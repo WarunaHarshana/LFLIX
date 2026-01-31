@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast } from 'lucide-react';
+import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw } from 'lucide-react';
 import clsx from 'clsx';
 import Link from 'next/link';
 
@@ -409,6 +409,30 @@ export default function Home() {
     await fetchLibrary();
   };
 
+  // Manual rescan all folders
+  const handleRescanAll = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/rescan', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        showToast(`Rescanned ${data.folders} folders. Added ${data.added} new items.`, 'success');
+        await fetchLibrary();
+        await fetchContinueWatching();
+      } else {
+        showToast(data.error || 'Rescan failed', 'error');
+      }
+    } catch (e) {
+      showToast('Failed to rescan folders', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Delete item
   const handleDelete = async (item: ContentItem) => {
     const confirmed = confirm(`Are you sure you want to remove "${item.title}" from your library?`);
@@ -524,6 +548,14 @@ export default function Home() {
             title="DLNA Server (VLC)"
           >
             <Cast className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleRescanAll}
+            disabled={loading}
+            className="p-2 hover:bg-white/10 rounded-full transition disabled:opacity-50"
+            title="Refresh Library (Scan for new files)"
+          >
+            <RotateCw className={clsx("w-5 h-5", loading && "animate-spin")} />
           </button>
           <button
             onClick={() => setShowFolderManager(true)}
