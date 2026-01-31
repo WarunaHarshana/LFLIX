@@ -16,6 +16,7 @@ import { HeroSkeleton, CardGridSkeleton, ContinueWatchingSkeleton } from './comp
 import FolderManager from './components/FolderManager';
 import LoginScreen from './components/LoginScreen';
 import SetupWizard from './components/SetupWizard';
+import VideoPlayer from './components/VideoPlayer';
 
 // Types
 type ContentItem = {
@@ -102,6 +103,15 @@ export default function Home() {
 
   // Keyboard Navigation
   const [focusedIndex, setFocusedIndex] = useState(-1);
+
+  // Video Player (for mobile streaming)
+  const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number } | null>(null);
+
+  // Detect mobile device
+  const isMobile = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
 
   // Check if setup is complete on first load
   useEffect(() => {
@@ -298,6 +308,30 @@ export default function Home() {
   // Play file - uses secure ID-based lookup instead of filePath
   const playFile = async (contentType: 'movie' | 'show', contentId: number, episodeId?: number, startTime?: number) => {
     try {
+      // Mobile: Stream video directly
+      if (isMobile()) {
+        const params = new URLSearchParams({
+          contentType,
+          contentId: contentId.toString(),
+          ...(episodeId && { episodeId: episodeId.toString() })
+        });
+        const streamUrl = `/api/stream?${params.toString()}`;
+        
+        // Get title for video player
+        let title = 'Unknown';
+        if (contentType === 'movie') {
+          const movie = library.find(m => m.id === contentId);
+          title = movie?.title || 'Movie';
+        } else {
+          const show = library.find(s => s.id === contentId);
+          title = show?.title || 'TV Show';
+        }
+        
+        setVideoPlayer({ src: streamUrl, title, initialTime: startTime });
+        return;
+      }
+
+      // Desktop: Launch VLC
       const res = await fetch('/api/play', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -669,6 +703,16 @@ export default function Home() {
           {toast.type === 'success' ? '✓' : '✕'}
           <span>{toast.message}</span>
         </div>
+      )}
+
+      {/* Video Player (Mobile) */}
+      {videoPlayer && (
+        <VideoPlayer
+          src={videoPlayer.src}
+          title={videoPlayer.title}
+          initialTime={videoPlayer.initialTime}
+          onClose={() => setVideoPlayer(null)}
+        />
       )}
 
     </main>
