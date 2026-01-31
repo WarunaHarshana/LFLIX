@@ -69,6 +69,8 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
         try {
             await onScan(folderPath);
             setNewPath('');
+            // Restart watcher to include new folder
+            await authFetch('/api/watcher', { method: 'POST' });
             await fetchFolders();
             onRefresh();
         } catch (e: any) {
@@ -94,6 +96,13 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
                 setError('Unauthorized. Please login with PIN.');
                 return;
             }
+            if (!res.ok) {
+                const data = await res.json();
+                setError(data.error || 'Failed to remove folder');
+                return;
+            }
+            // Restart watcher to update folder list
+            await authFetch('/api/watcher', { method: 'POST' });
             await fetchFolders();
             onRefresh();
         } catch (e) {

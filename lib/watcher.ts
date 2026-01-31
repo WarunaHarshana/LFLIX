@@ -72,21 +72,12 @@ class FolderWatcher {
 
             if (folder) {
                 try {
-                    // Use absolute URL for server-side fetch
-                    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-                    const response = await fetch(`${baseUrl}/api/scan`, {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'x-app-pin': process.env.APP_PIN || '1234'
-                        },
-                        body: JSON.stringify({ 
-                            folderPath: path.dirname(filePath),
-                            specificFile: filePath
-                        })
-                    });
-                    const data = await response.json();
-                    addedCount += data.added || 0;
+                    // Scan just this file using direct API call
+                    const { scanFile } = await import('./scanner');
+                    const result = await scanFile(filePath);
+                    if (result.added) {
+                        addedCount++;
+                    }
                 } catch (e) {
                     console.error('Scan error for', filePath, e);
                 }

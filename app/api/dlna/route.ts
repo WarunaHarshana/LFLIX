@@ -7,7 +7,12 @@ export async function POST() {
     return NextResponse.json({ 
       success: true, 
       running: true,
-      message: 'DLNA server started. VLC should discover "LocalFlix" in 10-30 seconds.'
+      message: 'DLNA server started. If VLC does not see it, check Windows Firewall.',
+      troubleshooting: [
+        'Make sure Windows Firewall allows port 3001',
+        'Make sure your phone and PC are on the same WiFi',
+        'Some routers block DLNA - check router settings'
+      ]
     });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
@@ -31,6 +36,7 @@ export async function GET() {
   const running = getDlnaStatus();
   return NextResponse.json({ 
     running,
-    status: running ? 'DLNA server is running' : 'DLNA server is stopped'
+    url: running ? 'http://YOUR-PC-IP:3001' : null,
+    status: running ? 'DLNA server is running on port 3001' : 'DLNA server is stopped'
   });
 }
