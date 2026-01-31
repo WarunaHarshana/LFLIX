@@ -4,9 +4,17 @@ import db from '@/lib/db';
 // Get watch history / continue watching
 export async function GET() {
   try {
+    // SECURITY: Don't expose filePath columns - use contentId/episodeId only
     const history = db.prepare(`
       SELECT 
-        wh.*,
+        wh.id,
+        wh.contentType,
+        wh.contentId,
+        wh.episodeId,
+        wh.progress,
+        wh.duration,
+        wh.completed,
+        wh.lastWatched,
         CASE 
           WHEN wh.contentType = 'movie' THEN m.title
           WHEN wh.contentType = 'show' THEN s.title
@@ -16,14 +24,9 @@ export async function GET() {
           WHEN wh.contentType = 'show' THEN s.posterPath
         END as posterPath,
         CASE 
-          WHEN wh.contentType = 'movie' THEN m.filePath
-          ELSE NULL
-        END as filePath,
-        CASE 
           WHEN wh.contentType = 'movie' THEN m.backdropPath
           WHEN wh.contentType = 'show' THEN s.backdropPath
         END as backdropPath,
-        e.filePath as episodeFilePath,
         e.seasonNumber,
         e.episodeNumber,
         e.title as episodeTitle
