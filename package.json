@@ -15,6 +15,7 @@
     "lucide-react": "^0.563.0",
     "moviedb-promise": "^4.0.8",
     "next": "16.1.6",
+    "node-upnp-ssdp": "^0.1.1",
     "qrcode.react": "^4.2.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",

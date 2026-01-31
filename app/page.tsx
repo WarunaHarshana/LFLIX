@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone } from 'lucide-react';
+import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast } from 'lucide-react';
 import clsx from 'clsx';
 import Link from 'next/link';
 
@@ -20,6 +20,7 @@ import VideoPlayer from './components/VideoPlayer';
 import MobileNav from './components/MobileNav';
 import MobileConnectModal from './components/MobileConnectModal';
 import FloatingQRButton from './components/FloatingQRButton';
+import DlnaModal from './components/DlnaModal';
 import PlayChoiceModal from './components/PlayChoiceModal';
 
 // Types
@@ -113,6 +114,9 @@ export default function Home() {
 
   // Mobile Connect QR Modal
   const [showMobileConnect, setShowMobileConnect] = useState(false);
+
+  // DLNA Server Modal
+  const [showDlna, setShowDlna] = useState(false);
 
   // Play Choice Modal (for mobile)
   const [playChoice, setPlayChoice] = useState<{ 
@@ -515,6 +519,13 @@ export default function Home() {
             <Smartphone className="w-5 h-5" />
           </button>
           <button
+            onClick={() => setShowDlna(true)}
+            className="p-2 hover:bg-white/10 rounded-full transition hidden md:flex"
+            title="DLNA Server (VLC)"
+          >
+            <Cast className="w-5 h-5" />
+          </button>
+          <button
             onClick={() => setShowFolderManager(true)}
             className="p-2 hover:bg-white/10 rounded-full transition"
             title="Manage Folders (F)"
@@ -772,6 +783,11 @@ export default function Home() {
       {/* Mobile Connect QR Modal */}
       {showMobileConnect && (
         <MobileConnectModal onClose={() => setShowMobileConnect(false)} />
+      )}
+
+      {/* DLNA Server Modal */}
+      {showDlna && (
+        <DlnaModal onClose={() => setShowDlna(false)} />
       )}
 
       {/* Mobile Navigation */}
