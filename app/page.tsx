@@ -585,7 +585,7 @@ export default function Home() {
           seasons={seasons}
           loading={loadingEpisodes}
           onClose={() => setSelectedShow(null)}
-          onPlayEpisode={(episodeId) => playFile('show', selectedShow.id, episodeId)}
+          onPlayEpisode={(episodeId, startTime) => playFile('show', selectedShow.id, episodeId, startTime)}
           onDeleteEpisode={handleDeleteEpisode}
         />
       )}

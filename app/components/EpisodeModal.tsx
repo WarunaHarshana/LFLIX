@@ -37,7 +37,7 @@ type Props = {
     seasons: Season[];
     loading: boolean;
     onClose: () => void;
-    onPlayEpisode: (filePath: string, startTime?: number) => void;
+    onPlayEpisode: (episodeId: number, startTime?: number) => void;
     onDeleteEpisode?: (episodeId: number) => void;
 };
 
@@ -143,7 +143,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                 return (
                                     <div
                                         key={ep.id}
-                                        onClick={() => onPlayEpisode(ep.filePath, ep.watchProgress?.progress)}
+                                        onClick={() => onPlayEpisode(ep.id, ep.watchProgress?.progress)}
                                         onContextMenu={(e) => handleContextMenu(e, ep.id)}
                                         className="relative flex items-center gap-4 p-4 rounded-xl hover:bg-neutral-800 cursor-pointer group transition border border-transparent hover:border-neutral-700"
                                     >
