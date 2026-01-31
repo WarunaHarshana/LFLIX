@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, ExternalLink, Smartphone, Monitor, Loader2, Download, AlertCircle } from 'lucide-react';
+import { X, Play, ExternalLink, Smartphone, Monitor, Loader2, Download, AlertCircle, MoreHorizontal } from 'lucide-react';
 
 type Props = {
   title: string;
@@ -135,6 +135,24 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
               <p className="text-sm text-neutral-400">Paste in any player</p>
             </div>
           </button>
+        </div>
+
+        {/* Other Players Info */}
+        <div className="mt-4 p-4 bg-neutral-800/50 rounded-lg text-sm">
+          <p className="font-medium text-neutral-300 mb-2">Using a different player?</p>
+          <p className="text-neutral-400 text-xs mb-2">
+            LocalFlix works with <strong>any</strong> video player that supports network streaming:
+          </p>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="px-2 py-1 bg-neutral-700 rounded">MX Player</span>
+            <span className="px-2 py-1 bg-neutral-700 rounded">Infuse</span>
+            <span className="px-2 py-1 bg-neutral-700 rounded">nPlayer</span>
+            <span className="px-2 py-1 bg-neutral-700 rounded">PotPlayer</span>
+            <span className="px-2 py-1 bg-neutral-700 rounded">Kodi</span>
+          </div>
+          <p className="text-neutral-500 text-xs mt-2">
+            Just copy the URL and paste in your player's "Network Stream" option!
+          </p>
         </div>
 
         {/* VLC Opened Message */}
