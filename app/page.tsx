@@ -20,6 +20,7 @@ import VideoPlayer from './components/VideoPlayer';
 import MobileNav from './components/MobileNav';
 import MobileConnectModal from './components/MobileConnectModal';
 import FloatingQRButton from './components/FloatingQRButton';
+import PlayChoiceModal from './components/PlayChoiceModal';
 
 // Types
 type ContentItem = {
@@ -112,6 +113,9 @@ export default function Home() {
 
   // Mobile Connect QR Modal
   const [showMobileConnect, setShowMobileConnect] = useState(false);
+
+  // Play Choice Modal (for mobile)
+  const [playChoice, setPlayChoice] = useState<{ title: string; streamUrl: string; onPlayBrowser: () => void } | null>(null);
 
   // Detect mobile device
   const isMobile = useCallback(() => {
@@ -314,7 +318,7 @@ export default function Home() {
   // Play file - uses secure ID-based lookup instead of filePath
   const playFile = async (contentType: 'movie' | 'show', contentId: number, episodeId?: number, startTime?: number) => {
     try {
-      // Mobile: Stream video directly
+      // Mobile: Show play choice modal (browser or VLC)
       if (isMobile()) {
         const params = new URLSearchParams({
           contentType,
@@ -333,7 +337,12 @@ export default function Home() {
           title = show?.title || 'TV Show';
         }
         
-        setVideoPlayer({ src: streamUrl, title, initialTime: startTime });
+        // Show choice modal
+        setPlayChoice({
+          title,
+          streamUrl: window.location.origin + streamUrl,
+          onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime })
+        });
         return;
       }
 
@@ -734,6 +743,16 @@ export default function Home() {
           title={videoPlayer.title}
           initialTime={videoPlayer.initialTime}
           onClose={() => setVideoPlayer(null)}
+        />
+      )}
+
+      {/* Play Choice Modal (Mobile) */}
+      {playChoice && (
+        <PlayChoiceModal
+          title={playChoice.title}
+          streamUrl={playChoice.streamUrl}
+          onPlayBrowser={playChoice.onPlayBrowser}
+          onClose={() => setPlayChoice(null)}
         />
       )}
 
