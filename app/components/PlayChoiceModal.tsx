@@ -42,8 +42,6 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
     generateToken();
   }, [contentType, contentId, episodeId, streamUrl]);
 
-  const [vlcOpened, setVlcOpened] = useState(false);
-
   const openInVLC = () => {
     if (!tokenUrl) return;
     
