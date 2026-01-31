@@ -14,6 +14,34 @@ function getTmdbApiKey(): string {
   }
 }
 
+// Rate limiting helper - prevents TMDB API bans
+let lastTmdbCall = 0;
+const TMDB_DELAY_MS = 100; // Minimum 100ms between API calls
+
+async function rateLimitedTmdbCall<T>(fn: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const timeSinceLastCall = now - lastTmdbCall;
+  
+  if (timeSinceLastCall < TMDB_DELAY_MS) {
+    await new Promise(resolve => setTimeout(resolve, TMDB_DELAY_MS - timeSinceLastCall));
+  }
+  
+  lastTmdbCall = Date.now();
+  
+  try {
+    return await fn();
+  } catch (error: any) {
+    // Handle TMDB rate limiting (429) or auth errors (401)
+    if (error.status === 429) {
+      console.warn('TMDB rate limit hit, waiting 2s...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      lastTmdbCall = Date.now();
+      return await fn(); // Retry once
+    }
+    throw error;
+  }
+}
+
 // Recursive folder scan
 function getVideoFiles(dir: string, fileList: string[] = []) {
   if (!fs.existsSync(dir)) return fileList;
@@ -103,9 +131,11 @@ function extractYear(name: string) {
 // Fetch genre names from TMDB genre IDs
 async function fetchGenres(moviedb: MovieDb, genreIds: number[], type: 'movie' | 'tv'): Promise<string> {
   try {
-    const genreList = type === 'movie'
-      ? await moviedb.genreMovieList({})
-      : await moviedb.genreTvList({});
+    const genreList = await rateLimitedTmdbCall(() => 
+      type === 'movie'
+        ? moviedb.genreMovieList({})
+        : moviedb.genreTvList({})
+    );
 
     const genreMap = new Map(genreList.genres?.map(g => [g.id, g.name]) || []);
     return genreIds.map(id => genreMap.get(id)).filter(Boolean).join(', ');
@@ -173,7 +203,7 @@ export async function POST(req: Request) {
         // First, search TMDB to get the real show info
         let showMeta: any = { title: rawShowName, tmdbId: null, posterPath: null, backdropPath: null, overview: null, rating: null, firstAirDate: null, genres: null };
         try {
-          const res = await moviedb.searchTv({ query: rawShowName });
+          const res = await rateLimitedTmdbCall(() => moviedb.searchTv({ query: rawShowName }));
           if (res.results && res.results.length > 0) {
             const hit = res.results[0];
             const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'tv') : '';
@@ -188,8 +218,10 @@ export async function POST(req: Request) {
               genres
             };
           }
-        } catch (e) {
-          errors.push(`TMDB TV Error for ${rawShowName}`);
+        } catch (e: any) {
+          // Graceful fallback - use filename as title, don't fail the whole scan
+          errors.push(`TMDB TV Error for ${rawShowName}: ${e.message || 'Unknown error'}`);
+          console.warn(`TMDB lookup failed for "${rawShowName}", using filename as fallback`);
         }
 
         // Check if show already exists by title OR tmdbId
@@ -247,7 +279,7 @@ export async function POST(req: Request) {
         };
 
         try {
-          const searchRes = await moviedb.searchMovie({ query: rawName, year: year });
+          const searchRes = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: rawName, year: year }));
           if (searchRes.results && searchRes.results.length > 0) {
             const hit = searchRes.results[0];
             const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'movie') : '';
@@ -262,8 +294,10 @@ export async function POST(req: Request) {
               genres
             };
           }
-        } catch (err) {
-          errors.push(`TMDB Movie Error for ${rawName}`);
+        } catch (err: any) {
+          // Graceful fallback - use filename as title, don't fail the whole scan
+          errors.push(`TMDB Movie Error for ${rawName}: ${err.message || 'Unknown error'}`);
+          console.warn(`TMDB lookup failed for "${rawName}", using filename as fallback`);
         }
 
         insertMovie.run({

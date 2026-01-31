@@ -4,6 +4,7 @@ import { folderWatcher, WatcherEvent } from '@/lib/watcher';
 // SSE endpoint for real-time notifications
 export async function GET() {
     const encoder = new TextEncoder();
+    let unsubscribe: (() => void) | null = null;
 
     const stream = new ReadableStream({
         start(controller) {
@@ -11,11 +12,15 @@ export async function GET() {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'connected' })}\n\n`));
 
             // Subscribe to watcher events
-            const unsubscribe = folderWatcher.subscribe((event: WatcherEvent) => {
+            unsubscribe = folderWatcher.subscribe((event: WatcherEvent) => {
                 try {
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
                 } catch (e) {
-                    // Stream might be closed
+                    // Stream might be closed, unsubscribe to prevent memory leak
+                    if (unsubscribe) {
+                        unsubscribe();
+                        unsubscribe = null;
+                    }
                 }
             });
 
@@ -23,13 +28,14 @@ export async function GET() {
             if (!folderWatcher.isWatching()) {
                 folderWatcher.start().catch(console.error);
             }
-
-            // Cleanup on close - note: this doesn't work perfectly with SSE
-            // The stream will eventually be garbage collected
         },
         cancel() {
-            // Called when client disconnects
-            console.log('SSE client disconnected');
+            // Called when client disconnects - clean up subscription
+            if (unsubscribe) {
+                unsubscribe();
+                unsubscribe = null;
+            }
+            console.log('SSE client disconnected, cleaned up subscription');
         }
     });
 

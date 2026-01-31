@@ -186,8 +186,11 @@ export default function Home() {
     };
   }, [fetchLibrary, fetchContinueWatching]);
 
-  // Keyboard navigation
+  // Keyboard navigation - with SSR safety
   useEffect(() => {
+    // Only run on client
+    if (typeof window === 'undefined') return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't handle if typing in input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -253,7 +256,7 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []); // Empty deps - uses refs for fresh values
 
-  const getGridColumns = () => {
+  const getGridColumns = useCallback(() => {
     if (typeof window === 'undefined') return 8;
     const width = window.innerWidth;
     if (width >= 1536) return 8;
@@ -261,7 +264,7 @@ export default function Home() {
     if (width >= 1024) return 6;
     if (width >= 768) return 4;
     return 2;
-  };
+  }, []);
 
   // Show toast
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {

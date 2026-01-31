@@ -79,7 +79,30 @@ db.exec(`
 `);
 
 // Run migrations for existing databases (add columns if they don't exist)
+// WHITELIST of valid tables and columns to prevent SQL injection
+const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings'];
+const VALID_COLUMNS: Record<string, string[]> = {
+  movies: ['genres', 'backdropPath', 'overview', 'rating'],
+  shows: ['genres', 'backdropPath', 'overview', 'rating'],
+  episodes: ['stillPath', 'overview'],
+  watch_history: ['completed'],
+  scanned_folders: ['contentType'],
+  settings: []
+};
+
 function addColumnIfNotExists(table: string, column: string, type: string) {
+  // Validate table name
+  if (!VALID_TABLES.includes(table)) {
+    console.error(`Invalid table name: ${table}`);
+    return;
+  }
+  
+  // Validate column name
+  if (!VALID_COLUMNS[table]?.includes(column)) {
+    console.error(`Invalid column name: ${column} for table ${table}`);
+    return;
+  }
+
   const tableInfo = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
   const columnExists = tableInfo.some(col => col.name === column);
   if (!columnExists) {

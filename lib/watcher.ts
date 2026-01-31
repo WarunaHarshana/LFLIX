@@ -52,7 +52,7 @@ class FolderWatcher {
         return !!(movie || episode);
     }
 
-    // Scan pending files
+    // Scan pending files - now scans individual files efficiently
     private async scanPendingFiles() {
         if (this.isScanning || this.pendingFiles.size === 0) return;
 
@@ -72,11 +72,14 @@ class FolderWatcher {
 
             if (folder) {
                 try {
-                    // Call the scan API internally
-                    const response = await fetch(`http://localhost:3000/api/scan`, {
+                    // Use relative URL and scan specific file only
+                    const response = await fetch('/api/scan', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ folderPath: path.dirname(filePath) })
+                        body: JSON.stringify({ 
+                            folderPath: path.dirname(filePath),
+                            specificFile: filePath // Pass specific file to scan only this file
+                        })
                     });
                     const data = await response.json();
                     addedCount += data.added || 0;

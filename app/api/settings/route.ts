@@ -1,5 +1,27 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import fs from 'fs';
+
+// Valid setting keys to prevent injection
+const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey'];
+
+// Validate VLC path exists
+function validateVlcPath(path: string): { valid: boolean; error?: string } {
+  if (!path) {
+    return { valid: false, error: 'VLC path is required' };
+  }
+  
+  if (!fs.existsSync(path)) {
+    return { valid: false, error: `VLC not found at: ${path}. Please check the path.` };
+  }
+  
+  // Check if it's actually vlc.exe
+  if (!path.toLowerCase().includes('vlc')) {
+    console.warn(`Warning: VLC path "${path}" doesn't contain "vlc" in filename`);
+  }
+  
+  return { valid: true };
+}
 
 // Get all settings
 export async function GET() {
@@ -9,6 +31,14 @@ export async function GET() {
         const settingsObj: Record<string, string> = {};
         for (const s of settings) {
             settingsObj[s.key] = s.value;
+        }
+
+        // Validate current VLC path and add warning if invalid
+        if (settingsObj.vlcPath) {
+            const validation = validateVlcPath(settingsObj.vlcPath);
+            if (!validation.valid) {
+                (settingsObj as any).vlcPathError = validation.error;
+            }
         }
 
         return NextResponse.json(settingsObj);
@@ -21,6 +51,21 @@ export async function GET() {
 export async function POST(req: Request) {
     try {
         const settings = await req.json();
+
+        // Validate setting keys
+        for (const key of Object.keys(settings)) {
+            if (!VALID_SETTINGS.includes(key)) {
+                return NextResponse.json({ error: `Invalid setting key: ${key}` }, { status: 400 });
+            }
+        }
+
+        // Validate VLC path if being updated
+        if (settings.vlcPath) {
+            const validation = validateVlcPath(settings.vlcPath);
+            if (!validation.valid) {
+                return NextResponse.json({ error: validation.error }, { status: 400 });
+            }
+        }
 
         const updateSetting = db.prepare(`
       INSERT INTO settings (key, value) VALUES (?, ?)
