@@ -11,8 +11,9 @@ export async function POST(req: Request) {
       const response = NextResponse.json({ success: true });
       response.cookies.set('app-pin', pin, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        secure: false, // Allow HTTP for local network access
+        sameSite: 'lax', // Changed from strict to work across IP addresses
+        path: '/', // Ensure cookie is available site-wide
         maxAge: 60 * 60 * 24 * 7 // 7 days
       });
       return response;

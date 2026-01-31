@@ -122,7 +122,7 @@ export default function Home() {
   useEffect(() => {
     const checkSetup = async () => {
       try {
-        const res = await fetch('/api/setup');
+        const res = await fetch('/api/setup', { credentials: 'same-origin' });
         const data = await res.json();
         setSetupComplete(data.setupComplete);
       } catch {
@@ -154,7 +154,7 @@ export default function Home() {
   // Fetch library
   const fetchLibrary = useCallback(async () => {
     try {
-      const res = await fetch('/api/content');
+      const res = await fetch('/api/content', { credentials: 'same-origin' });
       const data = await res.json();
       if (data.content) {
         setLibrary(data.content);
@@ -172,7 +172,7 @@ export default function Home() {
   // Fetch continue watching
   const fetchContinueWatching = useCallback(async () => {
     try {
-      const res = await fetch('/api/history');
+      const res = await fetch('/api/history', { credentials: 'same-origin' });
       const data = await res.json();
       setContinueWatching(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -340,6 +340,7 @@ export default function Home() {
       const res = await fetch('/api/play', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ contentType, contentId, episodeId, startTime })
       });
       const data = await res.json();
@@ -356,7 +357,7 @@ export default function Home() {
     setSelectedShow(show);
     setLoadingEpisodes(true);
     try {
-      const res = await fetch(`/api/episodes?showId=${show.id}`);
+      const res = await fetch(`/api/episodes?showId=${show.id}`, { credentials: 'same-origin' });
       const data = await res.json();
       setSeasons(data.seasons || []);
     } catch (e) {
@@ -371,6 +372,7 @@ export default function Home() {
     const res = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({ folderPath })
     });
     const data = await res.json();
@@ -389,7 +391,10 @@ export default function Home() {
     if (!confirmed) return;
 
     try {
-      await fetch(`/api/delete?type=${item.type}&id=${item.id}`, { method: 'DELETE' });
+      await fetch(`/api/delete?type=${item.type}&id=${item.id}`, { 
+        method: 'DELETE',
+        credentials: 'same-origin'
+      });
       showToast('Removed from library', 'success');
       setContextMenu(null);
       await fetchLibrary();
@@ -401,7 +406,10 @@ export default function Home() {
   // Delete episode
   const handleDeleteEpisode = async (episodeId: number) => {
     try {
-      await fetch(`/api/delete?type=episode&id=${episodeId}`, { method: 'DELETE' });
+      await fetch(`/api/delete?type=episode&id=${episodeId}`, { 
+        method: 'DELETE',
+        credentials: 'same-origin'
+      });
       showToast('Episode removed', 'success');
       if (selectedShow) {
         openShow(selectedShow); // Refresh episodes
@@ -501,8 +509,9 @@ export default function Home() {
             <Settings className="w-5 h-5" />
           </Link>
           <button
-            onClick={() => {
-              document.cookie = 'app-pin=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            onClick={async () => {
+              // Call logout endpoint to clear cookie properly
+              await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
               setIsAuthenticated(false);
             }}
             className="p-2 hover:bg-white/10 rounded-full transition text-neutral-400 hover:text-white text-xs"

@@ -27,21 +27,12 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
     const [error, setError] = useState<string | null>(null);
     const [showBrowser, setShowBrowser] = useState(false);
 
-    // Helper to get PIN from cookie
-    const getPin = () => {
-        if (typeof document === 'undefined') return null;
-        const match = document.cookie.match(/app-pin=([^;]+)/);
-        return match ? match[1] : null;
-    };
-
-    // Helper for authenticated fetch
+    // Helper for authenticated fetch - browser sends cookies automatically
     const authFetch = (url: string, options: RequestInit = {}) => {
-        const pin = getPin();
-        const headers: Record<string, string> = {
-            ...options.headers as Record<string, string>
-        };
-        if (pin) headers['x-app-pin'] = pin;
-        return fetch(url, { ...options, headers });
+        return fetch(url, {
+            ...options,
+            credentials: 'same-origin' // Ensure cookies are sent
+        });
     };
 
     useEffect(() => {

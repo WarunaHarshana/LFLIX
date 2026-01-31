@@ -12,18 +12,15 @@ export default function LoginScreen({ onLogin }: Props) {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // Check if already logged in
+    // Check if already logged in (cookie is httpOnly, can't read directly)
     useEffect(() => {
         const checkAuth = async () => {
-            const match = document.cookie.match(/app-pin=([^;]+)/);
-            if (match) {
-                // Verify the cookie is still valid
-                const res = await fetch('/api/auth/login', {
-                    headers: { 'x-app-pin': match[1] }
-                });
-                if (res.ok) {
-                    onLogin();
-                }
+            // Try to access a protected endpoint - browser sends cookie automatically
+            const res = await fetch('/api/content', {
+                credentials: 'same-origin'
+            });
+            if (res.ok) {
+                onLogin();
             }
         };
         checkAuth();
