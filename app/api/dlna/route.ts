@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { dlnaServer } from '@/lib/dlna';
+import { startDlnaServer, stopDlnaServer, getDlnaStatus } from '@/lib/dlna';
 
 export async function POST() {
   try {
-    await dlnaServer.start();
+    await startDlnaServer();
     return NextResponse.json({ 
       success: true, 
-      message: 'DLNA server started. VLC should now discover "LocalFlix Media Server" automatically.'
+      running: true,
+      message: 'DLNA server started. VLC should discover "LocalFlix" in 10-30 seconds.'
     });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
@@ -15,15 +16,21 @@ export async function POST() {
 
 export async function DELETE() {
   try {
-    dlnaServer.stop();
-    return NextResponse.json({ success: true, message: 'DLNA server stopped' });
+    stopDlnaServer();
+    return NextResponse.json({ 
+      success: true, 
+      running: false,
+      message: 'DLNA server stopped' 
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
 export async function GET() {
+  const running = getDlnaStatus();
   return NextResponse.json({ 
-    status: 'DLNA server available. Use POST to start, DELETE to stop.'
+    running,
+    status: running ? 'DLNA server is running' : 'DLNA server is stopped'
   });
 }

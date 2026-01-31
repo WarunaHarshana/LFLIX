@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Wifi, Play, Square, CheckCircle, AlertCircle } from 'lucide-react';
 
 type Props = {
@@ -12,6 +12,21 @@ export default function DlnaModal({ onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Check status when modal opens
+  useEffect(() => {
+    checkStatus();
+  }, []);
+
+  const checkStatus = async () => {
+    try {
+      const res = await fetch('/api/dlna', { credentials: 'include' });
+      const data = await res.json();
+      setRunning(data.running);
+    } catch (e) {
+      console.error('Failed to check DLNA status:', e);
+    }
+  };
 
   const startDlna = async () => {
     setLoading(true);

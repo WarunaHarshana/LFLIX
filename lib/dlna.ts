@@ -1,14 +1,19 @@
-import { spawn } from 'child_process';
 import http from 'http';
+import dgram from 'dgram';
 import os from 'os';
 import db from './db';
+
+// Global state to track if server is running
+let isRunning = false;
+let serverInstance: http.Server | null = null;
+let ssdpInterval: NodeJS.Timeout | null = null;
 
 // Get local IP
 function getLocalIp(): string {
   const interfaces = os.networkInterfaces();
   for (const iface of Object.values(interfaces)) {
     for (const details of iface || []) {
-      if (details.family === 'IPv4' && !details.internal) {
+      if (details.family === 'IPv4' && !details.internal && !details.address.startsWith('169.254')) {
         return details.address;
       }
     }
@@ -16,55 +21,11 @@ function getLocalIp(): string {
   return '127.0.0.1';
 }
 
-// Simple DLNA/UPnP server for VLC discovery
-class DlnaServer {
-  private server: http.Server | null = null;
-  private port: number = 3001; // Separate port for DLNA
-  private ip: string = getLocalIp();
+const PORT = 3001;
+const IP = getLocalIp();
 
-  async start() {
-    if (this.server) return;
-
-    this.server = http.createServer((req, res) => {
-      this.handleRequest(req, res);
-    });
-
-    this.server.listen(this.port, () => {
-      console.log(`DLNA Server running on http://${this.ip}:${this.port}`);
-      this.broadcastSsdp();
-    });
-
-    // Broadcast SSDP every 30 seconds
-    setInterval(() => this.broadcastSsdp(), 30000);
-  }
-
-  private handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
-    const url = req.url || '/';
-    
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', 'application/xml');
-
-    if (url === '/description.xml') {
-      // Device description for UPnP discovery
-      res.end(this.getDeviceDescription());
-    } else if (url === '/ContentDirectory/scpd') {
-      // Content directory service
-      res.end(this.getContentDirectoryScpd());
-    } else if (url === '/ContentDirectory/control') {
-      // Handle browse requests
-      this.handleBrowse(req, res);
-    } else if (url.startsWith('/media/')) {
-      // Stream media file
-      this.streamMedia(url, res);
-    } else {
-      res.statusCode = 404;
-      res.end('Not Found');
-    }
-  }
-
-  private getDeviceDescription(): string {
-    return `<?xml version="1.0"?>
+function getDeviceDescription(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
   <specVersion>
     <major>1</major>
@@ -72,226 +33,277 @@ class DlnaServer {
   </specVersion>
   <device>
     <deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>
-    <friendlyName>LocalFlix Media Server</friendlyName>
+    <friendlyName>LocalFlix</friendlyName>
     <manufacturer>LocalFlix</manufacturer>
-    <manufacturerURL>https://github.com/WarunaHarshana/localflix</manufacturerURL>
-    <modelName>LocalFlix</modelName>
+    <modelName>LocalFlix Media Server</modelName>
     <modelNumber>1.0</modelNumber>
-    <modelURL>https://github.com/WarunaHarshana/localflix</modelURL>
     <serialNumber>001</serialNumber>
-    <UDN>uuid:localflix-media-server-001</UDN>
+    <UDN>uuid:localflix-001</UDN>
+    <presentationURL>http://${IP}:3000</presentationURL>
     <serviceList>
       <service>
         <serviceType>urn:schemas-upnp-org:service:ContentDirectory:1</serviceType>
         <serviceId>urn:upnp-org:serviceId:ContentDirectory</serviceId>
-        <SCPDURL>/ContentDirectory/scpd</SCPDURL>
-        <controlURL>/ContentDirectory/control</controlURL>
-        <eventSubURL>/ContentDirectory/event</eventSubURL>
+        <SCPDURL>/cds</SCPDURL>
+        <controlURL>/cds/control</controlURL>
+        <eventSubURL>/cds/event</eventSubURL>
+      </service>
+      <service>
+        <serviceType>urn:schemas-upnp-org:service:ConnectionManager:1</serviceType>
+        <serviceId>urn:upnp-org:serviceId:ConnectionManager</serviceId>
+        <SCPDURL>/cm</SCPDURL>
+        <controlURL>/cm/control</controlURL>
+        <eventSubURL>/cm/event</eventSubURL>
       </service>
     </serviceList>
   </device>
 </root>`;
-  }
+}
 
-  private getContentDirectoryScpd(): string {
-    return `<?xml version="1.0"?>
+function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
+  const url = req.url || '/';
+  console.log('DLNA Request:', url);
+  
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  if (url === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h1>LocalFlix DLNA Server</h1><p>Server is running.</p>');
+  } else if (url === '/description.xml' || url === '/rootDesc.xml') {
+    res.writeHead(200, { 'Content-Type': 'text/xml' });
+    res.end(getDeviceDescription());
+  } else if (url === '/cds' || url === '/cds/scpd.xml') {
+    res.writeHead(200, { 'Content-Type': 'text/xml' });
+    res.end(`<?xml version="1.0"?>
 <scpd xmlns="urn:schemas-upnp-org:service-1-0">
-  <specVersion>
-    <major>1</major>
-    <minor>0</minor>
-  </specVersion>
+  <specVersion><major>1</major><minor>0</minor></specVersion>
   <actionList>
-    <action>
-      <name>Browse</name>
-      <argumentList>
-        <argument>
-          <name>ObjectID</name>
-          <direction>in</direction>
-          <relatedStateVariable>A_ARG_TYPE_ObjectID</relatedStateVariable>
-        </argument>
-        <argument>
-          <name>BrowseFlag</name>
-          <direction>in</direction>
-          <relatedStateVariable>A_ARG_TYPE_BrowseFlag</relatedStateVariable>
-        </argument>
-        <argument>
-          <name>Filter</name>
-          <direction>in</direction>
-          <relatedStateVariable>A_ARG_TYPE_Filter</relatedStateVariable>
-        </argument>
-        <argument>
-          <name>StartingIndex</name>
-          <direction>in</direction>
-          <relatedStateVariable>A_ARG_TYPE_Index</relatedStateVariable>
-        </argument>
-        <argument>
-          <name>RequestedCount</name>
-          <direction>in</direction>
-          <relatedStateVariable>A_ARG_TYPE_Count</relatedStateVariable>
-        </argument>
-        <argument>
-          <name>SortCriteria</name>
-          <direction>in</direction>
-          <relatedStateVariable>A_ARG_TYPE_SortCriteria</relatedStateVariable>
-        </argument>
-        <argument>
-          <name>Result</name>
-          <direction>out</direction>
-          <relatedStateVariable>A_ARG_TYPE_Result</relatedStateVariable>
-        </argument>
-        <argument>
-          <name>NumberReturned</name>
-          <direction>out</direction>
-          <relatedStateVariable>A_ARG_TYPE_Count</relatedStateVariable>
-        </argument>
-        <argument>
-          <name>TotalMatches</name>
-          <direction>out</direction>
-          <relatedStateVariable>A_ARG_TYPE_Count</relatedStateVariable>
-        </argument>
-        <argument>
-          <name>UpdateID</name>
-          <direction>out</direction>
-          <relatedStateVariable>A_ARG_TYPE_UpdateID</relatedStateVariable>
-        </argument>
-      </argumentList>
-    </action>
+    <action><name>Browse</name></action>
+    <action><name>Search</name></action>
+    <action><name>GetSearchCapabilities</name></action>
+    <action><name>GetSortCapabilities</name></action>
+    <action><name>GetSystemUpdateID</name></action>
   </actionList>
-</scpd>`;
+</scpd>`);
+  } else if (url === '/cm' || url === '/cm/scpd.xml') {
+    res.writeHead(200, { 'Content-Type': 'text/xml' });
+    res.end(`<?xml version="1.0"?>
+<scpd xmlns="urn:schemas-upnp-org:service-1-0">
+  <specVersion><major>1</major><minor>0</minor></specVersion>
+</scpd>`);
+  } else if (url === '/cds/control') {
+    handleBrowse(req, res);
+  } else if (url.startsWith('/media/')) {
+    streamMedia(url, res);
+  } else {
+    res.writeHead(404);
+    res.end('Not Found');
   }
+}
 
-  private handleBrowse(req: http.IncomingMessage, res: http.ServerResponse) {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        // Parse SOAP request
-        const objectId = body.match(/<ObjectID>(.*?)<\/ObjectID>/)?.[1] || '0';
-        
-        // Get movies from database
-        const movies = db.prepare('SELECT id, title, filePath FROM movies ORDER BY title').all() as { id: number; title: string; filePath: string }[];
-        
-        let didl = '<?xml version="1.0"?><DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dc="http://purl.org/dc/elements/1.1/">';
-        
-        if (objectId === '0') {
-          // Root container - list movies
-          for (const movie of movies) {
-            const ext = movie.filePath.split('.').pop()?.toLowerCase() || 'mp4';
-            const mimeType = ext === 'mp4' ? 'video/mp4' : ext === 'mkv' ? 'video/x-matroska' : 'video/mp4';
-            
-            didl += `<item id="${movie.id}" parentID="0" restricted="1">`;
-            didl += `<dc:title>${this.escapeXml(movie.title)}</dc:title>`;
-            didl += `<upnp:class>object.item.videoItem</upnp:class>`;
-            didl += `<res protocolInfo="http-get:*:${mimeType}:*">http://${this.ip}:${this.port}/media/${movie.id}</res>`;
-            didl += `</item>`;
-          }
-        }
-        
-        didl += '</DIDL-Lite>';
-        
-        const response = `<?xml version="1.0"?>
+function handleBrowse(req: http.IncomingMessage, res: http.ServerResponse) {
+  let body = '';
+  req.on('data', chunk => body += chunk);
+  req.on('end', () => {
+    try {
+      console.log('Browse request:', body.substring(0, 200));
+      
+      const movies = db.prepare('SELECT id, title, filePath FROM movies ORDER BY title').all() as { id: number; title: string; filePath: string }[];
+      
+      let result = '&lt;?xml version="1.0"?&gt;&lt;DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"&gt;';
+      
+      for (const movie of movies) {
+        const ext = movie.filePath.split('.').pop()?.toLowerCase() || 'mp4';
+        const mime = ext === 'mp4' ? 'video/mp4' : 'video/mpeg';
+        result += `&lt;item id="movie_${movie.id}" parentID="0" restricted="1"&gt;`;
+        result += `&lt;dc:title&gt;${escapeXml(movie.title)}&lt;/dc:title&gt;`;
+        result += `&lt;upnp:class&gt;object.item.videoItem&lt;/upnp:class&gt;`;
+        result += `&lt;res protocolInfo="http-get:*:${mime}:*"&gt;http://${IP}:${PORT}/media/${movie.id}&lt;/res&gt;`;
+        result += `&lt;/item&gt;`;
+      }
+      result += '&lt;/DIDL-Lite&gt;';
+
+      const soapResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
   <s:Body>
     <u:BrowseResponse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
-      <Result>${this.escapeXml(didl)}</Result>
+      <Result>${result}</Result>
       <NumberReturned>${movies.length}</NumberReturned>
       <TotalMatches>${movies.length}</TotalMatches>
       <UpdateID>1</UpdateID>
     </u:BrowseResponse>
   </s:Body>
 </s:Envelope>`;
-        
-        res.end(response);
-      } catch (e) {
-        console.error('Browse error:', e);
-        res.statusCode = 500;
-        res.end('Error');
-      }
-    });
+
+      res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
+      res.end(soapResponse);
+    } catch (e) {
+      console.error('Browse error:', e);
+      res.writeHead(500);
+      res.end('Error');
+    }
+  });
+}
+
+function streamMedia(url: string, res: http.ServerResponse) {
+  const id = parseInt(url.split('/').pop() || '0', 10);
+  if (!id) {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
   }
 
-  private streamMedia(url: string, res: http.ServerResponse) {
-    const id = parseInt(url.split('/').pop() || '0', 10);
-    if (!id) {
-      res.statusCode = 404;
+  try {
+    const fs = require('fs');
+    const movie = db.prepare('SELECT filePath FROM movies WHERE id = ?').get(id) as { filePath: string } | undefined;
+    if (!movie) {
+      res.writeHead(404);
       res.end('Not found');
       return;
     }
 
-    try {
-      const movie = db.prepare('SELECT filePath FROM movies WHERE id = ?').get(id) as { filePath: string } | undefined;
-      if (!movie) {
-        res.statusCode = 404;
-        res.end('Not found');
-        return;
-      }
-
-      const fs = require('fs');
-      const path = movie.filePath.replace(/\//g, '\\');
-      
-      if (!fs.existsSync(path)) {
-        res.statusCode = 404;
-        res.end('File not found');
-        return;
-      }
-
-      const stat = fs.statSync(path);
-      const ext = path.split('.').pop()?.toLowerCase() || 'mp4';
-      const mimeType = ext === 'mp4' ? 'video/mp4' : ext === 'mkv' ? 'video/x-matroska' : 'video/mp4';
-
-      res.setHeader('Content-Type', mimeType);
-      res.setHeader('Content-Length', stat.size);
-      res.setHeader('Accept-Ranges', 'bytes');
-
-      const stream = fs.createReadStream(path);
-      stream.pipe(res);
-    } catch (e) {
-      console.error('Stream error:', e);
-      res.statusCode = 500;
-      res.end('Error');
+    const path = movie.filePath.replace(/\//g, '\\');
+    if (!fs.existsSync(path)) {
+      res.writeHead(404);
+      res.end('File not found');
+      return;
     }
-  }
 
-  private broadcastSsdp() {
-    const dgram = require('dgram');
-    const socket = dgram.createSocket('udp4');
-    
-    const message = `NOTIFY * HTTP/1.1\r
-HOST: 239.255.255.250:1900\r
-CACHE-CONTROL: max-age=1800\r
-LOCATION: http://${this.ip}:${this.port}/description.xml\r
-NT: urn:schemas-upnp-org:device:MediaServer:1\r
-NTS: ssdp:alive\r
-SERVER: LocalFlix/1.0 UPnP/1.0\r
-USN: uuid:localflix-media-server-001::urn:schemas-upnp-org:device:MediaServer:1\r
-\r
-`;
+    const stat = fs.statSync(path);
+    const ext = path.split('.').pop()?.toLowerCase() || 'mp4';
+    const mimeType = ext === 'mp4' ? 'video/mp4' : ext === 'mkv' ? 'video/x-matroska' : 'video/mpeg';
 
-    socket.bind(() => {
-      socket.setBroadcast(true);
-      socket.send(message, 1900, '239.255.255.250', (err: any) => {
-        if (err) console.error('SSDP broadcast error:', err);
-        socket.close();
-      });
+    res.writeHead(200, {
+      'Content-Type': mimeType,
+      'Content-Length': stat.size,
+      'Accept-Ranges': 'bytes'
     });
-  }
 
-  private escapeXml(str: string): string {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
-  }
-
-  stop() {
-    if (this.server) {
-      this.server.close();
-      this.server = null;
-    }
+    fs.createReadStream(path).pipe(res);
+  } catch (e) {
+    console.error('Stream error:', e);
+    res.writeHead(500);
+    res.end('Error');
   }
 }
 
-// Singleton instance
-export const dlnaServer = new DlnaServer();
+function escapeXml(str: string): string {
+  return str.replace(/[<>&'"]/g, c => ({
+    '<': '&lt;',
+    '>': '&gt;',
+    '&': '&amp;',
+    "'": '&apos;',
+    '"': '&quot;'
+  })[c] || c);
+}
+
+function sendSsdpNotify() {
+  const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+  
+  const messages = [
+    `NOTIFY * HTTP/1.1\r\n` +
+    `HOST: 239.255.255.250:1900\r\n` +
+    `CACHE-CONTROL: max-age=1800\r\n` +
+    `LOCATION: http://${IP}:${PORT}/description.xml\r\n` +
+    `NT: urn:schemas-upnp-org:device:MediaServer:1\r\n` +
+    `NTS: ssdp:alive\r\n` +
+    `SERVER: LocalFlix/1.0 UPnP/1.0 DLNADOC/1.50\r\n` +
+    `USN: uuid:localflix-001::urn:schemas-upnp-org:device:MediaServer:1\r\n` +
+    `\r\n`,
+    
+    `NOTIFY * HTTP/1.1\r\n` +
+    `HOST: 239.255.255.250:1900\r\n` +
+    `CACHE-CONTROL: max-age=1800\r\n` +
+    `LOCATION: http://${IP}:${PORT}/description.xml\r\n` +
+    `NT: uuid:localflix-001\r\n` +
+    `NTS: ssdp:alive\r\n` +
+    `SERVER: LocalFlix/1.0 UPnP/1.0 DLNADOC/1.50\r\n` +
+    `USN: uuid:localflix-001\r\n` +
+    `\r\n`,
+    
+    `NOTIFY * HTTP/1.1\r\n` +
+    `HOST: 239.255.255.250:1900\r\n` +
+    `CACHE-CONTROL: max-age=1800\r\n` +
+    `LOCATION: http://${IP}:${PORT}/description.xml\r\n` +
+    `NT: upnp:rootdevice\r\n` +
+    `NTS: ssdp:alive\r\n` +
+    `SERVER: LocalFlix/1.0 UPnP/1.0 DLNADOC/1.50\r\n` +
+    `USN: uuid:localflix-001::upnp:rootdevice\r\n` +
+    `\r\n`
+  ];
+
+  socket.bind(() => {
+    socket.setBroadcast(true);
+    socket.setMulticastTTL(4);
+    
+    messages.forEach((msg, i) => {
+      setTimeout(() => {
+        socket.send(msg, 1900, '239.255.255.250', (err: any) => {
+          if (err) console.error('SSDP error:', err);
+        });
+      }, i * 100);
+    });
+    
+    setTimeout(() => socket.close(), 1000);
+  });
+}
+
+// Global functions
+export function startDlnaServer(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (isRunning && serverInstance) {
+      console.log('DLNA server already running');
+      resolve();
+      return;
+    }
+
+    try {
+      serverInstance = http.createServer(handleRequest);
+      
+      serverInstance.listen(PORT, () => {
+        console.log(`DLNA Server started on http://${IP}:${PORT}`);
+        isRunning = true;
+        
+        // Send SSDP broadcasts
+        sendSsdpNotify();
+        
+        // Continue broadcasting every 10 seconds for first minute
+        let count = 0;
+        const bootBroadcast = setInterval(() => {
+          sendSsdpNotify();
+          count++;
+          if (count >= 5) clearInterval(bootBroadcast);
+        }, 10000);
+        
+        // Then every 30 seconds
+        ssdpInterval = setInterval(sendSsdpNotify, 30000);
+        
+        resolve();
+      });
+
+      serverInstance.on('error', (err) => {
+        console.error('DLNA server error:', err);
+        reject(err);
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+export function stopDlnaServer(): void {
+  if (serverInstance) {
+    serverInstance.close();
+    serverInstance = null;
+  }
+  if (ssdpInterval) {
+    clearInterval(ssdpInterval);
+    ssdpInterval = null;
+  }
+  isRunning = false;
+  console.log('DLNA Server stopped');
+}
+
+export function getDlnaStatus(): boolean {
+  return isRunning;
+}
