@@ -1,21 +1,50 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Play, ExternalLink, Smartphone, Monitor } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Play, ExternalLink, Smartphone, Monitor, Loader2 } from 'lucide-react';
 
 type Props = {
   title: string;
   streamUrl: string;
+  contentType: 'movie' | 'show';
+  contentId: number;
+  episodeId?: number;
   onPlayBrowser: () => void;
   onClose: () => void;
 };
 
-export default function PlayChoiceModal({ title, streamUrl, onPlayBrowser, onClose }: Props) {
+export default function PlayChoiceModal({ title, streamUrl, contentType, contentId, episodeId, onPlayBrowser, onClose }: Props) {
   const [copied, setCopied] = useState(false);
+  const [tokenUrl, setTokenUrl] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Generate a token for external players
+    const generateToken = async () => {
+      try {
+        const res = await fetch('/api/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ contentType, contentId, episodeId })
+        });
+        const data = await res.json();
+        if (data.token) {
+          setTokenUrl(`${streamUrl}&token=${data.token}`);
+        }
+      } catch (e) {
+        console.error('Token generation failed:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    generateToken();
+  }, [contentType, contentId, episodeId, streamUrl]);
 
   const openInVLC = () => {
+    if (!tokenUrl) return;
     // VLC mobile URL schemes
-    const vlcUrl = `vlc://${streamUrl}`;
+    const vlcUrl = `vlc://${tokenUrl}`;
     window.location.href = vlcUrl;
     
     // Close modal after a delay
@@ -25,7 +54,8 @@ export default function PlayChoiceModal({ title, streamUrl, onPlayBrowser, onClo
   };
 
   const copyUrl = () => {
-    navigator.clipboard.writeText(streamUrl);
+    const urlToCopy = tokenUrl || streamUrl;
+    navigator.clipboard.writeText(urlToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -66,14 +96,17 @@ export default function PlayChoiceModal({ title, streamUrl, onPlayBrowser, onClo
           {/* Open in VLC */}
           <button
             onClick={openInVLC}
-            className="w-full flex items-center gap-4 p-4 bg-neutral-800 hover:bg-neutral-700 rounded-xl transition"
+            disabled={loading || !tokenUrl}
+            className="w-full flex items-center gap-4 p-4 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition"
           >
             <div className="w-12 h-12 bg-orange-600 rounded-full flex items-center justify-center">
-              <Smartphone className="w-6 h-6" />
+              {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Smartphone className="w-6 h-6" />}
             </div>
             <div className="text-left">
               <p className="font-bold">Open in VLC App</p>
-              <p className="text-sm text-neutral-400">Requires VLC installed</p>
+              <p className="text-sm text-neutral-400">
+                {loading ? 'Generating link...' : 'Requires VLC installed'}
+              </p>
             </div>
           </button>
 

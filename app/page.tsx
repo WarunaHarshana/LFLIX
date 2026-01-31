@@ -115,7 +115,14 @@ export default function Home() {
   const [showMobileConnect, setShowMobileConnect] = useState(false);
 
   // Play Choice Modal (for mobile)
-  const [playChoice, setPlayChoice] = useState<{ title: string; streamUrl: string; onPlayBrowser: () => void } | null>(null);
+  const [playChoice, setPlayChoice] = useState<{ 
+    title: string; 
+    streamUrl: string; 
+    contentType: 'movie' | 'show';
+    contentId: number;
+    episodeId?: number;
+    onPlayBrowser: () => void 
+  } | null>(null);
 
   // Detect mobile device
   const isMobile = useCallback(() => {
@@ -341,6 +348,9 @@ export default function Home() {
         setPlayChoice({
           title,
           streamUrl: window.location.origin + streamUrl,
+          contentType,
+          contentId,
+          episodeId,
           onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime })
         });
         return;
@@ -751,6 +761,9 @@ export default function Home() {
         <PlayChoiceModal
           title={playChoice.title}
           streamUrl={playChoice.streamUrl}
+          contentType={playChoice.contentType}
+          contentId={playChoice.contentId}
+          episodeId={playChoice.episodeId}
           onPlayBrowser={playChoice.onPlayBrowser}
           onClose={() => setPlayChoice(null)}
         />
