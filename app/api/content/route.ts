@@ -60,14 +60,33 @@ export async function GET() {
     const showProgressMap = new Map(showProgress.map(p => [p.contentId, p]));
 
     // Combine them into a single feed, adding type and progress
+    // SECURITY: Don't expose filePath to client - use contentId only
     const content = [
       ...movies.map((m) => ({
-        ...m,
+        id: m.id,
+        title: m.title,
+        year: m.year,
+        tmdbId: m.tmdbId,
+        posterPath: m.posterPath,
+        backdropPath: m.backdropPath,
+        overview: m.overview,
+        rating: m.rating,
+        genres: m.genres,
+        addedAt: m.addedAt,
         type: 'movie' as const,
         watchProgress: movieProgressMap.get(m.id)
       })),
       ...shows.map((s) => ({
-        ...s,
+        id: s.id,
+        title: s.title,
+        tmdbId: s.tmdbId,
+        posterPath: s.posterPath,
+        backdropPath: s.backdropPath,
+        overview: s.overview,
+        rating: s.rating,
+        genres: s.genres,
+        firstAirDate: s.firstAirDate,
+        addedAt: s.addedAt,
         type: 'show' as const,
         watchProgress: showProgressMap.get(s.id)
       }))

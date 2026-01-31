@@ -48,6 +48,7 @@ export async function GET(req: Request) {
     const progressMap = new Map(watchProgress.map(wp => [wp.episodeId, wp]));
 
     // Group episodes by season
+    // SECURITY: Don't expose filePath to client
     const seasonMap = new Map<number, SeasonGroup>();
 
     for (const ep of episodes) {
@@ -56,9 +57,15 @@ export async function GET(req: Request) {
         seasonMap.set(seasonNum, { season: seasonNum, episodes: [] });
       }
       seasonMap.get(seasonNum)!.episodes.push({
-        ...ep,
+        id: ep.id,
+        showId: ep.showId,
+        seasonNumber: ep.seasonNumber,
+        episodeNumber: ep.episodeNumber,
+        title: ep.title,
+        overview: ep.overview,
+        stillPath: ep.stillPath,
         watchProgress: progressMap.get(ep.id)
-      });
+      } as any);
     }
 
     const seasons = Array.from(seasonMap.values()).sort((a, b) => a.season - b.season);

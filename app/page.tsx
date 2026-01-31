@@ -242,8 +242,8 @@ export default function Home() {
           const currentFocusedIndex = focusedIndexRef.current;
           if (currentFocusedIndex >= 0 && filtered[currentFocusedIndex]) {
             const item = filtered[currentFocusedIndex];
-            if (item.type === 'movie' && item.filePath) {
-              playFile(item.filePath);
+            if (item.type === 'movie') {
+              playFile('movie', item.id);
             } else if (item.type === 'show') {
               openShow(item);
             }
@@ -272,13 +272,13 @@ export default function Home() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Play file
-  const playFile = async (filePath: string, startTime?: number) => {
+  // Play file - uses secure ID-based lookup instead of filePath
+  const playFile = async (contentType: 'movie' | 'show', contentId: number, episodeId?: number, startTime?: number) => {
     try {
       const res = await fetch('/api/play', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath, startTime })
+        body: JSON.stringify({ contentType, contentId, episodeId, startTime })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -463,7 +463,7 @@ export default function Home() {
                 <div className="flex gap-4 pt-2">
                   {featured.type === 'movie' ? (
                     <button
-                      onClick={() => featured.filePath && playFile(featured.filePath)}
+                      onClick={() => playFile('movie', featured.id)}
                       className="px-8 py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-neutral-200 transition"
                     >
                       <Play className="w-6 h-6 fill-black" /> Play
@@ -485,7 +485,7 @@ export default function Home() {
           <div className="-mt-20 relative z-20">
             <ContinueWatching
               items={continueWatching}
-              onPlay={playFile}
+              onPlay={(item) => playFile(item.contentType, item.contentId, item.episodeId)}
               onOpenShow={(showId) => {
                 const show = library.find(l => l.type === 'show' && l.id === showId);
                 if (show) openShow(show);
@@ -540,8 +540,8 @@ export default function Home() {
                     <ContentCard
                       item={item}
                       onClick={() => {
-                        if (item.type === 'movie' && item.filePath) {
-                          playFile(item.filePath);
+                        if (item.type === 'movie') {
+                          playFile('movie', item.id);
                         } else {
                           openShow(item);
                         }
@@ -566,7 +566,7 @@ export default function Home() {
           seasons={seasons}
           loading={loadingEpisodes}
           onClose={() => setSelectedShow(null)}
-          onPlayEpisode={playFile}
+          onPlayEpisode={(episodeId) => playFile('show', selectedShow.id, episodeId)}
           onDeleteEpisode={handleDeleteEpisode}
         />
       )}

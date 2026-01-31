@@ -4,14 +4,13 @@ import path from 'path';
 import db from '@/lib/db';
 import { MovieDb } from 'moviedb-promise';
 
-// Get TMDB API key from settings or env
+// Get TMDB API key from environment variable only (security)
 function getTmdbApiKey(): string {
-  try {
-    const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('tmdbApiKey') as { value: string } | undefined;
-    return setting?.value || process.env.TMDB_API_KEY || '3d8c8476371d0730fb5bd7ae67241879';
-  } catch {
-    return process.env.TMDB_API_KEY || '3d8c8476371d0730fb5bd7ae67241879';
+  const key = process.env.TMDB_API_KEY;
+  if (!key) {
+    throw new Error('TMDB_API_KEY not configured. Please set it in .env.local file.');
   }
+  return key;
 }
 
 // Rate limiting helper - prevents TMDB API bans

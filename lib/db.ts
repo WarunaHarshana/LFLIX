@@ -75,7 +75,7 @@ db.exec(`
   );
 
   INSERT OR IGNORE INTO settings (key, value) VALUES ('vlcPath', 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe');
-  INSERT OR IGNORE INTO settings (key, value) VALUES ('tmdbApiKey', '3d8c8476371d0730fb5bd7ae67241879');
+  -- TMDB API key is now loaded from environment variable, not stored in DB
 `);
 
 // Run migrations for existing databases (add columns if they don't exist)

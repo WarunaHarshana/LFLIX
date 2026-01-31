@@ -13,12 +13,40 @@ function getVlcPath(): string {
   }
 }
 
+// SECURITY: Look up file path by ID instead of receiving it directly
+function getFilePathById(contentType: 'movie' | 'episode', id: number): string | null {
+  try {
+    if (contentType === 'movie') {
+      const result = db.prepare('SELECT filePath FROM movies WHERE id = ?').get(id) as { filePath: string } | undefined;
+      return result?.filePath || null;
+    } else {
+      const result = db.prepare('SELECT filePath FROM episodes WHERE id = ?').get(id) as { filePath: string } | undefined;
+      return result?.filePath || null;
+    }
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
-    const { filePath, startTime } = await req.json();
+    const { contentType, contentId, episodeId, startTime } = await req.json();
+
+    // SECURITY: Must provide contentType and ID, not filePath
+    if (!contentType || !contentId) {
+      return NextResponse.json({ error: 'Missing contentType or contentId' }, { status: 400 });
+    }
+
+    // Look up the actual file path from database
+    const filePath = episodeId 
+      ? getFilePathById('episode', episodeId)
+      : getFilePathById(contentType === 'movie' ? 'movie' : 'episode', contentId);
 
     if (!filePath) {
-      return NextResponse.json({ error: 'No file path provided' }, { status: 400 });
+      return NextResponse.json({ 
+        error: 'Content not found in library',
+        hint: 'The item may have been removed. Please refresh your library.'
+      }, { status: 404 });
     }
 
     // Normalize the path for Windows
@@ -26,7 +54,7 @@ export async function POST(req: Request) {
 
     if (!fs.existsSync(normalizedPath)) {
       return NextResponse.json({
-        error: `File not found: ${normalizedPath}`,
+        error: 'File not found on disk',
         hint: 'The file may have been moved, renamed, or the drive is not connected.'
       }, { status: 404 });
     }
