@@ -122,7 +122,7 @@ export default function Home() {
   useEffect(() => {
     const checkSetup = async () => {
       try {
-        const res = await fetch('/api/setup', { credentials: 'same-origin' });
+        const res = await fetch('/api/setup', { credentials: 'include' });
         const data = await res.json();
         setSetupComplete(data.setupComplete);
       } catch {
@@ -154,7 +154,7 @@ export default function Home() {
   // Fetch library
   const fetchLibrary = useCallback(async () => {
     try {
-      const res = await fetch('/api/content', { credentials: 'same-origin' });
+      const res = await fetch('/api/content', { credentials: 'include' });
       const data = await res.json();
       if (data.content) {
         setLibrary(data.content);
@@ -172,7 +172,7 @@ export default function Home() {
   // Fetch continue watching
   const fetchContinueWatching = useCallback(async () => {
     try {
-      const res = await fetch('/api/history', { credentials: 'same-origin' });
+      const res = await fetch('/api/history', { credentials: 'include' });
       const data = await res.json();
       setContinueWatching(Array.isArray(data) ? data : []);
     } catch (e) {

@@ -30,7 +30,7 @@ export default function FileBrowser({ onSelect, onCancel, initialPath = '' }: Pr
         try {
             // Browser automatically sends cookies, including httpOnly ones
             const res = await fetch(`/api/browse?path=${encodeURIComponent(dirPath)}`, {
-                credentials: 'same-origin' // Ensure cookies are sent
+                credentials: 'include' // Ensure cookies are sent across origins
             });
             const data = await res.json();
 

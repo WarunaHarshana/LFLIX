@@ -31,7 +31,7 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
     const authFetch = (url: string, options: RequestInit = {}) => {
         return fetch(url, {
             ...options,
-            credentials: 'same-origin' // Ensure cookies are sent
+            credentials: 'include' // Ensure cookies are sent across origins
         });
     };
 

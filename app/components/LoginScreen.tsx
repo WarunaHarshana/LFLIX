@@ -35,16 +35,18 @@ export default function LoginScreen({ onLogin }: Props) {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include', // Important: send/receive cookies
                 body: JSON.stringify({ pin })
             });
 
             if (res.ok) {
                 onLogin();
             } else {
-                setError('Invalid PIN');
+                const data = await res.json();
+                setError(data.error || 'Invalid PIN');
             }
         } catch (e) {
-            setError('Login failed');
+            setError('Login failed - check connection');
         } finally {
             setLoading(false);
         }
