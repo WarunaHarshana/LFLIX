@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, ExternalLink, Smartphone, Monitor, Loader2 } from 'lucide-react';
+import { X, Play, ExternalLink, Smartphone, Monitor, Loader2, Download, AlertCircle } from 'lucide-react';
 
 type Props = {
   title: string;
@@ -43,14 +43,32 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
 
   const openInVLC = () => {
     if (!tokenUrl) return;
-    // VLC mobile URL schemes
-    const vlcUrl = `vlc://${tokenUrl}`;
-    window.location.href = vlcUrl;
+    
+    // Try different URL schemes for VLC
+    // 1. First try x-callback-url scheme (more reliable on iOS)
+    // 2. Fall back to direct http link
+    
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
+    if (isIOS) {
+      // iOS VLC x-callback-url scheme
+      const vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(tokenUrl)}`;
+      window.location.href = vlcUrl;
+    } else {
+      // Android - try vlc:// scheme or direct http
+      const vlcUrl = `vlc://${tokenUrl}`;
+      window.location.href = vlcUrl;
+      
+      // Also try opening direct http URL as fallback
+      setTimeout(() => {
+        window.open(tokenUrl, '_blank');
+      }, 500);
+    }
     
     // Close modal after a delay
     setTimeout(() => {
       onClose();
-    }, 500);
+    }, 1000);
   };
 
   const copyUrl = () => {
@@ -125,14 +143,20 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
           </button>
         </div>
 
-        {/* Instructions */}
-        <div className="mt-6 p-4 bg-neutral-800/50 rounded-lg text-sm text-neutral-400">
-          <p className="mb-2"><strong>VLC App:</strong></p>
-          <ol className="list-decimal list-inside space-y-1 text-xs">
-            <li>Install VLC from App Store/Play Store</li>
-            <li>Tap "Open in VLC App" above</li>
-            <li>VLC should open and start playing</li>
-          </ol>
+        {/* Format Warning */}
+        <div className="mt-6 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-sm">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-yellow-300 font-medium mb-1">Having issues?</p>
+              <ul className="text-yellow-400/80 text-xs space-y-1 list-disc list-inside">
+                <li><strong>Best option:</strong> Use "Play in Browser"</li>
+                <li>MP4 files work better than MKV/AVI in VLC mobile</li>
+                <li>Try "Copy Stream URL" and paste in VLC manually</li>
+                <li>VLC mobile doesn't support all video formats</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>
