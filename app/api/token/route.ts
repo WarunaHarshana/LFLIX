@@ -26,12 +26,13 @@ export async function POST(req: Request) {
     // Generate a random token
     const token = crypto.randomBytes(32).toString('hex');
     
-    // Store token with 1 hour expiry
+    // Store token with 24 hour expiry (enough for any movie + multiple sessions)
+    // This is safe for home network use
     tokens.set(token, {
       contentType,
       contentId,
       episodeId,
-      expires: Date.now() + 60 * 60 * 1000 // 1 hour
+      expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
     });
 
     return NextResponse.json({ token });
