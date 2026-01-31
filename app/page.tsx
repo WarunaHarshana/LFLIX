@@ -14,6 +14,7 @@ import GenreFilter from './components/GenreFilter';
 import EmptyState from './components/EmptyState';
 import { HeroSkeleton, CardGridSkeleton, ContinueWatchingSkeleton } from './components/LoadingStates';
 import FolderManager from './components/FolderManager';
+import LoginScreen from './components/LoginScreen';
 
 // Types
 type ContentItem = {
@@ -71,6 +72,9 @@ type ContinueItem = {
 };
 
 export default function Home() {
+  // Authentication
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   // Library State
   const [library, setLibrary] = useState<ContentItem[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
@@ -359,6 +363,11 @@ export default function Home() {
   // Featured item (first with backdrop)
   const featured = filteredLibrary.find(item => item.backdropPath) || filteredLibrary[0];
 
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <main className="min-h-screen bg-black text-white font-sans selection:bg-red-900">
 
@@ -410,6 +419,16 @@ export default function Home() {
           >
             <Settings className="w-5 h-5" />
           </Link>
+          <button
+            onClick={() => {
+              document.cookie = 'app-pin=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+              setIsAuthenticated(false);
+            }}
+            className="p-2 hover:bg-white/10 rounded-full transition text-neutral-400 hover:text-white text-xs"
+            title="Logout"
+          >
+            Exit
+          </button>
         </div>
       </nav>
 

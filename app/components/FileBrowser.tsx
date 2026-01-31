@@ -24,13 +24,27 @@ export default function FileBrowser({ onSelect, onCancel, initialPath = '' }: Pr
     const [error, setError] = useState<string | null>(null);
     const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
+    // Helper to get PIN from cookie
+    const getPin = () => {
+        if (typeof document === 'undefined') return null;
+        const match = document.cookie.match(/app-pin=([^;]+)/);
+        return match ? match[1] : null;
+    };
+
     const fetchDirectory = async (dirPath: string) => {
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch(`/api/browse?path=${encodeURIComponent(dirPath)}`);
+            const pin = getPin();
+            const headers: Record<string, string> = {};
+            if (pin) headers['x-app-pin'] = pin;
+
+            const res = await fetch(`/api/browse?path=${encodeURIComponent(dirPath)}`, { headers });
             const data = await res.json();
 
+            if (res.status === 401) {
+                throw new Error('Unauthorized. Please login with valid PIN.');
+            }
             if (!res.ok) {
                 throw new Error(data.error || 'Failed to browse directory');
             }

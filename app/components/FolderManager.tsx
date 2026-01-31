@@ -27,6 +27,23 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
     const [error, setError] = useState<string | null>(null);
     const [showBrowser, setShowBrowser] = useState(false);
 
+    // Helper to get PIN from cookie
+    const getPin = () => {
+        if (typeof document === 'undefined') return null;
+        const match = document.cookie.match(/app-pin=([^;]+)/);
+        return match ? match[1] : null;
+    };
+
+    // Helper for authenticated fetch
+    const authFetch = (url: string, options: RequestInit = {}) => {
+        const pin = getPin();
+        const headers: Record<string, string> = {
+            ...options.headers as Record<string, string>
+        };
+        if (pin) headers['x-app-pin'] = pin;
+        return fetch(url, { ...options, headers });
+    };
+
     useEffect(() => {
         if (isOpen) {
             fetchFolders();
@@ -36,7 +53,12 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
     const fetchFolders = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/folders');
+            const res = await authFetch('/api/folders');
+            if (res.status === 401) {
+                setError('Unauthorized. Please login with PIN.');
+                setFolders([]);
+                return;
+            }
             const data = await res.json();
             setFolders(Array.isArray(data) ? data : []);
         } catch (e) {
@@ -76,7 +98,11 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
         if (!confirm('Remove this folder and all its content from the library?')) return;
 
         try {
-            await fetch(`/api/folders?id=${id}`, { method: 'DELETE' });
+            const res = await authFetch(`/api/folders?id=${id}`, { method: 'DELETE' });
+            if (res.status === 401) {
+                setError('Unauthorized. Please login with PIN.');
+                return;
+            }
             await fetchFolders();
             onRefresh();
         } catch (e) {
