@@ -91,22 +91,36 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
         if (!confirm('Remove this folder and all its content from the library?')) return;
 
         try {
+            console.log('Deleting folder id:', id);
             const res = await authFetch(`/api/folders?id=${id}`, { method: 'DELETE' });
+            console.log('Delete response status:', res.status);
+            
             if (res.status === 401) {
                 setError('Unauthorized. Please login with PIN.');
                 return;
             }
             if (!res.ok) {
-                const data = await res.json();
-                setError(data.error || 'Failed to remove folder');
+                const text = await res.text();
+                console.error('Delete error response:', text);
+                try {
+                    const data = JSON.parse(text);
+                    setError(data.error || `Failed to remove folder (status ${res.status})`);
+                } catch {
+                    setError(`Failed to remove folder: ${text || res.statusText}`);
+                }
                 return;
             }
+            
+            const data = await res.json();
+            console.log('Delete success:', data);
+            
             // Restart watcher to update folder list
             await authFetch('/api/watcher', { method: 'POST' });
             await fetchFolders();
             onRefresh();
-        } catch (e) {
-            setError('Failed to remove folder');
+        } catch (e: any) {
+            console.error('Delete exception:', e);
+            setError(`Failed to remove folder: ${e.message}`);
         }
     };
 
