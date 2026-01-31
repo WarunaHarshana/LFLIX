@@ -59,6 +59,13 @@ export async function GET(req: Request) {
       ORDER BY seasonNumber ASC, episodeNumber ASC
     `).all(showId) as Episode[];
     
+    // Get watch progress for all episodes of this show
+    const watchProgress = db.prepare(`
+      SELECT episodeId, progress, duration, completed
+      FROM watch_history 
+      WHERE contentType = 'show' AND contentId = ?
+    `).all(showId) as WatchProgress[];
+    
     const progressMap = new Map(watchProgress.map(wp => [wp.episodeId, wp]));
 
     // Group episodes by season
