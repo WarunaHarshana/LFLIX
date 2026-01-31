@@ -19,6 +19,7 @@ import SetupWizard from './components/SetupWizard';
 import VideoPlayer from './components/VideoPlayer';
 import MobileNav from './components/MobileNav';
 import MobileConnectModal from './components/MobileConnectModal';
+import FloatingQRButton from './components/FloatingQRButton';
 
 // Types
 type ContentItem = {
@@ -748,6 +749,9 @@ export default function Home() {
         onShowQR={() => setShowMobileConnect(true)}
         onShowSettings={() => window.location.href = '/settings'}
       />
+
+      {/* Floating QR Button (Mobile) */}
+      <FloatingQRButton />
 
     </main>
   );

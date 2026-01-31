@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, Smartphone, Wifi, Copy, Check } from 'lucide-react';
+import { X, Smartphone, Wifi, Copy, Check, RefreshCw, Share2 } from 'lucide-react';
 
 type Props = {
   onClose: () => void;
@@ -11,11 +11,15 @@ type Props = {
 export default function MobileConnectModal({ onClose }: Props) {
   const [localIp, setLocalIp] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [shareSupported, setShareSupported] = useState(false);
 
   useEffect(() => {
     // Get the current host (works if accessed via IP)
     const host = window.location.host;
     setLocalIp(host);
+    
+    // Check if Web Share API is supported
+    setShareSupported(typeof navigator !== 'undefined' && !!navigator.share);
   }, []);
 
   const fullUrl = `http://${localIp}`;
@@ -24,6 +28,25 @@ export default function MobileConnectModal({ onClose }: Props) {
     navigator.clipboard.writeText(fullUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareUrl = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'LocalFlix',
+          text: 'Watch movies on LocalFlix',
+          url: fullUrl,
+        });
+      } catch (err) {
+        // User cancelled or share failed
+      }
+    }
+  };
+
+  const refreshIp = () => {
+    const host = window.location.host;
+    setLocalIp(host);
   };
 
   return (
@@ -50,12 +73,18 @@ export default function MobileConnectModal({ onClose }: Props) {
 
         {/* QR Code */}
         <div className="flex flex-col items-center">
-          <div className="bg-white p-4 rounded-xl mb-4">
+          <div className="bg-white p-6 rounded-2xl mb-4 shadow-lg">
             <QRCodeSVG 
               value={fullUrl}
-              size={200}
-              level="M"
+              size={220}
+              level="H"
               includeMargin={false}
+              imageSettings={{
+                src: '/logo.png',
+                height: 40,
+                width: 40,
+                excavate: true,
+              }}
             />
           </div>
 
@@ -66,31 +95,57 @@ export default function MobileConnectModal({ onClose }: Props) {
               {fullUrl}
             </code>
             <button 
+              onClick={refreshIp}
+              className="p-2 hover:bg-neutral-700 rounded-lg transition"
+              title="Refresh IP"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            <button 
               onClick={copyToClipboard}
               className="p-2 hover:bg-neutral-700 rounded-lg transition"
               title="Copy URL"
             >
               {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
             </button>
+            {shareSupported && (
+              <button 
+                onClick={shareUrl}
+                className="p-2 hover:bg-neutral-700 rounded-lg transition"
+                title="Share"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Instructions */}
-          <div className="text-center space-y-2 text-sm">
-            <p className="text-neutral-400">
-              1. Connect your phone to the <strong>same WiFi</strong> as this PC
-            </p>
-            <p className="text-neutral-400">
-              2. Open your phone's camera and <strong>scan the QR code</strong>
-            </p>
-            <p className="text-neutral-400">
-              3. Tap the link to open LocalFlix on your phone
-            </p>
+          <div className="text-center space-y-3 text-sm">
+            <div className="flex items-start gap-3 text-left">
+              <span className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">1</span>
+              <p className="text-neutral-400">Connect your phone to the <strong>same WiFi</strong> as this PC</p>
+            </div>
+            <div className="flex items-start gap-3 text-left">
+              <span className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">2</span>
+              <p className="text-neutral-400">Open your phone's camera and <strong>scan the QR code</strong></p>
+            </div>
+            <div className="flex items-start gap-3 text-left">
+              <span className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</span>
+              <p className="text-neutral-400">Tap the link and login with your PIN</p>
+            </div>
           </div>
 
           {/* Tips */}
           <div className="mt-6 p-4 bg-blue-900/20 border border-blue-800 rounded-lg text-sm">
             <p className="text-blue-300">
-              <strong>Tip:</strong> Make sure your PC's firewall allows connections on port 3000
+              <strong>💡 Tip:</strong> Both devices must be on the same WiFi network
+            </p>
+          </div>
+          
+          {/* Troubleshooting */}
+          <div className="mt-4 text-center">
+            <p className="text-neutral-500 text-xs">
+              Not working? Try typing the URL manually in your phone's browser
             </p>
           </div>
         </div>
