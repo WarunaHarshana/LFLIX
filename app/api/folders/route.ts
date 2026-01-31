@@ -107,21 +107,24 @@ export async function DELETE(req: Request) {
         const folderPath = folder.folderPath;
         console.log('Deleting folder:', folderPath);
         
-        // Escape special LIKE characters to prevent pattern interpretation
-        const escapedPath = folderPath.replace(/[%_\\]/g, '\\$&');
+        // Use simple LIKE pattern - escape % and _ by wrapping them in []
+        // This is SQLite's way of escaping without ESCAPE clause
+        const escapedPath = folderPath
+            .replace(/%/g, '[%]')
+            .replace(/_/g, '[_]');
         const likePattern = `${escapedPath}%`;
 
         // Delete movies from this folder
-        const moviesDeleted = db.prepare("DELETE FROM movies WHERE filePath LIKE ? ESCAPE '\\\\'").run(likePattern);
+        const moviesDeleted = db.prepare("DELETE FROM movies WHERE filePath LIKE ?").run(likePattern);
         console.log('Movies deleted:', moviesDeleted.changes);
 
         // Get shows that have episodes ONLY in this folder
         const showsToCheck = db.prepare(`
-            SELECT DISTINCT showId FROM episodes WHERE filePath LIKE ? ESCAPE '\\\\'
+            SELECT DISTINCT showId FROM episodes WHERE filePath LIKE ?
         `).all(likePattern) as { showId: number }[];
 
         // Delete episodes from this folder
-        const episodesDeleted = db.prepare("DELETE FROM episodes WHERE filePath LIKE ? ESCAPE '\\\\'").run(likePattern);
+        const episodesDeleted = db.prepare("DELETE FROM episodes WHERE filePath LIKE ?").run(likePattern);
         console.log('Episodes deleted:', episodesDeleted.changes);
 
         // Delete shows that no longer have any episodes
