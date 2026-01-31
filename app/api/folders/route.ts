@@ -81,53 +81,65 @@ export async function POST(req: Request) {
 
 // Remove folder and its content
 export async function DELETE(req: Request) {
+    console.log('DELETE /api/folders called');
     try {
-        const { searchParams } = new URL(req.url);
-        const idParam = searchParams.get('id');
+        const url = new URL(req.url);
+        const idParam = url.searchParams.get('id');
+        
+        console.log('Delete folder id:', idParam);
 
         if (!idParam) {
-            return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+            return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 });
         }
 
         const id = parseInt(idParam, 10);
-        if (!validateId(id)) {
+        if (isNaN(id) || id <= 0) {
             return NextResponse.json({ error: 'Invalid id. Must be a positive integer' }, { status: 400 });
         }
 
         // Get the folder path
         const folder = db.prepare('SELECT folderPath FROM scanned_folders WHERE id = ?').get(id) as { folderPath: string } | undefined;
 
-        if (folder) {
-            const folderPath = folder.folderPath;
-            // Escape special LIKE characters to prevent pattern interpretation
-            const escapedPath = folderPath.replace(/[%_\\]/g, '\\$&');
-            const likePattern = `${escapedPath}%`;
-
-            // Delete movies from this folder
-            db.prepare("DELETE FROM movies WHERE filePath LIKE ? ESCAPE '\\\\'").run(likePattern);
-
-            // Get shows that have episodes ONLY in this folder
-            const showsToCheck = db.prepare(`
-        SELECT DISTINCT showId FROM episodes WHERE filePath LIKE ? ESCAPE '\\\\'
-      `).all(likePattern) as { showId: number }[];
-
-            // Delete episodes from this folder
-            db.prepare("DELETE FROM episodes WHERE filePath LIKE ? ESCAPE '\\\\'").run(likePattern);
-
-            // Delete shows that no longer have any episodes
-            for (const { showId } of showsToCheck) {
-                const remaining = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE showId = ?').get(showId) as { count: number };
-                if (remaining.count === 0) {
-                    db.prepare('DELETE FROM shows WHERE id = ?').run(showId);
-                }
-            }
-
-            // Delete the folder record
-            db.prepare('DELETE FROM scanned_folders WHERE id = ?').run(id);
+        if (!folder) {
+            return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
         }
 
-        return NextResponse.json({ success: true });
+        const folderPath = folder.folderPath;
+        console.log('Deleting folder:', folderPath);
+        
+        // Escape special LIKE characters to prevent pattern interpretation
+        const escapedPath = folderPath.replace(/[%_\\]/g, '\\$&');
+        const likePattern = `${escapedPath}%`;
+
+        // Delete movies from this folder
+        const moviesDeleted = db.prepare("DELETE FROM movies WHERE filePath LIKE ? ESCAPE '\\\\'").run(likePattern);
+        console.log('Movies deleted:', moviesDeleted.changes);
+
+        // Get shows that have episodes ONLY in this folder
+        const showsToCheck = db.prepare(`
+            SELECT DISTINCT showId FROM episodes WHERE filePath LIKE ? ESCAPE '\\\\'
+        `).all(likePattern) as { showId: number }[];
+
+        // Delete episodes from this folder
+        const episodesDeleted = db.prepare("DELETE FROM episodes WHERE filePath LIKE ? ESCAPE '\\\\'").run(likePattern);
+        console.log('Episodes deleted:', episodesDeleted.changes);
+
+        // Delete shows that no longer have any episodes
+        for (const { showId } of showsToCheck) {
+            const remaining = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE showId = ?').get(showId) as { count: number };
+            if (remaining.count === 0) {
+                db.prepare('DELETE FROM shows WHERE id = ?').run(showId);
+                console.log('Deleted show:', showId);
+            }
+        }
+
+        // Delete the folder record
+        db.prepare('DELETE FROM scanned_folders WHERE id = ?').run(id);
+        console.log('Folder record deleted');
+
+        return NextResponse.json({ success: true, message: 'Folder removed from library' });
     } catch (e: any) {
+        console.error('Delete folder error:', e);
         return NextResponse.json({ error: e.message }, { status: 500 });
     }
 }
