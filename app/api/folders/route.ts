@@ -1,6 +1,35 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import path from 'path';
+import fs from 'fs';
+
+// Validate ID is a positive integer
+function validateId(id: any): id is number {
+  return Number.isInteger(id) && id > 0;
+}
+
+// SECURITY: Validate folder path to prevent directory traversal
+function validateFolderPath(folderPath: string): { valid: boolean; error?: string } {
+  // Check for null bytes (path injection)
+  if (folderPath.includes('\0')) {
+    return { valid: false, error: 'Invalid path' };
+  }
+
+  // Normalize the path
+  const normalizedPath = path.normalize(folderPath);
+
+  // Check for path traversal attempts (..)
+  if (normalizedPath.includes('..')) {
+    return { valid: false, error: 'Path traversal not allowed' };
+  }
+
+  // Must be an absolute path
+  if (!path.isAbsolute(normalizedPath)) {
+    return { valid: false, error: 'Path must be absolute' };
+  }
+
+  return { valid: true };
+}
 
 // Get all scanned folders
 export async function GET() {
@@ -21,6 +50,22 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing folderPath' }, { status: 400 });
         }
 
+        // Validate folder path
+        const validation = validateFolderPath(folderPath);
+        if (!validation.valid) {
+            return NextResponse.json({ error: validation.error }, { status: 400 });
+        }
+
+        // Check if folder exists
+        if (!fs.existsSync(folderPath)) {
+            return NextResponse.json({ error: 'Folder does not exist' }, { status: 404 });
+        }
+
+        const stat = fs.statSync(folderPath);
+        if (!stat.isDirectory()) {
+            return NextResponse.json({ error: 'Path is not a directory' }, { status: 400 });
+        }
+
         const folderName = path.basename(folderPath);
 
         db.prepare(`
@@ -38,10 +83,15 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
-        const id = searchParams.get('id');
+        const idParam = searchParams.get('id');
 
-        if (!id) {
+        if (!idParam) {
             return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+        }
+
+        const id = parseInt(idParam, 10);
+        if (!validateId(id)) {
+            return NextResponse.json({ error: 'Invalid id. Must be a positive integer' }, { status: 400 });
         }
 
         // Get the folder path

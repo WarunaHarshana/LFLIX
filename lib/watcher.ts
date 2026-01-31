@@ -72,13 +72,17 @@ class FolderWatcher {
 
             if (folder) {
                 try {
-                    // Use relative URL and scan specific file only
-                    const response = await fetch('/api/scan', {
+                    // Use absolute URL for server-side fetch
+                    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+                    const response = await fetch(`${baseUrl}/api/scan`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'x-app-pin': process.env.APP_PIN || '1234'
+                        },
                         body: JSON.stringify({ 
                             folderPath: path.dirname(filePath),
-                            specificFile: filePath // Pass specific file to scan only this file
+                            specificFile: filePath
                         })
                     });
                     const data = await response.json();

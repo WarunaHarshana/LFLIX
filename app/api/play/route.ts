@@ -28,6 +28,11 @@ function getFilePathById(contentType: 'movie' | 'episode', id: number): string |
   }
 }
 
+// Validate ID is a positive integer
+function validateId(id: any): id is number {
+  return Number.isInteger(id) && id > 0;
+}
+
 export async function POST(req: Request) {
   try {
     const { contentType, contentId, episodeId, startTime } = await req.json();
@@ -35,6 +40,19 @@ export async function POST(req: Request) {
     // SECURITY: Must provide contentType and ID, not filePath
     if (!contentType || !contentId) {
       return NextResponse.json({ error: 'Missing contentType or contentId' }, { status: 400 });
+    }
+
+    // Validate contentType
+    if (contentType !== 'movie' && contentType !== 'show') {
+      return NextResponse.json({ error: 'Invalid contentType. Must be movie or show' }, { status: 400 });
+    }
+
+    // Validate IDs are positive integers
+    if (!validateId(contentId)) {
+      return NextResponse.json({ error: 'Invalid contentId. Must be a positive integer' }, { status: 400 });
+    }
+    if (episodeId !== undefined && !validateId(episodeId)) {
+      return NextResponse.json({ error: 'Invalid episodeId. Must be a positive integer' }, { status: 400 });
     }
 
     // Look up the actual file path from database

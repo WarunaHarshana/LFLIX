@@ -20,31 +20,45 @@ type WatchProgress = {
   completed: number;
 };
 
+type EpisodeResponse = {
+  id: number;
+  showId: number;
+  seasonNumber: number;
+  episodeNumber: number;
+  title: string;
+  overview: string | null;
+  stillPath: string | null;
+  watchProgress?: WatchProgress;
+};
+
 type SeasonGroup = {
   season: number;
-  episodes: (Episode & { watchProgress?: WatchProgress })[];
+  episodes: EpisodeResponse[];
 };
+
+// Validate ID is a positive integer
+function validateId(id: any): id is number {
+  return Number.isInteger(id) && id > 0;
+}
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const showId = searchParams.get('showId');
+  const showIdParam = searchParams.get('showId');
 
   try {
-    if (!showId) return NextResponse.json({ error: 'Missing showId' }, { status: 400 });
+    if (!showIdParam) return NextResponse.json({ error: 'Missing showId' }, { status: 400 });
+    
+    const showId = parseInt(showIdParam, 10);
+    if (!validateId(showId)) {
+      return NextResponse.json({ error: 'Invalid showId. Must be a positive integer' }, { status: 400 });
+    }
 
     const episodes = db.prepare(`
       SELECT * FROM episodes 
       WHERE showId = ? 
       ORDER BY seasonNumber ASC, episodeNumber ASC
     `).all(showId) as Episode[];
-
-    // Get watch progress for all episodes of this show
-    const watchProgress = db.prepare(`
-      SELECT episodeId, progress, duration, completed
-      FROM watch_history 
-      WHERE contentType = 'show' AND contentId = ?
-    `).all(showId) as WatchProgress[];
-
+    
     const progressMap = new Map(watchProgress.map(wp => [wp.episodeId, wp]));
 
     // Group episodes by season
@@ -65,7 +79,7 @@ export async function GET(req: Request) {
         overview: ep.overview,
         stillPath: ep.stillPath,
         watchProgress: progressMap.get(ep.id)
-      } as any);
+      });
     }
 
     const seasons = Array.from(seasonMap.values()).sort((a, b) => a.season - b.season);

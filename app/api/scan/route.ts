@@ -143,17 +143,54 @@ async function fetchGenres(moviedb: MovieDb, genreIds: number[], type: 'movie' |
   }
 }
 
+// SECURITY: Validate folder path to prevent directory traversal
+function validateFolderPath(folderPath: string): { valid: boolean; error?: string } {
+  // Check for null bytes (path injection)
+  if (folderPath.includes('\0')) {
+    return { valid: false, error: 'Invalid path' };
+  }
+
+  // Normalize the path
+  const normalizedPath = path.normalize(folderPath);
+
+  // Check for path traversal attempts (..)
+  if (normalizedPath.includes('..')) {
+    return { valid: false, error: 'Path traversal not allowed' };
+  }
+
+  // Must be an absolute path
+  if (!path.isAbsolute(normalizedPath)) {
+    return { valid: false, error: 'Path must be absolute' };
+  }
+
+  return { valid: true };
+}
+
 export async function POST(req: Request) {
   const TMDB_API_KEY = getTmdbApiKey();
   const moviedb = new MovieDb(TMDB_API_KEY);
 
   try {
-    const { folderPath } = await req.json();
+    const { folderPath, specificFile } = await req.json();
     if (!folderPath) return NextResponse.json({ error: 'Missing folderPath' }, { status: 400 });
+
+    // Validate folder path
+    const validation = validateFolderPath(folderPath);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
 
     // Check if folder exists
     if (!fs.existsSync(folderPath)) {
       return NextResponse.json({ error: 'Folder does not exist' }, { status: 404 });
+    }
+
+    // Validate specificFile if provided
+    if (specificFile) {
+      const fileValidation = validateFolderPath(specificFile);
+      if (!fileValidation.valid) {
+        return NextResponse.json({ error: 'Invalid specificFile path' }, { status: 400 });
+      }
     }
 
     // Save this folder to scanned_folders
@@ -163,7 +200,15 @@ export async function POST(req: Request) {
       VALUES (?, ?, 'auto')
     `).run(folderPath, folderName);
 
-    const files = getVideoFiles(folderPath);
+    let files: string[];
+    
+    // If specificFile is provided, only scan that file
+    if (specificFile && fs.existsSync(specificFile)) {
+      files = [specificFile];
+    } else {
+      files = getVideoFiles(folderPath);
+    }
+    
     let addedCount = 0;
     const errors: string[] = [];
 

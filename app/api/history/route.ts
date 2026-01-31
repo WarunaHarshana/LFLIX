@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+// Validate ID is a positive integer
+function validateId(id: any): id is number {
+  return Number.isInteger(id) && id > 0;
+}
+
 // Get watch history / continue watching
 export async function GET() {
   try {
@@ -54,6 +59,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Validate contentType
+    if (contentType !== 'movie' && contentType !== 'show') {
+      return NextResponse.json({ error: 'Invalid contentType. Must be movie or show' }, { status: 400 });
+    }
+
+    // Validate IDs
+    if (!validateId(contentId)) {
+      return NextResponse.json({ error: 'Invalid contentId. Must be a positive integer' }, { status: 400 });
+    }
+    if (episodeId !== undefined && !validateId(episodeId)) {
+      return NextResponse.json({ error: 'Invalid episodeId. Must be a positive integer' }, { status: 400 });
+    }
+
+    // Validate progress and duration are numbers
+    if (progress !== undefined && (typeof progress !== 'number' || progress < 0)) {
+      return NextResponse.json({ error: 'Invalid progress. Must be a non-negative number' }, { status: 400 });
+    }
+    if (duration !== undefined && (typeof duration !== 'number' || duration < 0)) {
+      return NextResponse.json({ error: 'Invalid duration. Must be a non-negative number' }, { status: 400 });
+    }
+
     const completed = (duration && duration > 0 && progress / duration > 0.9) ? 1 : 0;
 
     db.prepare(`
@@ -73,10 +99,15 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+    const idParam = searchParams.get('id');
 
-    if (!id) {
+    if (!idParam) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    }
+
+    const id = parseInt(idParam, 10);
+    if (!validateId(id)) {
+      return NextResponse.json({ error: 'Invalid id. Must be a positive integer' }, { status: 400 });
     }
 
     db.prepare('DELETE FROM watch_history WHERE id = ?').run(id);
