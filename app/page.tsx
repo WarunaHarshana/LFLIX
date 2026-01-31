@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder } from 'lucide-react';
+import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone } from 'lucide-react';
 import clsx from 'clsx';
 import Link from 'next/link';
 
@@ -17,6 +17,8 @@ import FolderManager from './components/FolderManager';
 import LoginScreen from './components/LoginScreen';
 import SetupWizard from './components/SetupWizard';
 import VideoPlayer from './components/VideoPlayer';
+import MobileNav from './components/MobileNav';
+import MobileConnectModal from './components/MobileConnectModal';
 
 // Types
 type ContentItem = {
@@ -106,6 +108,9 @@ export default function Home() {
 
   // Video Player (for mobile streaming)
   const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number } | null>(null);
+
+  // Mobile Connect QR Modal
+  const [showMobileConnect, setShowMobileConnect] = useState(false);
 
   // Detect mobile device
   const isMobile = useCallback(() => {
@@ -438,10 +443,10 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white font-sans selection:bg-red-900">
+    <main className="min-h-screen bg-black text-white font-sans selection:bg-red-900 pb-20 md:pb-0">
 
-      {/* Navbar */}
-      <nav className="fixed top-0 w-full z-50 bg-gradient-to-b from-black/90 to-transparent px-8 py-6 flex items-center justify-between backdrop-blur-sm">
+      {/* Navbar - Desktop (hidden on mobile) */}
+      <nav className="fixed top-0 w-full z-40 bg-gradient-to-b from-black/90 to-transparent px-8 py-6 items-center justify-between backdrop-blur-sm hidden md:flex">
         <div className="flex items-center gap-8">
           <h1 className="text-3xl font-bold text-red-600 tracking-tighter">LOCALFLIX</h1>
           <div className="flex gap-4 text-sm font-medium">
@@ -474,6 +479,13 @@ export default function Home() {
               if (show) openShow(show);
             }}
           />
+          <button
+            onClick={() => setShowMobileConnect(true)}
+            className="p-2 hover:bg-white/10 rounded-full transition hidden md:flex"
+            title="Connect Mobile"
+          >
+            <Smartphone className="w-5 h-5" />
+          </button>
           <button
             onClick={() => setShowFolderManager(true)}
             className="p-2 hover:bg-white/10 rounded-full transition"
@@ -714,6 +726,19 @@ export default function Home() {
           onClose={() => setVideoPlayer(null)}
         />
       )}
+
+      {/* Mobile Connect QR Modal */}
+      {showMobileConnect && (
+        <MobileConnectModal onClose={() => setShowMobileConnect(false)} />
+      )}
+
+      {/* Mobile Navigation */}
+      <MobileNav
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onShowQR={() => setShowMobileConnect(true)}
+        onShowSettings={() => window.location.href = '/settings'}
+      />
 
     </main>
   );
