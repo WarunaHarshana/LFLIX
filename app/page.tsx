@@ -15,6 +15,7 @@ import EmptyState from './components/EmptyState';
 import { HeroSkeleton, CardGridSkeleton, ContinueWatchingSkeleton } from './components/LoadingStates';
 import FolderManager from './components/FolderManager';
 import LoginScreen from './components/LoginScreen';
+import SetupWizard from './components/SetupWizard';
 
 // Types
 type ContentItem = {
@@ -72,6 +73,9 @@ type ContinueItem = {
 };
 
 export default function Home() {
+  // Setup Wizard
+  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
+
   // Authentication
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -98,6 +102,21 @@ export default function Home() {
 
   // Keyboard Navigation
   const [focusedIndex, setFocusedIndex] = useState(-1);
+
+  // Check if setup is complete on first load
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        const res = await fetch('/api/setup');
+        const data = await res.json();
+        setSetupComplete(data.setupComplete);
+      } catch {
+        // If API fails, assume setup is needed
+        setSetupComplete(false);
+      }
+    };
+    checkSetup();
+  }, []);
   const gridRef = useRef<HTMLDivElement>(null);
 
   // Toast Notifications
@@ -362,6 +381,22 @@ export default function Home() {
 
   // Featured item (first with backdrop)
   const featured = filteredLibrary.find(item => item.backdropPath) || filteredLibrary[0];
+
+  // Show setup wizard if first run
+  if (setupComplete === false) {
+    return <SetupWizard onComplete={() => setSetupComplete(true)} />;
+  }
+
+  // Show loading while checking setup
+  if (setupComplete === null) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-pulse">
+          <h1 className="text-4xl font-bold text-red-600 tracking-tighter">LOCALFLIX</h1>
+        </div>
+      </div>
+    );
+  }
 
   // Show login screen if not authenticated
   if (!isAuthenticated) {

@@ -2,7 +2,7 @@
 
 A Netflix-style local media server that automatically organizes and plays your movie and TV show collection. Built with Next.js, SQLite, and VLC.
 
-![LocalFlix](https://img.shields.io/badge/LocalFlix-v0.1.0-red?style=for-the-badge)
+![LocalFlix](https://img.shields.io/badge/LocalFlix-v0.2.0-red?style=for-the-badge)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
 
@@ -17,68 +17,73 @@ A Netflix-style local media server that automatically organizes and plays your m
 - 🎮 **Keyboard Navigation** - Navigate with arrow keys, Enter to play
 - 🏷️ **Genre Filtering** - Filter content by genre
 - 🔎 **Search** - Instant search across your library
+- 🔒 **PIN Protection** - Secure your library with a PIN
+- 🧙 **Easy Setup** - Guided wizard for first-time setup
 
 ## 📋 Requirements
 
-- **Node.js** 18+ 
+- **Node.js** 18+ - [Download here](https://nodejs.org/)
 - **VLC Media Player** - [Download VLC](https://www.videolan.org/vlc/)
-- **Windows** (currently optimized for Windows, Linux/Mac support possible)
+- **Windows** (currently optimized for Windows)
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Easy Way)
 
-### 1. Clone the repository
+### Option 1: Double-click to Start
+
+1. **Double-click** `Start LocalFlix.bat`
+2. Wait for the server to start
+3. Open your browser to **http://localhost:3000**
+4. Follow the setup wizard!
+
+### Option 2: Create Desktop Shortcut
+
+1. **Double-click** `Create Desktop Shortcut.bat`
+2. A shortcut appears on your desktop
+3. Double-click the **LocalFlix** icon anytime to start
+
+## 🛠️ Manual Setup
+
+If you prefer command line:
 
 ```bash
+# Clone the repository
 git clone https://github.com/WarunaHarshana/localflix.git
 cd localflix
-```
 
-### 2. Install dependencies
-
-```bash
+# Install dependencies
 npm install
-```
 
-### 3. Run the development server
-
-```bash
+# Run the server
 npm run dev
 ```
 
-### 4. Open in browser
+Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Navigate to [http://localhost:3000](http://localhost:3000)
+## 🧙 First-Time Setup Wizard
 
-### 5. Add your media folders
+On first run, you'll see a simple 4-step wizard:
 
-1. Click the **+** button (or press **F**)
-2. Browse to your Movies or TV Shows folder
-3. Click **Select Folder** to scan
+1. **🔒 Create PIN** - Protect your library (4-6 digits)
+2. **🔑 TMDB API Key** - Get free key from [themoviedb.org](https://www.themoviedb.org/settings/api)
+3. **📁 Add Folders** - Select where your movies/TV shows are stored
+4. **🎬 Start Watching!**
 
-## ⚙️ Configuration
+The wizard saves everything automatically - no manual configuration needed!
 
-### VLC Path
+## 📁 Adding Media
 
-By default, LocalFlix looks for VLC at:
-```
-C:\Program Files\VideoLAN\VLC\vlc.exe
-```
+### During Setup
+Add folders directly in the setup wizard (Step 3).
 
-To change this:
-1. Click the **Settings** icon (⚙️) in the top right
-2. Update the VLC path
-3. Click **Save Settings**
+### After Setup
+1. Click **+** button (or press **F**)
+2. Browse to your folder
+3. Click **Select Folder**
+4. Your media is scanned automatically!
 
-### TMDB API Key
+### Folder Structure
 
-LocalFlix comes with a default TMDB API key, but you can use your own:
-1. Get a free API key at [themoviedb.org](https://www.themoviedb.org/settings/api)
-2. Go to **Settings** → **TMDB Integration**
-3. Enter your API key and save
-
-## 📁 Folder Structure
-
-LocalFlix automatically detects content type based on filename patterns:
+LocalFlix automatically detects content from filenames:
 
 **Movies:**
 ```
@@ -100,7 +105,31 @@ TV Shows/
     └── ...
 ```
 
-Supported formats: `.mp4`, `.mkv`, `.avi`, `.mov`, `.m4v`, `.wmv`, `.flv`, `.webm`, `.ts`
+**Supported formats:** `.mp4`, `.mkv`, `.avi`, `.mov`, `.m4v`, `.wmv`, `.flv`, `.webm`, `.ts`
+
+## ⚙️ Settings
+
+Access settings by clicking the **⚙️** icon (top right).
+
+### Change PIN
+Go to **Security** → Enter new PIN → Save
+
+### Change TMDB API Key
+Go to **TMDB Integration** → Enter new key → Save
+
+### Change VLC Path
+Go to **VLC Settings** → Browse to vlc.exe → Save
+
+(Default: `C:\Program Files\VideoLAN\VLC\vlc.exe`)
+
+## 🔄 Automatic Folder Watching
+
+LocalFlix watches your folders and updates automatically:
+
+1. Add new video file to watched folder
+2. Notification appears: "New video detected!"
+3. File is scanned and metadata fetched
+4. Library updates automatically ✨
 
 ## ⌨️ Keyboard Shortcuts
 
@@ -112,14 +141,11 @@ Supported formats: `.mp4`, `.mkv`, `.avi`, `.mov`, `.m4v`, `.wmv`, `.flv`, `.web
 | `F` | Open folder manager |
 | `Esc` | Close modals |
 
-## 🔄 Automatic Folder Watching
+## 🛡️ Security
 
-LocalFlix automatically watches your scanned folders for new files:
-
-1. When you download/copy a new video file to a watched folder
-2. A toast notification appears: "New video detected, scanning..."
-3. The file is scanned and metadata is fetched from TMDB
-4. Your library updates automatically
+- **PIN Protection** - Required to access the app
+- **No File Path Exposure** - Full paths never sent to browser
+- **Secure API** - All endpoints require authentication
 
 ## 🛠️ Tech Stack
 
@@ -127,39 +153,46 @@ LocalFlix automatically watches your scanned folders for new files:
 - **Backend:** Next.js API Routes, SQLite (better-sqlite3)
 - **File Watching:** Chokidar
 - **Media Player:** VLC (via child_process)
-- **Metadata:** TMDB API (moviedb-promise)
+- **Metadata:** TMDB API
 
 ## 📦 Project Structure
 
 ```
 localflix/
+├── Start LocalFlix.bat           # ← Double-click to start!
+├── Create Desktop Shortcut.bat   # ← Make desktop shortcut
 ├── app/
-│   ├── api/           # API routes
-│   │   ├── browse/    # File browser
-│   │   ├── content/   # Library content
-│   │   ├── scan/      # Folder scanning
-│   │   ├── play/      # VLC playback
-│   │   ├── watcher/   # Folder watching SSE
+│   ├── api/                      # API routes
+│   ├── components/               # React components
+│   │   ├── SetupWizard.tsx       # ← First-time setup
+│   │   ├── LoginScreen.tsx       # ← PIN login
 │   │   └── ...
-│   ├── components/    # React components
-│   ├── settings/      # Settings page
-│   └── page.tsx       # Main page
+│   ├── settings/                 # Settings page
+│   └── page.tsx                  # Main page
 ├── lib/
-│   ├── db.ts          # SQLite database
-│   └── watcher.ts     # File watcher service
-└── localflix.db       # SQLite database file
+│   ├── db.ts                     # SQLite database
+│   └── watcher.ts                # File watcher
+└── localflix.db                  # Your library database
 ```
 
-## 🐛 Known Issues
+## 🐛 Troubleshooting
 
-- Optimized for Windows; Linux/Mac paths may need adjustments
-- VLC must be installed and path configured correctly
-- Large libraries may take time to scan initially
+### "VLC not found"
+- Make sure VLC is installed
+- Go to Settings → VLC Settings → Browse to vlc.exe
+
+### "TMDB API error"
+- Check your internet connection
+- Verify your TMDB API key in Settings
+
+### "Can't access on other devices"
+- Make sure both devices are on the same WiFi
+- Use your PC's IP address: `http://192.168.1.xxx:3000`
 
 ## 📄 License
 
-MIT License - feel free to use and modify!
+MIT License - use and modify freely!
 
 ---
 
-**Made with ❤️ for movie enthusiasts who prefer local media**
+**Made with ❤️ for movie enthusiasts**
