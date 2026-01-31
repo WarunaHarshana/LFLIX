@@ -6,6 +6,8 @@ export async function POST(req: Request) {
     const { pin } = await req.json();
     const expectedPin = process.env.APP_PIN || '1234';
 
+    console.log('Login attempt:', { receivedPin: pin, expectedPin });
+
     if (pin === expectedPin) {
       // Set cookie for session
       const response = NextResponse.json({ success: true });
@@ -16,11 +18,14 @@ export async function POST(req: Request) {
         path: '/', // Ensure cookie is available site-wide
         maxAge: 60 * 60 * 24 * 7 // 7 days
       });
+      console.log('Login successful, cookie set');
       return response;
     }
 
+    console.log('Login failed: PIN mismatch');
     return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 });
   } catch (e: any) {
+    console.error('Login error:', e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
