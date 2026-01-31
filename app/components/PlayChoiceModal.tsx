@@ -17,6 +17,7 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
   const [copied, setCopied] = useState(false);
   const [tokenUrl, setTokenUrl] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [vlcOpened, setVlcOpened] = useState(false);
 
   useEffect(() => {
     // Generate a token for external players
@@ -41,12 +42,10 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
     generateToken();
   }, [contentType, contentId, episodeId, streamUrl]);
 
+  const [vlcOpened, setVlcOpened] = useState(false);
+
   const openInVLC = () => {
     if (!tokenUrl) return;
-    
-    // Try different URL schemes for VLC
-    // 1. First try x-callback-url scheme (more reliable on iOS)
-    // 2. Fall back to direct http link
     
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     
@@ -55,20 +54,17 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
       const vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(tokenUrl)}`;
       window.location.href = vlcUrl;
     } else {
-      // Android - try vlc:// scheme or direct http
+      // Android - try vlc:// scheme
       const vlcUrl = `vlc://${tokenUrl}`;
       window.location.href = vlcUrl;
-      
-      // Also try opening direct http URL as fallback
-      setTimeout(() => {
-        window.open(tokenUrl, '_blank');
-      }, 500);
     }
     
-    // Close modal after a delay
+    setVlcOpened(true);
+    
+    // Don't close modal immediately - let user see instructions
     setTimeout(() => {
       onClose();
-    }, 1000);
+    }, 3000);
   };
 
   const copyUrl = () => {
@@ -143,21 +139,39 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
           </button>
         </div>
 
+        {/* VLC Opened Message */}
+        {vlcOpened && (
+          <div className="mt-4 p-4 bg-blue-900/20 border border-blue-800 rounded-lg text-sm">
+            <p className="text-blue-300 font-medium mb-1">Opening VLC...</p>
+            <p className="text-blue-400/80 text-xs">
+              If VLC doesn't open automatically, use "Copy Stream URL" and paste it manually in VLC:
+            </p>
+            <ol className="text-blue-400/80 text-xs list-decimal list-inside mt-1 space-y-1">
+              <li>Copy the URL above</li>
+              <li>Open VLC app</li>
+              <li>Go to Network Stream</li>
+              <li>Paste the URL</li>
+            </ol>
+          </div>
+        )}
+
         {/* Format Warning */}
-        <div className="mt-6 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-sm">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-yellow-300 font-medium mb-1">Having issues?</p>
-              <ul className="text-yellow-400/80 text-xs space-y-1 list-disc list-inside">
-                <li><strong>Best option:</strong> Use "Play in Browser"</li>
-                <li>MP4 files work better than MKV/AVI in VLC mobile</li>
-                <li>Try "Copy Stream URL" and paste in VLC manually</li>
-                <li>VLC mobile doesn't support all video formats</li>
-              </ul>
+        {!vlcOpened && (
+          <div className="mt-6 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-sm">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-yellow-300 font-medium mb-1">Having issues?</p>
+                <ul className="text-yellow-400/80 text-xs space-y-1 list-disc list-inside">
+                  <li><strong>Best option:</strong> Use "Play in Browser"</li>
+                  <li>MP4 files work better than MKV/AVI in VLC mobile</li>
+                  <li>Try "Copy Stream URL" and paste in VLC manually</li>
+                  <li>VLC mobile doesn't support all video formats</li>
+                </ul>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
