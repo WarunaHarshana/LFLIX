@@ -10,13 +10,26 @@ type Props = {
 
 export default function MobileConnectModal({ onClose }: Props) {
   const [localIp, setLocalIp] = useState<string>('');
+  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [shareSupported, setShareSupported] = useState(false);
 
   useEffect(() => {
-    // Get the current host (works if accessed via IP)
-    const host = window.location.host;
-    setLocalIp(host);
+    // Fetch the actual IP address from server
+    const fetchIp = async () => {
+      try {
+        const res = await fetch('/api/ip');
+        const data = await res.json();
+        setLocalIp(`${data.ip}:${data.port}`);
+      } catch {
+        // Fallback to window location
+        setLocalIp(window.location.host);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchIp();
     
     // Check if Web Share API is supported
     setShareSupported(typeof navigator !== 'undefined' && !!navigator.share);
@@ -73,19 +86,20 @@ export default function MobileConnectModal({ onClose }: Props) {
 
         {/* QR Code */}
         <div className="flex flex-col items-center">
-          <div className="bg-white p-6 rounded-2xl mb-4 shadow-lg">
-            <QRCodeSVG 
-              value={fullUrl}
-              size={220}
-              level="H"
-              includeMargin={false}
-              imageSettings={{
-                src: '/logo.png',
-                height: 40,
-                width: 40,
-                excavate: true,
-              }}
-            />
+          <div className="bg-white p-6 rounded-2xl mb-4 shadow-lg min-h-[252px] min-w-[252px] flex items-center justify-center">
+            {loading ? (
+              <div className="flex flex-col items-center text-neutral-400">
+                <RefreshCw className="w-8 h-8 animate-spin mb-2" />
+                <span className="text-sm">Getting IP...</span>
+              </div>
+            ) : (
+              <QRCodeSVG 
+                value={fullUrl}
+                size={220}
+                level="H"
+                includeMargin={false}
+              />
+            )}
           </div>
 
           {/* URL Display */}
