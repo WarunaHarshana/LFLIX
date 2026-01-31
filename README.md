@@ -29,7 +29,7 @@ A Netflix-style local media server that automatically organizes and plays your m
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/localflix.git
+git clone https://github.com/WarunaHarshana/localflix.git
 cd localflix
 ```
 
