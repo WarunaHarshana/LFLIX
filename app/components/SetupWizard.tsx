@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Lock, Key, FolderOpen, Check, ChevronRight, ChevronLeft, Play } from 'lucide-react';
+import FileBrowser from './FileBrowser';
 
 type Props = {
   onComplete: () => void;
@@ -15,6 +16,7 @@ export default function SetupWizard({ onComplete }: Props) {
   const [newFolder, setNewFolder] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showBrowser, setShowBrowser] = useState(false);
 
   const totalSteps = 4;
 
@@ -186,6 +188,12 @@ export default function SetupWizard({ onComplete }: Props) {
                   className="flex-1 bg-black border border-neutral-700 rounded-lg px-4 py-2 outline-none focus:border-red-600 transition text-sm"
                 />
                 <button
+                  onClick={() => setShowBrowser(true)}
+                  className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition"
+                >
+                  Browse...
+                </button>
+                <button
                   onClick={handleAddFolder}
                   disabled={!newFolder.trim()}
                   className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 rounded-lg transition"
@@ -270,6 +278,19 @@ export default function SetupWizard({ onComplete }: Props) {
           )}
         </div>
       </div>
+
+      {/* File Browser Modal */}
+      {showBrowser && (
+        <FileBrowser
+          onSelect={(selectedPath) => {
+            setShowBrowser(false);
+            if (selectedPath && !folders.includes(selectedPath)) {
+              setFolders([...folders, selectedPath]);
+            }
+          }}
+          onCancel={() => setShowBrowser(false)}
+        />
+      )}
     </div>
   );
 }

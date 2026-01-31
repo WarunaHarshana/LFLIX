@@ -3,8 +3,10 @@ import type { NextRequest } from 'next/server';
 
 // Simple PIN authentication middleware
 export function middleware(request: NextRequest) {
-  // Skip auth for login endpoint and static files
-  if (request.nextUrl.pathname === '/api/auth/login' || 
+  // Skip auth for setup, browse, login, and static files (browse needed during setup)
+  if (request.nextUrl.pathname === '/api/setup' ||
+      request.nextUrl.pathname.startsWith('/api/browse') ||
+      request.nextUrl.pathname === '/api/auth/login' || 
       request.nextUrl.pathname.startsWith('/_next/') ||
       request.nextUrl.pathname.startsWith('/api/') === false) {
     return NextResponse.next();
