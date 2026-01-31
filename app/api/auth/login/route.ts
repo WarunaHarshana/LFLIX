@@ -31,7 +31,10 @@ export async function POST(req: Request) {
 }
 
 // Check if user is logged in
-export async function GET() {
-  // Middleware handles the actual check, this just returns success
+export async function GET(request: Request) {
+  // This endpoint should be protected by middleware
+  // If we reach here, user is authenticated
+  const cookie = request.headers.get('cookie');
+  console.log('GET /api/auth/login - Cookie header:', cookie ? 'present' : 'missing');
   return NextResponse.json({ authenticated: true });
 }

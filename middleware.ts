@@ -49,6 +49,7 @@ export function middleware(request: NextRequest) {
 
     // Validate PIN
     if (!pin || pin !== expectedPin) {
+      console.log('Auth failed:', { hasPin: !!pin, expectedPin });
       return NextResponse.json(
         { error: 'Unauthorized. Please provide valid PIN.' },
         { 
@@ -60,6 +61,8 @@ export function middleware(request: NextRequest) {
         }
       );
     }
+    
+    console.log('Auth success');
   }
 
   return response;
