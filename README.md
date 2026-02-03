@@ -19,6 +19,8 @@ A Netflix-style local media server that automatically organizes and plays your m
 - 🔎 **Search** - Instant search across your library
 - 🔒 **PIN Protection** - Secure your library with a PIN
 - 🧙 **Easy Setup** - Guided wizard for first-time setup
+- 📡 **Live TV (IPTV)** - Import and watch free IPTV channels from around the world
+- 🏆 **Live Sports** - Stream live sports matches with embedded player
 
 ## 📋 Requirements
 
@@ -122,14 +124,35 @@ Go to **VLC Settings** → Browse to vlc.exe → Save
 
 (Default: `C:\Program Files\VideoLAN\VLC\vlc.exe`)
 
-## 🔄 Automatic Folder Watching
+## 📡 Live TV (IPTV)
 
-LocalFlix watches your folders and updates automatically:
+Watch free IPTV channels from around the world:
 
-1. Add new video file to watched folder
-2. Notification appears: "New video detected!"
-3. File is scanned and metadata fetched
-4. Library updates automatically ✨
+1. Click **Live TV** tab in navigation
+2. Click **Manage Channels** button
+3. Import channels:
+   - **Free Sources** - Select from worldwide, Sri Lanka, USA, India, etc.
+   - **M3U URL** - Paste any M3U playlist URL
+   - **M3U File** - Upload .m3u/.m3u8 files
+4. Click any channel to start watching!
+
+**Features:**
+- Search and filter by category/country
+- Channel logos and organization
+- Quick channel switching
+- Clear all channels option
+
+## 🏆 Live Sports
+
+Stream live sports matches with embedded player:
+
+1. Click **Live Sports** in navigation
+2. Filter by sport (Football, Basketball, Cricket, etc.)
+3. Toggle between **Live Now** and **Today's Schedule**
+4. Click any match → Select stream source
+5. Watch in embedded player!
+
+**Supported Sports:** Football, Basketball, Cricket, Tennis, and more
 
 ## ⌨️ Keyboard Shortcuts
 
