@@ -12,7 +12,7 @@ echo.
 set "SOURCE_DIR=%~dp0"
 set "SOURCE_DIR=%SOURCE_DIR:~0,-1%"
 set "DESKTOP=%USERPROFILE%\Desktop"
-set "SHORTCUT_NAME=LocalFlix.lnk"
+set "SHORTCUT_NAME=LFLIX.lnk"
 set "TARGET_BAT=%SOURCE_DIR%\Start LocalFlix.bat"
 
 echo Source: %SOURCE_DIR%
@@ -79,7 +79,7 @@ if exist "%DESKTOP%\%SHORTCUT_NAME%" (
         )
     )
     echo.
-    echo You can now double-click "LocalFlix" on your desktop!
+    echo You can now double-click "LFLIX" on your desktop!
 ) else (
     echo ============================================
     echo  ERROR: Failed to create shortcut!
@@ -92,7 +92,7 @@ if exist "%DESKTOP%\%SHORTCUT_NAME%" (
     echo Manual workaround:
     echo 1. Right-click on Desktop -> New -> Shortcut
     echo 2. Location: %TARGET_BAT%
-    echo 3. Name it: LocalFlix
+    echo 3. Name it: LFLIX
 )
 
 echo.
