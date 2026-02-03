@@ -159,7 +159,12 @@ export default function LiveSports({ onClose }: Props) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <button
-                  onClick={onClose}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClose();
+                  }}
                   className="p-2 hover:bg-neutral-800 rounded-full transition"
                 >
                   <ChevronLeft className="w-6 h-6 text-white" />
@@ -175,7 +180,12 @@ export default function LiveSports({ onClose }: Props) {
                 </div>
               </div>
               <button
-                onClick={onClose}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose();
+                }}
                 className="p-2 hover:bg-neutral-800 rounded-full transition"
               >
                 <X className="w-6 h-6 text-white" />
@@ -365,8 +375,8 @@ export default function LiveSports({ onClose }: Props) {
                   <div
                     key={match.id}
                     className={`bg-gradient-to-br from-neutral-900 to-neutral-950 backdrop-blur rounded-2xl overflow-hidden border transition-all hover:scale-[1.02] hover:shadow-2xl hover:shadow-red-900/10 ${selectedMatch?.id === match.id
-                        ? 'border-red-500 shadow-lg shadow-red-900/20 ring-1 ring-red-500/50'
-                        : 'border-neutral-800/50 hover:border-red-500/30'
+                      ? 'border-red-500 shadow-lg shadow-red-900/20 ring-1 ring-red-500/50'
+                      : 'border-neutral-800/50 hover:border-red-500/30'
                       }`}
                   >
                     <div className="p-4">
