@@ -26,11 +26,14 @@ if not exist "%TARGET_BAT%" (
     exit /b 1
 )
 
-:: Check for custom icon
+:: Check for custom icon (try app folder first, then public)
 set "ICON_PATH="
-if exist "%SOURCE_DIR%\public\favicon.ico" (
+if exist "%SOURCE_DIR%\app\favicon.ico" (
+    set "ICON_PATH=%SOURCE_DIR%\app\favicon.ico"
+    echo [OK] Found custom icon: app\favicon.ico
+) else if exist "%SOURCE_DIR%\public\favicon.ico" (
     set "ICON_PATH=%SOURCE_DIR%\public\favicon.ico"
-    echo [OK] Found custom icon: favicon.ico
+    echo [OK] Found custom icon: public\favicon.ico
 ) else (
     echo [INFO] No custom icon found, using default
     set "ICON_PATH=%SystemRoot%\System32\SHELL32.dll,14"
