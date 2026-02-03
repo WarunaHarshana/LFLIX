@@ -22,6 +22,7 @@ import MobileConnectModal from './components/MobileConnectModal';
 import FloatingQRButton from './components/FloatingQRButton';
 import DlnaModal from './components/DlnaModal';
 import PlayChoiceModal from './components/PlayChoiceModal';
+import LiveSports from './components/LiveSports';
 
 // Types
 type ContentItem = {
@@ -119,14 +120,17 @@ export default function Home() {
   const [showDlna, setShowDlna] = useState(false);
 
   // Play Choice Modal (for mobile)
-  const [playChoice, setPlayChoice] = useState<{ 
-    title: string; 
-    streamUrl: string; 
+  const [playChoice, setPlayChoice] = useState<{
+    title: string;
+    streamUrl: string;
     contentType: 'movie' | 'show';
     contentId: number;
     episodeId?: number;
-    onPlayBrowser: () => void 
+    onPlayBrowser: () => void
   } | null>(null);
+
+  // Live Sports Modal
+  const [showLiveSports, setShowLiveSports] = useState(false);
 
   // Detect mobile device
   const isMobile = useCallback(() => {
@@ -337,7 +341,7 @@ export default function Home() {
           ...(episodeId && { episodeId: episodeId.toString() })
         });
         const streamUrl = `/api/stream?${params.toString()}`;
-        
+
         // Get title for video player
         let title = 'Unknown';
         if (contentType === 'movie') {
@@ -347,7 +351,7 @@ export default function Home() {
           const show = library.find(s => s.id === contentId);
           title = show?.title || 'TV Show';
         }
-        
+
         // Show choice modal
         setPlayChoice({
           title,
@@ -418,7 +422,7 @@ export default function Home() {
         credentials: 'include'
       });
       const data = await res.json();
-      
+
       if (data.success) {
         showToast(`Rescanned ${data.folders} folders. Added ${data.added} new items.`, 'success');
         await fetchLibrary();
@@ -439,7 +443,7 @@ export default function Home() {
     if (!confirmed) return;
 
     try {
-      await fetch(`/api/delete?type=${item.type}&id=${item.id}`, { 
+      await fetch(`/api/delete?type=${item.type}&id=${item.id}`, {
         method: 'DELETE',
         credentials: 'same-origin'
       });
@@ -454,7 +458,7 @@ export default function Home() {
   // Delete episode
   const handleDeleteEpisode = async (episodeId: number) => {
     try {
-      await fetch(`/api/delete?type=episode&id=${episodeId}`, { 
+      await fetch(`/api/delete?type=episode&id=${episodeId}`, {
         method: 'DELETE',
         credentials: 'same-origin'
       });
@@ -523,6 +527,12 @@ export default function Home() {
               className={clsx("transition hover:text-white", activeTab === 'movie' ? "text-white" : "text-neutral-400")}
             >
               Movies
+            </button>
+            <button
+              onClick={() => setShowLiveSports(true)}
+              className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded-full text-sm font-medium transition flex items-center gap-1"
+            >
+              ⚽ Live Sports
             </button>
           </div>
         </div>
@@ -832,6 +842,11 @@ export default function Home() {
 
       {/* Floating QR Button (Mobile) */}
       <FloatingQRButton />
+
+      {/* Live Sports Modal */}
+      {showLiveSports && (
+        <LiveSports onClose={() => setShowLiveSports(false)} />
+      )}
 
     </main>
   );
