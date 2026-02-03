@@ -23,6 +23,7 @@ import FloatingQRButton from './components/FloatingQRButton';
 import DlnaModal from './components/DlnaModal';
 import PlayChoiceModal from './components/PlayChoiceModal';
 import LiveSports from './components/LiveSports';
+import IPTVManager from './components/IPTVManager';
 
 // Types
 type ContentItem = {
@@ -90,7 +91,7 @@ export default function Home() {
   const [library, setLibrary] = useState<ContentItem[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live'>('all');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
   // Continue Watching
@@ -131,6 +132,12 @@ export default function Home() {
 
   // Live Sports Modal
   const [showLiveSports, setShowLiveSports] = useState(false);
+
+  // IPTV / Live TV State
+  const [iptvChannels, setIptvChannels] = useState<any[]>([]);
+  const [selectedIPTVChannel, setSelectedIPTVChannel] = useState<any>(null);
+  const [showIPTVManager, setShowIPTVManager] = useState(false);
+  const [iptvSearchQuery, setIptvSearchQuery] = useState('');
 
   // Detect mobile device
   const isMobile = useCallback(() => {
@@ -200,10 +207,24 @@ export default function Home() {
     }
   }, []);
 
+  // Fetch IPTV channels
+  const fetchIPTVChannels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/iptv/channels');
+      const data = await res.json();
+      if (data.channels) {
+        setIptvChannels(data.channels);
+      }
+    } catch (e) {
+      console.error('Failed to load IPTV channels', e);
+    }
+  }, []);
+
   useEffect(() => {
     fetchLibrary();
     fetchContinueWatching();
-  }, [fetchLibrary, fetchContinueWatching]);
+    fetchIPTVChannels();
+  }, [fetchLibrary, fetchContinueWatching, fetchIPTVChannels]);
 
   // Connect to folder watcher for real-time updates
   useEffect(() => {
@@ -529,6 +550,13 @@ export default function Home() {
               Movies
             </button>
             <button
+              onClick={() => setActiveTab('live')}
+              className={clsx("transition hover:text-white flex items-center gap-1", activeTab === 'live' ? "text-white" : "text-neutral-400")}
+            >
+              <Tv className="w-4 h-4" />
+              Live TV
+            </button>
+            <button
               onClick={() => setShowLiveSports(true)}
               className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded-full text-sm font-medium transition flex items-center gap-1"
             >
@@ -741,6 +769,129 @@ export default function Home() {
         </>
       )}
 
+      {/* Live TV Section */}
+      {activeTab === 'live' && (
+        <div className="pt-24 px-8 pb-20">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <Tv className="w-6 h-6" />
+                Live TV
+              </h2>
+              <p className="text-neutral-400">{iptvChannels.length} channels available</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowLiveSports(true)}
+                className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium flex items-center gap-2"
+              >
+                <span>⚽</span> Live Sports
+              </button>
+              <button
+                onClick={() => setShowIPTVManager(true)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" /> Manage Channels
+              </button>
+            </div>
+          </div>
+
+          {/* Channel Player */}
+          {selectedIPTVChannel && (
+            <div className="mb-8 bg-neutral-900 rounded-xl overflow-hidden">
+              <div className="aspect-video bg-black relative">
+                <video
+                  key={selectedIPTVChannel.id}
+                  src={selectedIPTVChannel.url}
+                  controls
+                  autoPlay
+                  className="w-full h-full"
+                  playsInline
+                />
+                <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1 bg-red-600 rounded-full">
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                  <span className="text-white text-sm font-medium">LIVE</span>
+                </div>
+              </div>
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  {selectedIPTVChannel.logo && (
+                    <img
+                      src={selectedIPTVChannel.logo}
+                      alt={selectedIPTVChannel.name}
+                      className="w-12 h-12 object-contain"
+                    />
+                  )}
+                  <div>
+                    <h3 className="text-lg font-semibold">{selectedIPTVChannel.name}</h3>
+                    <p className="text-neutral-400">{selectedIPTVChannel.category}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Search */}
+          <div className="mb-6">
+            <input
+              type="text"
+              placeholder="Search channels..."
+              value={iptvSearchQuery}
+              onChange={(e) => setIptvSearchQuery(e.target.value)}
+              className="w-full max-w-md bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2 text-white placeholder-neutral-500"
+            />
+          </div>
+
+          {/* Channels Grid */}
+          {iptvChannels.length === 0 ? (
+            <div className="text-center py-20">
+              <Tv className="w-16 h-16 text-neutral-600 mx-auto mb-4" />
+              <h3 className="text-xl font-bold mb-2">No channels yet</h3>
+              <p className="text-neutral-400 mb-6">Add IPTV channels to start watching</p>
+              <button
+                onClick={() => setShowIPTVManager(true)}
+                className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium"
+              >
+                Add Channels
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+              {iptvChannels
+                .filter(ch => !iptvSearchQuery || ch.name.toLowerCase().includes(iptvSearchQuery.toLowerCase()))
+                .map((channel) => (
+                  <div
+                    key={channel.id}
+                    onClick={() => setSelectedIPTVChannel(channel)}
+                    className={clsx(
+                      "cursor-pointer rounded-lg overflow-hidden transition-all hover:scale-105",
+                      selectedIPTVChannel?.id === channel.id
+                        ? "ring-2 ring-red-500 bg-neutral-800"
+                        : "bg-neutral-800/50 hover:bg-neutral-800"
+                    )}
+                  >
+                    <div className="aspect-video bg-neutral-800 flex items-center justify-center p-4">
+                      {channel.logo ? (
+                        <img
+                          src={channel.logo}
+                          alt={channel.name}
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      ) : (
+                        <Tv className="w-8 h-8 text-neutral-600" />
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <h4 className="font-medium text-sm truncate">{channel.name}</h4>
+                      <p className="text-xs text-neutral-500">{channel.category}</p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Episode Modal */}
       {selectedShow && (
         <EpisodeModal
@@ -846,6 +997,14 @@ export default function Home() {
       {/* Live Sports Modal */}
       {showLiveSports && (
         <LiveSports onClose={() => setShowLiveSports(false)} />
+      )}
+
+      {/* IPTV Manager */}
+      {showIPTVManager && (
+        <IPTVManager
+          onClose={() => setShowIPTVManager(false)}
+          onChannelsUpdated={fetchIPTVChannels}
+        />
       )}
 
     </main>
