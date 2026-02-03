@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Localflix - Your Personal Streaming Library",
+  title: "LFLIX",
   description: "Stream your local movies and TV shows with a Netflix-like experience. Powered by VLC and TMDB.",
   keywords: ["streaming", "movies", "tv shows", "local media", "vlc", "plex alternative"],
 };
