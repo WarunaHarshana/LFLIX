@@ -46,7 +46,7 @@ export default function EmptyState({ type, searchQuery, onAddFolder }: Props) {
 
             <h3 className="text-2xl font-bold text-neutral-200 mb-3">Your library is empty</h3>
             <p className="text-neutral-400 max-w-md mb-8">
-                Add a folder to start building your personal streaming library. Localflix will
+                Add a folder to start building your personal streaming library. LFLIX will
                 automatically detect and organize your movies and TV shows.
             </p>
 

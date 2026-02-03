@@ -141,7 +141,7 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
         <div className="mt-4 p-4 bg-neutral-800/50 rounded-lg text-sm">
           <p className="font-medium text-neutral-300 mb-2">Using a different player?</p>
           <p className="text-neutral-400 text-xs mb-2">
-            LocalFlix works with <strong>any</strong> video player that supports network streaming:
+            LFLIX works with <strong>any</strong> video player that supports network streaming:
           </p>
           <div className="flex flex-wrap gap-2 text-xs">
             <span className="px-2 py-1 bg-neutral-700 rounded">MX Player</span>

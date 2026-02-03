@@ -174,7 +174,7 @@ export default function DlnaModal({ onClose }: Props) {
               <li>Click "Start DLNA Server" above</li>
               <li>Open VLC on your phone</li>
               <li>Go to "Browse" → "Network"</li>
-              <li>Look for "LocalFlix Media Server"</li>
+              <li>Look for "LFLIX Media Server"</li>
               <li>Tap it to see your movies</li>
               <li>Select a movie to play!</li>
             </ol>

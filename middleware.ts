@@ -4,16 +4,16 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   // Get the origin for CORS
   const origin = request.headers.get('origin') || '*';
-  
+
   // Create base response
   const response = NextResponse.next();
-  
+
   // Set CORS headers for all requests
   response.headers.set('Access-Control-Allow-Credentials', 'true');
   response.headers.set('Access-Control-Allow-Origin', origin);
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   response.headers.set('Access-Control-Allow-Headers', 'Content-Type, x-app-pin');
-  
+
   // Handle preflight
   if (request.method === 'OPTIONS') {
     return response;
@@ -27,12 +27,12 @@ export function middleware(request: NextRequest) {
     '/api/auth/logout',
     '/api/ping'
   ];
-  
-  const isPublic = publicPaths.some(path => 
-    request.nextUrl.pathname === path || 
+
+  const isPublic = publicPaths.some(path =>
+    request.nextUrl.pathname === path ||
     request.nextUrl.pathname.startsWith(path + '/')
   );
-  
+
   if (isPublic || request.nextUrl.pathname.startsWith('/_next/')) {
     return response;
   }
@@ -52,7 +52,7 @@ export function middleware(request: NextRequest) {
       console.log('Auth failed:', { hasPin: !!pin, expectedPin });
       return NextResponse.json(
         { error: 'Unauthorized. Please provide valid PIN.' },
-        { 
+        {
           status: 401,
           headers: {
             'Access-Control-Allow-Credentials': 'true',
@@ -61,7 +61,7 @@ export function middleware(request: NextRequest) {
         }
       );
     }
-    
+
     console.log('Auth success');
   }
 

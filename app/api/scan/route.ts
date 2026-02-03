@@ -2,44 +2,8 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import db from '@/lib/db';
+import { fetchMovieMetadata, fetchShowMetadata, getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
 import { MovieDb } from 'moviedb-promise';
-
-// Get TMDB API key from environment variable only (security)
-function getTmdbApiKey(): string {
-  const key = process.env.TMDB_API_KEY;
-  if (!key) {
-    throw new Error('TMDB_API_KEY not configured. Please set it in .env.local file.');
-  }
-  return key;
-}
-
-// Rate limiting helper - prevents TMDB API bans
-let lastTmdbCall = 0;
-const TMDB_DELAY_MS = 100; // Minimum 100ms between API calls
-
-async function rateLimitedTmdbCall<T>(fn: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const timeSinceLastCall = now - lastTmdbCall;
-  
-  if (timeSinceLastCall < TMDB_DELAY_MS) {
-    await new Promise(resolve => setTimeout(resolve, TMDB_DELAY_MS - timeSinceLastCall));
-  }
-  
-  lastTmdbCall = Date.now();
-  
-  try {
-    return await fn();
-  } catch (error: any) {
-    // Handle TMDB rate limiting (429) or auth errors (401)
-    if (error.status === 429) {
-      console.warn('TMDB rate limit hit, waiting 2s...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      lastTmdbCall = Date.now();
-      return await fn(); // Retry once
-    }
-    throw error;
-  }
-}
 
 // Recursive folder scan
 function getVideoFiles(dir: string, fileList: string[] = []) {
@@ -64,7 +28,7 @@ function getVideoFiles(dir: string, fileList: string[] = []) {
   return fileList;
 }
 
-// Extended regex patterns for TV detection
+// TV show detection patterns
 const TV_PATTERNS = [
   /(.+?)[ ._\[\(]?(?:s(\d+)[ ._]?e(\d+))/i,  // S01E01
   /(.+?)[ ._\[\(]?(?:(\d+)x(\d+))/i,          // 1x01
@@ -85,62 +49,6 @@ function detectTvShow(fileName: string): { name: string; season: number; episode
     }
   }
   return null;
-}
-
-// Clean filename to guess title
-function cleanFilename(name: string) {
-  let clean = name.replace(/\.[^/.]+$/, ""); // Remove ext
-
-  // Remove Website Prefixes
-  clean = clean.replace(/^www\.[a-zA-Z0-9-]+\.[a-z]{2,4}\s*[-_]\s*/i, "");
-  clean = clean.replace(/^\[.*?\]\s*/i, ""); // Remove [group] tags
-
-  // Remove A.K.A and everything after
-  clean = clean.replace(/\bA\.?K\.?A\.?\b.*/i, "");
-
-  // Remove common scene tags & languages (cut off everything after these)
-  clean = clean.replace(/\b(1080p|720p|480p|2160p|4k|BluRay|Blu-Ray|BDRip|WEBRip|WEB-DL|DVDRip|HDTV|x264|x265|H\.?264|H\.?265|AAC|AC3|DTS|HDR|HDR10|HDR10Plus|DV|Dolby|Atmos|HEVC|HQ|HDRip|TRUE|PROPER|REMASTERED|EXTENDED|UNCUT|DIRECTORS|CUT|DUAL|MULTI|Telugu|Tamil|Hindi|Malayalam|Kannada|English|EngSub|ESub|AMZN|NF|DSNP|HMAX|IMAX|REPACK|Remux|10bit|6CH|8CH|PSA|YTS|YIFY|RARBG)\b.*/i, "");
-
-  // Replace dots/underscores with space
-  clean = clean.replace(/[._]/g, " ");
-
-  // Remove year in brackets/parentheses
-  clean = clean.replace(/[\(\[\{]\s*(19|20)\d{2}\s*[\)\]\}]/g, "");
-
-  // Remove other bracketed content
-  clean = clean.replace(/[\(\[\{].*?[\)\]\}]/g, "");
-
-  // Remove trailing standalone year (like "Scarface 1983")
-  clean = clean.replace(/\s+(19|20)\d{2}\s*$/g, "");
-
-  // Remove trailing junk and hyphens
-  clean = clean.replace(/[-–—]+\s*$/, "").trim();
-
-  // Remove extra spaces
-  clean = clean.replace(/\s+/g, " ").trim();
-
-  return clean;
-}
-
-function extractYear(name: string) {
-  const match = name.match(/\b(19|20)\d{2}\b/);
-  return match ? parseInt(match[0]) : undefined;
-}
-
-// Fetch genre names from TMDB genre IDs
-async function fetchGenres(moviedb: MovieDb, genreIds: number[], type: 'movie' | 'tv'): Promise<string> {
-  try {
-    const genreList = await rateLimitedTmdbCall(() => 
-      type === 'movie'
-        ? moviedb.genreMovieList({})
-        : moviedb.genreTvList({})
-    );
-
-    const genreMap = new Map(genreList.genres?.map(g => [g.id, g.name]) || []);
-    return genreIds.map(id => genreMap.get(id)).filter(Boolean).join(', ');
-  } catch {
-    return '';
-  }
 }
 
 // SECURITY: Validate folder path to prevent directory traversal
@@ -167,9 +75,6 @@ function validateFolderPath(folderPath: string): { valid: boolean; error?: strin
 }
 
 export async function POST(req: Request) {
-  const TMDB_API_KEY = getTmdbApiKey();
-  const moviedb = new MovieDb(TMDB_API_KEY);
-
   try {
     const { folderPath, specificFile } = await req.json();
     if (!folderPath) return NextResponse.json({ error: 'Missing folderPath' }, { status: 400 });
@@ -201,14 +106,14 @@ export async function POST(req: Request) {
     `).run(folderPath, folderName);
 
     let files: string[];
-    
+
     // If specificFile is provided, only scan that file
     if (specificFile && fs.existsSync(specificFile)) {
       files = [specificFile];
     } else {
       files = getVideoFiles(folderPath);
     }
-    
+
     let addedCount = 0;
     const errors: string[] = [];
 
@@ -244,43 +149,31 @@ export async function POST(req: Request) {
         // --- TV SHOW ---
         let rawShowName = tvInfo.name.replace(/[\(\[].*?[\)\]]/g, "").replace(/-$/, "").trim();
 
-        // First, search TMDB to get the real show info
-        let showMeta: any = { title: rawShowName, tmdbId: null, posterPath: null, backdropPath: null, overview: null, rating: null, firstAirDate: null, genres: null };
-        try {
-          const res = await rateLimitedTmdbCall(() => moviedb.searchTv({ query: rawShowName }));
-          if (res.results && res.results.length > 0) {
-            const hit = res.results[0];
-            const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'tv') : '';
-            showMeta = {
-              title: hit.name || rawShowName,
-              tmdbId: hit.id,
-              posterPath: hit.poster_path,
-              backdropPath: hit.backdrop_path,
-              overview: hit.overview,
-              rating: hit.vote_average,
-              firstAirDate: hit.first_air_date,
-              genres
-            };
-          }
-        } catch (e: any) {
-          // Graceful fallback - use filename as title, don't fail the whole scan
-          errors.push(`TMDB TV Error for ${rawShowName}: ${e.message || 'Unknown error'}`);
-          console.warn(`TMDB lookup failed for "${rawShowName}", using filename as fallback`);
-        }
+        // Use shared library to fetch metadata
+        const showMeta = await fetchShowMetadata(rawShowName);
 
         // Check if show already exists by title OR tmdbId
         let showId: number | bigint = 0;
-        const existingShow = findShow.get(showMeta.title, showMeta.tmdbId) as { id: number } | undefined;
+
+        // Prioritize TMDB ID check
+        let existingShow = null;
+        if (showMeta.tmdbId) {
+          existingShow = db.prepare('SELECT id FROM shows WHERE tmdbId = ?').get(showMeta.tmdbId) as { id: number } | undefined;
+        }
+
+        // Fallback to title check
+        if (!existingShow) {
+          existingShow = db.prepare('SELECT id FROM shows WHERE title = ?').get(showMeta.title) as { id: number } | undefined;
+        }
 
         if (existingShow) {
           showId = existingShow.id;
         } else {
-          // Try to insert new show, handle duplicate gracefully
           try {
             const info = insertShow.run(showMeta);
             showId = info.lastInsertRowid;
           } catch (insertError: any) {
-            // If it's a unique constraint error, try to find the existing show
+            // Unique constraint error fallback
             if (insertError.code === 'SQLITE_CONSTRAINT_UNIQUE' || insertError.code === 'SQLITE_CONSTRAINT') {
               const found = db.prepare('SELECT id FROM shows WHERE title = ?').get(showMeta.title) as { id: number } | undefined;
               if (found) {
@@ -308,50 +201,16 @@ export async function POST(req: Request) {
 
       } else {
         // --- MOVIE ---
-        const rawName = cleanFilename(fileName);
-        const year = extractYear(fileName);
-
-        let metadata: any = {
-          title: rawName,
-          year: year || null,
-          tmdbId: null,
-          posterPath: null,
-          backdropPath: null,
-          overview: null,
-          rating: null,
-          genres: null
-        };
-
-        try {
-          const searchRes = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: rawName, year: year }));
-          if (searchRes.results && searchRes.results.length > 0) {
-            const hit = searchRes.results[0];
-            const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'movie') : '';
-            metadata = {
-              title: hit.title || rawName,
-              year: hit.release_date ? parseInt(hit.release_date.substring(0, 4)) : year,
-              tmdbId: hit.id,
-              posterPath: hit.poster_path,
-              backdropPath: hit.backdrop_path,
-              overview: hit.overview,
-              rating: hit.vote_average,
-              genres
-            };
-          }
-        } catch (err: any) {
-          // Graceful fallback - use filename as title, don't fail the whole scan
-          errors.push(`TMDB Movie Error for ${rawName}: ${err.message || 'Unknown error'}`);
-          console.warn(`TMDB lookup failed for "${rawName}", using filename as fallback`);
-        }
+        const movieMeta = await fetchMovieMetadata(fileName);
 
         insertMovie.run({
           filePath,
           fileName,
-          ...metadata
+          ...movieMeta
         });
       }
 
-      // Check if item was actually added by querying for it
+      // Check if item was actually added
       const wasAdded = tvInfo
         ? db.prepare('SELECT id FROM episodes WHERE filePath = ?').get(filePath)
         : db.prepare('SELECT id FROM movies WHERE filePath = ?').get(filePath);

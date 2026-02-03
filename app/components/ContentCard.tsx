@@ -8,11 +8,14 @@ type WatchProgress = {
     completed: number;
 };
 
-type ContentItem = {
+export type ContentItem = {
     id: number;
     type: 'movie' | 'show';
     title: string;
     posterPath: string | null;
+    backdropPath: string | null;
+    overview: string | null;
+    genres?: string | null;
     year?: number;
     firstAirDate?: string | null;
     rating: number | null;
@@ -37,7 +40,7 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
         <div
             onClick={onClick}
             onContextMenu={onContextMenu}
-            className="group relative aspect-[2/3] bg-neutral-800 rounded-lg overflow-hidden cursor-pointer transition hover:scale-105 hover:z-30 hover:shadow-2xl hover:shadow-black/50"
+            className="group relative aspect-[2/3] bg-neutral-800 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:z-30 hover:shadow-2xl hover:shadow-black/50 hover:ring-2 hover:ring-red-600"
         >
             {item.posterPath ? (
                 <img

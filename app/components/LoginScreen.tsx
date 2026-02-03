@@ -59,7 +59,7 @@ export default function LoginScreen({ onLogin }: Props) {
                     <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center mb-4">
                         <Lock className="w-8 h-8 text-white" />
                     </div>
-                    <h1 className="text-3xl font-bold text-white tracking-tighter">LOCALFLIX</h1>
+                    <h1 className="text-3xl font-bold text-white tracking-tighter">LFLIX</h1>
                     <p className="text-neutral-400 mt-2">Enter PIN to access your library</p>
                 </div>
 

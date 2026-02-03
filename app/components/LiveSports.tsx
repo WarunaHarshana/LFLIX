@@ -150,7 +150,10 @@ export default function LiveSports({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black z-50 overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black z-50 overflow-y-auto"
+      onClick={(e) => e.stopPropagation()}
+    >
       {/* Full Screen Layout like Live TV */}
       <div className="min-h-screen bg-gradient-to-b from-neutral-950 via-black to-neutral-950">
         {/* Header */}
@@ -163,6 +166,7 @@ export default function LiveSports({ onClose }: Props) {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    console.log('LiveSports: Closing via back button');
                     onClose();
                   }}
                   className="p-2 hover:bg-neutral-800 rounded-full transition"

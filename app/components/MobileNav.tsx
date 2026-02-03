@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Home, Film, Tv, Settings, Menu, X, Smartphone, Search, Radio } from 'lucide-react';
+import { Home, Film, Tv, Settings, Menu, X, Smartphone, Search, Radio, Trophy } from 'lucide-react';
 import clsx from 'clsx';
 
 type Tab = 'all' | 'movie' | 'show' | 'live';
@@ -12,9 +12,10 @@ type Props = {
   onShowQR: () => void;
   onShowSettings: () => void;
   onShowSearch: () => void;
+  onShowLiveSports: () => void;
 };
 
-export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSettings, onShowSearch }: Props) {
+export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSettings, onShowSearch, onShowLiveSports }: Props) {
   const [isOpen, setIsOpen] = useState(false);
 
   const tabs = [
@@ -33,7 +34,6 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
           <div className="flex items-center gap-2">
             <button
               onClick={onShowSearch}
-              onTouchStart={onShowSearch}
               className="p-3 hover:bg-neutral-800 rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="Search"
               style={{ touchAction: 'manipulation' }}
@@ -42,7 +42,6 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
             </button>
             <button
               onClick={onShowQR}
-              onTouchStart={onShowQR}
               className="p-3 hover:bg-neutral-800 rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="Connect Mobile"
               style={{ touchAction: 'manipulation' }}
@@ -51,7 +50,6 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
             </button>
             <button
               onClick={() => setIsOpen(!isOpen)}
-              onTouchStart={() => setIsOpen(!isOpen)}
               className="p-3 hover:bg-neutral-800 rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
               style={{ touchAction: 'manipulation' }}
             >
@@ -85,6 +83,17 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
             <div className="border-t border-neutral-800 mt-2 pt-2">
               <button
                 onClick={() => {
+                  onShowLiveSports();
+                  setIsOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-4 text-neutral-400 hover:bg-neutral-800 transition"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <Trophy className="w-5 h-5" />
+                <span className="font-medium">Live Sports</span>
+              </button>
+              <button
+                onClick={() => {
                   onShowSettings();
                   setIsOpen(false);
                 }}
@@ -106,7 +115,6 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              onTouchStart={() => onTabChange(tab.id)}
               className={clsx(
                 "flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition min-w-[64px]",
                 activeTab === tab.id

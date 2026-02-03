@@ -87,7 +87,7 @@ export default function SetupWizard({ onComplete }: Props) {
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-xl overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-red-900 to-red-700 p-8 text-center">
-          <h1 className="text-4xl font-bold text-white tracking-tighter mb-2">LOCALFLIX</h1>
+          <h1 className="text-4xl font-bold text-white tracking-tighter mb-2">LFLIX</h1>
           <p className="text-red-200">Your Personal Media Server</p>
         </div>
 
@@ -240,7 +240,7 @@ export default function SetupWizard({ onComplete }: Props) {
                 </span></p>
               </div>
               <p className="text-neutral-400 text-sm mb-4">
-                LocalFlix will scan your folders and automatically organize your media.
+                LFLIX will scan your folders and automatically organize your media.
               </p>
             </div>
           )}
@@ -273,7 +273,7 @@ export default function SetupWizard({ onComplete }: Props) {
               disabled={loading}
               className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition disabled:opacity-50"
             >
-              {loading ? 'Setting up...' : 'Start LocalFlix'} <Play className="w-4 h-4" />
+              {loading ? 'Setting up...' : 'Start LFLIX'} <Play className="w-4 h-4" />
             </button>
           )}
         </div>

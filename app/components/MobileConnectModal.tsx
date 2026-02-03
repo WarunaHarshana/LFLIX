@@ -47,8 +47,8 @@ export default function MobileConnectModal({ onClose }: Props) {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'LocalFlix',
-          text: 'Watch movies on LocalFlix',
+          title: 'LFLIX',
+          text: 'Watch movies on LFLIX',
           url: fullUrl,
         });
       } catch (err) {

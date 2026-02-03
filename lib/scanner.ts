@@ -1,10 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import db from './db';
-import { MovieDb } from 'moviedb-promise';
-
-const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
-const moviedb = TMDB_API_KEY ? new MovieDb(TMDB_API_KEY) : null;
+import { fetchMovieMetadata, fetchShowMetadata } from './metadata';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.wmv', '.flv', '.webm', '.ts'];
 
@@ -36,26 +33,6 @@ function detectTvShow(fileName: string): { name: string; season: number; episode
   return null;
 }
 
-function cleanFilename(name: string): string {
-  let clean = name.replace(/\.[^/.]+$/, '');
-  clean = clean.replace(/^www\.[a-zA-Z0-9-]+\.[a-z]{2,4}\s*[-_]\s*/i, '');
-  clean = clean.replace(/^\[.*?\]\s*/i, '');
-  clean = clean.replace(/\bA\.?K\.?A\.?.*/i, '');
-  clean = clean.replace(/\b(1080p|720p|480p|2160p|4k|BluRay|WEBRip|WEB-DL|DVDRip|HDTV|x264|x265|H\.?264|H\.?265|AAC|AC3|DTS|HDR|HEVC|HQ|HDRip|REPACK|Remux|10bit|6CH|8CH|YTS|YIFY|RARBG)\b.*/i, '');
-  clean = clean.replace(/[._]/g, ' ');
-  clean = clean.replace(/[\(\[\{]\s*(19|20)\d{2}\s*[\)\]\}]/g, '');
-  clean = clean.replace(/[\(\[\{].*?[\)\]\}]/g, '');
-  clean = clean.replace(/\s+(19|20)\d{2}\s*$/g, '');
-  clean = clean.replace(/[-–—]+\s*$/, '').trim();
-  clean = clean.replace(/\s+/g, ' ').trim();
-  return clean;
-}
-
-function extractYear(name: string): number | undefined {
-  const match = name.match(/\b(19|20)\d{2}\b/);
-  return match ? parseInt(match[0]) : undefined;
-}
-
 export async function scanFile(filePath: string): Promise<{ added: boolean; error?: string }> {
   try {
     if (!isVideoFile(filePath)) {
@@ -80,15 +57,30 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
     if (tvInfo) {
       // Handle TV show
       const rawShowName = tvInfo.name.replace(/[\(\[].*?[\)\]]/g, '').replace(/-$/, '').trim();
-      
-      // Find or create show
-      let showId: number | bigint;
-      const existingShow = db.prepare('SELECT id FROM shows WHERE title = ?').get(rawShowName) as { id: number } | undefined;
-      
+
+      // Fetch metadata from TMDB
+      const showMeta = await fetchShowMetadata(rawShowName);
+
+      // Find or create show - using strict TMDB ID check first
+      let showId: number | bigint = 0;
+      let existingShow = null;
+
+      if (showMeta.tmdbId) {
+        existingShow = db.prepare('SELECT id FROM shows WHERE tmdbId = ?').get(showMeta.tmdbId) as { id: number } | undefined;
+      }
+
+      if (!existingShow) {
+        // Fallback to title check
+        existingShow = db.prepare('SELECT id FROM shows WHERE title = ?').get(showMeta.title) as { id: number } | undefined;
+      }
+
       if (existingShow) {
         showId = existingShow.id;
       } else {
-        const result = db.prepare('INSERT INTO shows (title, tmdbId, posterPath, backdropPath, overview, rating, firstAirDate, genres) VALUES (?, NULL, NULL, NULL, NULL, NULL, NULL, NULL)').run(rawShowName);
+        const result = db.prepare(`
+            INSERT INTO shows (title, tmdbId, posterPath, backdropPath, overview, rating, firstAirDate, genres) 
+            VALUES (@title, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @firstAirDate, @genres)
+        `).run(showMeta);
         showId = result.lastInsertRowid;
       }
 
@@ -99,11 +91,17 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
       return { added: true };
     } else {
       // Handle movie
-      const rawName = cleanFilename(fileName);
-      const year = extractYear(fileName);
+      // Fetch metadata from TMDB
+      const movieMeta = await fetchMovieMetadata(fileName);
 
-      db.prepare('INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, genres) VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL)')
-        .run(filePath, fileName, rawName, year || null);
+      db.prepare(`
+        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, genres) 
+        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @genres)
+      `).run({
+        filePath,
+        fileName,
+        ...movieMeta
+      });
 
       return { added: true };
     }
@@ -119,7 +117,7 @@ export async function scanFolder(folderPath: string): Promise<{ added: number; e
 
   function scanDir(dir: string) {
     if (!fs.existsSync(dir)) return;
-    
+
     const files = fs.readdirSync(dir);
     for (const file of files) {
       const filePath = path.join(dir, file);
@@ -129,7 +127,7 @@ export async function scanFolder(folderPath: string): Promise<{ added: number; e
           scanDir(filePath);
         } else if (isVideoFile(filePath)) {
           const result = db.prepare('SELECT id FROM movies WHERE filePath = ?').get(filePath) ||
-                         db.prepare('SELECT id FROM episodes WHERE filePath = ?').get(filePath);
+            db.prepare('SELECT id FROM episodes WHERE filePath = ?').get(filePath);
           if (!result) {
             // Will be added by watcher or manual scan
             added++;

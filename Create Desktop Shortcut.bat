@@ -1,36 +1,47 @@
 @echo off
-title Create LocalFlix Shortcut
+title Create LFLIX Desktop Shortcut
 color 0A
 cls
 
 echo ============================================
-echo  Create LocalFlix Desktop Shortcut
+echo  Create LFLIX Desktop Shortcut
 echo ============================================
 echo.
 
 :: Get script directory (remove trailing backslash)
-set "SOURCE_DIR=%~dp0"
-set "SOURCE_DIR=%SOURCE_DIR:~0,-1%"
+cd /d "%~dp0"
+set "SOURCE_DIR=%CD%"
 set "DESKTOP=%USERPROFILE%\Desktop"
 set "SHORTCUT_NAME=LFLIX.lnk"
-set "TARGET_BAT=%SOURCE_DIR%\Start LocalFlix.bat"
+set "TARGET_BAT=%SOURCE_DIR%\Start LFLIX.bat"
 
 echo Source: %SOURCE_DIR%
 echo Desktop: %DESKTOP%
 echo.
 
-:: Check if Start LocalFlix.bat exists
+:: Check if Start LFLIX.bat exists
 if not exist "%TARGET_BAT%" (
-    echo ERROR: Start LocalFlix.bat not found!
+    echo ERROR: Start LFLIX.bat not found!
+    echo Expected: %TARGET_BAT%
+    echo.
     pause
-    exit /b 1
+    goto :eof
 )
 
-:: Check for custom icon (try app folder first, then public)
+echo [OK] Start LFLIX.bat found
+
+:: Check for custom icon
 set "ICON_PATH="
-if exist "%SOURCE_DIR%\app\favicon.ico" (
-    set "ICON_PATH=%SOURCE_DIR%\app\favicon.ico"
-    echo [OK] Found custom icon: app\favicon.ico
+
+:: Check for custom icon
+set "ICON_PATH="
+
+if exist "%SOURCE_DIR%\lflix.ico" (
+    set "ICON_PATH=%SOURCE_DIR%\lflix.ico"
+    echo [OK] Found custom icon: lflix.ico
+) else if exist "%SOURCE_DIR%\public\lflix.ico" (
+    set "ICON_PATH=%SOURCE_DIR%\public\lflix.ico"
+    echo [OK] Found custom icon: public\lflix.ico
 ) else if exist "%SOURCE_DIR%\public\favicon.ico" (
     set "ICON_PATH=%SOURCE_DIR%\public\favicon.ico"
     echo [OK] Found custom icon: public\favicon.ico
@@ -52,7 +63,7 @@ echo Set oLink = oWS.CreateShortcut(sLinkFile^)
 echo oLink.TargetPath = "%TARGET_BAT%"
 echo oLink.WorkingDirectory = "%SOURCE_DIR%"
 echo oLink.IconLocation = "%ICON_PATH%"
-echo oLink.Description = "LocalFlix - Personal Media Server"
+echo oLink.Description = "LFLIX - Personal Media Server"
 echo oLink.WindowStyle = 1
 echo oLink.Save
 ) > "%VBSFILE%"
@@ -70,14 +81,6 @@ if exist "%DESKTOP%\%SHORTCUT_NAME%" (
     echo.
     echo Shortcut created:
     echo   %DESKTOP%\%SHORTCUT_NAME%
-    echo.
-    if defined ICON_PATH (
-        if not "%ICON_PATH%"=="%SystemRoot%\System32\SHELL32.dll,14" (
-            echo Custom icon applied! ^(favicon.ico^)
-        ) else (
-            echo Using default Windows icon
-        )
-    )
     echo.
     echo You can now double-click "LFLIX" on your desktop!
 ) else (

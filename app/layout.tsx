@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LFLIX",
+  title: "LFLIX - Your Personal Media Server",
   description: "Stream your local movies and TV shows with a Netflix-like experience. Powered by VLC and TMDB.",
   keywords: ["streaming", "movies", "tv shows", "local media", "vlc", "plex alternative"],
 };
@@ -24,9 +24,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black`}
+        suppressHydrationWarning
       >
         {children}
       </body>

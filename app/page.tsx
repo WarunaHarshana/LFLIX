@@ -21,6 +21,7 @@ import MobileNav from './components/MobileNav';
 import MobileConnectModal from './components/MobileConnectModal';
 import FloatingQRButton from './components/FloatingQRButton';
 import DlnaModal from './components/DlnaModal';
+import MobileSearchModal from './components/MobileSearchModal';
 import PlayChoiceModal from './components/PlayChoiceModal';
 import IPTVManager from './components/IPTVManager';
 import LiveSports from './components/LiveSports';
@@ -620,7 +621,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setShowLiveSports(true)}
-              className="px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] text-neutral-400 flex items-center gap-2"
+              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", showLiveSports ? "text-white bg-white/10" : "text-neutral-400")}
             >
               <Trophy className="w-4 h-4" />
               Live Sports
@@ -1292,6 +1293,21 @@ export default function Home() {
         )
       }
 
+      {/* Mobile Search Modal */}
+      {
+        showMobileSearch && (
+          <MobileSearchModal
+            isOpen={showMobileSearch}
+            onClose={() => setShowMobileSearch(false)}
+            library={library}
+            onPlay={(contentType, contentId, episodeId) => {
+              playFile(contentType, contentId, episodeId);
+            }}
+            onOpenShow={openShow}
+          />
+        )
+      }
+
       {/* Mobile Navigation */}
       <MobileNav
         activeTab={activeTab}
@@ -1299,6 +1315,7 @@ export default function Home() {
         onShowQR={() => setShowMobileConnect(true)}
         onShowSettings={() => window.location.href = '/settings'}
         onShowSearch={() => setShowMobileSearch(true)}
+        onShowLiveSports={() => setShowLiveSports(true)}
       />
 
       {/* Floating QR Button (Mobile) */}
