@@ -157,7 +157,7 @@ export default function LiveSports({ onClose }: Props) {
       {/* Full Screen Layout like Live TV */}
       <div className="min-h-screen bg-gradient-to-b from-neutral-950 via-black to-neutral-950">
         {/* Header */}
-        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/95 via-black/80 to-transparent backdrop-blur-sm pt-[env(safe-area-inset-top)]">
+        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/95 via-black/80 to-transparent backdrop-blur-sm">
           <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-12 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -213,7 +213,6 @@ export default function LiveSports({ onClose }: Props) {
                         className="w-full h-full"
                         allowFullScreen
                         allow="autoplay; fullscreen; picture-in-picture"
-                        referrerPolicy="no-referrer"
                       />
                       {/* Live indicator */}
                       {selectedMatch.isLive && (
@@ -275,9 +274,9 @@ export default function LiveSports({ onClose }: Props) {
                       <div className="space-y-2">
                         <p className="text-xs text-neutral-500 uppercase tracking-wider">Available Streams</p>
                         <div className="grid grid-cols-2 gap-2">
-                          {streams.map((stream, idx) => (
+                          {streams.map(stream => (
                             <button
-                              key={`${stream.id}-${idx}`}
+                              key={stream.id}
                               onClick={() => setSelectedStream(stream)}
                               className={`p-3 rounded-xl text-sm font-medium transition-all ${selectedStream?.id === stream.id
                                 ? 'bg-red-600 text-white'
