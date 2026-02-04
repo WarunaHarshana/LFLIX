@@ -274,9 +274,9 @@ export default function LiveSports({ onClose }: Props) {
                       <div className="space-y-2">
                         <p className="text-xs text-neutral-500 uppercase tracking-wider">Available Streams</p>
                         <div className="grid grid-cols-2 gap-2">
-                          {streams.map(stream => (
+                          {streams.map((stream, idx) => (
                             <button
-                              key={stream.id}
+                              key={`${stream.id}-${idx}`}
                               onClick={() => setSelectedStream(stream)}
                               className={`p-3 rounded-xl text-sm font-medium transition-all ${selectedStream?.id === stream.id
                                 ? 'bg-red-600 text-white'
