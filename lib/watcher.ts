@@ -9,7 +9,7 @@ const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.wmv', '.flv'
 type WatcherEventCallback = (event: WatcherEvent) => void;
 
 export type WatcherEvent = {
-    type: 'new_file' | 'scan_complete' | 'error';
+    type: 'new_file' | 'scan_complete' | 'error' | 'file_removed';
     filePath?: string;
     added?: number;
     message?: string;
@@ -144,6 +144,21 @@ class FolderWatcher {
                 this.pendingFiles.add(filePath);
                 this.emit({ type: 'new_file', filePath });
                 this.scheduleScan();
+            }
+        });
+
+        this.watcher.on('unlink', async (filePath) => {
+            if (this.isVideoFile(filePath)) {
+                console.log('Video deleted:', filePath);
+                try {
+                    const { removeFile } = await import('./scanner');
+                    const result = removeFile(filePath);
+                    if (result.removed) {
+                        this.emit({ type: 'file_removed', filePath });
+                    }
+                } catch (e) {
+                    console.error('Error removing file:', e);
+                }
             }
         });
 

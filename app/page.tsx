@@ -298,6 +298,10 @@ export default function Home() {
             showToast(`Added ${data.added} new item${data.added > 1 ? 's' : ''} to library`, 'success');
             fetchLibrary();
             fetchContinueWatching();
+          } else if (data.type === 'file_removed') {
+            showToast('Item removed from library', 'success');
+            fetchLibrary();
+            fetchContinueWatching();
           }
         } catch (e) {
           console.error('SSE parse error:', e);

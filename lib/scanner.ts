@@ -142,3 +142,40 @@ export async function scanFolder(folderPath: string): Promise<{ added: number; e
   scanDir(folderPath);
   return { added, errors };
 }
+
+export function removeFile(filePath: string): { removed: boolean } {
+  try {
+    console.log('[Scanner] Attempting to remove file:', filePath);
+    // Normalize path to ensure matches DB triggers
+    // Try original path first
+    let movieResult = db.prepare('DELETE FROM movies WHERE filePath = ?').run(filePath);
+    let epResult = db.prepare('DELETE FROM episodes WHERE filePath = ?').run(filePath);
+
+    if (movieResult.changes === 0 && epResult.changes === 0) {
+      // Try with normalized slashes if Windows
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      const winPath = filePath.replace(/\//g, '\\');
+
+      console.log('[Scanner] No items deleted, trying variants:', { normalizedPath, winPath });
+
+      if (normalizedPath !== filePath) {
+        const m = db.prepare('DELETE FROM movies WHERE filePath = ?').run(normalizedPath);
+        const e = db.prepare('DELETE FROM episodes WHERE filePath = ?').run(normalizedPath);
+        movieResult.changes += m.changes;
+        epResult.changes += e.changes;
+      }
+      if (winPath !== filePath && (movieResult.changes === 0 && epResult.changes === 0)) {
+        const m = db.prepare('DELETE FROM movies WHERE filePath = ?').run(winPath);
+        const e = db.prepare('DELETE FROM episodes WHERE filePath = ?').run(winPath);
+        movieResult.changes += m.changes;
+        epResult.changes += e.changes;
+      }
+    }
+
+    console.log('[Scanner] Removal result:', { movieChanges: movieResult.changes, epChanges: epResult.changes });
+    return { removed: movieResult.changes > 0 || epResult.changes > 0 };
+  } catch (e: any) {
+    console.error('Remove file error:', e);
+    return { removed: false };
+  }
+}
