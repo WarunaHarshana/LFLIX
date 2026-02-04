@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy } from 'lucide-react';
 import clsx from 'clsx';
 import Link from 'next/link';
+import { Capacitor } from '@capacitor/core';
 
 // Components
 import SearchBar from './components/SearchBar';
@@ -475,8 +476,38 @@ export default function Home() {
     console.log('playFile called:', { contentType, contentId, episodeId, startTime });
     try {
       const mobile = isMobile();
-      console.log('isMobile result:', mobile);
-      // Mobile or TV (force browser): Show browser player
+      const isNative = Capacitor.isNativePlatform();
+      console.log('isMobile result:', mobile, 'isNative:', isNative);
+
+      // Native App: Use Built-in Player (Capacitor)
+      if (isNative) {
+        // Generate token for auth-less streaming
+        const tokenRes = await fetch('/api/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contentType, contentId, episodeId })
+        });
+        const { token } = await tokenRes.json();
+
+        if (!token) throw new Error('Failed to generate playback token');
+
+        const streamUrl = `/api/stream?token=${token}`;
+
+        // Get title for video player
+        let title = 'Unknown';
+        if (contentType === 'movie') {
+          const movie = library.find(m => m.id === contentId);
+          title = movie?.title || 'Movie';
+        } else {
+          const show = library.find(s => s.id === contentId);
+          title = show?.title || 'TV Show';
+        }
+
+        setVideoPlayer({ src: streamUrl, title, initialTime: startTime });
+        return;
+      }
+
+      // Mobile Browser or TV (force browser): Show browser player choice
       if (mobile || forceBrowserPlayer) {
         const params = new URLSearchParams({
           contentType,

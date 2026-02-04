@@ -47,6 +47,11 @@ export function middleware(request: NextRequest) {
       return response;
     }
 
+    // Skip auth if token is provided for stream/m3u8
+    if (request.nextUrl.pathname.startsWith('/api/stream') && request.nextUrl.searchParams.has('token')) {
+      return response;
+    }
+
     // Validate PIN
     if (!pin || pin !== expectedPin) {
       console.log('Auth failed:', { hasPin: !!pin, expectedPin });

@@ -2,6 +2,8 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { X, AlertCircle, Maximize, Minimize, Settings2, Subtitles, AudioLines, Check } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { CapacitorVideoPlayer } from 'capacitor-video-player';
 
 type Props = {
   src: string;
@@ -38,6 +40,73 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0 }: Pr
   const [subtitleTracks, setSubtitleTracks] = useState<{ id: number; label: string; language: string }[]>([]);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(0);
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState<number>(-1);
+  const isNative = Capacitor.isNativePlatform();
+
+  // Handle Native Player
+  useEffect(() => {
+    if (!isNative) return;
+
+    let playerHandle: any;
+
+    const playNative = async () => {
+      try {
+        // Construct absolute URL
+        const absoluteUrl = src.startsWith('http') ? src : window.location.origin + src;
+        console.log('Starting native player:', absoluteUrl);
+
+        // Listen for exit
+        playerHandle = await (CapacitorVideoPlayer as any).addListener('jeepCapVideoPlayerExit', () => {
+          console.log('Native player exited');
+          onClose();
+        });
+
+        // Initialize Native Player
+        await CapacitorVideoPlayer.initPlayer({
+          mode: 'fullscreen',
+          url: absoluteUrl,
+          playerId: 'fullscreen-player',
+          componentTag: 'div',
+          headers: {
+            // If we had the cookie, we'd pass it here. But we use Token now.
+          }
+        });
+
+        // Use a small timeout to ensure player is ready before seeking (if needed)
+        /* if (initialTime > 0) { ... } */
+
+      } catch (e) {
+        console.error('Native player error:', e);
+        // Fallback to web player? or Show error
+        setError('Native player failed to load: ' + JSON.stringify(e));
+      }
+    };
+
+    playNative();
+
+    return () => {
+      if (playerHandle) playerHandle.remove();
+      CapacitorVideoPlayer.stopAllPlayers();
+    };
+  }, [src, isNative]); // Effect dependencies
+
+  // If Native, show a placeholder (player covers screen)
+  if (isNative) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-neutral-400">Opening system player...</p>
+          <button
+            onClick={onClose}
+            className="mt-8 px-6 py-2 bg-neutral-800 rounded-lg text-white text-sm hover:bg-neutral-700"
+          >
+            Cancel / Close
+          </button>
+        </div>
+        {error && <div className="absolute bottom-10 text-red-500">{error}</div>}
+      </div>
+    );
+  }
 
   // Track fullscreen state
   useEffect(() => {
