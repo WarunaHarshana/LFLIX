@@ -213,6 +213,8 @@ export default function LiveSports({ onClose }: Props) {
                         className="w-full h-full"
                         allowFullScreen
                         allow="autoplay; fullscreen; picture-in-picture"
+                        sandbox="allow-scripts allow-same-origin allow-presentation"
+                        referrerPolicy="no-referrer"
                       />
                       {/* Live indicator */}
                       {selectedMatch.isLive && (
