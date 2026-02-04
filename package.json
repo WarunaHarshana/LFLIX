@@ -9,10 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@capacitor/android": "^8.0.2",
-    "@capacitor/app": "^8.0.0",
-    "@capacitor/cli": "^8.0.2",
-    "@capacitor/core": "^8.0.2",
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/cli": "^6.2.1",
+    "@capacitor/core": "^6.0.0",
     "better-sqlite3": "^12.6.2",
     "capacitor-video-player": "^6.0.2",
     "chokidar": "^5.0.0",

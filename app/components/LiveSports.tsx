@@ -157,7 +157,7 @@ export default function LiveSports({ onClose }: Props) {
       {/* Full Screen Layout like Live TV */}
       <div className="min-h-screen bg-gradient-to-b from-neutral-950 via-black to-neutral-950">
         {/* Header */}
-        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/95 via-black/80 to-transparent backdrop-blur-sm">
+        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/95 via-black/80 to-transparent backdrop-blur-sm pt-[env(safe-area-inset-top)]">
           <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-12 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
