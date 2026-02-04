@@ -28,7 +28,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
   return (
     <>
       {/* Mobile Header */}
-      <div className="fixed top-0 left-0 right-0 z-[90] bg-black/95 backdrop-blur-md border-b border-neutral-800 md:hidden">
+      <div className="fixed top-0 left-0 right-0 z-[90] bg-black/95 backdrop-blur-md border-b border-neutral-800 md:hidden pt-[env(safe-area-inset-top)]">
         <div className="flex items-center justify-between px-4 py-3">
           <h1 className="text-xl font-bold tracking-tighter text-red-600">LFLIX</h1>
           <div className="flex items-center gap-2">
