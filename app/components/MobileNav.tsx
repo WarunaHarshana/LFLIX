@@ -28,7 +28,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
   return (
     <>
       {/* Mobile Header */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-md border-b border-neutral-800 md:hidden">
+      <div className="fixed top-0 left-0 right-0 z-[90] bg-black/95 backdrop-blur-md border-b border-neutral-800 md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <h1 className="text-xl font-bold tracking-tighter text-red-600">LFLIX</h1>
           <div className="flex items-center gap-2">
@@ -109,7 +109,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
       </div>
 
       {/* Mobile Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-md border-t border-neutral-800 md:hidden">
+      <div className="fixed bottom-0 left-0 right-0 z-[90] bg-black/95 backdrop-blur-md border-t border-neutral-800 md:hidden">
         <div className="flex justify-around py-2">
           {tabs.map((tab) => (
             <button

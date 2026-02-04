@@ -193,7 +193,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0 }: Pr
   }, [audioTracks, subtitleTracks]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-[100] bg-black flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-neutral-900">
         <h2 className="text-lg font-medium truncate flex-1">{title}</h2>
@@ -289,8 +289,9 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0 }: Pr
           </button>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-neutral-800 rounded-full transition"
+            className="p-3 hover:bg-neutral-800 rounded-full transition bg-neutral-800/50"
             title="Close"
+            style={{ touchAction: 'manipulation' }}
           >
             <X className="w-6 h-6" />
           </button>
