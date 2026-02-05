@@ -6,6 +6,9 @@ import clsx from 'clsx';
 import Link from 'next/link';
 import { Capacitor } from '@capacitor/core';
 
+// Mobile config
+import { apiUrl, isNativeApp } from '@/lib/mobileConfig';
+
 // Components
 import SearchBar from './components/SearchBar';
 import ContentCard from './components/ContentCard';
@@ -176,7 +179,7 @@ export default function Home() {
   useEffect(() => {
     const checkSetup = async () => {
       try {
-        const res = await fetch('/api/setup', { credentials: 'include' });
+        const res = await fetch(apiUrl('/api/setup'), { credentials: 'include' });
         const data = await res.json();
         setSetupComplete(data.setupComplete);
       } catch {
@@ -208,7 +211,7 @@ export default function Home() {
   // Fetch library
   const fetchLibrary = useCallback(async () => {
     try {
-      const res = await fetch('/api/content', { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/content'), { credentials: 'include' });
       const data = await res.json();
       if (data.content) {
         setLibrary(data.content);
@@ -226,7 +229,7 @@ export default function Home() {
   // Fetch continue watching
   const fetchContinueWatching = useCallback(async () => {
     try {
-      const res = await fetch('/api/history', { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/history'), { credentials: 'include' });
       const data = await res.json();
       setContinueWatching(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -238,7 +241,7 @@ export default function Home() {
   const fetchIPTVChannels = useCallback(async () => {
     setLoadingIPTV(true);
     try {
-      const res = await fetch('/api/iptv/channels');
+      const res = await fetch(apiUrl('/api/iptv/channels'));
       const data = await res.json();
       if (data.channels) {
         setIptvChannels(data.channels);
@@ -259,7 +262,7 @@ export default function Home() {
   // Delete individual IPTV channel
   const deleteIPTVChannel = async (channelId: number) => {
     try {
-      const res = await fetch(`/api/iptv/channels?id=${channelId}`, {
+      const res = await fetch(apiUrl(`/api/iptv/channels?id=${channelId}`), {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -482,7 +485,7 @@ export default function Home() {
       // Native App: Use Built-in Player (Capacitor)
       if (isNative) {
         // Generate token for auth-less streaming
-        const tokenRes = await fetch('/api/token', {
+        const tokenRes = await fetch(apiUrl('/api/token'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ contentType, contentId, episodeId })
@@ -491,7 +494,7 @@ export default function Home() {
 
         if (!token) throw new Error('Failed to generate playback token');
 
-        const streamUrl = `/api/stream?token=${token}`;
+        const streamUrl = apiUrl(`/api/stream?token=${token}`);
 
         // Get title for video player
         let title = 'Unknown';
@@ -540,7 +543,7 @@ export default function Home() {
 
       // Desktop: Launch VLC (or TV uses browser)
       console.log('Desktop/VLC path - calling /api/play');
-      const res = await fetch('/api/play', {
+      const res = await fetch(apiUrl('/api/play'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -565,7 +568,7 @@ export default function Home() {
     setSelectedShow(show);
     setLoadingEpisodes(true);
     try {
-      const res = await fetch(`/api/episodes?showId=${show.id}`, { credentials: 'same-origin' });
+      const res = await fetch(apiUrl(`/api/episodes?showId=${show.id}`), { credentials: 'same-origin' });
       const data = await res.json();
       setSeasons(data.seasons || []);
     } catch (e) {
@@ -577,7 +580,7 @@ export default function Home() {
 
   // Scan folder
   const handleScan = async (folderPath: string) => {
-    const res = await fetch('/api/scan', {
+    const res = await fetch(apiUrl('/api/scan'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
@@ -597,7 +600,7 @@ export default function Home() {
   const handleRescanAll = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/rescan', {
+      const res = await fetch(apiUrl('/api/rescan'), {
         method: 'POST',
         credentials: 'include'
       });
@@ -623,7 +626,7 @@ export default function Home() {
     if (!confirmed) return;
 
     try {
-      await fetch(`/api/delete?type=${item.type}&id=${item.id}`, {
+      await fetch(apiUrl(`/api/delete?type=${item.type}&id=${item.id}`), {
         method: 'DELETE',
         credentials: 'same-origin'
       });
@@ -638,7 +641,7 @@ export default function Home() {
   // Delete episode
   const handleDeleteEpisode = async (episodeId: number) => {
     try {
-      await fetch(`/api/delete?type=episode&id=${episodeId}`, {
+      await fetch(apiUrl(`/api/delete?type=episode&id=${episodeId}`), {
         method: 'DELETE',
         credentials: 'same-origin'
       });
@@ -788,7 +791,7 @@ export default function Home() {
           <button
             onClick={async () => {
               // Call logout endpoint to clear cookie properly
-              await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+              await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'same-origin' });
               setIsAuthenticated(false);
             }}
             className="p-2 hover:bg-white/10 rounded-full transition text-neutral-400 hover:text-white text-xs"

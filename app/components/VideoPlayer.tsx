@@ -4,6 +4,7 @@ import { useRef, useEffect, useState } from 'react';
 import { X, AlertCircle, Maximize, Minimize, Settings2, Subtitles, AudioLines, Check } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorVideoPlayer } from 'capacitor-video-player';
+import { getServerUrl } from '@/lib/mobileConfig';
 
 type Props = {
   src: string;
@@ -50,8 +51,19 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0 }: Pr
 
     const playNative = async () => {
       try {
-        // Construct absolute URL
-        const absoluteUrl = src.startsWith('http') ? src : window.location.origin + src;
+        // Construct absolute URL using server URL for native app
+        let absoluteUrl: string;
+        if (src.startsWith('http')) {
+          absoluteUrl = src;
+        } else {
+          // For native app, use the configured server URL
+          const serverUrl = getServerUrl();
+          if (serverUrl) {
+            absoluteUrl = serverUrl + (src.startsWith('/') ? src : '/' + src);
+          } else {
+            absoluteUrl = window.location.origin + (src.startsWith('/') ? src : '/' + src);
+          }
+        }
         console.log('Starting native player:', absoluteUrl);
 
         // Listen for exit

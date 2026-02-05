@@ -32,8 +32,11 @@ jobs:
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Build Web App
-        run: npm run build
+      - name: Build Web App (Static Export)
+        run: NEXT_EXPORT=1 npm run build
+
+      - name: Copy Capacitor Config
+        run: cp capacitor.config.ts mobile/
 
       - name: Sync Capacitor
         run: npx cap sync android
