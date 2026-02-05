@@ -5,6 +5,9 @@ import db from '@/lib/db';
 import { fetchMovieMetadata, fetchShowMetadata, getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
 import { MovieDb } from 'moviedb-promise';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // Recursive folder scan
 function getVideoFiles(dir: string, fileList: string[] = []) {
   if (!fs.existsSync(dir)) return fileList;

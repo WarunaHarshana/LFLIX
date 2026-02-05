@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // Streamed.pk API integration for live sports
 const API_BASE = 'https://streamed.pk/api';
 

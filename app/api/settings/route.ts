@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import fs from 'fs';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // Valid setting keys to prevent injection
 const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey'];
 

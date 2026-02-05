@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 type Episode = {
   id: number;
   showId: number;

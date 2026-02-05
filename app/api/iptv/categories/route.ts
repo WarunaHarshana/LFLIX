@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { iptvDb } from '@/lib/db';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const categories = iptvDb.getCategories();

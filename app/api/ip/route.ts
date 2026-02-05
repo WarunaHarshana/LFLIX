@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import os from 'os';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 function getLocalIpAddress(): string {
   const interfaces = os.networkInterfaces();
   

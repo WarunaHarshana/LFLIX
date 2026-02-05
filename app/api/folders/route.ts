@@ -3,6 +3,9 @@ import db from '@/lib/db';
 import path from 'path';
 import fs from 'fs';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // Validate ID is a positive integer
 function validateId(id: any): id is number {
   return Number.isInteger(id) && id > 0;

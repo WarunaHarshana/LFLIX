@@ -3,6 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 type FileItem = {
     name: string;
     path: string;

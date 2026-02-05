@@ -4,6 +4,9 @@ import path from 'path';
 import db from '@/lib/db';
 import { scanFile } from '@/lib/scanner';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.wmv', '.flv', '.webm', '.ts'];
 
 function isVideoFile(filePath: string): boolean {

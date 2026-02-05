@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // Validate ID is a positive integer
 function validateId(id: any): id is number {
   return Number.isInteger(id) && id > 0;

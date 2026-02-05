@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // Get stream URLs for a specific match
 const API_BASE = 'https://streamed.pk/api';
 

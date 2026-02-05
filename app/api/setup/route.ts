@@ -3,6 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import db from '@/lib/db';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // SECURITY: Validate folder path to prevent directory traversal
 function validateFolderPath(folderPath: string): { valid: boolean; error?: string } {
   // Check for null bytes (path injection)

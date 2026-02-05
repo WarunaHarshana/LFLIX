@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { startDlnaServer, stopDlnaServer, getDlnaStatus } from '@/lib/dlna';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 export async function POST() {
   try {
     await startDlnaServer();

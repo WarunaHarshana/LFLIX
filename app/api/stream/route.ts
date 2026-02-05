@@ -4,6 +4,9 @@ import path from 'path';
 import db from '@/lib/db';
 import { verifyToken } from '../token/route';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // Get file path by ID (same as play API)
 function getFilePathById(contentType: 'movie' | 'episode', id: number): string | null {
   try {

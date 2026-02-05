@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { folderWatcher, WatcherEvent } from '@/lib/watcher';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // SSE endpoint for real-time notifications
 export async function GET() {
     const encoder = new TextEncoder();

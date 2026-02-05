@@ -3,6 +3,9 @@ import db from '@/lib/db';
 import { MovieDb } from 'moviedb-promise';
 import { getTmdbApiKey, rateLimitedTmdbCall, cleanFilename, MediaMetadata, fetchMovieMetadata, fetchShowMetadata } from '@/lib/metadata';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
     const TMDB_API_KEY = getTmdbApiKey();
     const moviedb = new MovieDb(TMDB_API_KEY);

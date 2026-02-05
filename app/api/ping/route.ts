@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   return NextResponse.json({ 
     status: 'ok',

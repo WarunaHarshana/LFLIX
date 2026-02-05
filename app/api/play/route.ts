@@ -3,6 +3,9 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import db from '@/lib/db';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // Get VLC path from settings
 function getVlcPath(): string {
   try {

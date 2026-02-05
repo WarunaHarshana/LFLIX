@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import db from '@/lib/db';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 // Simple in-memory token store (tokens expire after 1 hour)
 const tokens = new Map<string, { contentType: string; contentId: number; episodeId?: number; expires: number }>();
 

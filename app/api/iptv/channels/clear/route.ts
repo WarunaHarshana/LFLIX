@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import Database from 'better-sqlite3';
 import path from 'path';
 
+// Mark as dynamic for static export compatibility
+export const dynamic = 'force-dynamic';
+
 const dbPath = path.join(process.cwd(), 'localflix.db');
 
 export async function DELETE(req: NextRequest) {
