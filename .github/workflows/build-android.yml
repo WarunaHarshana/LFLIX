@@ -34,8 +34,8 @@ jobs:
 
       - name: Temporarily Exclude API Routes
         run: |
-          # Move API routes out of the way for static export
-          mv app/api app/api_backup
+          # Move API routes completely out of app directory for static export
+          mv app/api ../api_temp
 
       - name: Build Web App (Static Export)
         run: NEXT_EXPORT=1 npm run build
@@ -43,7 +43,7 @@ jobs:
       - name: Restore API Routes
         run: |
           # Restore API routes after build
-          mv app/api_backup app/api
+          mv ../api_temp app/api
 
       - name: Copy Capacitor Config
         run: cp capacitor.config.ts mobile/

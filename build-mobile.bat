@@ -21,7 +21,7 @@ if errorlevel 1 (
 echo.
 echo [2/7] Temporarily excluding API routes for static export...
 if exist "app\api" (
-    rename app\api api_backup
+    move app\api ..\api_temp >nul
 ) else (
     echo WARNING: app\api not found, skipping...
 )
@@ -33,14 +33,14 @@ call npm run build
 if errorlevel 1 (
     echo ERROR: Build failed
     echo Restoring API routes...
-    if exist "app\api_backup" rename app\api_backup api
+    if exist "..\api_temp" move ..\api_temp app\api >nul
     exit /b 1
 )
 
 echo.
 echo [4/7] Restoring API routes...
-if exist "app\api_backup" (
-    rename app\api_backup api
+if exist "..\api_temp" (
+    move ..\api_temp app\api >nul
 )
 
 echo.
