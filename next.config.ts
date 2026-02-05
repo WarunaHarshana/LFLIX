@@ -1,15 +1,17 @@
 import type { NextConfig } from "next";
 
+const isExport = process.env.NEXT_EXPORT === '1';
+
 const nextConfig: NextConfig = {
   // Static export for mobile app (Capacitor)
   // Set NEXT_EXPORT=1 to build static files, otherwise normal build for web
-  output: process.env.NEXT_EXPORT === '1' ? 'export' : undefined,
-  distDir: process.env.NEXT_EXPORT === '1' ? 'mobile' : '.next',
+  output: isExport ? 'export' : undefined,
+  distDir: isExport ? 'mobile' : '.next',
   // For static export, use trailing slashes
-  trailingSlash: process.env.NEXT_EXPORT === '1',
+  trailingSlash: isExport,
   // Images must be unoptimized for static export
   images: {
-    unoptimized: process.env.NEXT_EXPORT === '1',
+    unoptimized: isExport,
   },
 };
 
