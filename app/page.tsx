@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { Capacitor } from '@capacitor/core';
 
 // Mobile config
-import { apiUrl, isNativeApp } from '@/lib/mobileConfig';
+import { apiUrl, isNativeApp, getServerUrl } from '@/lib/mobileConfig';
 
 // Components
 import SearchBar from './components/SearchBar';
@@ -178,6 +178,16 @@ export default function Home() {
   // Check if setup is complete on first load
   useEffect(() => {
     const checkSetup = async () => {
+      // In native app, check if server URL is configured
+      if (isNativeApp()) {
+        const serverUrl = getServerUrl();
+        if (!serverUrl) {
+          // No server configured, redirect to launcher
+          window.location.href = '/index.html';
+          return;
+        }
+      }
+
       try {
         const res = await fetch(apiUrl('/api/setup'), { credentials: 'include' });
         const data = await res.json();

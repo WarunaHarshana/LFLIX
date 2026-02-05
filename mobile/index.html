@@ -209,12 +209,22 @@
         // Load last server
         const storedServer = localStorage.getItem('lflix_server_url');
         if (storedServer) {
-            try {
-                const url = new URL(storedServer);
-                lastServerIpDiv.textContent = url.host;
-                lastServerDiv.style.display = 'block';
-            } catch (e) {
-                localStorage.removeItem('lflix_server_url');
+            // Check if we have server in URL (from redirect) - if not, auto-redirect to app
+            const urlParams = new URLSearchParams(window.location.search);
+            if (!urlParams.get('server')) {
+                // Auto-redirect to app with stored server
+                const currentUrl = new URL(window.location.href);
+                const appPath = currentUrl.pathname.replace(/\/index\.html$/, '/').replace(/\/$/, '/index/');
+                window.location.href = `${currentUrl.origin}${appPath}?server=${encodeURIComponent(storedServer)}`;
+            } else {
+                // Server param exists, show last server button
+                try {
+                    const url = new URL(storedServer);
+                    lastServerIpDiv.textContent = url.host;
+                    lastServerDiv.style.display = 'block';
+                } catch (e) {
+                    localStorage.removeItem('lflix_server_url');
+                }
             }
         }
 
@@ -275,9 +285,11 @@
             localStorage.setItem('lflix_server_url', serverUrl.origin);
             
             // Redirect to app with server URL
-            const appUrl = new URL(window.location.href);
-            appUrl.searchParams.set('server', serverUrl.origin);
-            window.location.href = appUrl.toString();
+            // In static export with trailingSlash, home is at /index/
+            const currentUrl = new URL(window.location.href);
+            const appPath = currentUrl.pathname.replace(/\/index\.html$/, '/').replace(/\/$/, '/index/');
+            const appUrl = `${currentUrl.origin}${appPath}?server=${encodeURIComponent(serverUrl.origin)}`;
+            window.location.href = appUrl;
         }
 
         function connectToLast() {
