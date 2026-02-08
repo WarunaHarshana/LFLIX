@@ -632,35 +632,45 @@ export default function Home() {
 
   // Delete item
   const handleDelete = async (item: ContentItem) => {
-    const confirmed = confirm(`Are you sure you want to remove "${item.title}" from your library?`);
+    const confirmed = confirm(`Delete "${item.title}" from library AND local disk permanently?`);
     if (!confirmed) return;
 
     try {
-      await fetch(apiUrl(`/api/delete?type=${item.type}&id=${item.id}`), {
+      const res = await fetch(apiUrl(`/api/delete?type=${item.type}&id=${item.id}&deleteFile=1`), {
         method: 'DELETE',
         credentials: 'same-origin'
       });
-      showToast('Removed from library', 'success');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+
+      showToast(`Deleted (${data.filesDeleted ?? 0} file(s) removed from disk)`, 'success');
       setContextMenu(null);
       await fetchLibrary();
     } catch (e) {
-      showToast('Failed to remove item', 'error');
+      showToast('Failed to delete item', 'error');
     }
   };
 
   // Delete episode
   const handleDeleteEpisode = async (episodeId: number) => {
+    const confirmed = confirm('Delete this episode from library AND local disk permanently?');
+    if (!confirmed) return;
+
     try {
-      await fetch(apiUrl(`/api/delete?type=episode&id=${episodeId}`), {
+      const res = await fetch(apiUrl(`/api/delete?type=episode&id=${episodeId}&deleteFile=1`), {
         method: 'DELETE',
         credentials: 'same-origin'
       });
-      showToast('Episode removed', 'success');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+
+      showToast(`Episode deleted (${data.filesDeleted ?? 0} file removed)`, 'success');
       if (selectedShow) {
         openShow(selectedShow); // Refresh episodes
       }
+      await fetchLibrary();
     } catch (e) {
-      showToast('Failed to remove episode', 'error');
+      showToast('Failed to delete episode', 'error');
     }
   };
 
