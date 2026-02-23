@@ -33,6 +33,13 @@ function detectTvShow(fileName: string): { name: string; season: number; episode
   return null;
 }
 
+// Detect HDR content from filename
+const HDR_PATTERN = /\b(HDR10\+?|HDR10Plus|HDR|HLG|DV|DoVi|Dolby[. ]?Vision|DolbyVision)\b/i;
+
+function detectHDR(fileName: string): boolean {
+  return HDR_PATTERN.test(fileName);
+}
+
 export async function scanFile(filePath: string): Promise<{ added: boolean; error?: string }> {
   try {
     if (!isVideoFile(filePath)) {
@@ -85,22 +92,25 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
       }
 
       // Insert episode
-      db.prepare('INSERT OR IGNORE INTO episodes (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)')
-        .run(showId, filePath, fileName, tvInfo.season, tvInfo.episode, `S${tvInfo.season} E${tvInfo.episode}`);
+      const isHDR = detectHDR(fileName) ? 1 : 0;
+      db.prepare('INSERT OR IGNORE INTO episodes (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath, isHDR) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)')
+        .run(showId, filePath, fileName, tvInfo.season, tvInfo.episode, `S${tvInfo.season} E${tvInfo.episode}`, isHDR);
 
       return { added: true };
     } else {
       // Handle movie
       // Fetch metadata from TMDB
       const movieMeta = await fetchMovieMetadata(fileName);
+      const isHDR = detectHDR(fileName) ? 1 : 0;
 
       db.prepare(`
-        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, genres) 
-        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @genres)
+        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, genres, isHDR) 
+        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @genres, @isHDR)
       `).run({
         filePath,
         fileName,
-        ...movieMeta
+        ...movieMeta,
+        isHDR
       });
 
       return { added: true };

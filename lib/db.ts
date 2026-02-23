@@ -23,9 +23,9 @@ if (fs.existsSync(oldRootDbPath) && !fs.existsSync(newDbPath)) {
   console.log('Migrated database to data/lflix.db');
 }
 
-const dbPath = fs.existsSync(newDbPath) ? newDbPath : 
-               fs.existsSync(oldRootDbPath) ? oldRootDbPath : 
-               fs.existsSync(oldRootDbPath2) ? oldRootDbPath2 : newDbPath;
+const dbPath = fs.existsSync(newDbPath) ? newDbPath :
+  fs.existsSync(oldRootDbPath) ? oldRootDbPath :
+    fs.existsSync(oldRootDbPath2) ? oldRootDbPath2 : newDbPath;
 const db = new Database(dbPath);
 
 // Initialize DB schema
@@ -135,9 +135,9 @@ db.exec(`
 // WHITELIST of valid tables and columns to prevent SQL injection
 const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings'];
 const VALID_COLUMNS: Record<string, string[]> = {
-  movies: ['genres', 'backdropPath', 'overview', 'rating'],
+  movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR'],
   shows: ['genres', 'backdropPath', 'overview', 'rating'],
-  episodes: ['stillPath', 'overview'],
+  episodes: ['stillPath', 'overview', 'isHDR'],
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
   settings: []
@@ -171,6 +171,10 @@ function addColumnIfNotExists(table: string, column: string, type: string) {
 // Add genres column to movies and shows if missing (for existing databases)
 addColumnIfNotExists('movies', 'genres', 'TEXT');
 addColumnIfNotExists('shows', 'genres', 'TEXT');
+
+// Add HDR detection column
+addColumnIfNotExists('movies', 'isHDR', 'INTEGER DEFAULT 0');
+addColumnIfNotExists('episodes', 'isHDR', 'INTEGER DEFAULT 0');
 
 // IPTV Helper Functions
 export const iptvDb = {

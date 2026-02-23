@@ -11,6 +11,7 @@ type Props = {
   title: string;
   onClose: () => void;
   initialTime?: number;
+  isHDR?: boolean;
 };
 
 // Extended HTMLVideoElement with non-standard audioTracks API
@@ -31,7 +32,7 @@ interface AudioTrack {
   language: string;
 }
 
-export default function VideoPlayer({ src, title, onClose, initialTime = 0 }: Props) {
+export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false }: Props) {
   const videoRef = useRef<ExtendedHTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,7 +42,17 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0 }: Pr
   const [subtitleTracks, setSubtitleTracks] = useState<{ id: number; label: string; language: string }[]>([]);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(0);
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState<number>(-1);
+  const [hdrSupported, setHdrSupported] = useState<boolean | null>(null);
   const isNative = Capacitor.isNativePlatform();
+
+  // Detect HDR display capability
+  useEffect(() => {
+    if (!isHDR) return;
+    if (typeof window === 'undefined') return;
+    const dynamicRange = window.matchMedia('(dynamic-range: high)');
+    const videoRange = window.matchMedia('(video-dynamic-range: high)');
+    setHdrSupported(dynamicRange.matches || videoRange.matches);
+  }, [isHDR]);
 
   // Handle Native Player
   useEffect(() => {
@@ -279,6 +290,12 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0 }: Pr
       <div className="flex items-center justify-between p-4 bg-neutral-900">
         <h2 className="text-lg font-medium truncate flex-1">{title}</h2>
         <div className="flex items-center gap-2">
+          {/* HDR Badge */}
+          {isHDR && (
+            <span className="px-2 py-0.5 bg-amber-500/90 text-black text-xs rounded font-bold tracking-wide">
+              HDR
+            </span>
+          )}
           {/* Settings Button - Always show, displays info about tracks */}
           <div className="relative">
             <button
@@ -424,6 +441,13 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0 }: Pr
           Your browser does not support the video tag.
         </video>
       </div>
+
+      {/* HDR Compatibility Warning */}
+      {isHDR && hdrSupported === false && !error && (
+        <div className="px-4 py-2 bg-amber-900/30 border-t border-amber-800/40 text-center text-xs text-amber-300/80">
+          ⚠ Your display may not support HDR — colors may appear washed out
+        </div>
+      )}
 
       {/* Hint */}
       <div className="p-4 bg-neutral-900 text-center text-sm text-neutral-500">

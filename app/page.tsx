@@ -42,6 +42,7 @@ type ContentItem = {
   firstAirDate?: string | null;
   rating: number | null;
   filePath?: string;
+  isHDR?: boolean;
   genres?: string | null;
   watchProgress?: {
     progress: number;
@@ -62,6 +63,7 @@ type Episode = {
   title: string;
   filePath: string;
   overview?: string | null;
+  isHDR?: boolean;
   watchProgress?: {
     progress: number;
     duration: number;
@@ -138,7 +140,7 @@ export default function Home() {
   const [focusedIndex, setFocusedIndex] = useState(-1);
 
   // Video Player (for mobile streaming)
-  const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number } | null>(null);
+  const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number; isHDR?: boolean } | null>(null);
 
   // Mobile Connect QR Modal
   const [showMobileConnect, setShowMobileConnect] = useState(false);
@@ -152,6 +154,17 @@ export default function Home() {
 
   // Force browser player (for TVs without VLC)
   const [forceBrowserPlayer, setForceBrowserPlayer] = useState(false);
+
+  // HDR display detection (live — updates when moving between monitors)
+  const [hdrDisplaySupported, setHdrDisplaySupported] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(dynamic-range: high)');
+    setHdrDisplaySupported(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setHdrDisplaySupported(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   // Play Choice Modal (for mobile)
   const [playChoice, setPlayChoice] = useState<{
@@ -508,15 +521,17 @@ export default function Home() {
 
         // Get title for video player
         let title = 'Unknown';
+        let isHDR = false;
         if (contentType === 'movie') {
           const movie = library.find(m => m.id === contentId);
           title = movie?.title || 'Movie';
+          isHDR = !!movie?.isHDR;
         } else {
           const show = library.find(s => s.id === contentId);
           title = show?.title || 'TV Show';
         }
 
-        setVideoPlayer({ src: streamUrl, title, initialTime: startTime });
+        setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR });
         return;
       }
 
@@ -531,9 +546,11 @@ export default function Home() {
 
         // Get title for video player
         let title = 'Unknown';
+        let isHDR = false;
         if (contentType === 'movie') {
           const movie = library.find(m => m.id === contentId);
           title = movie?.title || 'Movie';
+          isHDR = !!movie?.isHDR;
         } else {
           const show = library.find(s => s.id === contentId);
           title = show?.title || 'TV Show';
@@ -546,7 +563,7 @@ export default function Home() {
           contentType,
           contentId,
           episodeId,
-          onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime })
+          onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR })
         });
         return;
       }
@@ -808,6 +825,18 @@ export default function Home() {
           >
             <Settings className="w-5 h-5" />
           </Link>
+          {/* HDR Display Indicator */}
+          <div
+            className={clsx(
+              "px-2 py-1 rounded text-[10px] font-bold tracking-wider border select-none",
+              hdrDisplaySupported
+                ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                : "bg-neutral-800 text-neutral-500 border-neutral-700"
+            )}
+            title={hdrDisplaySupported ? "This display supports HDR" : "This display does not support HDR"}
+          >
+            HDR {hdrDisplaySupported ? 'ON' : 'OFF'}
+          </div>
           <button
             onClick={async () => {
               // Call logout endpoint to clear cookie properly
@@ -862,6 +891,11 @@ export default function Home() {
                   </span>
                   {featured.rating && <span className="text-green-400">Match {Math.round(featured.rating * 10)}%</span>}
                   <span className="text-neutral-300">{featured.year || (featured.firstAirDate ? featured.firstAirDate.substring(0, 4) : '')}</span>
+                  {featured.isHDR && (
+                    <span className="px-1.5 py-0.5 bg-amber-500/90 text-black text-xs rounded font-bold tracking-wide">
+                      HDR
+                    </span>
+                  )}
                   {featured.genres && (
                     <span className="text-neutral-400">{featured.genres.split(',').slice(0, 2).join(' • ')}</span>
                   )}
@@ -1378,6 +1412,7 @@ export default function Home() {
             src={videoPlayer.src}
             title={videoPlayer.title}
             initialTime={videoPlayer.initialTime}
+            isHDR={videoPlayer.isHDR}
             onClose={() => setVideoPlayer(null)}
           />
         )

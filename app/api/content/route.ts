@@ -16,6 +16,7 @@ type Movie = {
   overview: string | null;
   rating: number | null;
   genres: string | null;
+  isHDR: number;
   addedAt: string;
 };
 
@@ -75,6 +76,7 @@ export async function GET() {
         overview: m.overview,
         rating: m.rating,
         genres: m.genres,
+        isHDR: !!m.isHDR,
         addedAt: m.addedAt,
         type: 'movie' as const,
         watchProgress: movieProgressMap.get(m.id)

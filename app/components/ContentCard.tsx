@@ -20,6 +20,7 @@ export type ContentItem = {
     firstAirDate?: string | null;
     rating: number | null;
     filePath?: string;
+    isHDR?: boolean;
     watchProgress?: WatchProgress;
 };
 
@@ -86,6 +87,13 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
             {item.watchProgress?.completed === 1 && (
                 <div className="absolute top-2 right-2 px-2 py-0.5 bg-green-600 text-white text-xs rounded-full font-medium">
                     ✓ Watched
+                </div>
+            )}
+
+            {/* HDR badge */}
+            {item.isHDR && (
+                <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-amber-500/90 text-black text-[10px] rounded font-bold tracking-wide backdrop-blur-sm">
+                    HDR
                 </div>
             )}
         </div>
