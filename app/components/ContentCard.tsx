@@ -21,6 +21,10 @@ export type ContentItem = {
     rating: number | null;
     filePath?: string;
     isHDR?: boolean;
+    resolution?: string | null;
+    videoCodec?: string | null;
+    audioCodec?: string | null;
+    audioChannels?: string | null;
     watchProgress?: WatchProgress;
 };
 
@@ -94,6 +98,13 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
             {item.isHDR && (
                 <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-amber-500/90 text-black text-[10px] rounded font-bold tracking-wide backdrop-blur-sm">
                     HDR
+                </div>
+            )}
+
+            {/* Resolution badge */}
+            {item.resolution && (
+                <div className={`absolute ${item.isHDR ? 'top-8' : 'top-2'} left-2 px-1.5 py-0.5 bg-blue-500/80 text-white text-[10px] rounded font-bold tracking-wide backdrop-blur-sm`}>
+                    {item.resolution === '2160p' ? '4K' : item.resolution}
                 </div>
             )}
         </div>

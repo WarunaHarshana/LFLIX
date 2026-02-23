@@ -132,7 +132,7 @@ class FolderWatcher {
                 pollInterval: 100
             },
             ignored: [
-                /(^|[\/\\])\../, // Ignore dotfiles
+                /(^|[\/\\])\./, // Ignore dotfiles
                 /\$RECYCLE\.BIN/,
                 /System Volume Information/
             ]
@@ -167,6 +167,77 @@ class FolderWatcher {
             const message = error instanceof Error ? error.message : String(error);
             this.emit({ type: 'error', message });
         });
+
+        // Auto-rescan: if library is empty but folders exist, trigger initial scan
+        this.autoRescanIfNeeded(paths);
+    }
+
+    // Check if library is empty and trigger a background rescan
+    private async autoRescanIfNeeded(folderPaths: string[]) {
+        try {
+            const movieCount = (db.prepare('SELECT COUNT(*) as count FROM movies').get() as { count: number }).count;
+            const showCount = (db.prepare('SELECT COUNT(*) as count FROM shows').get() as { count: number }).count;
+
+            if (movieCount === 0 && showCount === 0) {
+                console.log('[AutoScan] Library is empty — starting initial scan...');
+                this.emit({ type: 'new_file', message: 'Starting initial library scan...' });
+
+                const fs = await import('fs');
+                const { scanFile } = await import('./scanner');
+                let totalAdded = 0;
+
+                for (const folderPath of folderPaths) {
+                    if (!fs.existsSync(folderPath)) continue;
+                    const videoFiles = this.getVideoFilesRecursive(folderPath, fs);
+
+                    for (const filePath of videoFiles) {
+                        try {
+                            const result = await scanFile(filePath);
+                            if (result.added) {
+                                totalAdded++;
+                                // Emit progress every 5 files so frontend can refresh incrementally
+                                if (totalAdded % 5 === 0) {
+                                    this.emit({ type: 'scan_complete', added: totalAdded });
+                                }
+                            }
+                        } catch (e) {
+                            console.error('[AutoScan] Error scanning', filePath, e);
+                        }
+                    }
+                }
+
+                if (totalAdded > 0) {
+                    this.emit({ type: 'scan_complete', added: totalAdded });
+                }
+                console.log(`[AutoScan] Initial scan complete — added ${totalAdded} items`);
+            }
+        } catch (e) {
+            console.error('[AutoScan] Error during auto-rescan:', e);
+        }
+    }
+
+    // Helper: recursively get video files from a folder
+    private getVideoFilesRecursive(dir: string, fs: typeof import('fs'), fileList: string[] = []): string[] {
+        if (!fs.existsSync(dir)) return fileList;
+        try {
+            const files = fs.readdirSync(dir);
+            for (const file of files) {
+                const filePath = path.join(dir, file);
+                try {
+                    const stat = fs.statSync(filePath);
+                    if (stat.isDirectory()) {
+                        this.getVideoFilesRecursive(filePath, fs, fileList);
+                    } else if (this.isVideoFile(filePath)) {
+                        fileList.push(filePath);
+                    }
+                } catch {
+                    // ignore access errors
+                }
+            }
+        } catch {
+            // ignore access errors
+        }
+        return fileList;
     }
 
     // Stop watching

@@ -23,13 +23,13 @@ const TMDB_DELAY_MS = 200; // Conservative 200ms
 export async function rateLimitedTmdbCall<T>(fn: () => Promise<T>): Promise<T> {
   const now = Date.now();
   const timeSinceLastCall = now - lastTmdbCall;
-  
+
   if (timeSinceLastCall < TMDB_DELAY_MS) {
     await new Promise(resolve => setTimeout(resolve, TMDB_DELAY_MS - timeSinceLastCall));
   }
-  
+
   lastTmdbCall = Date.now();
-  
+
   try {
     return await fn();
   } catch (error: any) {
@@ -99,24 +99,24 @@ export interface MediaMetadata {
 }
 
 async function fetchGenres(moviedb: MovieDb, genreIds: number[], type: 'movie' | 'tv'): Promise<string> {
-    try {
-      const genreList = await rateLimitedTmdbCall(() => 
-        type === 'movie'
-          ? moviedb.genreMovieList({})
-          : moviedb.genreTvList({})
-      );
-  
-      const genreMap = new Map(genreList.genres?.map(g => [g.id, g.name]) || []);
-      return genreIds.map(id => genreMap.get(id)).filter(Boolean).join(', ');
-    } catch {
-      return '';
-    }
+  try {
+    const genreList = await rateLimitedTmdbCall(() =>
+      type === 'movie'
+        ? moviedb.genreMovieList({})
+        : moviedb.genreTvList({})
+    );
+
+    const genreMap = new Map(genreList.genres?.map(g => [g.id, g.name]) || []);
+    return genreIds.map(id => genreMap.get(id)).filter(Boolean).join(', ');
+  } catch {
+    return '';
   }
+}
 
 export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadata> {
   const apiKey = getTmdbApiKey();
   const moviedb = new MovieDb(apiKey);
-  
+
   const rawName = cleanFilename(fileName);
   const year = extractYear(fileName);
 
@@ -133,21 +133,21 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
 
   try {
     const res = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: rawName, year: year }));
-    
+
     if (res.results && res.results.length > 0) {
-        const hit = res.results[0];
-        const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'movie') : '';
-        
-        return {
-            title: hit.title || rawName,
-            year: hit.release_date ? parseInt(hit.release_date.substring(0, 4)) : year,
-            tmdbId: hit.id || null,
-            posterPath: hit.poster_path || null,
-            backdropPath: hit.backdrop_path || null,
-            overview: hit.overview || null,
-            rating: hit.vote_average || null,
-            genres
-        };
+      const hit = res.results[0];
+      const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'movie') : '';
+
+      return {
+        title: hit.title || rawName,
+        year: hit.release_date ? parseInt(hit.release_date.substring(0, 4)) : year,
+        tmdbId: hit.id || null,
+        posterPath: hit.poster_path || null,
+        backdropPath: hit.backdrop_path || null,
+        overview: hit.overview || null,
+        rating: hit.vote_average || null,
+        genres
+      };
     }
   } catch (e) {
     console.warn(`TMDB fetch failed for movie: ${rawName}`, e);
@@ -157,41 +157,112 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
 }
 
 export async function fetchShowMetadata(showName: string): Promise<MediaMetadata> {
-    const apiKey = getTmdbApiKey();
-    const moviedb = new MovieDb(apiKey);
+  const apiKey = getTmdbApiKey();
+  const moviedb = new MovieDb(apiKey);
 
-    const baseData: MediaMetadata = {
-        title: showName,
-        tmdbId: null,
-        posterPath: null,
-        backdropPath: null,
-        overview: null,
-        rating: null,
-        genres: null,
-        firstAirDate: null
-    };
+  const baseData: MediaMetadata = {
+    title: showName,
+    tmdbId: null,
+    posterPath: null,
+    backdropPath: null,
+    overview: null,
+    rating: null,
+    genres: null,
+    firstAirDate: null
+  };
 
-    try {
-        const res = await rateLimitedTmdbCall(() => moviedb.searchTv({ query: showName }));
-        
-        if (res.results && res.results.length > 0) {
-            const hit = res.results[0];
-            const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'tv') : '';
-            
-            return {
-                title: hit.name || showName,
-                tmdbId: hit.id || null,
-                posterPath: hit.poster_path || null,
-                backdropPath: hit.backdrop_path || null,
-                overview: hit.overview || null,
-                rating: hit.vote_average || null,
-                genres,
-                firstAirDate: hit.first_air_date || null
-            };
-        }
-    } catch (e) {
-        console.warn(`TMDB fetch failed for show: ${showName}`, e);
+  try {
+    const res = await rateLimitedTmdbCall(() => moviedb.searchTv({ query: showName }));
+
+    if (res.results && res.results.length > 0) {
+      const hit = res.results[0];
+      const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'tv') : '';
+
+      return {
+        title: hit.name || showName,
+        tmdbId: hit.id || null,
+        posterPath: hit.poster_path || null,
+        backdropPath: hit.backdrop_path || null,
+        overview: hit.overview || null,
+        rating: hit.vote_average || null,
+        genres,
+        firstAirDate: hit.first_air_date || null
+      };
+    }
+  } catch (e) {
+    console.warn(`TMDB fetch failed for show: ${showName}`, e);
+  }
+
+  return baseData;
+}
+
+// --- Episode Metadata ---
+
+export interface EpisodeMetadata {
+  title: string;
+  overview: string | null;
+  stillPath: string | null;
+}
+
+// Cache season data within a scan session to avoid redundant API calls
+const seasonCache = new Map<string, EpisodeMetadata[]>();
+
+export async function fetchEpisodeMetadata(
+  tmdbShowId: number,
+  seasonNumber: number,
+  episodeNumber: number
+): Promise<EpisodeMetadata> {
+  const fallback: EpisodeMetadata = {
+    title: `S${seasonNumber} E${episodeNumber}`,
+    overview: null,
+    stillPath: null,
+  };
+
+  if (!tmdbShowId || tmdbShowId <= 0) return fallback;
+
+  const cacheKey = `${tmdbShowId}-${seasonNumber}`;
+
+  try {
+    // Check cache first
+    if (!seasonCache.has(cacheKey)) {
+      const apiKey = getTmdbApiKey();
+      const moviedb = new MovieDb(apiKey);
+
+      const seasonData = await rateLimitedTmdbCall(() =>
+        moviedb.seasonInfo({ id: tmdbShowId, season_number: seasonNumber })
+      );
+
+      if (seasonData.episodes) {
+        const episodes: EpisodeMetadata[] = seasonData.episodes.map(ep => ({
+          title: ep.name || `Episode ${ep.episode_number}`,
+          overview: ep.overview || null,
+          stillPath: ep.still_path || null,
+        }));
+        seasonCache.set(cacheKey, episodes);
+      } else {
+        seasonCache.set(cacheKey, []);
+      }
     }
 
-    return baseData;
+    const cachedEpisodes = seasonCache.get(cacheKey) || [];
+    // Episodes in TMDB are 1-indexed by episode_number, but array is 0-indexed
+    // Find by index (episode_number - 1) or search through if order doesn't match
+    const episode = cachedEpisodes[episodeNumber - 1];
+    if (episode) {
+      return {
+        title: episode.title,
+        overview: episode.overview,
+        stillPath: episode.stillPath,
+      };
+    }
+  } catch (e) {
+    console.warn(`TMDB episode fetch failed for show ${tmdbShowId} S${seasonNumber}E${episodeNumber}:`, e);
+  }
+
+  return fallback;
+}
+
+// Clear season cache (call after a full scan session)
+export function clearEpisodeCache() {
+  seasonCache.clear();
 }

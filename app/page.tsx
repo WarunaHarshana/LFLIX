@@ -14,6 +14,7 @@ import SearchBar from './components/SearchBar';
 import ContentCard from './components/ContentCard';
 import ContinueWatching from './components/ContinueWatching';
 import EpisodeModal from './components/EpisodeModal';
+import ContentDetailModal from './components/ContentDetailModal';
 import GenreFilter from './components/GenreFilter';
 import EmptyState from './components/EmptyState';
 import { HeroSkeleton, CardGridSkeleton, ContinueWatchingSkeleton } from './components/LoadingStates';
@@ -43,6 +44,10 @@ type ContentItem = {
   rating: number | null;
   filePath?: string;
   isHDR?: boolean;
+  resolution?: string | null;
+  videoCodec?: string | null;
+  audioCodec?: string | null;
+  audioChannels?: string | null;
   genres?: string | null;
   watchProgress?: {
     progress: number;
@@ -63,7 +68,12 @@ type Episode = {
   title: string;
   filePath: string;
   overview?: string | null;
+  stillPath?: string | null;
   isHDR?: boolean;
+  resolution?: string | null;
+  videoCodec?: string | null;
+  audioCodec?: string | null;
+  audioChannels?: string | null;
   watchProgress?: {
     progress: number;
     duration: number;
@@ -135,6 +145,9 @@ export default function Home() {
 
   // Context Menu
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: ContentItem } | null>(null);
+
+  // Content Detail Modal
+  const [selectedDetail, setSelectedDetail] = useState<ContentItem | null>(null);
 
   // Keyboard Navigation
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -467,11 +480,7 @@ export default function Home() {
           const currentFocusedIndex = focusedIndexRef.current;
           if (currentFocusedIndex >= 0 && filtered[currentFocusedIndex]) {
             const item = filtered[currentFocusedIndex];
-            if (item.type === 'movie') {
-              playFile('movie', item.id);
-            } else if (item.type === 'show') {
-              openShow(item);
-            }
+            setSelectedDetail(item);
           }
           break;
       }
@@ -896,6 +905,17 @@ export default function Home() {
                       HDR
                     </span>
                   )}
+                  {featured.resolution && (
+                    <span className="px-1.5 py-0.5 bg-blue-500/80 text-white text-xs rounded font-bold tracking-wide">
+                      {featured.resolution === '2160p' ? '4K' : featured.resolution}
+                    </span>
+                  )}
+                  {featured.videoCodec && (
+                    <span className="text-neutral-400 text-xs">{featured.videoCodec}</span>
+                  )}
+                  {featured.audioChannels && (
+                    <span className="text-neutral-400 text-xs">{featured.audioChannels}</span>
+                  )}
                   {featured.genres && (
                     <span className="text-neutral-400">{featured.genres.split(',').slice(0, 2).join(' • ')}</span>
                   )}
@@ -905,19 +925,35 @@ export default function Home() {
                 )}
                 <div className="flex gap-4 pt-2">
                   {featured.type === 'movie' ? (
-                    <button
-                      onClick={() => playFile('movie', featured.id)}
-                      className="px-8 py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-neutral-200 transition"
-                    >
-                      <Play className="w-6 h-6 fill-black" /> Play
-                    </button>
+                    <>
+                      <button
+                        onClick={() => playFile('movie', featured.id)}
+                        className="px-8 py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-neutral-200 transition"
+                      >
+                        <Play className="w-6 h-6 fill-black" /> Play
+                      </button>
+                      <button
+                        onClick={() => setSelectedDetail(featured)}
+                        className="px-8 py-3 bg-neutral-700/80 text-white font-bold rounded flex items-center gap-2 hover:bg-neutral-600 transition"
+                      >
+                        More Info
+                      </button>
+                    </>
                   ) : (
-                    <button
-                      onClick={() => openShow(featured)}
-                      className="px-8 py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-neutral-200 transition"
-                    >
-                      <Play className="w-6 h-6 fill-black" /> View Episodes
-                    </button>
+                    <>
+                      <button
+                        onClick={() => openShow(featured)}
+                        className="px-8 py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-neutral-200 transition"
+                      >
+                        <Play className="w-6 h-6 fill-black" /> View Episodes
+                      </button>
+                      <button
+                        onClick={() => setSelectedDetail(featured)}
+                        className="px-8 py-3 bg-neutral-700/80 text-white font-bold rounded flex items-center gap-2 hover:bg-neutral-600 transition"
+                      >
+                        More Info
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -989,13 +1025,7 @@ export default function Home() {
                   >
                     <ContentCard
                       item={item}
-                      onClick={() => {
-                        if (item.type === 'movie') {
-                          playFile('movie', item.id);
-                        } else {
-                          openShow(item);
-                        }
-                      }}
+                      onClick={() => setSelectedDetail(item)}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setContextMenu({ x: e.clientX, y: e.clientY, item });
@@ -1340,6 +1370,22 @@ export default function Home() {
         </div>
       )
       }
+
+      {/* Content Detail Modal */}
+      {selectedDetail && (
+        <ContentDetailModal
+          item={selectedDetail}
+          onClose={() => setSelectedDetail(null)}
+          onPlay={() => {
+            playFile('movie', selectedDetail.id, undefined, selectedDetail.watchProgress?.progress);
+            setSelectedDetail(null);
+          }}
+          onViewEpisodes={() => {
+            openShow(selectedDetail);
+            setSelectedDetail(null);
+          }}
+        />
+      )}
 
       {/* Episode Modal */}
       {

@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import db from './db';
-import { fetchMovieMetadata, fetchShowMetadata } from './metadata';
+import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata } from './metadata';
+import { probeFile } from './mediainfo';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.wmv', '.flv', '.webm', '.ts'];
 
@@ -40,6 +41,46 @@ function detectHDR(fileName: string): boolean {
   return HDR_PATTERN.test(fileName);
 }
 
+// Detect resolution from filename
+function detectResolution(fileName: string): string | null {
+  if (/\b(2160p|4k|UHD)\b/i.test(fileName)) return '2160p';
+  if (/\b1080p\b/i.test(fileName)) return '1080p';
+  if (/\b720p\b/i.test(fileName)) return '720p';
+  if (/\b480p\b/i.test(fileName)) return '480p';
+  return null;
+}
+
+// Detect video codec from filename
+function detectVideoCodec(fileName: string): string | null {
+  if (/\b(x265|h\.?265|HEVC)\b/i.test(fileName)) return 'HEVC';
+  if (/\b(x264|h\.?264|AVC)\b/i.test(fileName)) return 'H.264';
+  if (/\bAV1\b/i.test(fileName)) return 'AV1';
+  if (/\bVP9\b/i.test(fileName)) return 'VP9';
+  return null;
+}
+
+// Detect audio codec from filename
+function detectAudioCodec(fileName: string): { codec: string | null; channels: string | null } {
+  let codec: string | null = null;
+  let channels: string | null = null;
+
+  if (/\bAtmos\b/i.test(fileName)) codec = 'Atmos';
+  else if (/\bTrueHD\b/i.test(fileName)) codec = 'TrueHD';
+  else if (/\bDTS[- ]?HD\b/i.test(fileName)) codec = 'DTS-HD';
+  else if (/\bDTS\b/i.test(fileName)) codec = 'DTS';
+  else if (/\bEAC3\b/i.test(fileName) || /\bDD\+\b/i.test(fileName) || /\bDDP\b/i.test(fileName)) codec = 'EAC3';
+  else if (/\bAC3\b/i.test(fileName) || /\bDD5\.?1\b/i.test(fileName)) codec = 'AC3';
+  else if (/\bAAC\b/i.test(fileName)) codec = 'AAC';
+  else if (/\bFLAC\b/i.test(fileName)) codec = 'FLAC';
+  else if (/\bOpus\b/i.test(fileName)) codec = 'Opus';
+
+  if (/\b7\.1\b/.test(fileName)) channels = '7.1';
+  else if (/\b5\.1\b/.test(fileName)) channels = '5.1';
+  else if (/\b2\.0\b/.test(fileName)) channels = '2.0';
+
+  return { codec, channels };
+}
+
 export async function scanFile(filePath: string): Promise<{ added: boolean; error?: string }> {
   try {
     if (!isVideoFile(filePath)) {
@@ -53,13 +94,58 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
     const fileName = path.basename(filePath);
 
     // Check if already indexed
-    const movieExists = db.prepare('SELECT id FROM movies WHERE filePath = ?').get(filePath);
-    const epExists = db.prepare('SELECT id FROM episodes WHERE filePath = ?').get(filePath);
+    const movieExists = db.prepare('SELECT id, resolution FROM movies WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null } | undefined;
+    const epExists = db.prepare('SELECT id, resolution FROM episodes WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null } | undefined;
+
     if (movieExists || epExists) {
-      return { added: false };
+      // If already indexed but missing media info, update it
+      const needsMediaUpdate = (movieExists && !movieExists.resolution) || (epExists && !epExists.resolution);
+      if (!needsMediaUpdate) {
+        return { added: false };
+      }
+
+      // Run FFprobe + filename detection to fill in missing media info
+      const mediaInfo = await probeFile(filePath);
+      const fnResolution = detectResolution(fileName);
+      const fnVideoCodec = detectVideoCodec(fileName);
+      const fnAudio = detectAudioCodec(fileName);
+
+      const updResolution = mediaInfo?.resolution || fnResolution;
+      const updVideoCodec = mediaInfo?.videoCodec || fnVideoCodec;
+      const updAudioCodec = mediaInfo?.audioCodec || fnAudio.codec;
+      const updAudioChannels = mediaInfo?.audioChannels || fnAudio.channels;
+      const updIsHDR = (mediaInfo?.isHDR || detectHDR(fileName)) ? 1 : 0;
+
+      if (movieExists) {
+        db.prepare(`UPDATE movies SET resolution = ?, videoCodec = ?, audioCodec = ?, audioChannels = ?, isHDR = ?, bitrate = ?, duration = ?, fileSize = ? WHERE id = ?`)
+          .run(updResolution, updVideoCodec, updAudioCodec, updAudioChannels, updIsHDR,
+            mediaInfo?.bitrate || null, mediaInfo?.duration || null, mediaInfo?.fileSize || null, movieExists.id);
+      }
+      if (epExists) {
+        db.prepare(`UPDATE episodes SET resolution = ?, videoCodec = ?, audioCodec = ?, audioChannels = ?, isHDR = ?, bitrate = ?, duration = ?, fileSize = ? WHERE id = ?`)
+          .run(updResolution, updVideoCodec, updAudioCodec, updAudioChannels, updIsHDR,
+            mediaInfo?.bitrate || null, mediaInfo?.duration || null, mediaInfo?.fileSize || null, epExists.id);
+      }
+      console.log(`[Scanner] Updated media info for ${fileName}: ${updResolution} ${updVideoCodec} HDR=${updIsHDR}`);
+      return { added: false }; // Not a new addition, but updated
     }
 
     const tvInfo = detectTvShow(fileName);
+
+    // Probe file for media info (non-blocking — scan continues if FFprobe fails)
+    const mediaInfo = await probeFile(filePath);
+
+    // Filename-based detection as fallback
+    const fnResolution = detectResolution(fileName);
+    const fnVideoCodec = detectVideoCodec(fileName);
+    const fnAudio = detectAudioCodec(fileName);
+
+    // Merge: prefer FFprobe, fall back to filename
+    const isHDR = (mediaInfo?.isHDR || detectHDR(fileName)) ? 1 : 0;
+    const resolution = mediaInfo?.resolution || fnResolution;
+    const videoCodec = mediaInfo?.videoCodec || fnVideoCodec;
+    const audioCodec = mediaInfo?.audioCodec || fnAudio.codec;
+    const audioChannels = mediaInfo?.audioChannels || fnAudio.channels;
 
     if (tvInfo) {
       // Handle TV show
@@ -91,26 +177,47 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
         showId = result.lastInsertRowid;
       }
 
-      // Insert episode
-      const isHDR = detectHDR(fileName) ? 1 : 0;
-      db.prepare('INSERT OR IGNORE INTO episodes (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath, isHDR) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)')
-        .run(showId, filePath, fileName, tvInfo.season, tvInfo.episode, `S${tvInfo.season} E${tvInfo.episode}`, isHDR);
+      // Fetch per-episode metadata from TMDB
+      const epMeta = await fetchEpisodeMetadata(
+        showMeta.tmdbId || 0,
+        tvInfo.season,
+        tvInfo.episode
+      );
+
+      // Insert episode with TMDB metadata and media info
+      db.prepare(`INSERT OR IGNORE INTO episodes 
+        (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(
+          showId, filePath, fileName, tvInfo.season, tvInfo.episode,
+          epMeta.title, epMeta.overview, epMeta.stillPath, isHDR,
+          resolution || null, videoCodec || null,
+          audioCodec || null, audioChannels || null,
+          mediaInfo?.bitrate || null, mediaInfo?.duration || null,
+          mediaInfo?.fileSize || null
+        );
 
       return { added: true };
     } else {
       // Handle movie
       // Fetch metadata from TMDB
       const movieMeta = await fetchMovieMetadata(fileName);
-      const isHDR = detectHDR(fileName) ? 1 : 0;
 
       db.prepare(`
-        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, genres, isHDR) 
-        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @genres, @isHDR)
+        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, genres, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
+        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @genres, @isHDR, @resolution, @videoCodec, @audioCodec, @audioChannels, @bitrate, @duration, @fileSize)
       `).run({
         filePath,
         fileName,
         ...movieMeta,
-        isHDR
+        isHDR,
+        resolution: resolution || null,
+        videoCodec: videoCodec || null,
+        audioCodec: audioCodec || null,
+        audioChannels: audioChannels || null,
+        bitrate: mediaInfo?.bitrate || null,
+        duration: mediaInfo?.duration || null,
+        fileSize: mediaInfo?.fileSize || null,
       });
 
       return { added: true };

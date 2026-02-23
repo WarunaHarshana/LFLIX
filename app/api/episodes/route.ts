@@ -15,6 +15,10 @@ type Episode = {
   overview: string | null;
   stillPath: string | null;
   isHDR: number;
+  resolution: string | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  audioChannels: string | null;
 };
 
 type WatchProgress = {
@@ -33,6 +37,10 @@ type EpisodeResponse = {
   overview: string | null;
   stillPath: string | null;
   isHDR: boolean;
+  resolution: string | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  audioChannels: string | null;
   watchProgress?: WatchProgress;
 };
 
@@ -91,6 +99,10 @@ export async function GET(req: Request) {
         overview: ep.overview,
         stillPath: ep.stillPath,
         isHDR: !!ep.isHDR,
+        resolution: ep.resolution,
+        videoCodec: ep.videoCodec,
+        audioCodec: ep.audioCodec,
+        audioChannels: ep.audioChannels,
         watchProgress: progressMap.get(ep.id)
       });
     }

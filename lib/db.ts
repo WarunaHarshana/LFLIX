@@ -135,9 +135,9 @@ db.exec(`
 // WHITELIST of valid tables and columns to prevent SQL injection
 const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings'];
 const VALID_COLUMNS: Record<string, string[]> = {
-  movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR'],
+  movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   shows: ['genres', 'backdropPath', 'overview', 'rating'],
-  episodes: ['stillPath', 'overview', 'isHDR'],
+  episodes: ['stillPath', 'overview', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
   settings: []
@@ -175,6 +175,21 @@ addColumnIfNotExists('shows', 'genres', 'TEXT');
 // Add HDR detection column
 addColumnIfNotExists('movies', 'isHDR', 'INTEGER DEFAULT 0');
 addColumnIfNotExists('episodes', 'isHDR', 'INTEGER DEFAULT 0');
+
+// Add media info columns (FFprobe)
+const MEDIA_INFO_COLS: [string, string][] = [
+  ['resolution', 'TEXT'],
+  ['videoCodec', 'TEXT'],
+  ['audioCodec', 'TEXT'],
+  ['audioChannels', 'TEXT'],
+  ['bitrate', 'REAL'],
+  ['duration', 'REAL'],
+  ['fileSize', 'INTEGER'],
+];
+for (const [col, type] of MEDIA_INFO_COLS) {
+  addColumnIfNotExists('movies', col, type);
+  addColumnIfNotExists('episodes', col, type);
+}
 
 // IPTV Helper Functions
 export const iptvDb = {
