@@ -1,5 +1,5 @@
 /**
- * Torrent Search — scrapes 1337x and YTS for torrent results
+ * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS fallback
  */
 
 export interface TorrentResult {
@@ -9,34 +9,86 @@ export interface TorrentResult {
     seeds: number;
     leeches: number;
     quality: string;
-    source: '1337x' | 'YTS';
+    source: string;
     uploadDate?: string;
 }
 
-// Rate limiter
-let lastSearchCall = 0;
-const SEARCH_DELAY_MS = 1000;
+// Standard trackers for magnet links
+const TRACKERS = [
+    'udp://tracker.opentrackr.org:1337/announce',
+    'udp://open.demonii.com:1337/announce',
+    'udp://tracker.openbittorrent.com:80',
+    'udp://tracker.coppersurfer.tk:6969',
+    'udp://glotorrents.pw:6969/announce',
+    'udp://torrent.gresille.org:80/announce',
+    'udp://p4p.arenabg.com:1337',
+    'udp://tracker.leechers-paradise.org:6969',
+];
 
-async function rateLimitedFetch(url: string): Promise<Response> {
-    const now = Date.now();
-    const timeSince = now - lastSearchCall;
-    if (timeSince < SEARCH_DELAY_MS) {
-        await new Promise(r => setTimeout(r, SEARCH_DELAY_MS - timeSince));
-    }
-    lastSearchCall = Date.now();
-    return fetch(url, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-    });
+function buildMagnet(infoHash: string, name: string): string {
+    const trackerParams = TRACKERS.map(t => `&tr=${encodeURIComponent(t)}`).join('');
+    return `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(name)}${trackerParams}`;
 }
 
-// --- YTS API (movies only, public JSON API) ---
+function formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
+function extractQuality(title: string): string {
+    const match = title.match(/(2160p|4K|UHD|1080p|720p|480p|HDRip|BDRip|BluRay|WEBRip|WEB-DL|HDTV|CAM|TS)/i);
+    return match ? match[1] : 'Unknown';
+}
+
+// --- apibay.org (The Pirate Bay API) ---
+
+async function searchTPB(query: string, category: string = '200'): Promise<TorrentResult[]> {
+    try {
+        // Category 200 = Video, 201 = Movies, 205 = TV Shows
+        const url = `https://apibay.org/q.php?q=${encodeURIComponent(query)}&cat=${category}`;
+        const res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            signal: AbortSignal.timeout(10000),
+        });
+
+        if (!res.ok) return [];
+
+        const data = await res.json();
+
+        // apibay returns [{"id":"0","name":"No results returned"}] when no results
+        if (!Array.isArray(data) || data.length === 0 || data[0]?.id === '0') {
+            return [];
+        }
+
+        return data
+            .filter((item: any) => item.seeders && parseInt(item.seeders) > 0)
+            .slice(0, 20)
+            .map((item: any) => ({
+                title: item.name || 'Unknown',
+                magnet: buildMagnet(item.info_hash, item.name),
+                size: formatBytes(parseInt(item.size) || 0),
+                seeds: parseInt(item.seeders) || 0,
+                leeches: parseInt(item.leechers) || 0,
+                quality: extractQuality(item.name || ''),
+                source: 'TPB',
+                uploadDate: item.added ? new Date(parseInt(item.added) * 1000).toISOString().split('T')[0] : undefined,
+            }));
+    } catch (e) {
+        console.error('TPB search error:', e);
+        return [];
+    }
+}
+
+// --- YTS API (movies only, small high-quality encodes) ---
 
 async function searchYTS(query: string, year?: string): Promise<TorrentResult[]> {
     try {
         const params = new URLSearchParams({ query_term: query, limit: '10', sort_by: 'seeds' });
-        const res = await rateLimitedFetch(`https://yts.mx/api/v2/list_movies.json?${params}`);
+        const res = await fetch(`https://yts.mx/api/v2/list_movies.json?${params}`, {
+            signal: AbortSignal.timeout(5000),
+        });
         if (!res.ok) return [];
 
         const data = await res.json();
@@ -47,29 +99,13 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
 
         for (const movie of movies) {
             if (!movie.torrents) continue;
-
-            // If year specified, check match
             if (year && movie.year && String(movie.year) !== year) continue;
 
             for (const torrent of movie.torrents) {
-                // Build magnet link from hash
-                const trackers = [
-                    'udp://open.demonii.com:1337/announce',
-                    'udp://tracker.openbittorrent.com:80',
-                    'udp://tracker.coppersurfer.tk:6969',
-                    'udp://glotorrents.pw:6969/announce',
-                    'udp://tracker.opentrackr.org:1337/announce',
-                    'udp://torrent.gresille.org:80/announce',
-                    'udp://p4p.arenabg.com:1337',
-                    'udp://tracker.leechers-paradise.org:6969',
-                ];
-
                 const name = `${movie.title} (${movie.year}) [${torrent.quality}] [YTS]`;
-                const magnet = `magnet:?xt=urn:btih:${torrent.hash}&dn=${encodeURIComponent(name)}${trackers.map(t => `&tr=${encodeURIComponent(t)}`).join('')}`;
-
                 results.push({
                     title: name,
-                    magnet,
+                    magnet: buildMagnet(torrent.hash, name),
                     size: torrent.size || 'Unknown',
                     seeds: torrent.seeds || 0,
                     leeches: torrent.peers || 0,
@@ -81,71 +117,8 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
 
         return results;
     } catch (e) {
-        console.error('YTS search error:', e);
-        return [];
-    }
-}
-
-// --- 1337x scrape ---
-
-async function search1337x(query: string): Promise<TorrentResult[]> {
-    try {
-        const searchUrl = `https://1337x.to/search/${encodeURIComponent(query)}/1/`;
-        const res = await rateLimitedFetch(searchUrl);
-        if (!res.ok) return [];
-
-        const html = await res.text();
-        const results: TorrentResult[] = [];
-
-        // Parse search results page — extract links to detail pages
-        const rowRegex = /<td class="coll-1 name">[\s\S]*?<a href="(\/torrent\/[^"]+)"[^>]*>([^<]+)<\/a>[\s\S]*?<td class="coll-2 seeds">(\d+)<\/td>\s*<td class="coll-3 leeches">(\d+)<\/td>[\s\S]*?<td class="coll-4[^"]*">([^<]+)<\/td>/g;
-
-        let match;
-        const detailLinks: { path: string; title: string; seeds: number; leeches: number; size: string }[] = [];
-
-        while ((match = rowRegex.exec(html)) !== null && detailLinks.length < 10) {
-            detailLinks.push({
-                path: match[1],
-                title: match[2].trim(),
-                seeds: parseInt(match[3]) || 0,
-                leeches: parseInt(match[4]) || 0,
-                size: match[5]?.trim() || 'Unknown',
-            });
-        }
-
-        // Fetch magnet links from detail pages (limit to top 5 to avoid too many requests)
-        const top = detailLinks.slice(0, 5);
-        for (const link of top) {
-            try {
-                const detailRes = await rateLimitedFetch(`https://1337x.to${link.path}`);
-                if (!detailRes.ok) continue;
-
-                const detailHtml = await detailRes.text();
-                const magnetMatch = detailHtml.match(/href="(magnet:\?[^"]+)"/);
-                if (!magnetMatch) continue;
-
-                // Extract quality from title
-                let quality = 'Unknown';
-                const qualityMatch = link.title.match(/(2160p|4K|1080p|720p|480p|HDRip|BDRip|BluRay|WEBRip|WEB-DL|HDTV)/i);
-                if (qualityMatch) quality = qualityMatch[1];
-
-                results.push({
-                    title: link.title,
-                    magnet: magnetMatch[1],
-                    size: link.size,
-                    seeds: link.seeds,
-                    leeches: link.leeches,
-                    quality,
-                    source: '1337x',
-                });
-            } catch {
-                // Skip failed detail pages
-            }
-        }
-
-        return results;
-    } catch (e) {
-        console.error('1337x search error:', e);
+        // YTS is often blocked — fail silently
+        console.error('YTS search error (may be blocked):', e);
         return [];
     }
 }
@@ -158,14 +131,21 @@ export async function searchTorrents(
 ): Promise<TorrentResult[]> {
     const query = options?.year ? `${title} ${options.year}` : title;
 
-    // Search both sources in parallel
-    const [ytsResults, l337xResults] = await Promise.all([
+    // Determine TPB category: 201 = Movies, 205 = TV, 200 = all video
+    const tpbCategory = options?.type === 'tv' ? '205' : options?.type === 'movie' ? '201' : '200';
+
+    // Search all sources in parallel — don't let one failure block the others
+    const [tpbResults, ytsResults] = await Promise.allSettled([
+        searchTPB(query, tpbCategory),
         options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([]),
-        search1337x(query),
     ]);
 
-    // Combine and sort by seeds descending
-    const allResults = [...ytsResults, ...l337xResults];
+    const allResults: TorrentResult[] = [
+        ...(tpbResults.status === 'fulfilled' ? tpbResults.value : []),
+        ...(ytsResults.status === 'fulfilled' ? ytsResults.value : []),
+    ];
+
+    // Sort by seeds descending
     allResults.sort((a, b) => b.seeds - a.seeds);
 
     return allResults;
