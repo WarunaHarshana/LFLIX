@@ -129,11 +129,28 @@ db.exec(`
     ('Movies', 5),
     ('Kids', 6),
     ('Music', 7);
+
+  -- Watchlist (TMDB items saved for later download)
+  CREATE TABLE IF NOT EXISTS watchlist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tmdbId INTEGER NOT NULL,
+    mediaType TEXT NOT NULL,
+    title TEXT NOT NULL,
+    posterPath TEXT,
+    backdropPath TEXT,
+    overview TEXT,
+    rating REAL,
+    year TEXT,
+    genres TEXT,
+    addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+    UNIQUE(tmdbId, mediaType)
+  );
 `);
 
 // Run migrations for existing databases (add columns if they don't exist)
 // WHITELIST of valid tables and columns to prevent SQL injection
-const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings'];
+const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist'];
 const VALID_COLUMNS: Record<string, string[]> = {
   movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   shows: ['genres', 'backdropPath', 'overview', 'rating'],

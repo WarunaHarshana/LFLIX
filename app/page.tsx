@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy } from 'lucide-react';
+import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy, Bookmark } from 'lucide-react';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { Capacitor } from '@capacitor/core';
@@ -30,6 +30,7 @@ import MobileSearchModal from './components/MobileSearchModal';
 import PlayChoiceModal from './components/PlayChoiceModal';
 import IPTVManager from './components/IPTVManager';
 import LiveSports from './components/LiveSports';
+import WatchlistPage from './components/WatchlistPage';
 
 // Types
 type ContentItem = {
@@ -49,6 +50,7 @@ type ContentItem = {
   audioCodec?: string | null;
   audioChannels?: string | null;
   genres?: string | null;
+  tmdbId?: number | null;
   watchProgress?: {
     progress: number;
     duration: number;
@@ -118,7 +120,7 @@ export default function Home() {
   const [library, setLibrary] = useState<ContentItem[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live' | 'watchlist'>('all');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
   // IPTV State
@@ -771,6 +773,13 @@ export default function Home() {
               <Trophy className="w-4 h-4" />
               Live Sports
             </button>
+            <button
+              onClick={() => setActiveTab('watchlist')}
+              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'watchlist' ? "text-white bg-white/10" : "text-neutral-400")}
+            >
+              <Bookmark className="w-4 h-4" />
+              Watchlist
+            </button>
           </div>
         </div>
 
@@ -861,7 +870,7 @@ export default function Home() {
       </nav>
 
       {/* Loading State - only show for movie/show tabs */}
-      {activeTab !== 'live' && (loading ? (
+      {activeTab !== 'live' && activeTab !== 'watchlist' && (loading ? (
         <>
           <HeroSkeleton />
           <div className="px-12 pb-20 -mt-20 relative z-20">
@@ -1370,6 +1379,13 @@ export default function Home() {
         </div>
       )
       }
+
+      {/* Watchlist Section */}
+      {activeTab === 'watchlist' && (
+        <WatchlistPage
+          libraryTmdbIds={library.map(item => item.tmdbId).filter((id): id is number => id != null)}
+        />
+      )}
 
       {/* Content Detail Modal */}
       {selectedDetail && (
