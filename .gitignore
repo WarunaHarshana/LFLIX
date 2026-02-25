@@ -45,3 +45,6 @@ next-env.d.ts
 localflix.db
 lflix.db
 /data/
+
+# torrent downloads
+/downloads/

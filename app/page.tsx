@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy, Bookmark, Download } from 'lucide-react';
+import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy, Bookmark, Download, Magnet } from 'lucide-react';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { Capacitor } from '@capacitor/core';
@@ -32,6 +32,7 @@ import IPTVManager from './components/IPTVManager';
 import LiveSports from './components/LiveSports';
 import WatchlistPage from './components/WatchlistPage';
 import DownloadsPanel from './components/DownloadsPanel';
+import TorrentSearchPage from './components/TorrentSearchPage';
 
 // Types
 type ContentItem = {
@@ -121,7 +122,7 @@ export default function Home() {
   const [library, setLibrary] = useState<ContentItem[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live' | 'watchlist'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'torrents'>('all');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
   // IPTV State
@@ -783,6 +784,13 @@ export default function Home() {
               <Bookmark className="w-4 h-4" />
               Watchlist
             </button>
+            <button
+              onClick={() => setActiveTab('torrents')}
+              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'torrents' ? "text-white bg-white/10" : "text-neutral-400")}
+            >
+              <Magnet className="w-4 h-4" />
+              Torrents
+            </button>
           </div>
         </div>
 
@@ -885,7 +893,7 @@ export default function Home() {
       </nav>
 
       {/* Loading State - only show for movie/show tabs */}
-      {activeTab !== 'live' && activeTab !== 'watchlist' && (loading ? (
+      {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'torrents' && (loading ? (
         <>
           <HeroSkeleton />
           <div className="px-12 pb-20 -mt-20 relative z-20">
@@ -1400,6 +1408,11 @@ export default function Home() {
         <WatchlistPage
           libraryTmdbIds={library.map(item => item.tmdbId).filter((id): id is number => id != null)}
         />
+      )}
+
+      {/* Torrent Search Section */}
+      {activeTab === 'torrents' && (
+        <TorrentSearchPage />
       )}
 
       {/* Content Detail Modal */}
