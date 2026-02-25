@@ -146,11 +146,30 @@ db.exec(`
     notes TEXT,
     UNIQUE(tmdbId, mediaType)
   );
+
+  -- Downloads (torrent downloads)
+  CREATE TABLE IF NOT EXISTS downloads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    magnetUri TEXT NOT NULL,
+    infoHash TEXT,
+    name TEXT,
+    watchlistId INTEGER,
+    status TEXT DEFAULT 'downloading',
+    progress REAL DEFAULT 0,
+    downloadSpeed REAL DEFAULT 0,
+    totalSize INTEGER DEFAULT 0,
+    downloadedSize INTEGER DEFAULT 0,
+    downloadPath TEXT,
+    errorMessage TEXT,
+    startedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completedAt DATETIME,
+    FOREIGN KEY(watchlistId) REFERENCES watchlist(id) ON DELETE SET NULL
+  );
 `);
 
 // Run migrations for existing databases (add columns if they don't exist)
 // WHITELIST of valid tables and columns to prevent SQL injection
-const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist'];
+const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads'];
 const VALID_COLUMNS: Record<string, string[]> = {
   movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   shows: ['genres', 'backdropPath', 'overview', 'rating'],

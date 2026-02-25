@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download } from 'lucide-react';
 import Link from 'next/link';
 
 type Settings = {
     vlcPath: string;
     tmdbApiKey: string;
+    downloadPath: string;
 };
 
 // Component for refresh metadata button
@@ -50,7 +51,8 @@ function RefreshMetadataButton() {
 export default function SettingsPage() {
     const [settings, setSettings] = useState<Settings>({
         vlcPath: 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe',
-        tmdbApiKey: ''
+        tmdbApiKey: '',
+        downloadPath: ''
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -66,7 +68,8 @@ export default function SettingsPage() {
             const data = await res.json();
             setSettings({
                 vlcPath: data.vlcPath || 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe',
-                tmdbApiKey: data.tmdbApiKey || ''
+                tmdbApiKey: data.tmdbApiKey || '',
+                downloadPath: data.downloadPath || ''
             });
         } catch (e) {
             console.error('Failed to load settings', e);
@@ -134,6 +137,27 @@ export default function SettingsPage() {
                         />
                         <p className="text-xs text-neutral-500 mt-2">
                             Path to your media player executable. Supports VLC, PotPlayer, MPC-HC/BE, mpv, and any other player.
+                        </p>
+                    </div>
+                </section>
+
+                {/* Download Path */}
+                <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
+                    <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
+                        <Download className="w-5 h-5 text-amber-500" />
+                        <h2 className="text-lg font-semibold">Download Path</h2>
+                    </div>
+                    <div className="p-6">
+                        <label className="block text-sm text-neutral-400 mb-2">Torrent Download Folder</label>
+                        <input
+                            type="text"
+                            value={settings.downloadPath}
+                            onChange={(e) => setSettings(prev => ({ ...prev, downloadPath: e.target.value }))}
+                            className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-red-600 transition font-mono text-sm"
+                            placeholder="C:\Users\you\Downloads\Movies"
+                        />
+                        <p className="text-xs text-neutral-500 mt-2">
+                            Where torrent downloads will be saved. Use a folder that is also in your library for auto-import.
                         </p>
                     </div>
                 </section>

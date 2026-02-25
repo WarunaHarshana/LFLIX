@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Plus, Check, X, Trash2, Star, Film, Tv, Loader2, Bookmark, Calendar, Clock } from 'lucide-react';
+import { Search, Plus, Check, X, Trash2, Star, Film, Tv, Loader2, Bookmark, Calendar, Clock, Download } from 'lucide-react';
+import DownloadModal from './DownloadModal';
 
 type WatchlistItem = {
     id: number;
@@ -44,6 +45,7 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
     const [addingIds, setAddingIds] = useState<Set<number>>(new Set());
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const [downloadItem, setDownloadItem] = useState<WatchlistItem | null>(null);
 
     // Fetch watchlist on mount
     useEffect(() => {
@@ -184,8 +186,8 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
                                 key={type}
                                 onClick={() => handleTypeChange(type)}
                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition ${searchType === type
-                                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                        : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
                                     }`}
                             >
                                 {type === 'multi' ? 'All' : type === 'movie' ? 'Movies' : 'TV Shows'}
@@ -344,13 +346,21 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
                                         {item.overview && (
                                             <p className="text-[11px] text-neutral-300 line-clamp-3 mb-2">{item.overview}</p>
                                         )}
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); removeFromWatchlist(item.id); }}
-                                            className="w-full py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                            Remove
-                                        </button>
+                                        <div className="flex gap-1.5 w-full">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setDownloadItem(item); }}
+                                                className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-600 text-black text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition"
+                                            >
+                                                <Download className="w-3.5 h-3.5" />
+                                                Download
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); removeFromWatchlist(item.id); }}
+                                                className="py-1.5 px-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg flex items-center justify-center transition"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
                                     </div>
 
                                     {/* Badges */}
@@ -390,6 +400,17 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
                     })}
                 </div>
             )}
+
+            {/* Download Modal */}
+            <DownloadModal
+                isOpen={downloadItem !== null}
+                title={downloadItem?.title || ''}
+                year={downloadItem?.year}
+                mediaType={downloadItem?.mediaType || 'movie'}
+                posterPath={downloadItem?.posterPath}
+                watchlistId={downloadItem?.id}
+                onClose={() => setDownloadItem(null)}
+            />
         </div>
     );
 }

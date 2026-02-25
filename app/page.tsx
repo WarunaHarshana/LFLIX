@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy, Bookmark } from 'lucide-react';
+import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy, Bookmark, Download } from 'lucide-react';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { Capacitor } from '@capacitor/core';
@@ -31,6 +31,7 @@ import PlayChoiceModal from './components/PlayChoiceModal';
 import IPTVManager from './components/IPTVManager';
 import LiveSports from './components/LiveSports';
 import WatchlistPage from './components/WatchlistPage';
+import DownloadsPanel from './components/DownloadsPanel';
 
 // Types
 type ContentItem = {
@@ -166,6 +167,8 @@ export default function Home() {
   // Mobile Search Modal
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showLiveSports, setShowLiveSports] = useState(false);
+  const [showDownloads, setShowDownloads] = useState(false);
+  const [activeDownloads, setActiveDownloads] = useState(0);
 
   // Force browser player (for TVs without VLC)
   const [forceBrowserPlayer, setForceBrowserPlayer] = useState(false);
@@ -810,6 +813,18 @@ export default function Home() {
             title="DLNA Server (VLC)"
           >
             <Cast className="w-6 h-6" />
+          </button>
+          <button
+            onClick={() => setShowDownloads(true)}
+            className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center relative"
+            title="Downloads"
+          >
+            <Download className="w-6 h-6" />
+            {activeDownloads > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-amber-500 text-black text-[10px] font-bold rounded-full flex items-center justify-center">
+                {activeDownloads}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setForceBrowserPlayer(!forceBrowserPlayer)}
@@ -1551,6 +1566,12 @@ export default function Home() {
           />
         )
       }
+
+      {/* Downloads Panel */}
+      <DownloadsPanel
+        isOpen={showDownloads}
+        onClose={() => setShowDownloads(false)}
+      />
 
     </main >
   );

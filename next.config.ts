@@ -14,6 +14,8 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: isExport,
   },
+  // Prevent Turbopack from bundling native Node modules
+  serverExternalPackages: ['webtorrent', 'node-datachannel'],
 };
 
 export default nextConfig;
