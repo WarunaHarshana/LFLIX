@@ -6,13 +6,72 @@ import db from '@/lib/db';
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
-// Get VLC path from settings
-function getVlcPath(): string {
+// Get player path from settings
+function getPlayerPath(): string {
   try {
     const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('vlcPath') as { value: string } | undefined;
     return setting?.value || 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
   } catch {
     return 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
+  }
+}
+
+// Detect player type from executable path
+type PlayerType = 'vlc' | 'potplayer' | 'mpc' | 'mpv' | 'generic';
+
+function detectPlayerType(exePath: string): PlayerType {
+  const lowerPath = exePath.toLowerCase();
+  if (lowerPath.includes('vlc')) return 'vlc';
+  if (lowerPath.includes('potplayer') || lowerPath.includes('potpayer')) return 'potplayer';
+  if (lowerPath.includes('mpc-hc') || lowerPath.includes('mpc-be') || lowerPath.includes('mpc64')) return 'mpc';
+  if (lowerPath.includes('mpv')) return 'mpv';
+  return 'generic';
+}
+
+// Build player-specific arguments
+function buildPlayerArgs(playerType: PlayerType, filePath: string, startTime?: number): string[] {
+  switch (playerType) {
+    case 'vlc': {
+      const args = ['--fullscreen'];
+      if (startTime && startTime > 0) {
+        args.push(`--start-time=${Math.floor(startTime)}`);
+      }
+      args.push(filePath);
+      return args;
+    }
+    case 'potplayer': {
+      // PotPlayer uses /fullscreen and file path first, no VLC-style -- flags
+      const args = [filePath];
+      if (startTime && startTime > 0) {
+        // PotPlayer seek uses /seek=HH:MM:SS format
+        const h = Math.floor(startTime / 3600);
+        const m = Math.floor((startTime % 3600) / 60);
+        const s = Math.floor(startTime % 60);
+        const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        args.push(`/seek=${timeStr}`);
+      }
+      return args;
+    }
+    case 'mpc': {
+      // MPC-HC / MPC-BE uses /fullscreen and /start in milliseconds
+      const args = [filePath, '/fullscreen'];
+      if (startTime && startTime > 0) {
+        args.push('/start', String(Math.floor(startTime * 1000)));
+      }
+      return args;
+    }
+    case 'mpv': {
+      const args = ['--fullscreen'];
+      if (startTime && startTime > 0) {
+        args.push(`--start=${Math.floor(startTime)}`);
+      }
+      args.push(filePath);
+      return args;
+    }
+    default: {
+      // Generic: just pass the file path, no extra flags
+      return [filePath];
+    }
   }
 }
 
@@ -59,12 +118,12 @@ export async function POST(req: Request) {
     }
 
     // Look up the actual file path from database
-    const filePath = episodeId 
+    const filePath = episodeId
       ? getFilePathById('episode', episodeId)
       : getFilePathById(contentType === 'movie' ? 'movie' : 'episode', contentId);
 
     if (!filePath) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: 'Content not found in library',
         hint: 'The item may have been removed. Please refresh your library.'
       }, { status: 404 });
@@ -80,32 +139,34 @@ export async function POST(req: Request) {
       }, { status: 404 });
     }
 
-    const vlcPath = getVlcPath();
+    const playerPath = getPlayerPath();
 
-    if (!fs.existsSync(vlcPath)) {
+    if (!fs.existsSync(playerPath)) {
       return NextResponse.json({
-        error: `VLC not found at: ${vlcPath}. Please update the VLC path in Settings.`
+        error: `Player not found at: ${playerPath}. Please update the player path in Settings.`
       }, { status: 500 });
     }
 
-    // Build VLC arguments
-    const vlcArgs = ['--fullscreen'];
+    // Detect player type and build appropriate arguments
+    const playerType = detectPlayerType(playerPath);
+    const playerArgs = buildPlayerArgs(playerType, normalizedPath, startTime);
 
-    // Add start time if provided (for resume functionality)
-    if (startTime && startTime > 0) {
-      vlcArgs.push(`--start-time=${Math.floor(startTime)}`);
-    }
-
-    vlcArgs.push(normalizedPath);
-
-    // Spawn VLC detached so it doesn't block the server
-    const child = spawn(vlcPath, vlcArgs, {
+    // Spawn player detached so it doesn't block the server
+    const child = spawn(playerPath, playerArgs, {
       detached: true,
       stdio: 'ignore'
     });
     child.unref();
 
-    return NextResponse.json({ success: true, message: 'VLC Launched' });
+    const playerNames: Record<PlayerType, string> = {
+      vlc: 'VLC',
+      potplayer: 'PotPlayer',
+      mpc: 'MPC',
+      mpv: 'mpv',
+      generic: 'Player'
+    };
+
+    return NextResponse.json({ success: true, message: `${playerNames[playerType]} Launched` });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

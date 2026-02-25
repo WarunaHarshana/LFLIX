@@ -124,7 +124,7 @@ export default function SettingsPage() {
                         <h2 className="text-lg font-semibold">Video Player</h2>
                     </div>
                     <div className="p-6">
-                        <label className="block text-sm text-neutral-400 mb-2">VLC Executable Path</label>
+                        <label className="block text-sm text-neutral-400 mb-2">Media Player Executable Path</label>
                         <input
                             type="text"
                             value={settings.vlcPath}
@@ -133,7 +133,7 @@ export default function SettingsPage() {
                             placeholder="C:\Program Files\VideoLAN\VLC\vlc.exe"
                         />
                         <p className="text-xs text-neutral-500 mt-2">
-                            Path to the VLC media player executable. Localflix uses VLC to play media files.
+                            Path to your media player executable. Supports VLC, PotPlayer, MPC-HC/BE, mpv, and any other player.
                         </p>
                     </div>
                 </section>
