@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle } from 'lucide-react';
+import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder } from 'lucide-react';
 
 type TorrentResult = {
     title: string;
@@ -11,6 +11,12 @@ type TorrentResult = {
     leeches: number;
     quality: string;
     source: string;
+};
+
+type ScannedFolder = {
+    id: number;
+    path: string;
+    contentType: string;
 };
 
 type Props = {
@@ -32,10 +38,13 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     const [downloading, setDownloading] = useState<string | null>(null);
     const [manualMagnet, setManualMagnet] = useState('');
     const [downloadStarted, setDownloadStarted] = useState(false);
+    const [folders, setFolders] = useState<ScannedFolder[]>([]);
+    const [selectedFolder, setSelectedFolder] = useState<string>('');
 
-    // Auto-search on open
+    // Fetch folders + auto-search on open
     useEffect(() => {
         if (isOpen && title) {
+            fetchFolders();
             searchTorrents();
         }
         return () => {
@@ -48,6 +57,20 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         };
     }, [isOpen, title]);
 
+    const fetchFolders = async () => {
+        try {
+            const res = await fetch('/api/folders');
+            const data = await res.json();
+            const allFolders = data.folders || [];
+            setFolders(allFolders);
+            // Auto-select the matching folder type (movies/shows)
+            const matching = allFolders.find((f: ScannedFolder) =>
+                mediaType === 'movie' ? f.contentType === 'movies' : f.contentType === 'shows'
+            );
+            setSelectedFolder(matching?.path || allFolders[0]?.path || '');
+        } catch { /* ignore */ }
+    };
+
     const searchTorrents = async () => {
         setSearching(true);
         setError(null);
@@ -55,16 +78,11 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             const params = new URLSearchParams({ q: title });
             if (year) params.set('year', year);
             if (mediaType) params.set('type', mediaType);
-
             const res = await fetch(`/api/torrent-search?${params}`);
             const data = await res.json();
-
-            if (data.error) {
-                setError(data.error);
-            } else {
-                setResults(data.results || []);
-            }
-        } catch (e: any) {
+            if (data.error) setError(data.error);
+            else setResults(data.results || []);
+        } catch {
             setError('Search failed. Please try again.');
         } finally {
             setSearching(false);
@@ -75,10 +93,12 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     const startDownload = async (magnetUri: string) => {
         setDownloading(magnetUri);
         try {
+            const body: any = { magnetUri, watchlistId };
+            if (selectedFolder) body.downloadPath = selectedFolder;
             const res = await fetch('/api/downloads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ magnetUri, watchlistId })
+                body: JSON.stringify(body)
             });
             const data = await res.json();
             if (data.success) {
@@ -95,7 +115,6 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         }
     };
 
-    // Quality badge color
     const qualityColor = (q: string) => {
         const ql = q.toLowerCase();
         if (ql.includes('2160') || ql.includes('4k')) return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
@@ -114,11 +133,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                 {/* Header */}
                 <div className="flex items-center gap-4 p-5 border-b border-neutral-800">
                     {posterPath && (
-                        <img
-                            src={`https://image.tmdb.org/t/p/w92${posterPath}`}
-                            alt={title}
-                            className="w-12 h-16 object-cover rounded-lg"
-                        />
+                        <img src={`https://image.tmdb.org/t/p/w92${posterPath}`} alt={title} className="w-12 h-16 object-cover rounded-lg" />
                     )}
                     <div className="flex-1 min-w-0">
                         <h2 className="text-lg font-bold truncate">{title}</h2>
@@ -132,6 +147,27 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                         <X className="w-5 h-5" />
                     </button>
                 </div>
+
+                {/* Folder Chooser */}
+                {folders.length > 0 && (
+                    <div className="px-5 py-3 border-b border-neutral-800 bg-neutral-800/30">
+                        <label className="text-xs text-neutral-400 font-medium flex items-center gap-1.5 mb-1.5">
+                            <Folder className="w-3.5 h-3.5" />
+                            Save to library folder:
+                        </label>
+                        <select
+                            value={selectedFolder}
+                            onChange={(e) => setSelectedFolder(e.target.value)}
+                            className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-500 transition"
+                        >
+                            {folders.map((f) => (
+                                <option key={f.id} value={f.path}>
+                                    {f.path} ({f.contentType})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
                 {/* Download Started Banner */}
                 {downloadStarted && (
@@ -148,7 +184,6 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                         <div className="flex flex-col items-center justify-center py-12">
                             <Loader2 className="w-8 h-8 animate-spin text-amber-500 mb-3" />
                             <p className="text-neutral-400 text-sm">Searching for torrents...</p>
-                            <p className="text-neutral-600 text-xs mt-1">Checking 1337x & YTS</p>
                         </div>
                     )}
 
@@ -164,23 +199,16 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                     {!searching && searched && results.length > 0 && (
                         <>
                             <div className="flex items-center justify-between">
-                                <h3 className="text-sm font-semibold text-neutral-300">
-                                    {results.length} torrent{results.length !== 1 ? 's' : ''} found
-                                </h3>
+                                <h3 className="text-sm font-semibold text-neutral-300">{results.length} torrents found</h3>
                                 <span className="text-xs text-neutral-500">Sorted by seeds</span>
                             </div>
                             <div className="space-y-2">
                                 {results.map((result, i) => (
-                                    <div
-                                        key={i}
-                                        className="flex items-center gap-3 p-3 bg-neutral-800/60 hover:bg-neutral-800 rounded-xl transition group"
-                                    >
+                                    <div key={i} className="flex items-center gap-3 p-3 bg-neutral-800/60 hover:bg-neutral-800 rounded-xl transition">
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium truncate mb-1" title={result.title}>{result.title}</p>
                                             <div className="flex flex-wrap items-center gap-2 text-xs">
-                                                <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>
-                                                    {result.quality}
-                                                </span>
+                                                <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>{result.quality}</span>
                                                 <span className="text-neutral-400">{result.size}</span>
                                                 <span className="text-green-500">↑{result.seeds}</span>
                                                 <span className="text-red-400">↓{result.leeches}</span>
@@ -192,11 +220,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                             disabled={downloading !== null}
                                             className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
                                         >
-                                            {downloading === result.magnet ? (
-                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                            ) : (
-                                                <Download className="w-3.5 h-3.5" />
-                                            )}
+                                            {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                                             Download
                                         </button>
                                     </div>
@@ -210,22 +234,21 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                         <div className="text-center py-8">
                             <Search className="w-10 h-10 text-neutral-700 mx-auto mb-3" />
                             <p className="text-neutral-400 text-sm">No torrents found for &quot;{title}&quot;</p>
-                            <p className="text-neutral-600 text-xs mt-1">You can paste a magnet link manually below</p>
+                            <p className="text-neutral-600 text-xs mt-1">Paste a magnet link manually below</p>
                         </div>
                     )}
 
-                    {/* Manual magnet input */}
+                    {/* Manual magnet */}
                     <div className="border-t border-neutral-800 pt-4">
                         <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                            <Link2 className="w-3.5 h-3.5" />
-                            Manual Magnet Link
+                            <Link2 className="w-3.5 h-3.5" /> Manual Magnet Link
                         </h3>
                         <div className="flex gap-2">
                             <input
                                 type="text"
                                 value={manualMagnet}
                                 onChange={(e) => setManualMagnet(e.target.value)}
-                                placeholder="Paste magnet:?xt=urn:btih:..."
+                                placeholder="magnet:?xt=urn:btih:..."
                                 className="flex-1 bg-black border border-neutral-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-500 transition"
                             />
                             <button
@@ -233,8 +256,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                 disabled={!manualMagnet.trim().startsWith('magnet:') || downloading !== null}
                                 className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-600 text-white font-medium rounded-lg text-sm transition flex items-center gap-1.5"
                             >
-                                <ArrowDown className="w-4 h-4" />
-                                Go
+                                <ArrowDown className="w-4 h-4" /> Go
                             </button>
                         </div>
                     </div>

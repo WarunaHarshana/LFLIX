@@ -6,24 +6,24 @@ import fs from 'fs';
 export const dynamic = 'force-dynamic';
 
 // Valid setting keys to prevent injection
-const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey'];
+const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey', 'downloadPath'];
 
 // Validate VLC path exists
 function validateVlcPath(path: string): { valid: boolean; error?: string } {
-  if (!path) {
-    return { valid: false, error: 'VLC path is required' };
-  }
-  
-  if (!fs.existsSync(path)) {
-    return { valid: false, error: `VLC not found at: ${path}. Please check the path.` };
-  }
-  
-  // Check if it's actually vlc.exe
-  if (!path.toLowerCase().includes('vlc')) {
-    console.warn(`Warning: VLC path "${path}" doesn't contain "vlc" in filename`);
-  }
-  
-  return { valid: true };
+    if (!path) {
+        return { valid: false, error: 'VLC path is required' };
+    }
+
+    if (!fs.existsSync(path)) {
+        return { valid: false, error: `VLC not found at: ${path}. Please check the path.` };
+    }
+
+    // Check if it's actually vlc.exe
+    if (!path.toLowerCase().includes('vlc')) {
+        console.warn(`Warning: VLC path "${path}" doesn't contain "vlc" in filename`);
+    }
+
+    return { valid: true };
 }
 
 // Get all settings

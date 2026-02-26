@@ -1,36 +1,11 @@
 /**
  * Download Manager — wraps WebTorrent for torrent downloading
+ * Supports: add, remove, pause, resume downloads
  */
 
 import db from './db';
 import path from 'path';
 import fs from 'fs';
-
-// WebTorrent types (minimal)
-interface WTorrent {
-    infoHash: string;
-    name: string;
-    progress: number;
-    downloadSpeed: number;
-    uploadSpeed: number;
-    length: number;
-    downloaded: number;
-    done: boolean;
-    paused: boolean;
-    path: string;
-    on(event: string, cb: (...args: any[]) => void): void;
-    pause(): void;
-    resume(): void;
-    destroy(opts?: { destroyStore?: boolean }, cb?: (err?: Error) => void): void;
-}
-
-interface WTClient {
-    add(magnetUri: string, opts?: any, cb?: (torrent: WTorrent) => void): WTorrent;
-    remove(torrentId: string, opts?: { destroyStore?: boolean }, cb?: (err?: Error) => void): void;
-    get(torrentId: string): WTorrent | null;
-    torrents: WTorrent[];
-    destroy(cb?: (err?: Error) => void): void;
-}
 
 // Download record type
 export interface DownloadRecord {
@@ -51,17 +26,13 @@ export interface DownloadRecord {
 }
 
 class DownloadManager {
-    private client: WTClient | null = null;
-    private initialized = false;
-    private progressTimers: Map<string, NodeJS.Timeout> = new Map();
+    private client: any = null;
+    private progressTimers: Map<number, NodeJS.Timeout> = new Map();
 
-    private async getClient(): Promise<WTClient> {
+    private async getClient(): Promise<any> {
         if (this.client) return this.client;
-
-        // Dynamic import to avoid SSR issues
         const WebTorrent = (await import('webtorrent')).default;
-        this.client = new (WebTorrent as any)() as WTClient;
-        this.initialized = true;
+        this.client = new (WebTorrent as any)();
         return this.client;
     }
 
@@ -74,7 +45,6 @@ class DownloadManager {
             }
         } catch { /* ignore */ }
 
-        // Default to ./downloads
         const defaultPath = path.join(process.cwd(), 'downloads');
         if (!fs.existsSync(defaultPath)) {
             fs.mkdirSync(defaultPath, { recursive: true });
@@ -83,8 +53,8 @@ class DownloadManager {
     }
 
     // Start a new download
-    async addDownload(magnetUri: string, watchlistId?: number): Promise<DownloadRecord> {
-        const downloadPath = this.getDownloadPath();
+    async addDownload(magnetUri: string, watchlistId?: number, customPath?: string): Promise<DownloadRecord> {
+        const downloadPath = customPath || this.getDownloadPath();
         const client = await this.getClient();
 
         // Insert DB record
@@ -99,113 +69,218 @@ class DownloadManager {
             const torrent = client.add(magnetUri, { path: downloadPath });
 
             torrent.on('metadata', () => {
-                db.prepare('UPDATE downloads SET name = ?, infoHash = ?, totalSize = ? WHERE id = ?')
-                    .run(torrent.name, torrent.infoHash, torrent.length, downloadId);
+                try {
+                    db.prepare('UPDATE downloads SET name = ?, infoHash = ?, totalSize = ? WHERE id = ?')
+                        .run(torrent.name, torrent.infoHash, torrent.length || 0, downloadId);
+                } catch { /* ignore */ }
             });
 
             // Update progress every 2 seconds
             const timer = setInterval(() => {
                 try {
+                    const record = this.getDownload(downloadId);
+                    if (!record || record.status !== 'downloading') {
+                        clearInterval(timer);
+                        this.progressTimers.delete(downloadId);
+                        return;
+                    }
                     db.prepare(`
             UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?, totalSize = ?
             WHERE id = ? AND status = 'downloading'
           `).run(
-                        Math.round(torrent.progress * 10000) / 100, // 2 decimal places
-                        Math.round(torrent.downloadSpeed),
-                        torrent.downloaded,
-                        torrent.length,
+                        Math.round(torrent.progress * 10000) / 100,
+                        Math.round(torrent.downloadSpeed || 0),
+                        torrent.downloaded || 0,
+                        torrent.length || 0,
                         downloadId
                     );
                 } catch { /* ignore */ }
             }, 2000);
-            this.progressTimers.set(String(downloadId), timer);
+            this.progressTimers.set(downloadId, timer);
 
             torrent.on('done', () => {
-                clearInterval(timer);
-                this.progressTimers.delete(String(downloadId));
-
-                db.prepare(`
-          UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
-          downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).run(downloadId);
-
-                // Trigger library rescan after download completes
+                this.clearTimer(downloadId);
+                try {
+                    db.prepare(`
+            UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
+            downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).run(downloadId);
+                } catch { /* ignore */ }
                 this.triggerRescan();
             });
 
             torrent.on('error', (err: Error) => {
-                clearInterval(timer);
-                this.progressTimers.delete(String(downloadId));
-
-                db.prepare(`
-          UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0
-          WHERE id = ?
-        `).run(err.message, downloadId);
+                this.clearTimer(downloadId);
+                try {
+                    db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0 WHERE id = ?`)
+                        .run(err.message, downloadId);
+                } catch { /* ignore */ }
             });
 
         } catch (err: any) {
-            db.prepare('UPDATE downloads SET status = ?, errorMessage = ? WHERE id = ?')
-                .run('error', err.message, downloadId);
+            try {
+                db.prepare('UPDATE downloads SET status = ?, errorMessage = ? WHERE id = ?')
+                    .run('error', err.message || 'Unknown error', downloadId);
+            } catch { /* ignore */ }
         }
 
         return this.getDownload(downloadId)!;
     }
 
-    // Remove/cancel a download
-    async removeDownload(downloadId: number, deleteFiles = false): Promise<void> {
+    // Pause a download
+    async pauseDownload(downloadId: number): Promise<boolean> {
         const record = this.getDownload(downloadId);
-        if (!record) return;
+        if (!record || record.status !== 'downloading') return false;
 
-        // Clear progress timer
-        const timer = this.progressTimers.get(String(downloadId));
-        if (timer) {
-            clearInterval(timer);
-            this.progressTimers.delete(String(downloadId));
-        }
+        this.clearTimer(downloadId);
 
-        // Remove from WebTorrent if active
+        // Pause in WebTorrent
         if (record.infoHash && this.client) {
             const torrent = this.client.get(record.infoHash);
             if (torrent) {
-                await new Promise<void>((resolve) => {
-                    torrent.destroy({ destroyStore: deleteFiles }, () => resolve());
-                });
+                torrent.pause();
             }
         }
 
-        // Remove from DB
-        db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
+        db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0 WHERE id = ?").run(downloadId);
+        return true;
+    }
+
+    // Resume a download
+    async resumeDownload(downloadId: number): Promise<boolean> {
+        const record = this.getDownload(downloadId);
+        if (!record || record.status !== 'paused') return false;
+
+        // Check if torrent still exists in client
+        if (record.infoHash && this.client) {
+            const torrent = this.client.get(record.infoHash);
+            if (torrent) {
+                torrent.resume();
+                // Restart progress timer
+                const timer = setInterval(() => {
+                    try {
+                        const r = this.getDownload(downloadId);
+                        if (!r || r.status !== 'downloading') {
+                            clearInterval(timer);
+                            this.progressTimers.delete(downloadId);
+                            return;
+                        }
+                        db.prepare(`
+              UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?
+              WHERE id = ? AND status = 'downloading'
+            `).run(
+                            Math.round(torrent.progress * 10000) / 100,
+                            Math.round(torrent.downloadSpeed || 0),
+                            torrent.downloaded || 0,
+                            downloadId
+                        );
+                    } catch { /* ignore */ }
+                }, 2000);
+                this.progressTimers.set(downloadId, timer);
+            } else {
+                // Torrent was lost, re-add it
+                const client = await this.getClient();
+                const downloadPath = record.downloadPath || this.getDownloadPath();
+                client.add(record.magnetUri, { path: downloadPath });
+            }
+        }
+
+        db.prepare("UPDATE downloads SET status = 'downloading' WHERE id = ?").run(downloadId);
+        return true;
+    }
+
+    // Remove/cancel a download
+    async removeDownload(downloadId: number, deleteFiles = false): Promise<boolean> {
+        const record = this.getDownload(downloadId);
+        if (!record) {
+            // Even if no record, try to delete from DB
+            try { db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId); } catch { /* ignore */ }
+            return true;
+        }
+
+        // Clear progress timer
+        this.clearTimer(downloadId);
+
+        // Remove from WebTorrent if active
+        if (this.client) {
+            try {
+                // Try by infoHash first, then by magnetUri
+                const torrent = record.infoHash
+                    ? this.client.get(record.infoHash)
+                    : this.client.get(record.magnetUri);
+
+                if (torrent) {
+                    await new Promise<void>((resolve) => {
+                        try {
+                            torrent.destroy({ destroyStore: deleteFiles }, () => resolve());
+                        } catch {
+                            resolve();
+                        }
+                    });
+                }
+            } catch {
+                // Ignore WebTorrent errors during removal
+            }
+        }
+
+        // Remove from DB — this is the critical part
+        try {
+            db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
+        } catch (e) {
+            console.error('Failed to delete download from DB:', e);
+            return false;
+        }
+
+        return true;
     }
 
     // Get all downloads
     getAll(): DownloadRecord[] {
-        return db.prepare('SELECT * FROM downloads ORDER BY startedAt DESC').all() as DownloadRecord[];
+        try {
+            return db.prepare('SELECT * FROM downloads ORDER BY startedAt DESC').all() as DownloadRecord[];
+        } catch {
+            return [];
+        }
     }
 
     // Get single download
     getDownload(id: number): DownloadRecord | null {
-        return (db.prepare('SELECT * FROM downloads WHERE id = ?').get(id) as DownloadRecord) || null;
+        try {
+            return (db.prepare('SELECT * FROM downloads WHERE id = ?').get(id) as DownloadRecord) || null;
+        } catch {
+            return null;
+        }
     }
 
     // Get active download count
     getActiveCount(): number {
-        const result = db.prepare("SELECT COUNT(*) as count FROM downloads WHERE status = 'downloading'").get() as { count: number };
-        return result?.count || 0;
+        try {
+            const result = db.prepare("SELECT COUNT(*) as count FROM downloads WHERE status = 'downloading'").get() as { count: number };
+            return result?.count || 0;
+        } catch {
+            return 0;
+        }
+    }
+
+    // Helper: clear progress timer
+    private clearTimer(downloadId: number) {
+        const timer = this.progressTimers.get(downloadId);
+        if (timer) {
+            clearInterval(timer);
+            this.progressTimers.delete(downloadId);
+        }
     }
 
     // Trigger library rescan
     private async triggerRescan(): Promise<void> {
         try {
-            // Use internal fetch to trigger rescan
             const baseUrl = `http://localhost:${process.env.PORT || 3000}`;
             await fetch(`${baseUrl}/api/rescan`, { method: 'POST' }).catch(() => { });
-        } catch {
-            // Ignore — rescan is best-effort
-        }
+        } catch { /* ignore */ }
     }
 }
 
-// Singleton instance
+// Singleton
 const downloadManager = new DownloadManager();
 export default downloadManager;

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder } from 'lucide-react';
 
 type TorrentResult = {
     title: string;
@@ -23,7 +23,23 @@ export default function TorrentSearchPage() {
     const [downloading, setDownloading] = useState<string | null>(null);
     const [downloadStarted, setDownloadStarted] = useState<Set<string>>(new Set());
     const [manualMagnet, setManualMagnet] = useState('');
+    const [folders, setFolders] = useState<{ id: number; path: string; contentType: string }[]>([]);
+    const [selectedFolder, setSelectedFolder] = useState<string>('');
     const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        fetchFolders();
+    }, []);
+
+    const fetchFolders = async () => {
+        try {
+            const res = await fetch('/api/folders');
+            const data = await res.json();
+            const allFolders = data.folders || [];
+            setFolders(allFolders);
+            if (allFolders.length > 0) setSelectedFolder(allFolders[0].path);
+        } catch { /* ignore */ }
+    };
 
     const searchTorrents = async () => {
         if (searchQuery.trim().length < 2) return;
@@ -53,7 +69,7 @@ export default function TorrentSearchPage() {
             const res = await fetch('/api/downloads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ magnetUri })
+                body: JSON.stringify({ magnetUri, downloadPath: selectedFolder || undefined })
             });
             const data = await res.json();
             if (data.success) {
@@ -151,6 +167,27 @@ export default function TorrentSearchPage() {
                 )}
             </div>
 
+            {/* Folder Chooser */}
+            {folders.length > 0 && (
+                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 mb-6">
+                    <label className="text-xs text-neutral-400 font-medium flex items-center gap-1.5 mb-2">
+                        <Folder className="w-3.5 h-3.5" />
+                        Save downloads to:
+                    </label>
+                    <select
+                        value={selectedFolder}
+                        onChange={(e) => setSelectedFolder(e.target.value)}
+                        className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500 transition"
+                    >
+                        {folders.map((f) => (
+                            <option key={f.id} value={f.path}>
+                                {f.path} ({f.contentType})
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
             {/* Error */}
             {error && (
                 <div className="flex items-center gap-2 p-3 bg-red-600/10 border border-red-500/30 rounded-xl text-red-400 text-sm mb-4">
@@ -207,8 +244,8 @@ export default function TorrentSearchPage() {
                                     onClick={() => startDownload(result.magnet)}
                                     disabled={downloading !== null || isStarted}
                                     className={`px-4 py-2.5 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0 ${isStarted
-                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default'
-                                            : 'bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-600 text-white'
+                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default'
+                                        : 'bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-600 text-white'
                                         }`}
                                 >
                                     {downloading === result.magnet ? (
