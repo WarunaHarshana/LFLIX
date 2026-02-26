@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Plus, Check, X, Trash2, Star, Film, Tv, Loader2, Bookmark, Calendar, Clock, Download } from 'lucide-react';
+import { Search, Plus, Check, X, Trash2, Star, Film, Tv, Loader2, Bookmark, Calendar, Clock, Download, Play } from 'lucide-react';
 import DownloadModal from './DownloadModal';
+import TrailerModal from './TrailerModal';
 
 type WatchlistItem = {
     id: number;
@@ -46,6 +47,7 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const [downloadItem, setDownloadItem] = useState<WatchlistItem | null>(null);
+    const [trailerItem, setTrailerItem] = useState<{ tmdbId: number; mediaType: 'movie' | 'tv'; title: string } | null>(null);
 
     // Fetch watchlist on mount
     useEffect(() => {
@@ -252,7 +254,14 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
                                     </div>
 
                                     {/* Action */}
-                                    <div className="flex items-center flex-shrink-0">
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        <button
+                                            onClick={() => setTrailerItem({ tmdbId: result.tmdbId, mediaType: result.mediaType, title: result.title })}
+                                            className="p-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded-lg transition"
+                                            title="Watch Trailer"
+                                        >
+                                            <Play className="w-3.5 h-3.5" />
+                                        </button>
                                         {inLibrary ? (
                                             <span className="px-3 py-1.5 bg-green-500/10 text-green-400 border border-green-500/30 rounded-lg text-xs font-medium">
                                                 In Library
@@ -348,6 +357,13 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
                                         )}
                                         <div className="flex gap-1.5 w-full">
                                             <button
+                                                onClick={(e) => { e.stopPropagation(); setTrailerItem(item); }}
+                                                className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition"
+                                            >
+                                                <Play className="w-3.5 h-3.5" />
+                                                Trailer
+                                            </button>
+                                            <button
                                                 onClick={(e) => { e.stopPropagation(); setDownloadItem(item); }}
                                                 className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-600 text-black text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition"
                                             >
@@ -410,6 +426,15 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
                 posterPath={downloadItem?.posterPath}
                 watchlistId={downloadItem?.id}
                 onClose={() => setDownloadItem(null)}
+            />
+
+            {/* Trailer Modal */}
+            <TrailerModal
+                isOpen={trailerItem !== null}
+                tmdbId={trailerItem?.tmdbId || 0}
+                mediaType={trailerItem?.mediaType || 'movie'}
+                title={trailerItem?.title || ''}
+                onClose={() => setTrailerItem(null)}
             />
         </div>
     );
