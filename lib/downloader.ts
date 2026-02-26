@@ -190,14 +190,54 @@ class DownloadManager {
         return true;
     }
 
+    // Delete downloaded files from disk
+    private deleteFilesFromDisk(record: DownloadRecord): void {
+        console.log('[Download] Attempting file deletion for:', {
+            id: record.id,
+            name: record.name,
+            downloadPath: record.downloadPath,
+            infoHash: record.infoHash,
+        });
+
+        // Build list of candidate paths to try
+        const candidates: string[] = [];
+
+        if (record.downloadPath && record.name) {
+            candidates.push(path.join(record.downloadPath, record.name));
+        }
+        if (record.downloadPath && record.infoHash) {
+            candidates.push(path.join(record.downloadPath, record.infoHash));
+        }
+        // Fallback: project downloads folder
+        if (record.name) {
+            candidates.push(path.join(process.cwd(), 'downloads', record.name));
+        }
+
+        for (const candidate of candidates) {
+            try {
+                if (fs.existsSync(candidate)) {
+                    console.log('[Download] Deleting:', candidate);
+                    fs.rmSync(candidate, { recursive: true, force: true });
+                    console.log('[Download] Deleted successfully:', candidate);
+                    return; // Done
+                }
+            } catch (e) {
+                console.error('[Download] Failed to delete:', candidate, e);
+            }
+        }
+
+        console.warn('[Download] No matching files found on disk. Candidates tried:', candidates);
+    }
+
     // Remove/cancel a download
     async removeDownload(downloadId: number, deleteFiles = false): Promise<boolean> {
         const record = this.getDownload(downloadId);
         if (!record) {
-            // Even if no record, try to delete from DB
             try { db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId); } catch { /* ignore */ }
             return true;
         }
+
+        console.log('[Download] Removing download:', downloadId, 'deleteFiles:', deleteFiles);
 
         // Clear progress timer
         this.clearTimer(downloadId);
@@ -217,37 +257,25 @@ class DownloadManager {
                             resolve();
                         }
                     });
-                } else if (deleteFiles && record.downloadPath && record.name) {
-                    // Torrent not in WebTorrent (completed/lost) — manually delete files
-                    const filePath = path.join(record.downloadPath, record.name);
-                    try {
-                        if (fs.existsSync(filePath)) {
-                            fs.rmSync(filePath, { recursive: true, force: true });
-                        }
-                    } catch (e) {
-                        console.error('Failed to delete files:', e);
+                    // If destroyStore was used, files should be gone. But double-check:
+                    if (deleteFiles) {
+                        this.deleteFilesFromDisk(record);
                     }
+                } else if (deleteFiles) {
+                    this.deleteFilesFromDisk(record);
                 }
             } catch {
-                // Ignore WebTorrent errors during removal
+                if (deleteFiles) this.deleteFilesFromDisk(record);
             }
-        } else if (deleteFiles && record.downloadPath && record.name) {
-            // No WebTorrent client at all — manually delete
-            const filePath = path.join(record.downloadPath, record.name);
-            try {
-                if (fs.existsSync(filePath)) {
-                    fs.rmSync(filePath, { recursive: true, force: true });
-                }
-            } catch (e) {
-                console.error('Failed to delete files:', e);
-            }
+        } else if (deleteFiles) {
+            this.deleteFilesFromDisk(record);
         }
 
         // Remove from DB
         try {
             db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
         } catch (e) {
-            console.error('Failed to delete download from DB:', e);
+            console.error('[Download] Failed to delete from DB:', e);
             return false;
         }
 
