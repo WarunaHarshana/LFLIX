@@ -205,7 +205,6 @@ class DownloadManager {
         // Remove from WebTorrent if active
         if (this.client) {
             try {
-                // Try by infoHash first, then by magnetUri
                 const torrent = record.infoHash
                     ? this.client.get(record.infoHash)
                     : this.client.get(record.magnetUri);
@@ -218,13 +217,33 @@ class DownloadManager {
                             resolve();
                         }
                     });
+                } else if (deleteFiles && record.downloadPath && record.name) {
+                    // Torrent not in WebTorrent (completed/lost) — manually delete files
+                    const filePath = path.join(record.downloadPath, record.name);
+                    try {
+                        if (fs.existsSync(filePath)) {
+                            fs.rmSync(filePath, { recursive: true, force: true });
+                        }
+                    } catch (e) {
+                        console.error('Failed to delete files:', e);
+                    }
                 }
             } catch {
                 // Ignore WebTorrent errors during removal
             }
+        } else if (deleteFiles && record.downloadPath && record.name) {
+            // No WebTorrent client at all — manually delete
+            const filePath = path.join(record.downloadPath, record.name);
+            try {
+                if (fs.existsSync(filePath)) {
+                    fs.rmSync(filePath, { recursive: true, force: true });
+                }
+            } catch (e) {
+                console.error('Failed to delete files:', e);
+            }
         }
 
-        // Remove from DB — this is the critical part
+        // Remove from DB
         try {
             db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
         } catch (e) {

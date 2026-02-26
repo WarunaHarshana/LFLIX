@@ -49,14 +49,14 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
         }
     };
 
-    const removeDownload = async (id: number) => {
+    const removeDownload = async (id: number, deleteFiles = false) => {
         // Stop polling so it doesn't re-add the item
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         setRemovingIds(prev => new Set(prev).add(id));
         setConfirmDelete(null);
 
         try {
-            const res = await fetch(`/api/downloads?id=${id}&deleteFiles=0`, { method: 'DELETE' });
+            const res = await fetch(`/api/downloads?id=${id}&deleteFiles=${deleteFiles ? '1' : '0'}`, { method: 'DELETE' });
             if (res.ok) {
                 setDownloads(prev => prev.filter(d => d.id !== id));
             }
@@ -270,18 +270,24 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                 This download is still in progress!
                             </p>
                         )}
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-2">
                             <button
-                                onClick={() => setConfirmDelete(null)}
-                                className="flex-1 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white font-medium rounded-lg transition text-sm"
+                                onClick={() => removeDownload(confirmDelete.id, true)}
+                                className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition text-sm"
                             >
-                                Cancel
+                                🗑 Delete from Disk
                             </button>
                             <button
-                                onClick={() => removeDownload(confirmDelete.id)}
-                                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition text-sm"
+                                onClick={() => removeDownload(confirmDelete.id, false)}
+                                className="w-full py-2.5 bg-neutral-700 hover:bg-neutral-600 text-white font-medium rounded-lg transition text-sm"
                             >
-                                Remove
+                                Remove from List Only
+                            </button>
+                            <button
+                                onClick={() => setConfirmDelete(null)}
+                                className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 font-medium rounded-lg transition text-sm"
+                            >
+                                Cancel
                             </button>
                         </div>
                     </div>
