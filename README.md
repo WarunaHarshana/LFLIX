@@ -2,7 +2,7 @@
 
 A Netflix-style local media server that organizes and plays your movie & TV show collection. Built with Next.js, SQLite, and your favourite player.
 
-![LFLIX](https://img.shields.io/badge/LFLIX-v0.5.0-red?style=for-the-badge)
+![LFLIX](https://img.shields.io/badge/LFLIX-v0.6.0-red?style=for-the-badge)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
 
@@ -17,6 +17,8 @@ A Netflix-style local media server that organizes and plays your movie & TV show
 | 📺 **Live TV (IPTV)** | Import M3U playlists, filter by country/category |
 | 🏆 **Live Sports** | Stream live matches (Football, Cricket, Basketball, etc.) |
 | 📌 **Watchlist** | Search TMDB for any movie/show, save to download later |
+| 🧲 **Torrent Search** | Search & download torrents directly — pick quality, choose library folder |
+| ⏸️ **Download Manager** | Pause, resume, delete downloads with progress tracking |
 | ⏯️ **Continue Watching** | Resume where you left off |
 | 📱 **Mobile & TV** | Access from any device via browser, QR code, or DLNA |
 | 📡 **DLNA Server** | Auto-discover on Smart TVs |
@@ -68,6 +70,16 @@ Works on Smart TVs, phones, tablets, game consoles — anything with a screen.
 
 Search TMDB for any movie or show and save it to your watchlist — a personal "to download" list. Items already in your library are marked with an **In Library** badge.
 
+## 🧲 Torrent Downloads
+
+| Action | How |
+|--------|-----|
+| **Torrents tab** | Click 🧲 Torrents → search anything (e.g. `Vikings S01E01 2160p`) → one-click download |
+| **Watchlist download** | Hover a watchlist card → click ⬇ → auto-searches by title → pick quality |
+| **Magnet link** | Paste a magnet URI directly in either the Torrents tab or the Watchlist modal |
+| **Folder chooser** | Pick which library folder to save to (auto-import when done) |
+| **Download panel** | Click ⬇ in navbar → see progress, pause ⏸, resume ▶, delete 🗑 |
+
 ## 🛠️ Tech Stack
 
 | Layer | Tech |
@@ -75,6 +87,7 @@ Search TMDB for any movie or show and save it to your watchlist — a personal "
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS |
 | Backend | Next.js API Routes, SQLite (better-sqlite3) |
 | Metadata | TMDB API |
+| Torrents | WebTorrent, apibay.org (TPB API) |
 | Players | VLC, PotPlayer, MPC-HC, mpv, HTML5, DLNA |
 | File Watching | Chokidar |
 
