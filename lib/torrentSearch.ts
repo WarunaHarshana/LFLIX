@@ -183,12 +183,16 @@ function parseDirectoryListing(html: string, baseUrl: string): { name: string; h
     return entries;
 }
 
-/** Check if folder name matches search query (fuzzy) */
+/** Check if folder name matches search query (fuzzy). Ignores season/episode numbers and resolutions for folder matching. */
 function titleMatches(folderName: string, query: string): boolean {
     const normalFolder = normalizeTitle(folderName);
     const normalQuery = normalizeTitle(query);
-    const queryWords = normalQuery.split(' ').filter(w => w.length > 1);
-    // All significant query words must appear in the folder name
+
+    // Filter out typical season/episode patterns (e.g. s01e01, 1080p) from query words when matching root folders
+    const ignoreRegex = /^(s\d+e\d+|s\d+|\d{3,4}p|4k|uhd)$/;
+    const queryWords = normalQuery.split(' ').filter(w => w.length > 1 && !ignoreRegex.test(w));
+
+    // All significant non-episode query words must appear in the folder name
     return queryWords.every(word => normalFolder.includes(word));
 }
 
@@ -196,6 +200,10 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
     try {
         const categories = type ? (OPEN_DIR_CATEGORIES[type] || OPEN_DIR_CATEGORIES.all) : OPEN_DIR_CATEGORIES.all;
         const results: TorrentResult[] = [];
+
+        // Full query string for filtering actual media files later
+        const fullNormalQuery = normalizeTitle(query);
+        const queryWords = fullNormalQuery.split(' ').filter(w => w.length > 1);
 
         for (const category of categories) {
             const categoryUrl = `${OPEN_DIR_BASE}${category}`;
@@ -223,8 +231,41 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
                         if (!fRes.ok) return [];
                         const fHtml = await fRes.text();
                         const files = parseDirectoryListing(fHtml, folderUrl);
-                        return files
-                            .filter(f => /\.(mkv|mp4|avi|mov|wmv|flv|webm|iso)$/i.test(f.name))
+
+                        const mediaRegex = /\.(mkv|mp4|avi|mov|wmv|flv|webm|iso)$/i;
+                        const allMediaFiles = files.filter(f => mediaRegex.test(f.name));
+
+                        // If no media files, but subdirectories exist (likely TV seasons), fetch them
+                        if (allMediaFiles.length === 0) {
+                            const subDirs = files.filter(f => !mediaRegex.test(f.name) && f.href.endsWith('/'));
+
+                            // Fetch subdirectories in parallel (limit to 10 to avoid hammering the server)
+                            const subResults = await Promise.allSettled(
+                                subDirs.slice(0, 10).map(async (subDir) => {
+                                    const subRes = await fetch(subDir.href, {
+                                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                                        signal: AbortSignal.timeout(10000),
+                                    });
+                                    if (!subRes.ok) return [];
+                                    const subHtml = await subRes.text();
+                                    const subFiles = parseDirectoryListing(subHtml, subDir.href);
+                                    return subFiles.filter(f => mediaRegex.test(f.name));
+                                })
+                            );
+
+                            for (const sub of subResults) {
+                                if (sub.status === 'fulfilled') {
+                                    allMediaFiles.push(...sub.value);
+                                }
+                            }
+                        }
+
+                        return allMediaFiles
+                            // Filter by the FULL query to ensure users only see matching episodes (e.g. S01E01)
+                            .filter(f => {
+                                const nf = normalizeTitle(f.name);
+                                return queryWords.every(w => nf.includes(w));
+                            })
                             .map(file => ({
                                 title: file.name,
                                 magnet: `http-direct:${file.href}`,
