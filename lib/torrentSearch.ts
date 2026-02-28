@@ -1,5 +1,5 @@
 /**
- * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS fallback
+ * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS + a.111477.xyz open directory
  */
 
 export interface TorrentResult {
@@ -123,6 +123,137 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
     }
 }
 
+// --- a.111477.xyz open directory (direct downloads) ---
+
+const OPEN_DIR_BASE = 'https://a.111477.xyz';
+const OPEN_DIR_CATEGORIES: Record<string, string[]> = {
+    movie: ['/movies/'],
+    tv: ['/tvs/'],
+    all: ['/movies/', '/tvs/'],
+};
+
+/** Normalize a title for fuzzy comparison */
+function normalizeTitle(t: string): string {
+    return t
+        .toLowerCase()
+        .replace(/[\(\)\[\]\{\}'"!@#$%^&*,.:;]/g, '')
+        .replace(/[-_]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/** Extract entries from the HTML index page (uses data-entry table rows) */
+function parseDirectoryListing(html: string, baseUrl: string): { name: string; href: string; sizeBytes: number }[] {
+    const entries: { name: string; href: string; sizeBytes: number }[] = [];
+    // Match all <tr data-entry="true" ...> rows — attributes can be in any order
+    const rowRegex = /<tr[^>]+data-entry="true"[^>]*>([\s\S]*?)<\/tr>/gi;
+    let match;
+    while ((match = rowRegex.exec(html)) !== null) {
+        const fullTag = match[0];
+        const rowContent = match[1];
+        // Extract data-name and data-url from the tr tag
+        const nameMatch = fullTag.match(/data-name="([^"]*)"/);
+        const urlMatch = fullTag.match(/data-url="([^"]*)"/);
+        if (!nameMatch || !urlMatch) continue;
+        const name = nameMatch[1].trim();
+        const dataUrl = urlMatch[1].trim();
+        // Skip parent directory
+        if (name === '..' || name === '.' || name === '../') continue;
+        // Extract size from <td class="size" data-sort="bytes">
+        let sizeBytes = -1;
+        const sizeMatch = rowContent.match(/data-sort="(-?\d+)"/);
+        if (sizeMatch) {
+            sizeBytes = parseInt(sizeMatch[1], 10);
+        }
+
+        // Safely decode name
+        let decodedName = name;
+        try {
+            decodedName = decodeURIComponent(name);
+        } catch {
+            decodedName = unescape(name); // fallback
+        }
+
+        // Resolve URL
+        const fullHref = dataUrl.startsWith('http')
+            ? dataUrl
+            : `${OPEN_DIR_BASE}${dataUrl}`;
+        entries.push({ name: decodedName.replace(/\/$/, ''), href: fullHref, sizeBytes });
+    }
+    return entries;
+}
+
+/** Check if folder name matches search query (fuzzy) */
+function titleMatches(folderName: string, query: string): boolean {
+    const normalFolder = normalizeTitle(folderName);
+    const normalQuery = normalizeTitle(query);
+    const queryWords = normalQuery.split(' ').filter(w => w.length > 1);
+    // All significant query words must appear in the folder name
+    return queryWords.every(word => normalFolder.includes(word));
+}
+
+async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promise<TorrentResult[]> {
+    try {
+        const categories = type ? (OPEN_DIR_CATEGORIES[type] || OPEN_DIR_CATEGORIES.all) : OPEN_DIR_CATEGORIES.all;
+        const results: TorrentResult[] = [];
+
+        for (const category of categories) {
+            const categoryUrl = `${OPEN_DIR_BASE}${category}`;
+            try {
+                const res = await fetch(categoryUrl, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                    signal: AbortSignal.timeout(15000),
+                });
+                if (!res.ok) continue;
+
+                const html = await res.text();
+                const folders = parseDirectoryListing(html, categoryUrl);
+
+                // Find matching title folders
+                const matchingFolders = folders.filter(f => titleMatches(f.name, query)).slice(0, 5);
+
+                // Fetch file listings from matching folders in parallel
+                const fileListings = await Promise.allSettled(
+                    matchingFolders.map(async (folder) => {
+                        const folderUrl = folder.href.endsWith('/') ? folder.href : folder.href + '/';
+                        const fRes = await fetch(folderUrl, {
+                            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                            signal: AbortSignal.timeout(10000),
+                        });
+                        if (!fRes.ok) return [];
+                        const fHtml = await fRes.text();
+                        const files = parseDirectoryListing(fHtml, folderUrl);
+                        return files
+                            .filter(f => /\.(mkv|mp4|avi|mov|wmv|flv|webm|iso)$/i.test(f.name))
+                            .map(file => ({
+                                title: file.name,
+                                magnet: `http-direct:${file.href}`,
+                                size: file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : 'Unknown',
+                                seeds: 0,
+                                leeches: 0,
+                                quality: extractQuality(file.name),
+                                source: 'DDL',
+                            }));
+                    })
+                );
+
+                for (const listing of fileListings) {
+                    if (listing.status === 'fulfilled') {
+                        results.push(...listing.value);
+                    }
+                }
+            } catch (e) {
+                console.error(`Open directory search error for ${category}:`, e);
+            }
+        }
+
+        return results.slice(0, 30);
+    } catch (e) {
+        console.error('Open directory search error:', e);
+        return [];
+    }
+}
+
 // --- Combined search ---
 
 export async function searchTorrents(
@@ -135,18 +266,22 @@ export async function searchTorrents(
     const tpbCategory = options?.type === 'tv' ? '205' : options?.type === 'movie' ? '201' : '200';
 
     // Search all sources in parallel — don't let one failure block the others
-    const [tpbResults, ytsResults] = await Promise.allSettled([
+    const [tpbResults, ytsResults, ddlResults] = await Promise.allSettled([
         searchTPB(query, tpbCategory),
         options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([]),
+        searchOpenDirectory(title, options?.type),
     ]);
 
-    const allResults: TorrentResult[] = [
+    const torrentResults: TorrentResult[] = [
         ...(tpbResults.status === 'fulfilled' ? tpbResults.value : []),
         ...(ytsResults.status === 'fulfilled' ? ytsResults.value : []),
     ];
 
-    // Sort by seeds descending
-    allResults.sort((a, b) => b.seeds - a.seeds);
+    // Sort torrents by seeds descending
+    torrentResults.sort((a, b) => b.seeds - a.seeds);
 
-    return allResults;
+    // Append DDL results after torrent results (DDL has no seeds to sort by)
+    const ddl = ddlResults.status === 'fulfilled' ? ddlResults.value : [];
+
+    return [...torrentResults, ...ddl];
 }

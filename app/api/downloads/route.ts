@@ -14,22 +14,26 @@ export async function GET() {
     }
 }
 
-// POST — start a new download
+// POST — start a new download (torrent or HTTP direct)
 export async function POST(req: Request) {
     try {
-        const { magnetUri, watchlistId, downloadPath } = await req.json();
+        const { magnetUri, httpUrl, watchlistId, downloadPath } = await req.json();
 
-        if (!magnetUri) {
-            return NextResponse.json({ error: 'Missing magnetUri' }, { status: 400 });
+        // Support both magnet URIs and HTTP direct download URLs
+        const uri = magnetUri || (httpUrl ? `http-direct:${httpUrl}` : null);
+
+        if (!uri) {
+            return NextResponse.json({ error: 'Missing magnetUri or httpUrl' }, { status: 400 });
         }
 
-        if (!magnetUri.startsWith('magnet:')) {
-            return NextResponse.json({ error: 'Invalid magnet URI' }, { status: 400 });
+        if (!uri.startsWith('magnet:') && !uri.startsWith('http-direct:')) {
+            return NextResponse.json({ error: 'Invalid download URI' }, { status: 400 });
         }
 
-        const download = await downloadManager.addDownload(magnetUri, watchlistId, downloadPath);
+        const download = await downloadManager.addDownload(uri, watchlistId, downloadPath);
         return NextResponse.json({ success: true, download });
     } catch (e: any) {
+        console.error('Download error:', e);
         return NextResponse.json({ error: e.message }, { status: 500 });
     }
 }

@@ -1,11 +1,13 @@
 /**
- * Download Manager — wraps WebTorrent for torrent downloading
- * Supports: add, remove, pause, resume downloads
+ * Download Manager — wraps WebTorrent for torrent downloading + HTTP direct downloads
+ * Supports: add, remove, pause, resume downloads (torrent & HTTP)
  */
 
 import db from './db';
 import path from 'path';
 import fs from 'fs';
+import http from 'http';
+import https from 'https';
 
 // Download record type
 export interface DownloadRecord {
@@ -28,6 +30,7 @@ export interface DownloadRecord {
 class DownloadManager {
     private client: any = null;
     private progressTimers: Map<number, NodeJS.Timeout> = new Map();
+    private httpAbortControllers: Map<number, AbortController> = new Map();
 
     private async getClient(): Promise<any> {
         if (this.client) return this.client;
@@ -52,8 +55,15 @@ class DownloadManager {
         return defaultPath;
     }
 
-    // Start a new download
+    // Start a new download (auto-detects torrent vs HTTP)
     async addDownload(magnetUri: string, watchlistId?: number, customPath?: string): Promise<DownloadRecord> {
+        // Detect HTTP direct download
+        if (magnetUri.startsWith('http-direct:')) {
+            const url = magnetUri.replace('http-direct:', '');
+            const filename = decodeURIComponent(url.split('/').pop() || 'download');
+            return this.addHttpDownload(url, filename, watchlistId, customPath);
+        }
+
         const downloadPath = customPath || this.getDownloadPath();
         const client = await this.getClient();
 
@@ -128,12 +138,165 @@ class DownloadManager {
         return this.getDownload(downloadId)!;
     }
 
+    // Start an HTTP direct download
+    private async addHttpDownload(url: string, filename: string, watchlistId?: number, customPath?: string): Promise<DownloadRecord> {
+        const downloadPath = customPath || this.getDownloadPath();
+        if (!fs.existsSync(downloadPath)) {
+            fs.mkdirSync(downloadPath, { recursive: true });
+        }
+
+        const filePath = path.join(downloadPath, filename);
+        const magnetUriStored = `http-direct:${url}`;
+
+        // Insert DB record
+        const stmt = db.prepare(`
+      INSERT INTO downloads (magnetUri, name, watchlistId, status, downloadPath)
+      VALUES (?, ?, ?, 'downloading', ?)
+    `);
+        const result = stmt.run(magnetUriStored, filename, watchlistId || null, downloadPath);
+        const downloadId = Number(result.lastInsertRowid);
+
+        const abortController = new AbortController();
+        this.httpAbortControllers.set(downloadId, abortController);
+
+        try {
+            const httpModule = url.startsWith('https') ? https : http;
+            const fileStream = fs.createWriteStream(filePath);
+            let downloadedBytes = 0;
+            let totalBytes = 0;
+            let lastTime = Date.now();
+            let lastBytes = 0;
+
+            const request = httpModule.get(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            }, (response) => {
+                // Handle redirects
+                if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                    request.destroy();
+                    fileStream.close();
+                    // Follow redirect
+                    const redirectUrl = response.headers.location.startsWith('http')
+                        ? response.headers.location
+                        : new URL(response.headers.location, url).href;
+                    this.httpAbortControllers.delete(downloadId);
+                    db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
+                    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+                    this.addHttpDownload(redirectUrl, filename, watchlistId, customPath);
+                    return;
+                }
+
+                if (response.statusCode !== 200) {
+                    fileStream.close();
+                    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+                    db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ? WHERE id = ?`)
+                        .run(`HTTP error ${response.statusCode}`, downloadId);
+                    return;
+                }
+
+                totalBytes = parseInt(response.headers['content-length'] || '0', 10);
+                if (totalBytes > 0) {
+                    db.prepare('UPDATE downloads SET totalSize = ? WHERE id = ?').run(totalBytes, downloadId);
+                }
+
+                // Progress timer
+                const timer = setInterval(() => {
+                    try {
+                        const record = this.getDownload(downloadId);
+                        if (!record || record.status !== 'downloading') {
+                            clearInterval(timer);
+                            this.progressTimers.delete(downloadId);
+                            return;
+                        }
+                        const now = Date.now();
+                        const elapsed = (now - lastTime) / 1000;
+                        const speed = elapsed > 0 ? Math.round((downloadedBytes - lastBytes) / elapsed) : 0;
+                        lastTime = now;
+                        lastBytes = downloadedBytes;
+
+                        const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 10000) / 100 : 0;
+                        db.prepare(`
+                            UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?, totalSize = ?
+                            WHERE id = ? AND status = 'downloading'
+                        `).run(progress, speed, downloadedBytes, totalBytes, downloadId);
+                    } catch { /* ignore */ }
+                }, 2000);
+                this.progressTimers.set(downloadId, timer);
+
+                response.on('data', (chunk: Buffer) => {
+                    downloadedBytes += chunk.length;
+                });
+
+                response.pipe(fileStream);
+
+                fileStream.on('finish', () => {
+                    this.clearTimer(downloadId);
+                    this.httpAbortControllers.delete(downloadId);
+                    try {
+                        db.prepare(`
+                            UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
+                            downloadedSize = ?, totalSize = ?, completedAt = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        `).run(downloadedBytes, totalBytes || downloadedBytes, downloadId);
+                    } catch { /* ignore */ }
+                    this.triggerRescan();
+                });
+
+                response.on('error', (err: Error) => {
+                    this.clearTimer(downloadId);
+                    this.httpAbortControllers.delete(downloadId);
+                    fileStream.close();
+                    try {
+                        db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0 WHERE id = ?`)
+                            .run(err.message, downloadId);
+                    } catch { /* ignore */ }
+                });
+            });
+
+            request.on('error', (err: Error) => {
+                this.clearTimer(downloadId);
+                this.httpAbortControllers.delete(downloadId);
+                fileStream.close();
+                try {
+                    db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0 WHERE id = ?`)
+                        .run(err.message, downloadId);
+                } catch { /* ignore */ }
+            });
+
+            // Handle abort
+            abortController.signal.addEventListener('abort', () => {
+                request.destroy();
+                fileStream.close();
+                this.clearTimer(downloadId);
+            });
+
+        } catch (err: any) {
+            this.httpAbortControllers.delete(downloadId);
+            try {
+                db.prepare('UPDATE downloads SET status = ?, errorMessage = ? WHERE id = ?')
+                    .run('error', err.message || 'Unknown error', downloadId);
+            } catch { /* ignore */ }
+        }
+
+        return this.getDownload(downloadId)!;
+    }
+
     // Pause a download
     async pauseDownload(downloadId: number): Promise<boolean> {
         const record = this.getDownload(downloadId);
         if (!record || record.status !== 'downloading') return false;
 
         this.clearTimer(downloadId);
+
+        // Handle HTTP downloads
+        if (record.magnetUri.startsWith('http-direct:')) {
+            const controller = this.httpAbortControllers.get(downloadId);
+            if (controller) {
+                controller.abort();
+                this.httpAbortControllers.delete(downloadId);
+            }
+            db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0 WHERE id = ?").run(downloadId);
+            return true;
+        }
 
         // Pause in WebTorrent
         if (record.infoHash && this.client) {
@@ -151,6 +314,21 @@ class DownloadManager {
     async resumeDownload(downloadId: number): Promise<boolean> {
         const record = this.getDownload(downloadId);
         if (!record || record.status !== 'paused') return false;
+
+        // Handle HTTP downloads — restart from scratch (no resume support)
+        if (record.magnetUri.startsWith('http-direct:')) {
+            const url = record.magnetUri.replace('http-direct:', '');
+            const filename = record.name || decodeURIComponent(url.split('/').pop() || 'download');
+            // Delete partial file
+            if (record.downloadPath && record.name) {
+                const filePath = path.join(record.downloadPath, record.name);
+                try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch { /* ignore */ }
+            }
+            // Remove current record and re-download
+            db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
+            await this.addHttpDownload(url, filename, record.watchlistId || undefined, record.downloadPath || undefined);
+            return true;
+        }
 
         // Check if torrent still exists in client
         if (record.infoHash && this.client) {
@@ -241,6 +419,25 @@ class DownloadManager {
 
         // Clear progress timer
         this.clearTimer(downloadId);
+
+        // Handle HTTP downloads
+        if (record.magnetUri.startsWith('http-direct:')) {
+            const controller = this.httpAbortControllers.get(downloadId);
+            if (controller) {
+                controller.abort();
+                this.httpAbortControllers.delete(downloadId);
+            }
+            if (deleteFiles) {
+                this.deleteFilesFromDisk(record);
+            }
+            try {
+                db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
+            } catch (e) {
+                console.error('[Download] Failed to delete from DB:', e);
+                return false;
+            }
+            return true;
+        }
 
         // Remove from WebTorrent if active
         if (this.client) {

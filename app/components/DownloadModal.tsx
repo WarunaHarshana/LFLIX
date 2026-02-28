@@ -123,6 +123,8 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         return 'bg-neutral-700/50 text-neutral-400 border-neutral-600';
     };
 
+    const isDDL = (result: TorrentResult) => result.source === 'DDL';
+
     if (!isOpen) return null;
 
     return (
@@ -210,9 +212,12 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                             <div className="flex flex-wrap items-center gap-2 text-xs">
                                                 <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>{result.quality}</span>
                                                 <span className="text-neutral-400">{result.size}</span>
-                                                <span className="text-green-500">↑{result.seeds}</span>
-                                                <span className="text-red-400">↓{result.leeches}</span>
-                                                <span className="px-1.5 py-0.5 bg-neutral-700/50 rounded text-[10px] text-neutral-500">{result.source}</span>
+                                                {!isDDL(result) && <span className="text-green-500">↑{result.seeds}</span>}
+                                                {!isDDL(result) && <span className="text-red-400">↓{result.leeches}</span>}
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDDL(result)
+                                                        ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold'
+                                                        : 'bg-neutral-700/50 text-neutral-500'
+                                                    }`}>{isDDL(result) ? '⬇ DDL' : result.source}</span>
                                             </div>
                                         </div>
                                         <button

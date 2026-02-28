@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder } from 'lucide-react';
+import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder, Globe } from 'lucide-react';
 
 type TorrentResult = {
     title: string;
@@ -104,6 +104,8 @@ export default function TorrentSearchPage() {
         if (ql.includes('bluray') || ql.includes('bdrip')) return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
         return 'bg-neutral-700/50 text-neutral-400 border-neutral-600';
     };
+
+    const isDDL = (result: TorrentResult) => result.source === 'DDL';
 
     return (
         <div className="pt-24 px-6 md:px-12 pb-20">
@@ -234,9 +236,12 @@ export default function TorrentSearchPage() {
                                             {result.quality}
                                         </span>
                                         <span className="text-neutral-400">{result.size}</span>
-                                        <span className="text-green-500 font-medium">↑ {result.seeds}</span>
-                                        <span className="text-red-400">↓ {result.leeches}</span>
-                                        <span className="px-1.5 py-0.5 bg-neutral-800 rounded text-[10px] text-neutral-500">{result.source}</span>
+                                        {!isDDL(result) && <span className="text-green-500 font-medium">↑ {result.seeds}</span>}
+                                        {!isDDL(result) && <span className="text-red-400">↓ {result.leeches}</span>}
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDDL(result)
+                                                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold'
+                                                : 'bg-neutral-800 text-neutral-500'
+                                            }`}>{isDDL(result) ? '⬇ DDL' : result.source}</span>
                                         {result.uploadDate && <span className="text-neutral-600">{result.uploadDate}</span>}
                                     </div>
                                 </div>
