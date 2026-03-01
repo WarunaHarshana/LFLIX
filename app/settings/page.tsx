@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive } from 'lucide-react';
 import Link from 'next/link';
 
 type Settings = {
@@ -42,6 +42,44 @@ function RefreshMetadataButton() {
             {result && (
                 <span className="text-sm text-neutral-400">
                     Updated {result.refreshed} of {result.total} items
+                </span>
+            )}
+        </div>
+    );
+}
+
+// Component for re-probe media info button
+function ReprobeButton() {
+    const [reprobing, setReprobing] = useState(false);
+    const [result, setResult] = useState<{ updated: number; total: number; failed: number } | null>(null);
+
+    const handleReprobe = async () => {
+        setReprobing(true);
+        setResult(null);
+        try {
+            const res = await fetch('/api/reprobe', { method: 'POST' });
+            const data = await res.json();
+            setResult({ updated: data.updated || 0, total: data.total || 0, failed: data.failed || 0 });
+        } catch (e) {
+            console.error('Reprobe failed', e);
+        } finally {
+            setReprobing(false);
+        }
+    };
+
+    return (
+        <div className="flex items-center gap-4">
+            <button
+                onClick={handleReprobe}
+                disabled={reprobing}
+                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-neutral-700 text-white font-medium rounded-lg flex items-center gap-2 transition"
+            >
+                <HardDrive className={`w-4 h-4 ${reprobing ? 'animate-pulse' : ''}`} />
+                {reprobing ? 'Re-probing...' : 'Re-probe Media Info'}
+            </button>
+            {result && (
+                <span className="text-sm text-neutral-400">
+                    Updated {result.updated} of {result.total} files{result.failed > 0 ? ` (${result.failed} failed)` : ''}
                 </span>
             )}
         </div>
@@ -237,6 +275,21 @@ export default function SettingsPage() {
                             that are currently missing poster images.
                         </p>
                         <RefreshMetadataButton />
+                    </div>
+                </section>
+
+                {/* Re-probe Media Info */}
+                <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
+                    <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
+                        <HardDrive className="w-5 h-5 text-teal-500" />
+                        <h2 className="text-lg font-semibold">Media Info</h2>
+                    </div>
+                    <div className="p-6">
+                        <p className="text-neutral-400 text-sm mb-4">
+                            Re-scan all media files with FFprobe to detect the correct resolution, video/audio codecs,
+                            HDR status, and audio channels. Use this if resolution or codec information appears wrong.
+                        </p>
+                        <ReprobeButton />
                     </div>
                 </section>
 
