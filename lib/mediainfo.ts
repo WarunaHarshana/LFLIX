@@ -37,11 +37,13 @@ const AUDIO_CODEC_MAP: Record<string, string> = {
 
 // --- Resolution Helper ---
 
-function getResolutionLabel(height: number): string {
-    if (height >= 1800) return '2160p';
-    if (height >= 900) return '1080p';
-    if (height >= 600) return '720p';
-    if (height >= 350) return '480p';
+function getResolutionLabel(width: number, height: number): string {
+    // Use the larger dimension to handle widescreen (e.g. 1920x800) correctly
+    // Width is more reliable for aspect ratios like 2.40:1 where height is misleadingly low
+    if (width >= 3200 || height >= 1800) return '2160p';
+    if (width >= 1800 || height >= 900) return '1080p';
+    if (width >= 1200 || height >= 600) return '720p';
+    if (width >= 640 || height >= 350) return '480p';
     return `${height}p`;
 }
 
@@ -138,8 +140,9 @@ export async function probeFile(filePath: string): Promise<MediaInfo | null> {
                 const audioStream = streams.find((s: any) => s.codec_type === 'audio');
 
                 // Resolution
-                const height = videoStream?.height || videoStream?.coded_height;
-                const resolution = height ? getResolutionLabel(height) : null;
+                const width = videoStream?.width || videoStream?.coded_width || 0;
+                const height = videoStream?.height || videoStream?.coded_height || 0;
+                const resolution = (width || height) ? getResolutionLabel(width, height) : null;
 
                 // Video codec
                 const rawVideoCodec = (videoStream?.codec_name || '').toLowerCase();
