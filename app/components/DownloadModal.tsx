@@ -125,6 +125,40 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
 
     const isDDL = (result: TorrentResult) => result.source === 'DDL';
 
+    /** Extract format tags (HDR, IMAX, Remux, Atmos, etc.) from a title */
+    const extractTags = (title: string): { label: string; className: string }[] => {
+        const t = title.toUpperCase();
+        const tags: { label: string; className: string }[] = [];
+
+        // Video format tags
+        if (/\bDOVI\b|\bDV\b|DOLBY[\s.-]?VISION/i.test(title))
+            tags.push({ label: 'DV', className: 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30' });
+        if (/\bHDR10\+|HDR10PLUS/i.test(title))
+            tags.push({ label: 'HDR10+', className: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' });
+        else if (/\bHDR10\b/i.test(title))
+            tags.push({ label: 'HDR10', className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' });
+        else if (/\bHDR\b/i.test(title))
+            tags.push({ label: 'HDR', className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' });
+        if (/\bIMAX\b/i.test(title))
+            tags.push({ label: 'IMAX', className: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' });
+        if (/\bREMUX\b/i.test(title))
+            tags.push({ label: 'Remux', className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' });
+
+        // Audio format tags
+        if (/\bATMOS\b/i.test(title))
+            tags.push({ label: 'Atmos', className: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' });
+        if (/\bDTS[\s.-]?HD/i.test(title))
+            tags.push({ label: 'DTS-HD', className: 'bg-sky-500/20 text-sky-400 border-sky-500/30' });
+        if (/\bTRUEHD\b|\bTRUE[\s.-]?HD\b/i.test(title))
+            tags.push({ label: 'TrueHD', className: 'bg-sky-500/20 text-sky-400 border-sky-500/30' });
+
+        // If no HDR/DV tag found, label as SDR
+        if (!tags.some(t => ['DV', 'HDR10+', 'HDR10', 'HDR'].includes(t.label)))
+            tags.push({ label: 'SDR', className: 'bg-neutral-600/30 text-neutral-400 border-neutral-600/40' });
+
+        return tags;
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -211,12 +245,15 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                             <p className="text-sm font-medium truncate mb-1" title={result.title}>{result.title}</p>
                                             <div className="flex flex-wrap items-center gap-2 text-xs">
                                                 <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>{result.quality}</span>
+                                                {extractTags(result.title).map((tag, ti) => (
+                                                    <span key={ti} className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${tag.className}`}>{tag.label}</span>
+                                                ))}
                                                 <span className="text-neutral-400">{result.size}</span>
                                                 {!isDDL(result) && <span className="text-green-500">↑{result.seeds}</span>}
                                                 {!isDDL(result) && <span className="text-red-400">↓{result.leeches}</span>}
                                                 <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDDL(result)
-                                                        ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold'
-                                                        : 'bg-neutral-700/50 text-neutral-500'
+                                                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold'
+                                                    : 'bg-neutral-700/50 text-neutral-500'
                                                     }`}>{isDDL(result) ? '⬇ DDL' : result.source}</span>
                                             </div>
                                         </div>
