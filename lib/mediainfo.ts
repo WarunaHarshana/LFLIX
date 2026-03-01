@@ -38,10 +38,10 @@ const AUDIO_CODEC_MAP: Record<string, string> = {
 // --- Resolution Helper ---
 
 function getResolutionLabel(height: number): string {
-    if (height >= 2000) return '2160p';
-    if (height >= 1000) return '1080p';
-    if (height >= 700) return '720p';
-    if (height >= 400) return '480p';
+    if (height >= 1800) return '2160p';
+    if (height >= 900) return '1080p';
+    if (height >= 600) return '720p';
+    if (height >= 350) return '480p';
     return `${height}p`;
 }
 
