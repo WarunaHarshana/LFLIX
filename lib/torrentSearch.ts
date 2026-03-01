@@ -132,6 +132,47 @@ const OPEN_DIR_CATEGORIES: Record<string, string[]> = {
     all: ['/movies/', '/tvs/'],
 };
 
+// In-memory cache for directory listings (avoids re-fetching the 7800+ entry index)
+const dirCache = new Map<string, { data: { name: string; href: string; sizeBytes: number }[]; ts: number }>();
+const DIR_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+/** Fetch with retry — retries once after a delay on 429 or network error */
+async function fetchWithRetry(url: string, timeoutMs: number): Promise<Response | null> {
+    const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' };
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            const res = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+            if (res.status === 429 && attempt === 0) {
+                await new Promise(r => setTimeout(r, 1500));
+                continue;
+            }
+            if (!res.ok) return null;
+            return res;
+        } catch {
+            if (attempt === 0) {
+                await new Promise(r => setTimeout(r, 1000));
+                continue;
+            }
+            return null;
+        }
+    }
+    return null;
+}
+
+/** Fetch and parse a directory listing, with caching */
+async function fetchDirectoryListing(url: string, timeoutMs: number): Promise<{ name: string; href: string; sizeBytes: number }[]> {
+    const cached = dirCache.get(url);
+    if (cached && Date.now() - cached.ts < DIR_CACHE_TTL) {
+        return cached.data;
+    }
+    const res = await fetchWithRetry(url, timeoutMs);
+    if (!res) return [];
+    const html = await res.text();
+    const entries = parseDirectoryListing(html, url);
+    dirCache.set(url, { data: entries, ts: Date.now() });
+    return entries;
+}
+
 /** Normalize a title for fuzzy comparison */
 function normalizeTitle(t: string): string {
     return t
@@ -201,21 +242,16 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
         const categories = type ? (OPEN_DIR_CATEGORIES[type] || OPEN_DIR_CATEGORIES.all) : OPEN_DIR_CATEGORIES.all;
         const results: TorrentResult[] = [];
 
-        // Full query string for filtering actual media files later
+        // Query words for filtering — only keep words with length > 1
         const fullNormalQuery = normalizeTitle(query);
         const queryWords = fullNormalQuery.split(' ').filter(w => w.length > 1);
 
         for (const category of categories) {
             const categoryUrl = `${OPEN_DIR_BASE}${category}`;
             try {
-                const res = await fetch(categoryUrl, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-                    signal: AbortSignal.timeout(15000),
-                });
-                if (!res.ok) continue;
-
-                const html = await res.text();
-                const folders = parseDirectoryListing(html, categoryUrl);
+                // Use cached directory listing to avoid redundant fetches of the large index
+                const folders = await fetchDirectoryListing(categoryUrl, 20000);
+                if (folders.length === 0) continue;
 
                 // Find matching title folders
                 const matchingFolders = folders.filter(f => titleMatches(f.name, query)).slice(0, 5);
@@ -224,13 +260,8 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
                 const fileListings = await Promise.allSettled(
                     matchingFolders.map(async (folder) => {
                         const folderUrl = folder.href.endsWith('/') ? folder.href : folder.href + '/';
-                        const fRes = await fetch(folderUrl, {
-                            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-                            signal: AbortSignal.timeout(10000),
-                        });
-                        if (!fRes.ok) return [];
-                        const fHtml = await fRes.text();
-                        const files = parseDirectoryListing(fHtml, folderUrl);
+                        const files = await fetchDirectoryListing(folderUrl, 15000);
+                        if (files.length === 0) return [];
 
                         const mediaRegex = /\.(mkv|mp4|avi|mov|wmv|flv|webm|iso)$/i;
                         const allMediaFiles = files.filter(f => mediaRegex.test(f.name));
@@ -239,32 +270,28 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
                         if (allMediaFiles.length === 0) {
                             const subDirs = files.filter(f => !mediaRegex.test(f.name) && f.href.endsWith('/'));
 
-                            // Fetch subdirectories in parallel (limit to 10 to avoid hammering the server)
-                            const subResults = await Promise.allSettled(
-                                subDirs.slice(0, 10).map(async (subDir) => {
-                                    const subRes = await fetch(subDir.href, {
-                                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-                                        signal: AbortSignal.timeout(10000),
-                                    });
-                                    if (!subRes.ok) return [];
-                                    const subHtml = await subRes.text();
-                                    const subFiles = parseDirectoryListing(subHtml, subDir.href);
-                                    return subFiles.filter(f => mediaRegex.test(f.name));
-                                })
-                            );
-
-                            for (const sub of subResults) {
-                                if (sub.status === 'fulfilled') {
-                                    allMediaFiles.push(...sub.value);
+                            // Fetch subdirectories sequentially with a small delay to avoid rate limiting
+                            for (const subDir of subDirs.slice(0, 10)) {
+                                try {
+                                    const subFiles = await fetchDirectoryListing(subDir.href, 15000);
+                                    const subMedia = subFiles.filter(f => mediaRegex.test(f.name));
+                                    allMediaFiles.push(...subMedia);
+                                    // Small delay between requests to prevent 429s
+                                    if (subDirs.length > 3) {
+                                        await new Promise(r => setTimeout(r, 300));
+                                    }
+                                } catch {
+                                    // Continue even if one season folder fails
                                 }
                             }
                         }
 
                         return allMediaFiles
-                            // Filter by the FULL query to ensure users only see matching episodes (e.g. S01E01)
                             .filter(f => {
-                                const nf = normalizeTitle(f.name);
-                                return queryWords.every(w => nf.includes(w));
+                                // Match query words against folder name + file name combined
+                                // This ensures "The Last of Us" matches files inside the correct folder
+                                const combined = normalizeTitle(folder.name + ' ' + f.name);
+                                return queryWords.every(w => combined.includes(w));
                             })
                             .map(file => ({
                                 title: file.name,
@@ -288,7 +315,7 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
             }
         }
 
-        return results.slice(0, 30);
+        return results.slice(0, 50);
     } catch (e) {
         console.error('Open directory search error:', e);
         return [];
