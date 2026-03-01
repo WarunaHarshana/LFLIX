@@ -94,13 +94,21 @@ function detectHDRFromStreams(videoStream: any): boolean {
 function findFFprobe(): string {
     // Check common locations on Windows
     const commonPaths = [
-        'ffprobe',  // In PATH
         'C:\\ffmpeg\\ffprobe.exe',
         'C:\\ffmpeg\\bin\\ffprobe.exe',
         path.join(process.cwd(), 'ffprobe.exe'),
     ];
-    // Return first one — execFile will validate
-    return commonPaths[0];
+
+    // Check if any of the common paths exist
+    const fs = require('fs');
+    for (const p of commonPaths) {
+        try {
+            if (fs.existsSync(p)) return p;
+        } catch { /* ignore */ }
+    }
+
+    // Fall back to PATH lookup
+    return 'ffprobe';
 }
 
 export async function probeFile(filePath: string): Promise<MediaInfo | null> {
