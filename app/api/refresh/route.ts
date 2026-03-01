@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall, cleanFilename, MediaMetadata, fetchMovieMetadata, fetchShowMetadata } from '@/lib/metadata';
+import { getTmdbApiKey, rateLimitedTmdbCall, cleanFilename, MediaMetadata, fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -118,9 +118,35 @@ export async function POST(req: Request) {
             await new Promise(resolve => setTimeout(resolve, 50));
         }
 
+        // Refresh episodes missing metadata (thumbnails, proper titles)
+        const episodesNeedingMeta = db.prepare(`
+            SELECT e.id, e.showId, e.seasonNumber, e.episodeNumber, e.title, e.stillPath, s.tmdbId
+            FROM episodes e
+            JOIN shows s ON s.id = e.showId
+            WHERE s.tmdbId IS NOT NULL AND s.tmdbId > 0
+            AND (e.stillPath IS NULL OR e.title LIKE 'S% E%')
+        `).all() as { id: number; showId: number; seasonNumber: number; episodeNumber: number; title: string; stillPath: string | null; tmdbId: number }[];
+
+        let episodesRefreshed = 0;
+        for (const ep of episodesNeedingMeta) {
+            try {
+                const epMeta = await fetchEpisodeMetadata(ep.tmdbId, ep.seasonNumber, ep.episodeNumber);
+                // Only update if we got real data (not fallback)
+                if (epMeta.stillPath || (epMeta.title && !/^S\d+ E\d+$/.test(epMeta.title))) {
+                    db.prepare(`UPDATE episodes SET title = ?, overview = ?, stillPath = ? WHERE id = ?`)
+                        .run(epMeta.title, epMeta.overview, epMeta.stillPath, ep.id);
+                    episodesRefreshed++;
+                }
+            } catch (e: any) {
+                errors.push(`Episode error: S${ep.seasonNumber}E${ep.episodeNumber} of show ${ep.showId}`);
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
         return NextResponse.json({
-            refreshed,
-            total: moviesWithoutPoster.length + showsWithoutPoster.length,
+            refreshed: refreshed + episodesRefreshed,
+            total: moviesWithoutPoster.length + showsWithoutPoster.length + episodesNeedingMeta.length,
+            episodes: episodesRefreshed,
             errors: errors.length > 0 ? errors : undefined
         });
     } catch (e: any) {

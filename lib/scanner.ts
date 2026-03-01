@@ -95,38 +95,62 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
 
     // Check if already indexed
     const movieExists = db.prepare('SELECT id, resolution FROM movies WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null } | undefined;
-    const epExists = db.prepare('SELECT id, resolution FROM episodes WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null } | undefined;
+    const epExists = db.prepare('SELECT id, resolution, title, stillPath, showId, seasonNumber, episodeNumber FROM episodes WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null; title: string | null; stillPath: string | null; showId: number; seasonNumber: number; episodeNumber: number } | undefined;
 
     if (movieExists || epExists) {
-      // If already indexed but missing media info, update it
+      // Check if media info or episode metadata needs updating
       const needsMediaUpdate = (movieExists && !movieExists.resolution) || (epExists && !epExists.resolution);
-      if (!needsMediaUpdate) {
+      // Episode needs metadata refresh if title is fallback pattern (e.g., "S1 E1") or stillPath is null
+      const needsEpMetadata = epExists && (!epExists.stillPath || /^S\d+ E\d+$/.test(epExists.title || ''));
+
+      if (!needsMediaUpdate && !needsEpMetadata) {
         return { added: false };
       }
 
-      // Run FFprobe + filename detection to fill in missing media info
-      const mediaInfo = await probeFile(filePath);
-      const fnResolution = detectResolution(fileName);
-      const fnVideoCodec = detectVideoCodec(fileName);
-      const fnAudio = detectAudioCodec(fileName);
-
-      const updResolution = mediaInfo?.resolution || fnResolution;
-      const updVideoCodec = mediaInfo?.videoCodec || fnVideoCodec;
-      const updAudioCodec = mediaInfo?.audioCodec || fnAudio.codec;
-      const updAudioChannels = mediaInfo?.audioChannels || fnAudio.channels;
-      const updIsHDR = (mediaInfo?.isHDR || detectHDR(fileName)) ? 1 : 0;
-
-      if (movieExists) {
-        db.prepare(`UPDATE movies SET resolution = ?, videoCodec = ?, audioCodec = ?, audioChannels = ?, isHDR = ?, bitrate = ?, duration = ?, fileSize = ? WHERE id = ?`)
-          .run(updResolution, updVideoCodec, updAudioCodec, updAudioChannels, updIsHDR,
-            mediaInfo?.bitrate || null, mediaInfo?.duration || null, mediaInfo?.fileSize || null, movieExists.id);
+      // Re-fetch episode TMDB metadata if needed (titles, thumbnails, overviews)
+      if (needsEpMetadata && epExists) {
+        try {
+          const show = db.prepare('SELECT tmdbId FROM shows WHERE id = ?').get(epExists.showId) as { tmdbId: number | null } | undefined;
+          if (show?.tmdbId && show.tmdbId > 0) {
+            const epMeta = await fetchEpisodeMetadata(show.tmdbId, epExists.seasonNumber, epExists.episodeNumber);
+            // Only update if we got real data (not fallback)
+            if (epMeta.stillPath || (epMeta.title && !/^S\d+ E\d+$/.test(epMeta.title))) {
+              db.prepare(`UPDATE episodes SET title = ?, overview = ?, stillPath = ? WHERE id = ?`)
+                .run(epMeta.title, epMeta.overview, epMeta.stillPath, epExists.id);
+              console.log(`[Scanner] Updated episode metadata for ${fileName}: "${epMeta.title}" still=${!!epMeta.stillPath}`);
+            }
+          }
+        } catch (e) {
+          console.warn(`[Scanner] Failed to refresh episode metadata for ${fileName}:`, e);
+        }
       }
-      if (epExists) {
-        db.prepare(`UPDATE episodes SET resolution = ?, videoCodec = ?, audioCodec = ?, audioChannels = ?, isHDR = ?, bitrate = ?, duration = ?, fileSize = ? WHERE id = ?`)
-          .run(updResolution, updVideoCodec, updAudioCodec, updAudioChannels, updIsHDR,
-            mediaInfo?.bitrate || null, mediaInfo?.duration || null, mediaInfo?.fileSize || null, epExists.id);
+
+      // Re-probe media info if resolution is missing
+      if (needsMediaUpdate) {
+        const mediaInfo = await probeFile(filePath);
+        const fnResolution = detectResolution(fileName);
+        const fnVideoCodec = detectVideoCodec(fileName);
+        const fnAudio = detectAudioCodec(fileName);
+
+        const updResolution = mediaInfo?.resolution || fnResolution;
+        const updVideoCodec = mediaInfo?.videoCodec || fnVideoCodec;
+        const updAudioCodec = mediaInfo?.audioCodec || fnAudio.codec;
+        const updAudioChannels = mediaInfo?.audioChannels || fnAudio.channels;
+        const updIsHDR = (mediaInfo?.isHDR || detectHDR(fileName)) ? 1 : 0;
+
+        if (movieExists) {
+          db.prepare(`UPDATE movies SET resolution = ?, videoCodec = ?, audioCodec = ?, audioChannels = ?, isHDR = ?, bitrate = ?, duration = ?, fileSize = ? WHERE id = ?`)
+            .run(updResolution, updVideoCodec, updAudioCodec, updAudioChannels, updIsHDR,
+              mediaInfo?.bitrate || null, mediaInfo?.duration || null, mediaInfo?.fileSize || null, movieExists.id);
+        }
+        if (epExists) {
+          db.prepare(`UPDATE episodes SET resolution = ?, videoCodec = ?, audioCodec = ?, audioChannels = ?, isHDR = ?, bitrate = ?, duration = ?, fileSize = ? WHERE id = ?`)
+            .run(updResolution, updVideoCodec, updAudioCodec, updAudioChannels, updIsHDR,
+              mediaInfo?.bitrate || null, mediaInfo?.duration || null, mediaInfo?.fileSize || null, epExists.id);
+        }
+        console.log(`[Scanner] Updated media info for ${fileName}: ${updResolution} ${updVideoCodec} HDR=${updIsHDR}`);
       }
-      console.log(`[Scanner] Updated media info for ${fileName}: ${updResolution} ${updVideoCodec} HDR=${updIsHDR}`);
+
       return { added: false }; // Not a new addition, but updated
     }
 
