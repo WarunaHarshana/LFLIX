@@ -94,19 +94,30 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
                 </div>
             )}
 
-            {/* HDR badge */}
-            {item.isHDR && (
-                <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-amber-500/90 text-black text-[10px] rounded font-bold tracking-wide backdrop-blur-sm">
-                    HDR
-                </div>
-            )}
-
-            {/* Resolution badge */}
-            {item.resolution && (
-                <div className={`absolute ${item.isHDR ? 'top-8' : 'top-2'} left-2 px-1.5 py-0.5 bg-blue-500/80 text-white text-[10px] rounded font-bold tracking-wide backdrop-blur-sm`}>
-                    {item.resolution === '2160p' ? '4K' : item.resolution}
-                </div>
-            )}
+            {/* Format tags */}
+            {(() => {
+                const tags: { label: string; cls: string }[] = [];
+                const fp = item.filePath?.toUpperCase() || '';
+                if (item.isHDR || /\bHDR\b/.test(fp))
+                    tags.push({ label: /HDR10\+|HDR10PLUS/.test(fp) ? 'HDR10+' : /HDR10/.test(fp) ? 'HDR10' : 'HDR', cls: 'bg-amber-500/90 text-black' });
+                if (/\bDOVI\b|\bDV\b|DOLBY.?VISION/.test(fp))
+                    tags.push({ label: 'DV', cls: 'bg-fuchsia-500/90 text-white' });
+                if (/\bIMAX\b/.test(fp))
+                    tags.push({ label: 'IMAX', cls: 'bg-cyan-500/90 text-black' });
+                if (/\bREMUX\b/.test(fp))
+                    tags.push({ label: 'Remux', cls: 'bg-emerald-500/90 text-black' });
+                if (/\bATMOS\b/.test(fp))
+                    tags.push({ label: 'Atmos', cls: 'bg-indigo-500/90 text-white' });
+                if (tags.length === 0 && !item.isHDR)
+                    tags.push({ label: 'SDR', cls: 'bg-neutral-600/80 text-neutral-200' });
+                return tags.length > 0 ? (
+                    <div className="absolute top-2 left-2 flex flex-col gap-1">
+                        {tags.map((t, i) => (
+                            <span key={i} className={`px-1.5 py-0.5 text-[10px] rounded font-bold tracking-wide backdrop-blur-sm ${t.cls}`}>{t.label}</span>
+                        ))}
+                    </div>
+                ) : null;
+            })()}
         </div>
     );
 }

@@ -19,6 +19,7 @@ type ContentItem = {
     videoCodec?: string | null;
     audioCodec?: string | null;
     audioChannels?: string | null;
+    filePath?: string;
     watchProgress?: {
         progress: number;
         duration: number;
@@ -108,16 +109,31 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                 <span className="px-2 py-0.5 bg-neutral-800 rounded border border-neutral-600 text-neutral-300 uppercase tracking-wide text-xs font-medium">
                                     {item.type === 'movie' ? 'Movie' : 'TV Show'}
                                 </span>
-                                {item.isHDR && (
-                                    <span className="px-1.5 py-0.5 bg-amber-500/90 text-black text-xs rounded font-bold tracking-wide">
-                                        HDR
-                                    </span>
-                                )}
-                                {item.resolution && (
-                                    <span className="px-1.5 py-0.5 bg-blue-500/80 text-white text-xs rounded font-bold tracking-wide">
-                                        {item.resolution === '2160p' ? '4K' : item.resolution}
-                                    </span>
-                                )}
+                                {(() => {
+                                    const tags: { label: string; cls: string }[] = [];
+                                    const fp = item.filePath?.toUpperCase() || '';
+                                    if (item.resolution)
+                                        tags.push({ label: item.resolution === '2160p' ? '4K' : item.resolution, cls: 'bg-blue-500/80 text-white' });
+                                    if (item.isHDR || /\bHDR\b/.test(fp))
+                                        tags.push({ label: /HDR10\+|HDR10PLUS/.test(fp) ? 'HDR10+' : /HDR10/.test(fp) ? 'HDR10' : 'HDR', cls: 'bg-amber-500/90 text-black' });
+                                    else
+                                        tags.push({ label: 'SDR', cls: 'bg-neutral-600/80 text-neutral-300' });
+                                    if (/\bDOVI\b|\bDV\b|DOLBY.?VISION/.test(fp))
+                                        tags.push({ label: 'DV', cls: 'bg-fuchsia-500/90 text-white' });
+                                    if (/\bIMAX\b/.test(fp))
+                                        tags.push({ label: 'IMAX', cls: 'bg-cyan-500/90 text-black' });
+                                    if (/\bREMUX\b/.test(fp))
+                                        tags.push({ label: 'Remux', cls: 'bg-emerald-500/90 text-black' });
+                                    if (/\bATMOS\b/.test(fp))
+                                        tags.push({ label: 'Atmos', cls: 'bg-indigo-500/90 text-white' });
+                                    if (/\bDTS[\s.-]?HD/.test(fp))
+                                        tags.push({ label: 'DTS-HD', cls: 'bg-sky-500/80 text-white' });
+                                    if (/\bTRUEHD\b|\bTRUE[\s.-]?HD/.test(fp))
+                                        tags.push({ label: 'TrueHD', cls: 'bg-sky-500/80 text-white' });
+                                    return tags.map((t, i) => (
+                                        <span key={i} className={`px-1.5 py-0.5 text-xs rounded font-bold tracking-wide ${t.cls}`}>{t.label}</span>
+                                    ));
+                                })()}
                             </div>
 
                             {/* Action Buttons */}
