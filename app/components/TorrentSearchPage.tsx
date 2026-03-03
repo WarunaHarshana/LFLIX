@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder, Globe } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder, Globe, ArrowUpDown } from 'lucide-react';
+
+type SortMode = 'seeds' | 'size_asc' | 'size_desc';
 
 type TorrentResult = {
     title: string;
     magnet: string;
     size: string;
+    sizeBytes: number;
     seeds: number;
     leeches: number;
     quality: string;
@@ -25,7 +28,17 @@ export default function TorrentSearchPage() {
     const [manualMagnet, setManualMagnet] = useState('');
     const [folders, setFolders] = useState<{ id: number; path: string; contentType: string }[]>([]);
     const [selectedFolder, setSelectedFolder] = useState<string>('');
+    const [sortBy, setSortBy] = useState<SortMode>('seeds');
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const sortedResults = useMemo(() => {
+        const sorted = [...results];
+        switch (sortBy) {
+            case 'size_asc': return sorted.sort((a, b) => a.sizeBytes - b.sizeBytes);
+            case 'size_desc': return sorted.sort((a, b) => b.sizeBytes - a.sizeBytes);
+            default: return sorted.sort((a, b) => b.seeds - a.seeds);
+        }
+    }, [results, sortBy]);
 
     useEffect(() => {
         fetchFolders();
@@ -246,9 +259,23 @@ export default function TorrentSearchPage() {
                 <div className="space-y-2">
                     <div className="flex items-center justify-between mb-3">
                         <h2 className="text-sm font-semibold text-neutral-300">{results.length} results</h2>
-                        <span className="text-xs text-neutral-500">Sorted by seeds</span>
+                        <div className="flex items-center gap-1">
+                            <ArrowUpDown className="w-3.5 h-3.5 text-neutral-500 mr-1" />
+                            {(['seeds', 'size_desc', 'size_asc'] as SortMode[]).map(mode => (
+                                <button
+                                    key={mode}
+                                    onClick={() => setSortBy(mode)}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${sortBy === mode
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                                        }`}
+                                >
+                                    {mode === 'seeds' ? 'Seeds' : mode === 'size_desc' ? 'Size ↓' : 'Size ↑'}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                    {results.map((result, i) => {
+                    {sortedResults.map((result, i) => {
                         const isStarted = downloadStarted.has(result.magnet);
                         return (
                             <div

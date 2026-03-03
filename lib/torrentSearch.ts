@@ -6,6 +6,7 @@ export interface TorrentResult {
     title: string;
     magnet: string;
     size: string;
+    sizeBytes: number;
     seeds: number;
     leeches: number;
     quality: string;
@@ -35,6 +36,16 @@ function formatBytes(bytes: number): string {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
+/** Parse a human-readable size string (e.g. "1.5 GB", "850 MB") back to bytes */
+function parseSizeToBytes(sizeStr: string): number {
+    const match = sizeStr.match(/([\d.]+)\s*(B|KB|MB|GB|TB)/i);
+    if (!match) return 0;
+    const value = parseFloat(match[1]);
+    const unit = match[2].toUpperCase();
+    const multipliers: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+    return Math.round(value * (multipliers[unit] || 0));
 }
 
 function extractQuality(title: string): string {
@@ -69,6 +80,7 @@ async function searchTPB(query: string, category: string = '200'): Promise<Torre
                 title: item.name || 'Unknown',
                 magnet: buildMagnet(item.info_hash, item.name),
                 size: formatBytes(parseInt(item.size) || 0),
+                sizeBytes: parseInt(item.size) || 0,
                 seeds: parseInt(item.seeders) || 0,
                 leeches: parseInt(item.leechers) || 0,
                 quality: extractQuality(item.name || ''),
@@ -107,6 +119,7 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
                     title: name,
                     magnet: buildMagnet(torrent.hash, name),
                     size: torrent.size || 'Unknown',
+                    sizeBytes: parseSizeToBytes(torrent.size || ''),
                     seeds: torrent.seeds || 0,
                     leeches: torrent.peers || 0,
                     quality: torrent.quality || 'Unknown',
@@ -297,6 +310,7 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
                                 title: file.name,
                                 magnet: `http-direct:${file.href}`,
                                 size: file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : 'Unknown',
+                                sizeBytes: file.sizeBytes > 0 ? file.sizeBytes : 0,
                                 seeds: 0,
                                 leeches: 0,
                                 quality: extractQuality(file.name),

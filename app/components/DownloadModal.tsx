@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown } from 'lucide-react';
+
+type SortMode = 'seeds' | 'size_asc' | 'size_desc';
 
 type TorrentResult = {
     title: string;
     magnet: string;
     size: string;
+    sizeBytes: number;
     seeds: number;
     leeches: number;
     quality: string;
@@ -40,6 +43,16 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     const [downloadStarted, setDownloadStarted] = useState(false);
     const [folders, setFolders] = useState<ScannedFolder[]>([]);
     const [selectedFolder, setSelectedFolder] = useState<string>('');
+    const [sortBy, setSortBy] = useState<SortMode>('seeds');
+
+    const sortedResults = useMemo(() => {
+        const sorted = [...results];
+        switch (sortBy) {
+            case 'size_asc': return sorted.sort((a, b) => a.sizeBytes - b.sizeBytes);
+            case 'size_desc': return sorted.sort((a, b) => b.sizeBytes - a.sizeBytes);
+            default: return sorted.sort((a, b) => b.seeds - a.seeds);
+        }
+    }, [results, sortBy]);
 
     // Fetch folders + auto-search on open
     useEffect(() => {
@@ -236,10 +249,24 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                         <>
                             <div className="flex items-center justify-between">
                                 <h3 className="text-sm font-semibold text-neutral-300">{results.length} torrents found</h3>
-                                <span className="text-xs text-neutral-500">Sorted by seeds</span>
+                                <div className="flex items-center gap-1">
+                                    <ArrowUpDown className="w-3 h-3 text-neutral-500 mr-0.5" />
+                                    {(['seeds', 'size_desc', 'size_asc'] as SortMode[]).map(mode => (
+                                        <button
+                                            key={mode}
+                                            onClick={() => setSortBy(mode)}
+                                            className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition ${sortBy === mode
+                                                    ? 'bg-amber-500 text-black'
+                                                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                                                }`}
+                                        >
+                                            {mode === 'seeds' ? 'Seeds' : mode === 'size_desc' ? 'Size ↓' : 'Size ↑'}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                             <div className="space-y-2">
-                                {results.map((result, i) => (
+                                {sortedResults.map((result, i) => (
                                     <div key={i} className="flex items-center gap-3 p-3 bg-neutral-800/60 hover:bg-neutral-800 rounded-xl transition">
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium truncate mb-1" title={result.title}>{result.title}</p>
