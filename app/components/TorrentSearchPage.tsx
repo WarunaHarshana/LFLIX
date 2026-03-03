@@ -1,7 +1,19 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder, Globe, ArrowUpDown } from 'lucide-react';
+import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder, Globe, ArrowUpDown, TrendingUp, Film, Tv } from 'lucide-react';
+
+type TrendingItem = {
+    tmdbId: number;
+    title: string;
+    posterPath: string | null;
+    backdropPath: string | null;
+    overview: string | null;
+    rating: number | null;
+    year: string | null;
+    mediaType: 'movie' | 'tv';
+    popularity: number;
+};
 
 type SortMode = 'seeds' | 'size_asc' | 'size_desc';
 
@@ -31,6 +43,12 @@ export default function TorrentSearchPage() {
     const [sortBy, setSortBy] = useState<SortMode>('seeds');
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Trending state
+    const [trendingMovies, setTrendingMovies] = useState<TrendingItem[]>([]);
+    const [trendingTv, setTrendingTv] = useState<TrendingItem[]>([]);
+    const [trendingTab, setTrendingTab] = useState<'movie' | 'tv'>('movie');
+    const [loadingTrending, setLoadingTrending] = useState(true);
+
     const sortedResults = useMemo(() => {
         const sorted = [...results];
         switch (sortBy) {
@@ -42,7 +60,19 @@ export default function TorrentSearchPage() {
 
     useEffect(() => {
         fetchFolders();
+        fetchTrending();
     }, []);
+
+    const fetchTrending = async () => {
+        setLoadingTrending(true);
+        try {
+            const res = await fetch('/api/trending');
+            const data = await res.json();
+            if (data.movies) setTrendingMovies(data.movies);
+            if (data.tv) setTrendingTv(data.tv);
+        } catch { /* ignore */ }
+        finally { setLoadingTrending(false); }
+    };
 
     const fetchFolders = async () => {
         try {
@@ -266,8 +296,8 @@ export default function TorrentSearchPage() {
                                     key={mode}
                                     onClick={() => setSortBy(mode)}
                                     className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${sortBy === mode
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
                                         }`}
                                 >
                                     {mode === 'seeds' ? 'Seeds' : mode === 'size_desc' ? 'Size ↓' : 'Size ↑'}
@@ -333,14 +363,112 @@ export default function TorrentSearchPage() {
                 </div>
             )}
 
-            {/* Empty state */}
+            {/* Trending section (shown when no search performed) */}
             {!searching && !searched && (
-                <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
-                    <Magnet className="w-16 h-16 text-neutral-700 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-neutral-400 mb-2">Search for anything</h3>
-                    <p className="text-neutral-500 text-sm max-w-md mx-auto">
-                        Search for movies, TV episodes, or any content by name. Include quality tags like 1080p or 4K for better results.
-                    </p>
+                <div>
+                    {/* Trending header */}
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <TrendingUp className="w-5 h-5 text-red-500" />
+                            <h2 className="text-lg font-bold">Trending Now</h2>
+                        </div>
+                        <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 rounded-xl p-1">
+                            <button
+                                onClick={() => setTrendingTab('movie')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${trendingTab === 'movie'
+                                    ? 'bg-red-600 text-white'
+                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                                    }`}
+                            >
+                                <Film className="w-3.5 h-3.5" />
+                                Movies
+                            </button>
+                            <button
+                                onClick={() => setTrendingTab('tv')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${trendingTab === 'tv'
+                                    ? 'bg-red-600 text-white'
+                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                                    }`}
+                            >
+                                <Tv className="w-3.5 h-3.5" />
+                                TV Shows
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Trending loading */}
+                    {loadingTrending && (
+                        <div className="flex items-center justify-center py-16">
+                            <Loader2 className="w-6 h-6 animate-spin text-neutral-500" />
+                        </div>
+                    )}
+
+                    {/* Trending grid */}
+                    {!loadingTrending && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3">
+                            {(trendingTab === 'movie' ? trendingMovies : trendingTv).map((item) => (
+                                <button
+                                    key={item.tmdbId}
+                                    onClick={() => {
+                                        setSearchQuery(item.title);
+                                        inputRef.current?.focus();
+                                    }}
+                                    className="group relative bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden hover:border-neutral-600 hover:scale-[1.03] transition-all duration-200 text-left cursor-pointer"
+                                    title={`Search torrents for "${item.title}"`}
+                                >
+                                    {/* Poster */}
+                                    <div className="aspect-[2/3] relative bg-neutral-800">
+                                        {item.posterPath ? (
+                                            <img
+                                                src={`https://image.tmdb.org/t/p/w300${item.posterPath}`}
+                                                alt={item.title}
+                                                className="w-full h-full object-cover"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <Film className="w-8 h-8 text-neutral-700" />
+                                            </div>
+                                        )}
+                                        {/* Hover overlay */}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end">
+                                            <div className="p-2.5 w-full">
+                                                <div className="flex items-center gap-1 text-[10px] text-blue-400 font-medium">
+                                                    <Search className="w-3 h-3" />
+                                                    Search torrents
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* Rating badge */}
+                                        {item.rating !== null && item.rating > 0 && (
+                                            <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
+                                                <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500" />
+                                                <span className="text-[10px] font-bold text-white">{item.rating.toFixed(1)}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Info */}
+                                    <div className="p-2.5">
+                                        <p className="text-xs font-medium leading-tight line-clamp-2 mb-1">{item.title}</p>
+                                        {item.year && (
+                                            <p className="text-[10px] text-neutral-500">{item.year}</p>
+                                        )}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Fallback if no trending data */}
+                    {!loadingTrending && trendingMovies.length === 0 && trendingTv.length === 0 && (
+                        <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
+                            <Magnet className="w-16 h-16 text-neutral-700 mx-auto mb-4" />
+                            <h3 className="text-xl font-semibold text-neutral-400 mb-2">Search for anything</h3>
+                            <p className="text-neutral-500 text-sm max-w-md mx-auto">
+                                Search for movies, TV episodes, or any content by name. Include quality tags like 1080p or 4K for better results.
+                            </p>
+                        </div>
+                    )}
                 </div>
             )}
 
