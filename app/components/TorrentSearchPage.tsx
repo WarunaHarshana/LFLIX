@@ -86,25 +86,40 @@ export default function TorrentSearchPage() {
         } catch { /* ignore */ }
     };
 
+    const searchAbortRef = useRef<AbortController | null>(null);
+
     const searchTorrents = async () => {
         if (searchQuery.trim().length < 2) return;
+
+        // Cancel previous search if still running
+        if (searchAbortRef.current) {
+            searchAbortRef.current.abort();
+        }
+        const controller = new AbortController();
+        searchAbortRef.current = controller;
 
         setSearching(true);
         setError(null);
         setSearched(false);
         try {
-            const res = await fetch(`/api/torrent-search?q=${encodeURIComponent(searchQuery.trim())}`);
+            const res = await fetch(`/api/torrent-search?q=${encodeURIComponent(searchQuery.trim())}`, {
+                signal: controller.signal,
+            });
             const data = await res.json();
             if (data.error) {
                 setError(data.error);
             } else {
                 setResults(data.results || []);
             }
-        } catch {
-            setError('Search failed. Please try again.');
+        } catch (e: any) {
+            if (e.name !== 'AbortError') {
+                setError('Search failed. Please try again.');
+            }
         } finally {
-            setSearching(false);
-            setSearched(true);
+            if (!controller.signal.aborted) {
+                setSearching(false);
+                setSearched(true);
+            }
         }
     };
 

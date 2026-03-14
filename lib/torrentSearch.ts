@@ -54,6 +54,50 @@ function extractQuality(title: string): string {
     return match ? match[1] : 'Unknown';
 }
 
+/** Score how relevant a torrent title is to the search query (0-100) */
+function relevanceScore(title: string, query: string): number {
+    const normTitle = title.toLowerCase().replace(/[._\-]+/g, ' ');
+    const normQuery = query.toLowerCase().replace(/[._\-]+/g, ' ');
+    const queryWords = normQuery.split(/\s+/).filter(w => w.length > 1);
+    
+    if (queryWords.length === 0) return 0;
+
+    let score = 0;
+    let matchedWords = 0;
+
+    for (const word of queryWords) {
+        if (normTitle.includes(word)) {
+            matchedWords++;
+            // Bonus for exact word match (not substring)
+            if (normTitle.split(/\s+/).some(w => w === word)) score += 15;
+            else score += 10;
+        }
+    }
+
+    // Must match at least 60% of query words
+    const matchRatio = matchedWords / queryWords.length;
+    if (matchRatio < 0.5) return 0;
+
+    // Bonus for matching all words
+    if (matchedWords === queryWords.length) score += 20;
+
+    // Bonus for shorter titles (more specific matches)
+    if (normTitle.length < 80) score += 10;
+
+    // Penalty for very long titles (usually spam/pack releases)
+    if (normTitle.length > 120) score -= 15;
+
+    return Math.max(0, Math.min(100, score));
+}
+
+/** Filter and sort results by relevance */
+function filterByRelevance(results: TorrentResult[], query: string, minScore: number = 30): TorrentResult[] {
+    return results
+        .map(r => ({ ...r, _score: relevanceScore(r.title, query) }))
+        .filter(r => r._score >= minScore)
+        .sort((a, b) => (b._score - a._score) || (b.seeds - a.seeds));
+}
+
 // --- apibay.org (The Pirate Bay API) ---
 
 async function searchTPB(query: string, category: string = '200'): Promise<TorrentResult[]> {
@@ -62,7 +106,7 @@ async function searchTPB(query: string, category: string = '200'): Promise<Torre
         const url = `https://apibay.org/q.php?q=${encodeURIComponent(query)}&cat=${category}`;
         const res = await fetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(15000),
         });
 
         if (!res.ok) return [];
@@ -101,7 +145,7 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
     try {
         const params = new URLSearchParams({ query_term: query, limit: '10', sort_by: 'seeds' });
         const res = await fetch(`https://yts.mx/api/v2/list_movies.json?${params}`, {
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(10000),
         });
         if (!res.ok) return [];
 
@@ -340,6 +384,88 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
     }
 }
 
+// --- Knaben API (meta-search, returns JSON) ---
+
+async function searchKnaben(query: string): Promise<TorrentResult[]> {
+    try {
+        const url = `https://api.knaben.org/v1?query=${encodeURIComponent(query)}&limit=50`;
+        const res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!res.ok) return [];
+
+        const data = await res.json();
+        if (!data?.hits || !Array.isArray(data.hits)) return [];
+
+        return data.hits
+            .filter((item: any) => {
+                // Filter out adult content and zero-size
+                const cat = (item.category || '').toLowerCase();
+                if (cat.includes('xxx') || cat.includes('adult') || cat.includes('porn')) return false;
+                if (!item.bytes || item.bytes <= 0) return false;
+                // Must have at least 1 seeder
+                if (!item.seeders || item.seeders < 1) return false;
+                return true;
+            })
+            .sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0))
+            .slice(0, 20)
+            .map((item: any) => ({
+                title: item.title || 'Unknown',
+                magnet: item.magnet || `magnet:?xt=urn:btih:${item.infoHash || ''}&dn=${encodeURIComponent(item.title || '')}`,
+                size: formatBytes(item.bytes || 0),
+                sizeBytes: item.bytes || 0,
+                seeds: item.seeders || 0,
+                leeches: item.leechers || 0,
+                quality: extractQuality(item.title || ''),
+                source: item.cachedOrigin ? item.cachedOrigin.replace(' python scraper', '') : 'Knaben',
+                uploadDate: item.date ? item.date.split('T')[0] : undefined,
+            }));
+    } catch (e) {
+        console.error('Knaben search error:', e);
+        return [];
+    }
+}
+
+// --- Nyaa.si (anime/torrents, HTML scrape) ---
+
+async function searchNyaa(query: string): Promise<TorrentResult[]> {
+    try {
+        const url = `https://nyaa.si/?q=${encodeURIComponent(query)}&s=seeders&o=desc`;
+        const res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!res.ok) return [];
+
+        const html = await res.text();
+        const results: TorrentResult[] = [];
+
+        // Parse table rows
+        const rowRegex = /<tr class="(?:default|success)">[\s\S]*?<a href="\/\?q=[^"]*"[^>]*title="([^"]*)"[^>]*>([^<]*)<\/a>[\s\S]*?<a href="(magnet:[^"]*)"[^>]*>[\s\S]*?<td class="text-center">([\d.]+ [KMG]?i?B)<\/td>[\s\S]*?<td class="text-center">(\d+)<\/td>[\s\S]*?<td class="text-center">(\d+)<\/td>/gi;
+
+        let match;
+        while ((match = rowRegex.exec(html)) !== null) {
+            const title = match[1].trim() || match[2].trim();
+            results.push({
+                title,
+                magnet: match[3],
+                size: match[4],
+                sizeBytes: parseSizeToBytes(match[4]),
+                seeds: parseInt(match[5]) || 0,
+                leeches: parseInt(match[6]) || 0,
+                quality: extractQuality(title),
+                source: 'Nyaa',
+            });
+        }
+
+        return results.slice(0, 15);
+    } catch (e) {
+        console.error('Nyaa search error:', e);
+        return [];
+    }
+}
+
 // --- Combined search ---
 
 export async function searchTorrents(
@@ -351,23 +477,46 @@ export async function searchTorrents(
     // Determine TPB category: 201 = Movies, 205 = TV, 200 = all video
     const tpbCategory = options?.type === 'tv' ? '205' : options?.type === 'movie' ? '201' : '200';
 
-    // Search all sources in parallel — don't let one failure block the others
-    const [tpbResults, ytsResults, ddlResults] = await Promise.allSettled([
+    // Search ALL sources in parallel — working ones contribute, blocked ones fail silently
+    const [tpbResults, ytsResults, knabenResults, nyaaResults, ddlResults] = await Promise.allSettled([
         searchTPB(query, tpbCategory),
         options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([]),
+        searchKnaben(query),
+        searchNyaa(query),
         searchOpenDirectory(title, options?.type),
     ]);
 
     const torrentResults: TorrentResult[] = [
         ...(tpbResults.status === 'fulfilled' ? tpbResults.value : []),
         ...(ytsResults.status === 'fulfilled' ? ytsResults.value : []),
+        ...(knabenResults.status === 'fulfilled' ? knabenResults.value : []),
+        ...(nyaaResults.status === 'fulfilled' ? nyaaResults.value : []),
     ];
 
-    // Sort torrents by seeds descending
-    torrentResults.sort((a, b) => b.seeds - a.seeds);
+    // Log source status for debugging
+    const sourceStatus = [
+        `TPB=${tpbResults.status === 'fulfilled' ? tpbResults.value.length : 'fail'}`,
+        `YTS=${ytsResults.status === 'fulfilled' ? ytsResults.value.length : 'fail'}`,
+        `Knaben=${knabenResults.status === 'fulfilled' ? knabenResults.value.length : 'fail'}`,
+        `Nyaa=${nyaaResults.status === 'fulfilled' ? nyaaResults.value.length : 'fail'}`,
+        `DDL=${ddlResults.status === 'fulfilled' ? ddlResults.value.length : 'fail'}`,
+    ];
+    console.log(`[TorrentSearch] ${sourceStatus.join(', ')} — ${torrentResults.length} torrent results total`);
 
-    // Append DDL results after torrent results (DDL has no seeds to sort by)
+    // Deduplicate by normalized title
+    const seen = new Set();
+    const unique = torrentResults.filter(t => {
+        const key = t.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    // Filter by relevance to search query — removes random/unrelated results
+    const relevant = filterByRelevance(unique, title, 25);
+
+    // Append DDL results after torrent results
     const ddl = ddlResults.status === 'fulfilled' ? ddlResults.value : [];
 
-    return [...torrentResults, ...ddl];
+    return [...relevant, ...ddl];
 }

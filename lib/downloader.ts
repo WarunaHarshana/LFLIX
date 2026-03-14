@@ -39,6 +39,45 @@ class DownloadManager {
         return this.client;
     }
 
+    // Helper: find a torrent by multiple strategies (used by add, pause, resume)
+    private findTorrent(identifier: string): any {
+        if (!this.client || !this.client.torrents) return null;
+
+        // Strategy 1: Direct lookup via client.get()
+        try {
+            const torrent = this.client.get(identifier);
+            if (torrent && typeof torrent.on === 'function') return torrent;
+        } catch { /* ignore */ }
+
+        // Strategy 2: If it's a magnet URI, extract infoHash and try again
+        if (identifier.startsWith('magnet:')) {
+            try {
+                const xtMatch = identifier.match(/xt=urn:btih:([a-fA-F0-9]+)/);
+                if (xtMatch) {
+                    const infoHash = xtMatch[1].toLowerCase();
+                    const torrent = this.client.get(infoHash);
+                    if (torrent && typeof torrent.on === 'function') return torrent;
+                }
+            } catch { /* ignore */ }
+        }
+
+        // Strategy 3: Linear search through all torrents in client
+        try {
+            const searchHash = identifier.toLowerCase().replace(/[^a-f0-9]/g, '');
+            for (const t of this.client.torrents) {
+                if (!t || typeof t.on !== 'function') continue;
+                if (t.infoHash && t.infoHash.toLowerCase() === searchHash) return t;
+                // Also try partial match on magnet URI
+                if (identifier.startsWith('magnet:') && t.magnetURI) {
+                    const tXtMatch = t.magnetURI.match(/xt=urn:btih:([a-fA-F0-9]+)/);
+                    if (tXtMatch && tXtMatch[1].toLowerCase() === searchHash) return t;
+                }
+            }
+        } catch { /* ignore */ }
+
+        return null;
+    }
+
     // Get download path from settings or default
     getDownloadPath(): string {
         try {
@@ -57,6 +96,7 @@ class DownloadManager {
 
     // Start a new download (auto-detects torrent vs HTTP)
     async addDownload(magnetUri: string, watchlistId?: number, customPath?: string): Promise<DownloadRecord> {
+        console.log(`[DownloadManager] addDownload called for: ${magnetUri.substring(0, 30)}...`);
         // Detect HTTP direct download
         if (magnetUri.startsWith('http-direct:')) {
             const url = magnetUri.replace('http-direct:', '');
@@ -76,58 +116,16 @@ class DownloadManager {
         const downloadId = Number(result.lastInsertRowid);
 
         try {
-            const torrent = client.add(magnetUri, { path: downloadPath });
-
-            torrent.on('metadata', () => {
-                try {
-                    db.prepare('UPDATE downloads SET name = ?, infoHash = ?, totalSize = ? WHERE id = ?')
-                        .run(torrent.name, torrent.infoHash, torrent.length || 0, downloadId);
-                } catch { /* ignore */ }
-            });
-
-            // Update progress every 2 seconds
-            const timer = setInterval(() => {
-                try {
-                    const record = this.getDownload(downloadId);
-                    if (!record || record.status !== 'downloading') {
-                        clearInterval(timer);
-                        this.progressTimers.delete(downloadId);
-                        return;
-                    }
-                    db.prepare(`
-            UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?, totalSize = ?
-            WHERE id = ? AND status = 'downloading'
-          `).run(
-                        Math.round(torrent.progress * 10000) / 100,
-                        Math.round(torrent.downloadSpeed || 0),
-                        torrent.downloaded || 0,
-                        torrent.length || 0,
-                        downloadId
-                    );
-                } catch { /* ignore */ }
-            }, 2000);
-            this.progressTimers.set(downloadId, timer);
-
-            torrent.on('done', () => {
-                this.clearTimer(downloadId);
-                try {
-                    db.prepare(`
-            UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
-            downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `).run(downloadId);
-                } catch { /* ignore */ }
-                this.triggerRescan();
-            });
-
-            torrent.on('error', (err: Error) => {
-                this.clearTimer(downloadId);
-                try {
-                    db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0 WHERE id = ?`)
-                        .run(err.message, downloadId);
-                } catch { /* ignore */ }
-            });
-
+            console.log(`[DownloadManager] Adding torrent to client: ${magnetUri.substring(0, 30)}...`);
+            let torrent = this.findTorrent(magnetUri);
+            if (torrent) {
+                console.log(`[DownloadManager] Torrent already in client: ${torrent.infoHash}`);
+                // Re-setup events for this download
+                this.setupTorrentEvents(downloadId, torrent);
+            } else {
+                torrent = client.add(magnetUri, { path: downloadPath });
+                this.setupTorrentEvents(downloadId, torrent);
+            }
         } catch (err: any) {
             try {
                 db.prepare('UPDATE downloads SET status = ?, errorMessage = ? WHERE id = ?')
@@ -298,11 +296,18 @@ class DownloadManager {
             return true;
         }
 
-        // Pause in WebTorrent
-        if (record.infoHash && this.client) {
-            const torrent = this.client.get(record.infoHash);
+        // Pause in WebTorrent — try multiple lookup strategies
+        if (this.client) {
+            const torrent = this.findTorrent(record.infoHash || record.magnetUri);
             if (torrent) {
-                torrent.pause();
+                try {
+                    torrent.pause();
+                    console.log(`[DownloadManager] Paused torrent: ${torrent.infoHash}`);
+                } catch (err: any) {
+                    console.error(`[DownloadManager] Error pausing torrent:`, err?.message);
+                }
+            } else {
+                console.warn(`[DownloadManager] Could not find torrent to pause for download ${downloadId}`);
             }
         }
 
@@ -330,42 +335,60 @@ class DownloadManager {
             return true;
         }
 
-        // Check if torrent still exists in client
-        if (record.infoHash && this.client) {
-            const torrent = this.client.get(record.infoHash);
-            if (torrent) {
+        const client = await this.getClient();
+
+        // Try multiple strategies to find the torrent
+        let torrent = this.findTorrent(record.infoHash || record.magnetUri);
+
+        if (torrent) {
+            // Found existing torrent — resume it
+            try {
                 torrent.resume();
-                // Restart progress timer
-                const timer = setInterval(() => {
-                    try {
-                        const r = this.getDownload(downloadId);
-                        if (!r || r.status !== 'downloading') {
-                            clearInterval(timer);
-                            this.progressTimers.delete(downloadId);
-                            return;
-                        }
-                        db.prepare(`
-              UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?
-              WHERE id = ? AND status = 'downloading'
-            `).run(
-                            Math.round(torrent.progress * 10000) / 100,
-                            Math.round(torrent.downloadSpeed || 0),
-                            torrent.downloaded || 0,
-                            downloadId
-                        );
-                    } catch { /* ignore */ }
-                }, 2000);
-                this.progressTimers.set(downloadId, timer);
-            } else {
-                // Torrent was lost, re-add it
-                const client = await this.getClient();
-                const downloadPath = record.downloadPath || this.getDownloadPath();
-                client.add(record.magnetUri, { path: downloadPath });
+                console.log(`[DownloadManager] Resumed torrent: ${torrent.infoHash}`);
+                this.setupTorrentProgressTimer(downloadId, torrent);
+                db.prepare("UPDATE downloads SET status = 'downloading' WHERE id = ?").run(downloadId);
+                return true;
+            } catch (err: any) {
+                console.error(`[DownloadManager] Error resuming torrent:`, err?.message);
+                // Fall through to re-add
             }
         }
 
-        db.prepare("UPDATE downloads SET status = 'downloading' WHERE id = ?").run(downloadId);
-        return true;
+        // Torrent not found or resume failed — try to re-add
+        try {
+            const downloadPath = record.downloadPath || this.getDownloadPath();
+            console.log(`[DownloadManager] Re-adding torrent for download ${downloadId}`);
+
+            // Check if a torrent with this infoHash already exists in the client
+            if (record.infoHash) {
+                const existing = this.findTorrent(record.infoHash);
+                if (existing) {
+                    // It exists but wasn't found earlier? Resume it
+                    try {
+                        existing.resume();
+                        this.setupTorrentProgressTimer(downloadId, existing);
+                        db.prepare("UPDATE downloads SET status = 'downloading', magnetUri = ? WHERE id = ?")
+                            .run(existing.magnetURI || record.magnetUri, downloadId);
+                        return true;
+                    } catch {
+                        // Last resort: destroy and re-add
+                        await new Promise<void>((resolve) => {
+                            try { existing.destroy({}, () => resolve()); } catch { resolve(); }
+                        });
+                    }
+                }
+            }
+
+            const newTorrent = client.add(record.magnetUri, { path: downloadPath });
+            this.setupTorrentEvents(downloadId, newTorrent);
+            db.prepare("UPDATE downloads SET status = 'downloading' WHERE id = ?").run(downloadId);
+            return true;
+        } catch (err: any) {
+            console.error(`[DownloadManager] Failed to re-add torrent:`, err?.message);
+            db.prepare("UPDATE downloads SET status = ?, errorMessage = ? WHERE id = ?")
+                .run('error', err?.message || 'Failed to resume', downloadId);
+            return false;
+        }
     }
 
     // Delete downloaded files from disk
@@ -505,6 +528,62 @@ class DownloadManager {
         } catch {
             return 0;
         }
+    }
+
+    private setupTorrentProgressTimer(downloadId: number, torrent: any) {
+        this.clearTimer(downloadId);
+        const timer = setInterval(() => {
+            try {
+                const record = this.getDownload(downloadId);
+                if (!record || record.status !== 'downloading') {
+                    clearInterval(timer);
+                    this.progressTimers.delete(downloadId);
+                    return;
+                }
+                db.prepare(`
+            UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?, totalSize = ?
+            WHERE id = ? AND status = 'downloading'
+          `).run(
+                    Math.round(torrent.progress * 10000) / 100,
+                    Math.round(torrent.downloadSpeed || 0),
+                    torrent.downloaded || 0,
+                    torrent.length || 0,
+                    downloadId
+                );
+            } catch { /* ignore */ }
+        }, 2000);
+        this.progressTimers.set(downloadId, timer);
+    }
+
+    private setupTorrentEvents(downloadId: number, torrent: any) {
+        torrent.on('metadata', () => {
+            try {
+                db.prepare('UPDATE downloads SET name = ?, infoHash = ?, totalSize = ? WHERE id = ?')
+                    .run(torrent.name, torrent.infoHash, torrent.length || 0, downloadId);
+            } catch { /* ignore */ }
+        });
+
+        this.setupTorrentProgressTimer(downloadId, torrent);
+
+        torrent.on('done', () => {
+            this.clearTimer(downloadId);
+            try {
+                db.prepare(`
+            UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
+            downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).run(downloadId);
+            } catch { /* ignore */ }
+            this.triggerRescan();
+        });
+
+        torrent.on('error', (err: Error) => {
+            this.clearTimer(downloadId);
+            try {
+                db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0 WHERE id = ?`)
+                    .run(err.message, downloadId);
+            } catch { /* ignore */ }
+        });
     }
 
     // Helper: clear progress timer
