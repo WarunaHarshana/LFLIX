@@ -15,7 +15,7 @@ type TrendingItem = {
     popularity: number;
 };
 
-type SortMode = 'seeds' | 'size_asc' | 'size_desc';
+type SortMode = 'seeds' | 'size_asc' | 'size_desc' | 'time_desc';
 
 type TorrentResult = {
     title: string;
@@ -27,6 +27,7 @@ type TorrentResult = {
     quality: string;
     source: string;
     uploadDate?: string;
+    uploadTimestamp?: number;
 };
 
 export default function TorrentSearchPage() {
@@ -54,6 +55,7 @@ export default function TorrentSearchPage() {
         switch (sortBy) {
             case 'size_asc': return sorted.sort((a, b) => a.sizeBytes - b.sizeBytes);
             case 'size_desc': return sorted.sort((a, b) => b.sizeBytes - a.sizeBytes);
+            case 'time_desc': return sorted.sort((a, b) => (b.uploadTimestamp || 0) - (a.uploadTimestamp || 0));
             default: return sorted.sort((a, b) => b.seeds - a.seeds);
         }
     }, [results, sortBy]);
@@ -291,7 +293,7 @@ export default function TorrentSearchPage() {
                         <h2 className="text-sm font-semibold text-neutral-300">{results.length} results</h2>
                         <div className="flex items-center gap-1">
                             <ArrowUpDown className="w-3.5 h-3.5 text-neutral-500 mr-1" />
-                            {(['seeds', 'size_desc', 'size_asc'] as SortMode[]).map(mode => (
+                            {(['seeds', 'time_desc', 'size_desc', 'size_asc'] as SortMode[]).map(mode => (
                                 <button
                                     key={mode}
                                     onClick={() => setSortBy(mode)}
@@ -300,7 +302,7 @@ export default function TorrentSearchPage() {
                                         : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
                                         }`}
                                 >
-                                    {mode === 'seeds' ? 'Seeds' : mode === 'size_desc' ? 'Size ↓' : 'Size ↑'}
+                                    {mode === 'seeds' ? 'Seeds' : mode === 'time_desc' ? 'Time ↓' : mode === 'size_desc' ? 'Size ↓' : 'Size ↑'}
                                 </button>
                             ))}
                         </div>

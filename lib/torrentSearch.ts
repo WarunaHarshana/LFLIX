@@ -12,6 +12,7 @@ export interface TorrentResult {
     quality: string;
     source: string;
     uploadDate?: string;
+    uploadTimestamp?: number;
 }
 
 // Standard trackers for magnet links
@@ -86,6 +87,7 @@ async function searchTPB(query: string, category: string = '200'): Promise<Torre
                 quality: extractQuality(item.name || ''),
                 source: 'TPB',
                 uploadDate: item.added ? new Date(parseInt(item.added) * 1000).toISOString().split('T')[0] : undefined,
+                uploadTimestamp: item.added ? parseInt(item.added) * 1000 : undefined,
             }));
     } catch (e) {
         console.error('TPB search error:', e);
@@ -124,6 +126,8 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
                     leeches: torrent.peers || 0,
                     quality: torrent.quality || 'Unknown',
                     source: 'YTS',
+                    uploadDate: torrent.date_uploaded ? String(torrent.date_uploaded).split(' ')[0] : undefined,
+                    uploadTimestamp: torrent.date_uploaded_unix ? parseInt(torrent.date_uploaded_unix) * 1000 : undefined,
                 });
             }
         }
