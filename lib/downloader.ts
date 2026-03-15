@@ -32,11 +32,49 @@ class DownloadManager {
     private progressTimers: Map<number, NodeJS.Timeout> = new Map();
     private httpAbortControllers: Map<number, AbortController> = new Map();
 
-    private async getClient(): Promise<any> {
+    public async getClient(): Promise<any> {
         if (this.client) return this.client;
         const WebTorrent = (await import('webtorrent')).default;
         this.client = new (WebTorrent as any)();
         return this.client;
+    }
+
+    // Public recovery method — only resets downloads stuck for >30 seconds
+    async recoverAll(): Promise<void> {
+        try {
+            // Only reset downloads that have been stuck for more than 30 seconds
+            // (fresh downloads that are still initializing shouldn't be touched)
+            const staleDownloads = db.prepare(
+                `SELECT id, magnetUri, status, infoHash, name, downloadPath, startedAt 
+                 FROM downloads 
+                 WHERE status IN ('downloading') 
+                 AND magnetUri NOT LIKE 'http-direct:%'
+                 AND datetime(startedAt) < datetime('now', '-30 seconds')`
+            ).all() as any[];
+
+            if (staleDownloads.length === 0) {
+                console.log('[DownloadManager] Recovery: no stuck downloads');
+                return;
+            }
+
+            console.log(`[DownloadManager] Recovery: found ${staleDownloads.length} stuck downloads`);
+            
+            let recovered = 0;
+            for (const dl of staleDownloads) {
+                const torrent = this.findTorrent(dl.infoHash || dl.magnetUri);
+                if (!torrent) {
+                    db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0 WHERE id = ?").run(dl.id);
+                    console.log(`[DownloadManager] Recovery: #${dl.id} "${dl.name || 'unknown'}" → paused`);
+                    recovered++;
+                }
+            }
+
+            if (recovered > 0) {
+                console.log(`[DownloadManager] Recovery: ${recovered} downloads ready to resume`);
+            }
+        } catch (e) {
+            console.error('[DownloadManager] Recovery error:', e);
+        }
     }
 
     // Helper: find a torrent by multiple strategies (used by add, pause, resume)
@@ -318,70 +356,75 @@ class DownloadManager {
     // Resume a download
     async resumeDownload(downloadId: number): Promise<boolean> {
         const record = this.getDownload(downloadId);
-        if (!record || record.status !== 'paused') return false;
+        if (!record || (record.status !== 'paused' && record.status !== 'downloading' && record.status !== 'error')) {
+            console.log(`[DownloadManager] Cannot resume #${downloadId}: status is ${record?.status}`);
+            return false;
+        }
 
         // Handle HTTP downloads — restart from scratch (no resume support)
         if (record.magnetUri.startsWith('http-direct:')) {
             const url = record.magnetUri.replace('http-direct:', '');
             const filename = record.name || decodeURIComponent(url.split('/').pop() || 'download');
-            // Delete partial file
             if (record.downloadPath && record.name) {
                 const filePath = path.join(record.downloadPath, record.name);
                 try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch { /* ignore */ }
             }
-            // Remove current record and re-download
             db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
             await this.addHttpDownload(url, filename, record.watchlistId || undefined, record.downloadPath || undefined);
             return true;
         }
 
         const client = await this.getClient();
+        const downloadPath = record.downloadPath || this.getDownloadPath();
 
-        // Try multiple strategies to find the torrent
+        console.log(`[DownloadManager] Resume #${downloadId}: path=${downloadPath}, infoHash=${record.infoHash || 'null'}, name=${record.name || 'null'}`);
+
+        // Try to find existing torrent in client
         let torrent = this.findTorrent(record.infoHash || record.magnetUri);
 
         if (torrent) {
-            // Found existing torrent — resume it
+            // Found existing torrent — just resume it
             try {
                 torrent.resume();
-                console.log(`[DownloadManager] Resumed torrent: ${torrent.infoHash}`);
+                console.log(`[DownloadManager] Resumed existing torrent: ${torrent.infoHash}`);
                 this.setupTorrentProgressTimer(downloadId, torrent);
                 db.prepare("UPDATE downloads SET status = 'downloading' WHERE id = ?").run(downloadId);
                 return true;
             } catch (err: any) {
                 console.error(`[DownloadManager] Error resuming torrent:`, err?.message);
-                // Fall through to re-add
             }
         }
 
-        // Torrent not found or resume failed — try to re-add
+        // Torrent not found or resume failed — re-add it
+        // WebTorrent will check for existing files in the download path
         try {
-            const downloadPath = record.downloadPath || this.getDownloadPath();
-            console.log(`[DownloadManager] Re-adding torrent for download ${downloadId}`);
-
-            // Check if a torrent with this infoHash already exists in the client
+            // Destroy any existing torrent with same infoHash first
             if (record.infoHash) {
                 const existing = this.findTorrent(record.infoHash);
                 if (existing) {
-                    // It exists but wasn't found earlier? Resume it
-                    try {
-                        existing.resume();
-                        this.setupTorrentProgressTimer(downloadId, existing);
-                        db.prepare("UPDATE downloads SET status = 'downloading', magnetUri = ? WHERE id = ?")
-                            .run(existing.magnetURI || record.magnetUri, downloadId);
-                        return true;
-                    } catch {
-                        // Last resort: destroy and re-add
-                        await new Promise<void>((resolve) => {
-                            try { existing.destroy({}, () => resolve()); } catch { resolve(); }
-                        });
-                    }
+                    await new Promise<void>((resolve) => {
+                        try { existing.destroy({}, () => resolve()); } catch { resolve(); }
+                    });
                 }
             }
 
-            const newTorrent = client.add(record.magnetUri, { path: downloadPath });
+            console.log(`[DownloadManager] Re-adding torrent with path: ${downloadPath}`);
+            const newTorrent = client.add(record.magnetUri, { 
+                path: downloadPath,
+            });
+
+            // Log when metadata arrives so we can see if file detection works
+            newTorrent.on('metadata', () => {
+                console.log(`[DownloadManager] Metadata received: ${newTorrent.name}, ${newTorrent.files?.length} files, path: ${newTorrent.path}`);
+            });
+
+            newTorrent.on('ready', () => {
+                console.log(`[DownloadManager] Torrent ready: ${newTorrent.name}, downloaded: ${newTorrent.downloaded}, length: ${newTorrent.length}`);
+            });
+
             this.setupTorrentEvents(downloadId, newTorrent);
-            db.prepare("UPDATE downloads SET status = 'downloading' WHERE id = ?").run(downloadId);
+            db.prepare("UPDATE downloads SET status = 'downloading', infoHash = ? WHERE id = ?")
+                .run(newTorrent.infoHash || record.infoHash, downloadId);
             return true;
         } catch (err: any) {
             console.error(`[DownloadManager] Failed to re-add torrent:`, err?.message);
@@ -606,4 +649,21 @@ class DownloadManager {
 
 // Singleton
 const downloadManager = new DownloadManager();
+
+// Auto-recover on module load — only runs once
+let startupDone = false;
+setImmediate(async () => {
+    if (startupDone) return;
+    startupDone = true;
+    try {
+        await downloadManager.getClient();
+        console.log('[DownloadManager] Running startup recovery...');
+        setTimeout(async () => {
+            try { await downloadManager.recoverAll(); } catch (e) { console.error('[DownloadManager] Recovery failed:', e); }
+        }, 1500);
+    } catch (e) {
+        console.error('[DownloadManager] Startup init failed:', e);
+    }
+});
+
 export default downloadManager;
