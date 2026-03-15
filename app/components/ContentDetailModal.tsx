@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Play, Star, Clock, Film, Tv, HardDrive, Info } from 'lucide-react';
+import { X, Play, Star, Clock, Film, Tv, HardDrive, Info, PlayCircle } from 'lucide-react';
+import TrailerModal from './TrailerModal';
 
 type ContentItem = {
     id: number;
+    tmdbId?: number | null;
     type: 'movie' | 'show';
     title: string;
     posterPath: string | null;
@@ -43,6 +45,7 @@ function formatDuration(seconds: number): string {
 
 export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisodes }: Props) {
     const [imgLoaded, setImgLoaded] = useState(false);
+    const [showTrailer, setShowTrailer] = useState(false);
     const year = item.year || (item.firstAirDate ? item.firstAirDate.substring(0, 4) : '');
     const progressPercent = item.watchProgress && item.watchProgress.duration > 0
         ? (item.watchProgress.progress / item.watchProgress.duration) * 100
@@ -154,6 +157,12 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                         <Play className="w-5 h-5 fill-black" /> View Episodes
                                     </button>
                                 )}
+                                <button
+                                    onClick={() => setShowTrailer(true)}
+                                    className="px-5 py-2.5 bg-neutral-700/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-neutral-600 transition text-sm border border-neutral-600"
+                                >
+                                    <PlayCircle className="w-4 h-4" /> Trailer
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -235,6 +244,15 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                     )}
                 </div>
             </div>
+
+            {/* Trailer Modal */}
+            <TrailerModal
+                isOpen={showTrailer}
+                tmdbId={(item.tmdbId || item.id) as number}
+                mediaType={item.type === 'show' ? 'tv' : 'movie'}
+                title={item.title}
+                onClose={() => setShowTrailer(false)}
+            />
         </div>
     );
 }
