@@ -68,18 +68,16 @@ echo    Starting LFLIX server...
 echo ==========================================
 echo.
 echo The server will start below.
-echo Once you see "Ready" message, open:
+echo The browser will open automatically once ready.
 echo.
 echo    http://localhost:3000
-echo.
-echo (I'll try to open it automatically after 5 seconds)
 echo.
 echo Press Ctrl+C to stop the server
 echo ==========================================
 echo.
 
-:: Start browser after delay (in background)
-start /b cmd /c "timeout /t 5 >nul && start http://localhost:3000"
+:: Wait for server to be ready, then open browser (in background)
+start /b cmd /c "for /L %%i in (1,1,30) do (curl -s -o nul http://localhost:3000 && start http://localhost:3000 && exit /b 0 || timeout /t 2 >nul) & echo Browser auto-open timed out."
 
 :: Start the server (this blocks)
 npm run dev
