@@ -1,10 +1,72 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, X, Star, Film, Tv, Loader2, Globe, TrendingUp, Play, Download, Bookmark, ChevronLeft, ChevronDown, Info, Clock } from 'lucide-react';
+import { Search, X, Star, Film, Tv, Loader2, Globe, TrendingUp, Play, Download, Bookmark, ChevronLeft, ChevronDown, Info, Clock, Filter } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 import DownloadModal from './DownloadModal';
 import TrailerModal from './TrailerModal';
+
+const MOVIE_GENRES = [
+    { id: '28', name: 'Action' },
+    { id: '12', name: 'Adventure' },
+    { id: '16', name: 'Animation' },
+    { id: '35', name: 'Comedy' },
+    { id: '80', name: 'Crime' },
+    { id: '99', name: 'Documentary' },
+    { id: '18', name: 'Drama' },
+    { id: '10751', name: 'Family' },
+    { id: '14', name: 'Fantasy' },
+    { id: '36', name: 'History' },
+    { id: '27', name: 'Horror' },
+    { id: '10402', name: 'Music' },
+    { id: '9648', name: 'Mystery' },
+    { id: '10749', name: 'Romance' },
+    { id: '878', name: 'Science Fiction' },
+    { id: '53', name: 'Thriller' },
+    { id: '10752', name: 'War' },
+    { id: '37', name: 'Western' },
+];
+
+const TV_GENRES = [
+    { id: '10759', name: 'Action & Adventure' },
+    { id: '16', name: 'Animation' },
+    { id: '35', name: 'Comedy' },
+    { id: '80', name: 'Crime' },
+    { id: '99', name: 'Documentary' },
+    { id: '18', name: 'Drama' },
+    { id: '10751', name: 'Family' },
+    { id: '10762', name: 'Kids' },
+    { id: '9648', name: 'Mystery' },
+    { id: '10763', name: 'News' },
+    { id: '10764', name: 'Reality' },
+    { id: '10765', name: 'Sci-Fi & Fantasy' },
+    { id: '10766', name: 'Soap' },
+    { id: '10767', name: 'Talk' },
+    { id: '10768', name: 'War & Politics' },
+    { id: '37', name: 'Western' },
+];
+
+const LANGUAGES = [
+    { id: 'en', name: 'English' },
+    { id: 'es', name: 'Spanish' },
+    { id: 'fr', name: 'French' },
+    { id: 'de', name: 'German' },
+    { id: 'it', name: 'Italian' },
+    { id: 'pt', name: 'Portuguese' },
+    { id: 'hi', name: 'Hindi' },
+    { id: 'ja', name: 'Japanese' },
+    { id: 'ko', name: 'Korean' },
+    { id: 'zh', name: 'Chinese' },
+    { id: 'th', name: 'Thai' },
+    { id: 'ru', name: 'Russian' },
+];
+
+const SORT_OPTIONS = [
+    { id: 'popularity.desc', name: 'Most Popular' },
+    { id: 'vote_average.desc', name: 'Top Rated' },
+    { id: 'primary_release_date.desc', name: 'Newest' },
+    { id: 'primary_release_date.asc', name: 'Oldest' },
+];
 
 type TMDBResult = {
     tmdbId: number;
@@ -73,11 +135,25 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Trending
+    // Trending & Discover Form
     const [trendingMovies, setTrendingMovies] = useState<TrendingItem[]>([]);
     const [trendingTv, setTrendingTv] = useState<TrendingItem[]>([]);
-    const [trendingTab, setTrendingTab] = useState<'movie' | 'tv'>('movie');
+    const [discoverType, setDiscoverType] = useState<'movie' | 'tv'>('movie');
     const [loadingTrending, setLoadingTrending] = useState(true);
+
+    // Filters
+    const [selectedGenre, setSelectedGenre] = useState<string>('');
+    const [selectedLanguage, setSelectedLanguage] = useState<string>('');
+    const [sortBy, setSortBy] = useState<string>('popularity.desc');
+    const [discoveredItems, setDiscoveredItems] = useState<TMDBResult[]>([]);
+    const [loadingDiscover, setLoadingDiscover] = useState(false);
+    
+    // Pagination
+    const [discoverPage, setDiscoverPage] = useState(1);
+    const [hasMoreDiscover, setHasMoreDiscover] = useState(true);
+    const observerTarget = useRef<HTMLDivElement>(null);
+
+    const isFiltering = selectedGenre !== '' || selectedLanguage !== '' || sortBy !== 'popularity.desc';
 
     // Detail modal
     const [selectedResult, setSelectedResult] = useState<TMDBResult | null>(null);
@@ -113,6 +189,78 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
         };
         fetchTrending();
     }, []);
+
+    // Reset pagination when filters change
+    useEffect(() => {
+        setDiscoverPage(1);
+        setDiscoveredItems([]);
+        setHasMoreDiscover(true);
+    }, [discoverType, selectedGenre, selectedLanguage, sortBy]);
+
+    // Discover effect
+    useEffect(() => {
+        if (!isFiltering || !hasMoreDiscover) return;
+        
+        const fetchDiscover = async () => {
+            if (discoverPage === 1) setLoadingDiscover(true);
+            try {
+                let actualSortBy = sortBy;
+                if (discoverType === 'tv') {
+                    if (sortBy === 'primary_release_date.desc') actualSortBy = 'first_air_date.desc';
+                    if (sortBy === 'primary_release_date.asc') actualSortBy = 'first_air_date.asc';
+                }
+
+                const params = new URLSearchParams({
+                    type: discoverType,
+                    sort_by: actualSortBy,
+                    page: discoverPage.toString()
+                });
+                if (selectedGenre) params.append('with_genres', selectedGenre);
+                if (selectedLanguage) params.append('with_original_language', selectedLanguage);
+                
+                const res = await fetch(`/api/discover?${params.toString()}`);
+                const data = await res.json();
+                
+                if (data.results && data.results.length > 0) {
+                    setDiscoveredItems(prev => discoverPage === 1 ? data.results : [...prev, ...data.results]);
+                    setHasMoreDiscover(data.page < data.totalPages);
+                } else {
+                    if (discoverPage === 1) setDiscoveredItems([]);
+                    setHasMoreDiscover(false);
+                }
+            } catch (e) {
+                console.error('Discover filtering failed', e);
+            } finally {
+                setLoadingDiscover(false);
+            }
+        };
+
+        const timeout = setTimeout(fetchDiscover, discoverPage === 1 ? 500 : 100);
+        return () => clearTimeout(timeout);
+    }, [discoverType, selectedGenre, selectedLanguage, sortBy, isFiltering, discoverPage, hasMoreDiscover]);
+
+    // Intersection observer for infinite scroll
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            entries => {
+                if (entries[0].isIntersecting && hasMoreDiscover && !loadingDiscover && isFiltering) {
+                    setDiscoverPage(prev => prev + 1);
+                }
+            },
+            { threshold: 0.1 }
+        );
+
+        if (observerTarget.current) {
+            observer.observe(observerTarget.current);
+        }
+
+        const currentTarget = observerTarget.current;
+        return () => {
+            if (currentTarget) {
+                observer.unobserve(currentTarget);
+            }
+        };
+    }, [hasMoreDiscover, loadingDiscover, isFiltering]);
 
     // Debounced search
     const searchTMDB = useCallback(async (query: string, type: string) => {
@@ -222,7 +370,11 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
     // Determine items to show in the grid
     const gridItems = showingSearch
         ? searchResults
-        : (trendingTab === 'movie' ? trendingMovies : trendingTv);
+        : isFiltering 
+            ? discoveredItems 
+            : (discoverType === 'movie' ? trendingMovies : trendingTv);
+
+    const activeGenres = discoverType === 'movie' ? MOVIE_GENRES : TV_GENRES;
 
     return (
         <div className="pt-24 px-6 md:px-12 pb-20">
@@ -286,27 +438,101 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                 </div>
             )}
 
-            {/* Trending toggle (when not searching) */}
+            {/* Filters Bar (when not searching) */}
             {!showingSearch && !searching && (
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-red-500" />
-                        <h2 className="text-lg font-bold">Trending Now</h2>
+                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 mb-8">
+                    <div className="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-6">
+                        {/* Title / Toggle */}
+                        <div className="flex items-center gap-4 sm:min-w-fit">
+                            <div className="flex items-center gap-2">
+                                <Filter className="w-5 h-5 text-blue-500" />
+                                <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-400">Filters</h2>
+                            </div>
+                            <div className="flex bg-black border border-neutral-700 rounded-xl p-1">
+                                <button
+                                    onClick={() => { setDiscoverType('movie'); setSelectedGenre(''); }}
+                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'movie' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
+                                >
+                                    <Film className="w-4 h-4" /> Movies
+                                </button>
+                                <button
+                                    onClick={() => { setDiscoverType('tv'); setSelectedGenre(''); }}
+                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'tv' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
+                                >
+                                    <Tv className="w-4 h-4" /> TV Shows
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Dropdowns */}
+                        <div className="flex flex-wrap items-center gap-3 flex-1 xl:justify-end">
+                            {/* Genre Filter */}
+                            <div className="relative min-w-[140px] flex-1 sm:flex-none">
+                                <select 
+                                    value={selectedGenre} 
+                                    onChange={(e) => setSelectedGenre(e.target.value)}
+                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm text-neutral-300 pr-10"
+                                >
+                                    <option value="">All Genres</option>
+                                    {activeGenres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
+                            </div>
+
+                            {/* Language Filter */}
+                            <div className="relative min-w-[140px] flex-1 sm:flex-none">
+                                <select 
+                                    value={selectedLanguage} 
+                                    onChange={(e) => setSelectedLanguage(e.target.value)}
+                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm text-neutral-300 pr-10"
+                                >
+                                    <option value="">All Languages</option>
+                                    {LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
+                            </div>
+
+                            {/* Sort Filter */}
+                            <div className="relative min-w-[160px] flex-1 sm:flex-none">
+                                <select 
+                                    value={sortBy} 
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm text-neutral-300 pr-10"
+                                >
+                                    {SORT_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
+                            </div>
+
+                            {/* Clear Filters */}
+                            {isFiltering && (
+                                <button
+                                    onClick={() => { setSelectedGenre(''); setSelectedLanguage(''); setSortBy('popularity.desc'); }}
+                                    className="p-2.5 bg-neutral-800 hover:bg-neutral-700 rounded-xl text-neutral-400 hover:text-white transition flex-shrink-0"
+                                    title="Reset Filters"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 rounded-xl p-1">
-                        <button
-                            onClick={() => setTrendingTab('movie')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${trendingTab === 'movie' ? 'bg-red-600 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800'}`}
-                        >
-                            <Film className="w-3.5 h-3.5" /> Movies
-                        </button>
-                        <button
-                            onClick={() => setTrendingTab('tv')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${trendingTab === 'tv' ? 'bg-red-600 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800'}`}
-                        >
-                            <Tv className="w-3.5 h-3.5" /> TV Shows
-                        </button>
-                    </div>
+                </div>
+            )}
+
+            {/* Results Header (if filtering/trending) */}
+            {!showingSearch && !searching && (
+                <div className="flex items-center gap-2 mb-4">
+                    {isFiltering ? (
+                        <>
+                            <Filter className="w-5 h-5 text-blue-500" />
+                            <h2 className="text-lg font-bold">Filtered Results</h2>
+                        </>
+                    ) : (
+                        <>
+                            <TrendingUp className="w-5 h-5 text-red-500" />
+                            <h2 className="text-lg font-bold">Trending Now</h2>
+                        </>
+                    )}
                 </div>
             )}
 
@@ -318,19 +544,19 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                 </div>
             )}
 
-            {/* Loading trending */}
-            {!showingSearch && loadingTrending && (
+            {/* Loading trending / initial filters */}
+            {!showingSearch && (loadingTrending || (loadingDiscover && discoverPage === 1)) && (
                 <div className="flex items-center justify-center py-16">
                     <Loader2 className="w-6 h-6 animate-spin text-neutral-500" />
                 </div>
             )}
 
             {/* Content Grid */}
-            {!searching && !(loadingTrending && !showingSearch) && (
+            {!searching && !(loadingTrending && !showingSearch && !loadingDiscover) && !(loadingDiscover && discoverPage === 1) && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3">
-                    {gridItems.map((item) => (
+                    {gridItems.map((item, idx) => (
                         <button
-                            key={`${item.mediaType}-${item.tmdbId}`}
+                            key={`${item.mediaType}-${item.tmdbId}-${idx}`}
                             onClick={() => openDetails(item)}
                             className="group relative bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden hover:border-neutral-600 hover:scale-[1.03] transition-all duration-200 text-left cursor-pointer"
                         >
@@ -381,11 +607,27 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                 </div>
             )}
 
-            {/* No search results */}
+            {/* Loading More Indicator / Observer target */}
+            {!showingSearch && isFiltering && discoveredItems.length > 0 && (
+                <div ref={observerTarget} className="flex justify-center py-12">
+                    {loadingDiscover && discoverPage > 1 && (
+                        <Loader2 className="w-6 h-6 animate-spin text-neutral-500" />
+                    )}
+                </div>
+            )}
+
+            {/* No search results / Filter Results */}
             {showingSearch && !searching && searchResults.length === 0 && (
                 <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
                     <Search className="w-12 h-12 text-neutral-700 mx-auto mb-3" />
                     <p className="text-neutral-400 text-sm">No results found for &quot;{searchQuery}&quot;</p>
+                </div>
+            )}
+            
+            {!showingSearch && isFiltering && !loadingDiscover && discoveredItems.length === 0 && (
+                <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
+                    <Filter className="w-12 h-12 text-neutral-700 mx-auto mb-3" />
+                    <p className="text-neutral-400 text-sm">No results found for your filters. Try clearing some selections.</p>
                 </div>
             )}
 
