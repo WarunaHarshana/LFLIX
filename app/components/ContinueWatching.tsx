@@ -1,6 +1,7 @@
 'use client';
 
-import { Play, Clock } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Play, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type ContinueItem = {
     id: number;
@@ -27,6 +28,10 @@ type Props = {
 export default function ContinueWatching({ items, onPlay, onOpenShow }: Props) {
     if (items.length === 0) return null;
 
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [showLeftArrow, setShowLeftArrow] = useState(false);
+    const [showRightArrow, setShowRightArrow] = useState(true);
+
     const handleClick = (item: ContinueItem) => {
         const filePath = item.episodeFilePath || item.filePath;
         if (filePath) {
@@ -36,14 +41,54 @@ export default function ContinueWatching({ items, onPlay, onOpenShow }: Props) {
         }
     };
 
+    const scroll = (direction: 'left' | 'right') => {
+        if (!scrollRef.current) return;
+        const amount = scrollRef.current.clientWidth * 0.7;
+        scrollRef.current.scrollBy({
+            left: direction === 'left' ? -amount : amount,
+            behavior: 'smooth'
+        });
+    };
+
+    const handleScroll = () => {
+        if (!scrollRef.current) return;
+        const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+        setShowLeftArrow(scrollLeft > 10);
+        setShowRightArrow(scrollLeft + clientWidth < scrollWidth - 10);
+    };
+
     return (
-        <section className="px-12 mb-10">
+        <section className="px-12 mb-10 relative group/cw">
             <div className="flex items-center gap-3 mb-4">
                 <Clock className="w-5 h-5 text-red-500" />
                 <h3 className="text-xl font-semibold text-neutral-200">Continue Watching</h3>
             </div>
 
-            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-neutral-700">
+            {/* Left arrow */}
+            {showLeftArrow && (
+                <button
+                    onClick={() => scroll('left')}
+                    className="absolute left-4 top-1/2 translate-y-2 z-10 p-2 bg-black/70 hover:bg-black/90 backdrop-blur rounded-full text-white opacity-0 group-hover/cw:opacity-100 transition-opacity shadow-lg"
+                >
+                    <ChevronLeft className="w-5 h-5" />
+                </button>
+            )}
+
+            {/* Right arrow */}
+            {showRightArrow && items.length > 3 && (
+                <button
+                    onClick={() => scroll('right')}
+                    className="absolute right-4 top-1/2 translate-y-2 z-10 p-2 bg-black/70 hover:bg-black/90 backdrop-blur rounded-full text-white opacity-0 group-hover/cw:opacity-100 transition-opacity shadow-lg"
+                >
+                    <ChevronRight className="w-5 h-5" />
+                </button>
+            )}
+
+            <div
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide scroll-snap-x"
+            >
                 {items.map((item) => {
                     const progressPercent = item.duration > 0 ? (item.progress / item.duration) * 100 : 0;
                     const remainingMins = Math.round((item.duration - item.progress) / 60);
@@ -52,7 +97,7 @@ export default function ContinueWatching({ items, onPlay, onOpenShow }: Props) {
                         <div
                             key={item.id}
                             onClick={() => handleClick(item)}
-                            className="group relative flex-shrink-0 w-72 bg-neutral-800 rounded-xl overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/20 transition"
+                            className="group relative flex-shrink-0 w-72 bg-neutral-800 rounded-xl overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/20 transition-all duration-300 hover:scale-[1.03] scroll-snap-start"
                         >
                             {/* Backdrop/Poster */}
                             <div className="relative h-40">

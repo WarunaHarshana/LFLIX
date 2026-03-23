@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, X, Film, Tv, Play } from 'lucide-react';
+import { Search, X, Film, Tv, Play, Globe, Loader2, Star } from 'lucide-react';
 
 type SearchResult = {
     id: number;
@@ -14,40 +14,70 @@ type SearchResult = {
     filePath?: string;
 };
 
+type OnlineResult = {
+    tmdbId: number;
+    mediaType: 'movie' | 'tv';
+    title: string;
+    posterPath: string | null;
+    backdropPath: string | null;
+    overview: string | null;
+    year: string | null;
+    rating: number | null;
+    popularity: number;
+};
+
 type Props = {
     onPlay: (filePath: string) => void;
     onOpenShow: (show: SearchResult) => void;
+    onOpenOnline?: (item: OnlineResult) => void;
     onClose?: () => void;
 };
 
-export default function SearchBar({ onPlay, onOpenShow, onClose }: Props) {
+export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }: Props) {
     const [query, setQuery] = useState('');
-    const [results, setResults] = useState<SearchResult[]>([]);
+    const [localResults, setLocalResults] = useState<SearchResult[]>([]);
+    const [onlineResults, setOnlineResults] = useState<OnlineResult[]>([]);
     const [isOpen, setIsOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
+    const [loadingLocal, setLoadingLocal] = useState(false);
+    const [loadingOnline, setLoadingOnline] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
     const search = useCallback(async (searchQuery: string, signal?: AbortSignal) => {
         if (searchQuery.length < 2) {
-            setResults([]);
+            setLocalResults([]);
+            setOnlineResults([]);
             return;
         }
 
-        setLoading(true);
+        // Search local library
+        setLoadingLocal(true);
         try {
             const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`, { signal });
             const data = await res.json();
-            setResults(Array.isArray(data) ? data : []);
-            setSelectedIndex(0);
+            setLocalResults(Array.isArray(data) ? data : []);
         } catch (e) {
-            // Ignore abort errors
             if (e instanceof Error && e.name === 'AbortError') return;
-            setResults([]);
+            setLocalResults([]);
         } finally {
-            setLoading(false);
+            setLoadingLocal(false);
         }
+
+        // Search TMDB online
+        setLoadingOnline(true);
+        try {
+            const res = await fetch(`/api/tmdb-search?q=${encodeURIComponent(searchQuery)}&type=multi`, { signal });
+            const data = await res.json();
+            setOnlineResults((data.results || []).slice(0, 8));
+        } catch (e) {
+            if (e instanceof Error && e.name === 'AbortError') return;
+            setOnlineResults([]);
+        } finally {
+            setLoadingOnline(false);
+        }
+
+        setSelectedIndex(0);
     }, []);
 
     useEffect(() => {
@@ -63,21 +93,27 @@ export default function SearchBar({ onPlay, onOpenShow, onClose }: Props) {
     }, [query, search]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
+        const total = localResults.length + onlineResults.length;
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            setSelectedIndex(prev => Math.min(prev + 1, results.length - 1));
+            setSelectedIndex(prev => Math.min(prev + 1, total - 1));
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setSelectedIndex(prev => Math.max(prev - 1, 0));
-        } else if (e.key === 'Enter' && results[selectedIndex]) {
+        } else if (e.key === 'Enter') {
             e.preventDefault();
-            handleSelect(results[selectedIndex]);
+            if (selectedIndex < localResults.length) {
+                handleSelectLocal(localResults[selectedIndex]);
+            } else {
+                const onlineIdx = selectedIndex - localResults.length;
+                if (onlineResults[onlineIdx]) handleSelectOnline(onlineResults[onlineIdx]);
+            }
         } else if (e.key === 'Escape') {
             handleClose();
         }
     };
 
-    const handleSelect = (item: SearchResult) => {
+    const handleSelectLocal = (item: SearchResult) => {
         if (item.type === 'movie' && item.filePath) {
             onPlay(item.filePath);
         } else if (item.type === 'show') {
@@ -86,12 +122,21 @@ export default function SearchBar({ onPlay, onOpenShow, onClose }: Props) {
         handleClose();
     };
 
+    const handleSelectOnline = (item: OnlineResult) => {
+        onOpenOnline?.(item);
+        handleClose();
+    };
+
     const handleClose = () => {
         setQuery('');
-        setResults([]);
+        setLocalResults([]);
+        setOnlineResults([]);
         setIsOpen(false);
         onClose?.();
     };
+
+    const hasResults = localResults.length > 0 || onlineResults.length > 0;
+    const loading = loadingLocal || loadingOnline;
 
     return (
         <div className="relative">
@@ -113,7 +158,7 @@ export default function SearchBar({ onPlay, onOpenShow, onClose }: Props) {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Search movies, shows..."
+                        placeholder="Search local & online..."
                         className="flex-1 bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2 text-sm outline-none focus:border-red-600 transition"
                         autoFocus
                     />
@@ -127,56 +172,106 @@ export default function SearchBar({ onPlay, onOpenShow, onClose }: Props) {
             </div>
 
             {/* Search Results Dropdown */}
-            {isOpen && results.length > 0 && (
-                <div className="absolute top-full right-0 mt-2 w-80 bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl overflow-hidden z-50">
-                    {loading && (
-                        <div className="p-4 text-center text-neutral-400 text-sm">Searching...</div>
+            {isOpen && hasResults && (
+                <div className="absolute top-full right-0 mt-2 w-96 bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
+                    {/* Local results */}
+                    {localResults.length > 0 && (
+                        <>
+                            <div className="px-3 py-1.5 bg-neutral-800/50 text-[10px] font-bold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+                                <Film className="w-3 h-3" /> Local Library
+                            </div>
+                            {localResults.map((item, index) => (
+                                <div
+                                    key={`local-${item.type}-${item.id}`}
+                                    onClick={() => handleSelectLocal(item)}
+                                    className={`flex items-center gap-3 p-3 cursor-pointer transition ${index === selectedIndex ? 'bg-neutral-800' : 'hover:bg-neutral-800/50'
+                                        }`}
+                                >
+                                    {item.posterPath ? (
+                                        <img
+                                            src={`https://image.tmdb.org/t/p/w92${item.posterPath}`}
+                                            alt={item.title}
+                                            className="w-10 h-14 object-cover rounded"
+                                        />
+                                    ) : (
+                                        <div className="w-10 h-14 bg-neutral-700 rounded flex items-center justify-center">
+                                            {item.type === 'movie' ? <Film className="w-4 h-4 text-neutral-500" /> : <Tv className="w-4 h-4 text-neutral-500" />}
+                                        </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-medium text-white text-sm truncate">{item.title}</h4>
+                                        <div className="flex items-center gap-2 text-xs text-neutral-400">
+                                            <span className="uppercase">{item.type}</span>
+                                            <span>•</span>
+                                            <span>{item.year || (item.firstAirDate?.substring(0, 4) || 'N/A')}</span>
+                                        </div>
+                                    </div>
+                                    <Play className="w-4 h-4 text-neutral-500" />
+                                </div>
+                            ))}
+                        </>
                     )}
 
-                    {results.map((item, index) => (
-                        <div
-                            key={`${item.type}-${item.id}`}
-                            onClick={() => handleSelect(item)}
-                            className={`flex items-center gap-3 p-3 cursor-pointer transition ${index === selectedIndex ? 'bg-neutral-800' : 'hover:bg-neutral-800/50'
-                                }`}
-                        >
-                            {item.posterPath ? (
-                                <img
-                                    src={`https://image.tmdb.org/t/p/w92${item.posterPath}`}
-                                    alt={item.title}
-                                    className="w-10 h-14 object-cover rounded"
-                                />
-                            ) : (
-                                <div className="w-10 h-14 bg-neutral-700 rounded flex items-center justify-center">
-                                    {item.type === 'movie' ? <Film className="w-4 h-4 text-neutral-500" /> : <Tv className="w-4 h-4 text-neutral-500" />}
-                                </div>
-                            )}
-
-                            <div className="flex-1 min-w-0">
-                                <h4 className="font-medium text-white text-sm truncate">{item.title}</h4>
-                                <div className="flex items-center gap-2 text-xs text-neutral-400">
-                                    <span className="uppercase">{item.type}</span>
-                                    <span>•</span>
-                                    <span>{item.year || (item.firstAirDate?.substring(0, 4) || 'N/A')}</span>
-                                    {item.rating && (
-                                        <>
-                                            <span>•</span>
-                                            <span className="text-green-400">{Math.round(item.rating * 10)}%</span>
-                                        </>
-                                    )}
-                                </div>
+                    {/* Online results */}
+                    {onlineResults.length > 0 && (
+                        <>
+                            <div className="px-3 py-1.5 bg-blue-900/20 text-[10px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5 border-t border-neutral-800">
+                                <Globe className="w-3 h-3" /> Online — Watch, Download, or Save
                             </div>
+                            {onlineResults.map((item, i) => {
+                                const globalIndex = localResults.length + i;
+                                return (
+                                    <div
+                                        key={`online-${item.mediaType}-${item.tmdbId}`}
+                                        onClick={() => handleSelectOnline(item)}
+                                        className={`flex items-center gap-3 p-3 cursor-pointer transition ${globalIndex === selectedIndex ? 'bg-neutral-800' : 'hover:bg-neutral-800/50'
+                                            }`}
+                                    >
+                                        {item.posterPath ? (
+                                            <img
+                                                src={`https://image.tmdb.org/t/p/w92${item.posterPath}`}
+                                                alt={item.title}
+                                                className="w-10 h-14 object-cover rounded"
+                                            />
+                                        ) : (
+                                            <div className="w-10 h-14 bg-neutral-700 rounded flex items-center justify-center">
+                                                {item.mediaType === 'movie' ? <Film className="w-4 h-4 text-neutral-500" /> : <Tv className="w-4 h-4 text-neutral-500" />}
+                                            </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-medium text-white text-sm truncate">{item.title}</h4>
+                                            <div className="flex items-center gap-2 text-xs text-neutral-400">
+                                                <span className="px-1 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[9px] font-bold uppercase">{item.mediaType === 'movie' ? 'Movie' : 'TV'}</span>
+                                                <span>{item.year || 'N/A'}</span>
+                                                {item.rating != null && item.rating > 0 && (
+                                                    <span className="text-yellow-400 flex items-center gap-0.5">
+                                                        <Star className="w-2.5 h-2.5 fill-yellow-400" />
+                                                        {item.rating.toFixed(1)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-1 text-[10px] text-blue-400 font-medium shrink-0">
+                                            <Globe className="w-3 h-3" /> View
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </>
+                    )}
 
-                            <Play className="w-4 h-4 text-neutral-500" />
+                    {loading && (
+                        <div className="p-3 text-center text-neutral-500 text-xs flex items-center justify-center gap-2">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Searching...
                         </div>
-                    ))}
+                    )}
                 </div>
             )}
 
             {/* No results */}
-            {isOpen && query.length >= 2 && !loading && results.length === 0 && (
+            {isOpen && query.length >= 2 && !loading && !hasResults && (
                 <div className="absolute top-full right-0 mt-2 w-80 bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-center text-neutral-400 text-sm">
-                    No results found for "{query}"
+                    No results found for &quot;{query}&quot;
                 </div>
             )}
         </div>

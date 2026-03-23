@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Play, Star, Clock, Film, Tv, HardDrive, Info, PlayCircle } from 'lucide-react';
+import { X, Play, Star, Clock, Film, Tv, HardDrive, Info, PlayCircle, Globe } from 'lucide-react';
 import TrailerModal from './TrailerModal';
+import StreamServerModal from './StreamServerModal';
 
 type ContentItem = {
     id: number;
@@ -46,6 +47,7 @@ function formatDuration(seconds: number): string {
 export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisodes }: Props) {
     const [imgLoaded, setImgLoaded] = useState(false);
     const [showTrailer, setShowTrailer] = useState(false);
+    const [showStreamServers, setShowStreamServers] = useState(false);
     const year = item.year || (item.firstAirDate ? item.firstAirDate.substring(0, 4) : '');
     const progressPercent = item.watchProgress && item.watchProgress.duration > 0
         ? (item.watchProgress.progress / item.watchProgress.duration) * 100
@@ -163,6 +165,14 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                 >
                                     <PlayCircle className="w-4 h-4" /> Trailer
                                 </button>
+                                {item.tmdbId && (
+                                    <button
+                                        onClick={() => setShowStreamServers(true)}
+                                        className="px-5 py-2.5 bg-blue-600/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-blue-500 transition text-sm border border-blue-500/50"
+                                    >
+                                        <Globe className="w-4 h-4" /> Watch Online
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -253,6 +263,16 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                 title={item.title}
                 onClose={() => setShowTrailer(false)}
             />
+
+            {/* Stream Server Modal */}
+            {showStreamServers && item.tmdbId && (
+                <StreamServerModal
+                    tmdbId={item.tmdbId}
+                    type={item.type === 'show' ? 'tv' : 'movie'}
+                    title={item.title}
+                    onClose={() => setShowStreamServers(false)}
+                />
+            )}
         </div>
     );
 }

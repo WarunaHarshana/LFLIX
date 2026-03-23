@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye } from 'lucide-react';
 import Link from 'next/link';
 
 type Settings = {
@@ -95,6 +95,20 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+
+    // Display preferences (localStorage only)
+    const [displayPrefs, setDisplayPrefs] = useState({ showTitles: true, showRatings: true, cinematicMode: false });
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem('lflix-display-prefs');
+            if (saved) setDisplayPrefs(JSON.parse(saved));
+        } catch {}
+    }, []);
+    const updateDisplayPref = (key: string, value: boolean) => {
+        const updated = { ...displayPrefs, [key]: value };
+        setDisplayPrefs(updated);
+        localStorage.setItem('lflix-display-prefs', JSON.stringify(updated));
+    };
 
     useEffect(() => {
         fetchSettings();
@@ -221,6 +235,58 @@ export default function SettingsPage() {
                                 themoviedb.org
                             </a>
                         </p>
+                    </div>
+                </section>
+
+                {/* Display Preferences */}
+                <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
+                    <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
+                        <Eye className="w-5 h-5 text-violet-500" />
+                        <h2 className="text-lg font-semibold">Display Preferences</h2>
+                    </div>
+                    <div className="p-6 space-y-5">
+                        <p className="text-neutral-400 text-sm">
+                            Customize what information is shown on the home page.
+                        </p>
+                        <label className="flex items-center justify-between cursor-pointer group">
+                            <span className="text-neutral-300 group-hover:text-white transition">Show titles on poster cards</span>
+                            <button
+                                onClick={() => updateDisplayPref('showTitles', !displayPrefs.showTitles)}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${
+                                    displayPrefs.showTitles ? 'bg-red-600' : 'bg-neutral-700'
+                                }`}
+                            >
+                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                                    displayPrefs.showTitles ? 'translate-x-5' : ''
+                                }`} />
+                            </button>
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer group">
+                            <span className="text-neutral-300 group-hover:text-white transition">Show ratings on poster cards</span>
+                            <button
+                                onClick={() => updateDisplayPref('showRatings', !displayPrefs.showRatings)}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${
+                                    displayPrefs.showRatings ? 'bg-red-600' : 'bg-neutral-700'
+                                }`}
+                            >
+                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                                    displayPrefs.showRatings ? 'translate-x-5' : ''
+                                }`} />
+                            </button>
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer group">
+                            <span className="text-neutral-300 group-hover:text-white transition">Cinematic mode <span className="text-neutral-500 text-xs">(simplified navbar)</span></span>
+                            <button
+                                onClick={() => updateDisplayPref('cinematicMode', !displayPrefs.cinematicMode)}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${
+                                    displayPrefs.cinematicMode ? 'bg-red-600' : 'bg-neutral-700'
+                                }`}
+                            >
+                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                                    displayPrefs.cinematicMode ? 'translate-x-5' : ''
+                                }`} />
+                            </button>
+                        </label>
                     </div>
                 </section>
 

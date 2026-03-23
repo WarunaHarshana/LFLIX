@@ -11,6 +11,8 @@ A Netflix-style local media server that organizes and plays your movie & TV show
 | Feature | Description |
 |---------|-------------|
 | 🎥 **Netflix-style UI** | Dark theme, hero banners, poster grids |
+| 🌍 **Discover & Stream** | Browse trending movies & TV shows from TMDB. Watch online instantly! |
+| 🎬 **Stream Anywhere** | 9+ integrated high-speed streaming servers (VidSrc, SmashyStream, etc.) |
 | 📁 **Auto Scanning** | Add folders → movies & shows detected automatically |
 | 🔍 **TMDB Metadata** | Posters, ratings, genres fetched automatically |
 | 🎮 **Any Player** | VLC, PotPlayer, MPC-HC, mpv — auto-detects and passes correct args |

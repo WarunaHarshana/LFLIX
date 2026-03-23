@@ -33,9 +33,11 @@ type Props = {
     onClick: () => void;
     onContextMenu?: (e: React.MouseEvent) => void;
     showProgress?: boolean;
+    showTitle?: boolean;
+    showRating?: boolean;
 };
 
-export default function ContentCard({ item, onClick, onContextMenu, showProgress = true }: Props) {
+export default function ContentCard({ item, onClick, onContextMenu, showProgress = true, showTitle = true, showRating = true }: Props) {
     const year = item.year || (item.firstAirDate ? item.firstAirDate.substring(0, 4) : '');
     const progressPercent = item.watchProgress && item.watchProgress.duration > 0
         ? (item.watchProgress.progress / item.watchProgress.duration) * 100
@@ -75,11 +77,14 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
 
             {/* Hover overlay */}
             <div className="absolute inset-0 p-4 opacity-0 group-hover:opacity-100 transition duration-300 flex flex-col justify-end bg-gradient-to-t from-black/90 to-transparent">
-                <h4 className="font-bold text-white text-sm line-clamp-2">{item.title}</h4>
+                {showTitle && <h4 className="font-bold text-white text-sm line-clamp-2">{item.title}</h4>}
                 <div className="flex justify-between items-center mt-2">
                     <div className="flex gap-2 text-xs text-neutral-400">
                         {item.type === 'show' ? <Tv className="w-3 h-3" /> : <Film className="w-3 h-3" />}
                         <span>{year}</span>
+                        {showRating && item.rating && item.rating > 0 && (
+                            <span className="text-green-400 font-semibold">★ {item.rating.toFixed(1)}</span>
+                        )}
                     </div>
                     <div className="p-1.5 bg-red-600 rounded-full">
                         <Play className="w-3 h-3 fill-white text-white" />

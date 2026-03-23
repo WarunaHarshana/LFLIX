@@ -176,3 +176,77 @@ body {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+
+/* ===== UI Polish: Animations & Utilities ===== */
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out both;
+}
+
+/* Slide up animation */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.6s ease-out both;
+}
+
+/* Hero crossfade transition */
+@keyframes heroFade {
+  0% { opacity: 0; transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.animate-heroFade {
+  animation: heroFade 1.2s ease-out both;
+}
+
+/* Card hover glow */
+@keyframes cardGlow {
+  0% { box-shadow: 0 0 0 rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 8px 30px rgba(220, 38, 38, 0.25); }
+}
+
+/* Glass card utility */
+.glass-card {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Glassmorphism navbar */
+.glass-nav {
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  background: rgba(0, 0, 0, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Scroll snap for carousels */
+.scroll-snap-x {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scroll-snap-start {
+  scroll-snap-align: start;
+}
+
+/* Hero indicator dot */
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+
+.hero-dot-active {
+  animation: dotPulse 2s ease-in-out infinite;
+}

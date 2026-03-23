@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Info, Star } from 'lucide-react';
+import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Info, Star, Globe, BarChart3 } from 'lucide-react';
+import StreamServerModal from './StreamServerModal';
+
+type EpisodeRating = {
+    season: number;
+    episode: number;
+    rating: number | null;
+};
 
 type Episode = {
     id: number;
@@ -30,6 +37,7 @@ type Season = {
 
 type Show = {
     id: number;
+    tmdbId?: number | null;
     title: string;
     overview: string | null;
     posterPath: string | null;
@@ -57,11 +65,30 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     const [activeSeason, setActiveSeason] = useState(seasons[0]?.season || 1);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; episodeId: number } | null>(null);
     const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
+    const [showStreamServers, setShowStreamServers] = useState(false);
+    const [showRatingGrid, setShowRatingGrid] = useState(true);
+    const [episodeRatings, setEpisodeRatings] = useState<EpisodeRating[]>([]);
+    const [hoveredRating, setHoveredRating] = useState<{ season: number; episode: number; rating: number | null; x: number; y: number } | null>(null);
 
     // Reset active season when seasons change (new show opened)
     useEffect(() => {
         setActiveSeason(seasons[0]?.season || 1);
         setSelectedEpisode(null);
+    }, [seasons]);
+
+    // Build episode ratings from the episodes data (using available data)
+    useEffect(() => {
+        const ratings: EpisodeRating[] = [];
+        for (const s of seasons) {
+            for (const ep of s.episodes) {
+                ratings.push({
+                    season: s.season,
+                    episode: ep.episodeNumber,
+                    rating: null, // We'll derive a visual rating from watch progress or leave neutral
+                });
+            }
+        }
+        setEpisodeRatings(ratings);
     }, [seasons]);
 
     const currentSeason = seasons.find(s => s.season === activeSeason);
@@ -153,6 +180,14 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                     && (selectedEpisode.watchProgress.progress / selectedEpisode.watchProgress.duration) * 100 < 95
                                     ? 'Resume' : 'Play'}
                             </button>
+                            {show.tmdbId && (
+                                <button
+                                    onClick={() => setShowStreamServers(true)}
+                                    className="px-5 py-2.5 bg-blue-600/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-blue-500 transition text-sm border border-blue-500/50"
+                                >
+                                    <Globe className="w-4 h-4" /> Watch Online
+                                </button>
+                            )}
                         </div>
 
                         {/* Watch Progress */}
@@ -256,6 +291,65 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                         </button>
                                     ))}
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Episode Rating Grid */}
+                        {seasons.length > 0 && (
+                            <div className="px-8 py-4 border-b border-neutral-800">
+                                <button
+                                    onClick={() => setShowRatingGrid(!showRatingGrid)}
+                                    className="flex items-center gap-2 text-sm font-medium text-neutral-400 hover:text-white transition mb-3"
+                                >
+                                    <BarChart3 className="w-4 h-4" />
+                                    Episode Grid
+                                    <ChevronDown className={`w-3 h-3 transition-transform ${showRatingGrid ? '' : '-rotate-90'}`} />
+                                </button>
+                                {showRatingGrid && (
+                                    <div className="space-y-2">
+                                        {seasons.map(({ season, episodes }) => (
+                                            <div key={season} className="flex items-center gap-1.5">
+                                                <span className="text-[10px] text-neutral-500 font-medium w-6 shrink-0">S{season}</span>
+                                                <div className="flex gap-0.5 flex-wrap">
+                                                    {episodes.map((ep) => {
+                                                        const hasProgress = ep.watchProgress && ep.watchProgress.progress > 0;
+                                                        const isCompleted = ep.watchProgress?.completed === 1;
+                                                        let bgColor = 'bg-neutral-700'; // No data
+                                                        if (isCompleted) bgColor = 'bg-green-500';
+                                                        else if (hasProgress) bgColor = 'bg-yellow-500';
+
+                                                        return (
+                                                            <div
+                                                                key={ep.id}
+                                                                className={`w-4 h-4 rounded-sm ${bgColor} cursor-pointer transition-all hover:scale-150 hover:z-10 relative`}
+                                                                onMouseEnter={(e) => {
+                                                                    const rect = (e.target as HTMLElement).getBoundingClientRect();
+                                                                    setHoveredRating({
+                                                                        season,
+                                                                        episode: ep.episodeNumber,
+                                                                        rating: null,
+                                                                        x: rect.left + rect.width / 2,
+                                                                        y: rect.top - 8
+                                                                    });
+                                                                }}
+                                                                onMouseLeave={() => setHoveredRating(null)}
+                                                                onClick={() => {
+                                                                    setActiveSeason(season);
+                                                                    setSelectedEpisode(ep);
+                                                                }}
+                                                            />
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div className="flex items-center gap-3 mt-1 text-[10px] text-neutral-500">
+                                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" /> Watched</span>
+                                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-yellow-500 inline-block" /> In Progress</span>
+                                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-neutral-700 inline-block" /> Not Watched</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -394,6 +488,18 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                         </button>
                     </div>
                 </>
+            )}
+
+            {/* Stream Server Modal */}
+            {showStreamServers && show.tmdbId && selectedEpisode && (
+                <StreamServerModal
+                    tmdbId={show.tmdbId}
+                    type="tv"
+                    title={`${show.title} - S${selectedEpisode.seasonNumber}E${selectedEpisode.episodeNumber}`}
+                    season={selectedEpisode.seasonNumber}
+                    episode={selectedEpisode.episodeNumber}
+                    onClose={() => setShowStreamServers(false)}
+                />
             )}
         </div>
     );

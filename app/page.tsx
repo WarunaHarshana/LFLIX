@@ -33,6 +33,7 @@ import LiveSports from './components/LiveSports';
 import WatchlistPage from './components/WatchlistPage';
 import DownloadsPanel from './components/DownloadsPanel';
 import TorrentSearchPage from './components/TorrentSearchPage';
+import DiscoverPage from './components/DiscoverPage';
 
 // Types
 type ContentItem = {
@@ -122,7 +123,7 @@ export default function Home() {
   const [library, setLibrary] = useState<ContentItem[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'torrents'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'torrents' | 'discover'>('all');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
   // IPTV State
@@ -170,9 +171,13 @@ export default function Home() {
   const [showLiveSports, setShowLiveSports] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
   const [activeDownloads, setActiveDownloads] = useState(0);
+  const [discoverInitialItem, setDiscoverInitialItem] = useState<any>(null);
 
   // Force browser player (for TVs without VLC)
   const [forceBrowserPlayer, setForceBrowserPlayer] = useState(false);
+
+  // Hero auto-rotate
+  const [heroIndex, setHeroIndex] = useState(0);
 
   // HDR display detection (live — updates when moving between monitors)
   const [hdrDisplaySupported, setHdrDisplaySupported] = useState(false);
@@ -232,6 +237,15 @@ export default function Home() {
     checkSetup();
   }, []);
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Display preferences from localStorage
+  const [displayPrefs, setDisplayPrefs] = useState({ showTitles: true, showRatings: true, cinematicMode: false });
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('lflix-display-prefs');
+      if (saved) setDisplayPrefs(JSON.parse(saved));
+    } catch {}
+  }, []);
 
   // Toast Notifications
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -713,8 +727,17 @@ export default function Home() {
     return matchesTab && matchesGenre;
   });
 
-  // Featured item (first with backdrop)
-  const featured = filteredLibrary.find(item => item.backdropPath) || filteredLibrary[0];
+  // Hero candidates: top 5 items with backdrops
+  const heroCandidates = filteredLibrary.filter(item => item.backdropPath).slice(0, 5);
+  if (heroCandidates.length === 0 && filteredLibrary.length > 0) heroCandidates.push(filteredLibrary[0]);
+  const featured = heroCandidates[heroIndex % Math.max(heroCandidates.length, 1)] || filteredLibrary[0];
+
+  // Auto-rotate hero every 8 seconds
+  useEffect(() => {
+    if (heroCandidates.length <= 1) return;
+    const timer = setInterval(() => setHeroIndex(i => i + 1), 8000);
+    return () => clearInterval(timer);
+  }, [heroCandidates.length]);
 
   // Show setup wizard if first run
   if (setupComplete === false) {
@@ -741,7 +764,7 @@ export default function Home() {
     <main className="min-h-screen bg-black text-white font-sans selection:bg-red-900 pb-20 md:pb-0">
 
       {/* Navbar - Desktop (hidden on mobile) */}
-      <nav className="fixed top-0 w-full z-40 bg-gradient-to-b from-black/90 to-transparent px-8 py-6 items-center justify-between backdrop-blur-sm hidden md:flex">
+      <nav className="fixed top-0 w-full z-40 glass-nav px-8 py-6 items-center justify-between hidden md:flex">
         <div className="flex items-center gap-8">
           <h1 className="text-3xl font-bold text-red-600 tracking-tighter">LFLIX</h1>
           <div className="flex gap-2 text-base font-medium">
@@ -750,6 +773,13 @@ export default function Home() {
               className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px]", activeTab === 'all' ? "text-white bg-white/10" : "text-neutral-400")}
             >
               Home
+            </button>
+            <button
+              onClick={() => setActiveTab('discover')}
+              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'discover' ? "text-white bg-white/10" : "text-neutral-400")}
+            >
+              <Globe className="w-4 h-4" />
+              Discover
             </button>
             <button
               onClick={() => setActiveTab('show')}
@@ -806,6 +836,11 @@ export default function Home() {
             onOpenShow={(result) => {
               const show = library.find(l => l.type === 'show' && l.id === result.id);
               if (show) openShow(show);
+            }}
+            onOpenOnline={(item) => {
+              setDiscoverInitialItem(item);
+              setActiveTab('discover');
+              setTimeout(() => setDiscoverInitialItem(null), 500);
             }}
           />
           <button
@@ -893,7 +928,7 @@ export default function Home() {
       </nav>
 
       {/* Loading State - only show for movie/show tabs */}
-      {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'torrents' && (loading ? (
+      {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'torrents' && activeTab !== 'discover' && (loading ? (
         <>
           <HeroSkeleton />
           <div className="px-12 pb-20 -mt-20 relative z-20">
@@ -909,13 +944,13 @@ export default function Home() {
         <>
           {/* Hero Section */}
           {featured && (
-            <div className="relative h-[80vh] w-full">
-              <div className="absolute inset-0">
+            <div className="relative h-[80vh] w-full overflow-hidden">
+              <div className="absolute inset-0" key={`hero-${heroIndex}`}>
                 {(featured.backdropPath || featured.posterPath) ? (
                   <img
                     src={`https://image.tmdb.org/t/p/original${featured.backdropPath || featured.posterPath}`}
                     alt="Hero"
-                    className="w-full h-full object-cover opacity-60"
+                    className="w-full h-full object-cover opacity-60 animate-heroFade"
                   />
                 ) : (
                   <div className="w-full h-full bg-neutral-900" />
@@ -924,7 +959,7 @@ export default function Home() {
                 <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-transparent to-transparent" />
               </div>
 
-              <div className="absolute bottom-0 left-0 p-12 pb-24 space-y-6 max-w-2xl z-10">
+              <div className="absolute bottom-0 left-0 p-12 pb-24 space-y-6 max-w-2xl z-10 animate-slideUp" key={`hero-info-${heroIndex}`}>
                 <h2 className="text-6xl font-extrabold drop-shadow-2xl leading-tight">{featured.title}</h2>
                 <div className="flex items-center gap-3 text-sm font-semibold">
                   <span className="px-2 py-0.5 bg-neutral-800 rounded border border-neutral-600 uppercase tracking-wide text-neutral-300">
@@ -989,6 +1024,23 @@ export default function Home() {
                   )}
                 </div>
               </div>
+
+              {/* Hero indicator dots */}
+              {heroCandidates.length > 1 && (
+                <div className="absolute bottom-6 right-12 flex gap-2 z-10">
+                  {heroCandidates.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setHeroIndex(i)}
+                      className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                        (heroIndex % heroCandidates.length) === i
+                          ? 'bg-white scale-125 hero-dot-active'
+                          : 'bg-white/30 hover:bg-white/60'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1058,6 +1110,8 @@ export default function Home() {
                     <ContentCard
                       item={item}
                       onClick={() => setSelectedDetail(item)}
+                      showTitle={displayPrefs.showTitles}
+                      showRating={displayPrefs.showRatings}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setContextMenu({ x: e.clientX, y: e.clientY, item });
@@ -1413,6 +1467,11 @@ export default function Home() {
       {/* Torrent Search Section */}
       {activeTab === 'torrents' && (
         <TorrentSearchPage />
+      )}
+
+      {/* Discover Section */}
+      {activeTab === 'discover' && (
+        <DiscoverPage initialItem={discoverInitialItem} />
       )}
 
       {/* Content Detail Modal */}

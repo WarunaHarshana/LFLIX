@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Home, Film, Tv, Settings, Menu, X, Smartphone, Search, Radio, Trophy, Bookmark, Magnet } from 'lucide-react';
+import { Home, Film, Tv, Settings, Menu, X, Smartphone, Search, Radio, Trophy, Bookmark, Magnet, Globe } from 'lucide-react';
 import clsx from 'clsx';
 
-type Tab = 'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'torrents';
+type Tab = 'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'torrents' | 'discover';
 
 type Props = {
   activeTab: Tab;
@@ -20,6 +20,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
 
   const tabs = [
     { id: 'all' as Tab, label: 'Home', icon: Home },
+    { id: 'discover' as Tab, label: 'Discover', icon: Globe },
     { id: 'movie' as Tab, label: 'Movies', icon: Film },
     { id: 'show' as Tab, label: 'Shows', icon: Tv },
     { id: 'live' as Tab, label: 'Live TV', icon: Radio },
