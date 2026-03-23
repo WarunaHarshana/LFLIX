@@ -955,23 +955,35 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                                                             )}
                                                             <div className="flex items-center gap-2 mt-1.5 text-[10px] text-neutral-600">
                                                                 {ep.runtime && <span>{ep.runtime}m</span>}
-                                                                {ep.airDate && <span>{ep.airDate}</span>}
+                                                              {ep.airDate && <span>{ep.airDate}</span>}
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <div className="flex flex-col sm:flex-row gap-2 self-center shrink-0">
+                                                                <button
+                                                                    onClick={() => setStreamModal({
+                                                                        tmdbId: selectedResult.tmdbId,
+                                                                        type: 'tv',
+                                                                        title: `${selectedResult.title} - S${selectedSeason}E${ep.episodeNumber}`,
+                                                                        season: selectedSeason,
+                                                                        episode: ep.episodeNumber
+                                                                    })}
+                                                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition"
+                                                                >
+                                                                    <Play className="w-3 h-3 fill-white" /> Watch
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setDownloadModal({
+                                                                        title: `${selectedResult.title} S${String(selectedSeason).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`,
+                                                                        mediaType: 'tv',
+                                                                        posterPath: ep.stillPath || selectedResult.posterPath
+                                                                    })}
+                                                                    className="px-3 py-1.5 bg-neutral-700/80 hover:bg-neutral-600 text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition border border-neutral-600"
+                                                                >
+                                                                    <Download className="w-3 h-3" /> Download
+                                                                </button>
                                                             </div>
                                                         </div>
-
-                                                        <button
-                                                            onClick={() => setStreamModal({
-                                                                tmdbId: selectedResult.tmdbId,
-                                                                type: 'tv',
-                                                                title: `${selectedResult.title} - S${selectedSeason}E${ep.episodeNumber}`,
-                                                                season: selectedSeason,
-                                                                episode: ep.episodeNumber
-                                                            })}
-                                                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition self-center shrink-0"
-                                                        >
-                                                            <Play className="w-3 h-3 fill-white" /> Watch
-                                                        </button>
-                                                    </div>
                                                 ))}
                                             </div>
                                         )}
