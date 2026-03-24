@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward } from 'lucide-react';
 
 type StreamServer = {
   name: string;
   url: string;
   color: string;
 };
+
+const AUTO_FAILOVER_TIMEOUT_MS = 15000;
 
 type Props = {
   tmdbId: number;
@@ -21,9 +23,16 @@ type Props = {
 export default function StreamServerModal({ tmdbId, type, title, season, episode, onClose }: Props) {
   const [servers, setServers] = useState<StreamServer[]>([]);
   const [activeServer, setActiveServer] = useState<number>(0);
+  const [attemptedServers, setAttemptedServers] = useState<number[]>([0]);
   const [loading, setLoading] = useState(true);
   const [iframeLoading, setIframeLoading] = useState(true);
   const [iframeError, setIframeError] = useState(false);
+  const [autoSwitching, setAutoSwitching] = useState(false);
+  const attemptedServersRef = useRef<number[]>([0]);
+
+  useEffect(() => {
+    attemptedServersRef.current = attemptedServers;
+  }, [attemptedServers]);
 
   useEffect(() => {
     const fetchServers = async () => {
@@ -38,6 +47,12 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
         const data = await res.json();
         if (data.servers) {
           setServers(data.servers);
+          setActiveServer(0);
+          setAttemptedServers([0]);
+          attemptedServersRef.current = [0];
+          setIframeError(false);
+          setIframeLoading(true);
+          setAutoSwitching(false);
         }
       } catch (e) {
         console.error('Failed to fetch servers:', e);
@@ -52,13 +67,53 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     setActiveServer(index);
     setIframeLoading(true);
     setIframeError(false);
+    setAttemptedServers([index]);
+    attemptedServersRef.current = [index];
+    setAutoSwitching(false);
+  };
+
+  const findNextServerIndex = (currentIndex: number) => {
+    if (servers.length <= 1) {
+      return -1;
+    }
+
+    const attempted = attemptedServersRef.current;
+    for (let step = 1; step < servers.length; step += 1) {
+      const candidate = (currentIndex + step) % servers.length;
+      if (!attempted.includes(candidate)) {
+        return candidate;
+      }
+    }
+
+    return -1;
+  };
+
+  const tryNextServer = (fromIndex: number, mode: 'auto' | 'manual' = 'auto') => {
+    const nextServerIndex = findNextServerIndex(fromIndex);
+    if (nextServerIndex === -1) {
+      return false;
+    }
+
+    setAttemptedServers((prev) =>
+      prev.includes(nextServerIndex) ? prev : [...prev, nextServerIndex]
+    );
+    attemptedServersRef.current = attemptedServersRef.current.includes(nextServerIndex)
+      ? attemptedServersRef.current
+      : [...attemptedServersRef.current, nextServerIndex];
+    setActiveServer(nextServerIndex);
+    setIframeLoading(true);
+    setIframeError(false);
+    setAutoSwitching(mode === 'auto');
+    return true;
   };
 
   const handleIframeLoad = () => {
     setIframeLoading(false);
+    setAutoSwitching(false);
   };
 
   const currentServer = servers[activeServer];
+  const hasAlternateServer = servers.length > 1;
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -67,6 +122,22 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       document.body.style.overflow = '';
     };
   }, []);
+
+  useEffect(() => {
+    if (loading || servers.length === 0 || !iframeLoading) {
+      return;
+    }
+
+    const watchdog = window.setTimeout(() => {
+      const switched = tryNextServer(activeServer, 'auto');
+      if (!switched) {
+        setIframeLoading(false);
+        setIframeError(true);
+      }
+    }, AUTO_FAILOVER_TIMEOUT_MS);
+
+    return () => window.clearTimeout(watchdog);
+  }, [activeServer, iframeLoading, loading, servers.length]);
 
   return (
     <div className="fixed inset-0 z-[90] bg-black flex flex-col">
@@ -85,6 +156,24 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const switched = tryNextServer(activeServer, 'manual');
+              if (!switched) {
+                setIframeLoading(false);
+                setIframeError(true);
+              }
+            }}
+            disabled={!hasAlternateServer}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition flex items-center gap-1.5 ${
+              hasAlternateServer
+                ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+                : 'bg-neutral-900 text-neutral-600 cursor-not-allowed'
+            }`}
+            title={hasAlternateServer ? 'Try next server' : 'No alternate server available'}
+          >
+            <SkipForward className="w-3.5 h-3.5" /> Next
+          </button>
           {currentServer && (
             <a
               href={currentServer.url}
@@ -144,8 +233,8 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center p-6">
               <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-              <p className="text-lg font-semibold mb-2">No servers available</p>
-              <p className="text-neutral-400 text-sm">Could not load streaming servers. Try again later.</p>
+              <p className="text-lg font-semibold mb-2">No working servers right now</p>
+              <p className="text-neutral-400 text-sm">All providers are currently unavailable. Please try again shortly.</p>
             </div>
           </div>
         ) : (
@@ -162,7 +251,9 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                     />
                   </div>
                   <p className="text-neutral-300 font-medium">{currentServer?.name}</p>
-                  <p className="text-neutral-500 text-sm mt-1">Connecting to server...</p>
+                  <p className="text-neutral-500 text-sm mt-1">
+                    {autoSwitching ? 'Trying next server...' : 'Connecting to server...'}
+                  </p>
                 </div>
               </div>
             )}
@@ -197,10 +288,14 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               referrerPolicy="origin"
               onLoad={handleIframeLoad}
               onError={() => {
+                const switched = tryNextServer(activeServer, 'auto');
+                if (switched) {
+                  return;
+                }
+
                 setIframeLoading(false);
                 setIframeError(true);
               }}
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
             />
           </>
         )}

@@ -12,7 +12,7 @@ A Netflix-style local media server that organizes and plays your movie & TV show
 |---------|-------------|
 | 🎥 **Netflix-style UI** | Dark theme, hero banners, poster grids |
 | 🌍 **Discover & Stream** | Browse trending movies & TV shows from TMDB. Watch online instantly! |
-| 🎬 **Stream Anywhere** | 9+ integrated high-speed streaming servers (VidSrc, SmashyStream, etc.) |
+| 🎬 **Stream Anywhere** | 9+ integrated streaming servers with automatic runtime availability filtering |
 | 📁 **Auto Scanning** | Add folders → movies & shows detected automatically |
 | 🔍 **TMDB Metadata** | Posters, ratings, genres fetched automatically |
 | 🎮 **Any Player** | VLC, PotPlayer, MPC-HC, mpv — auto-detects and passes correct args |
@@ -67,6 +67,14 @@ TV Shows/
 | **DLNA** | Click 📡 icon → Smart TV auto-discovers |
 
 Works on Smart TVs, phones, tablets, game consoles — anything with a screen.
+
+## 🌐 Streaming Server Behavior
+
+LFLIX now checks third-party movie/TV stream servers at request time and only shows servers that appear reachable and embeddable.
+
+- Checks are best-effort with a short timeout to keep the UI responsive.
+- Server availability can change by region, ISP, anti-bot challenges, or upstream outages.
+- A server that passes pre-check can still fail during playback; switch servers if needed.
 
 ## 📌 Watchlist
 
