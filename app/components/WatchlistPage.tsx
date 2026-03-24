@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Plus, Check, X, Trash2, Star, Film, Tv, Loader2, Bookmark, Calendar, Clock, Download, Play } from 'lucide-react';
+import { Search, Plus, Check, X, Trash2, Star, Film, Tv, Loader2, Bookmark, Clock, Download, Play, Globe } from 'lucide-react';
 import DownloadModal from './DownloadModal';
 import TrailerModal from './TrailerModal';
 
@@ -34,9 +34,10 @@ type TMDBResult = {
 
 type Props = {
     libraryTmdbIds?: number[];
+    onOpenOnline?: (item: TMDBResult) => void;
 };
 
-export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
+export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Props) {
     const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<TMDBResult[]>([]);
@@ -141,6 +142,21 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
 
     // Check if item is in library
     const isInLibrary = (tmdbId: number) => libraryTmdbIds.includes(tmdbId);
+
+    const openWatchlistItemOnline = (item: WatchlistItem) => {
+        if (!onOpenOnline) return;
+        onOpenOnline({
+            tmdbId: item.tmdbId,
+            mediaType: item.mediaType,
+            title: item.title,
+            posterPath: item.posterPath,
+            backdropPath: item.backdropPath,
+            overview: item.overview,
+            rating: item.rating,
+            year: item.year,
+            popularity: 0,
+        });
+    };
 
     // Format date
     const formatDate = (dateStr: string) => {
@@ -256,6 +272,13 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
                                     {/* Action */}
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                         <button
+                                            onClick={() => onOpenOnline?.(result)}
+                                            className="p-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg transition"
+                                            title="Open Details"
+                                        >
+                                            <Globe className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
                                             onClick={() => setTrailerItem({ tmdbId: result.tmdbId, mediaType: result.mediaType, title: result.title })}
                                             className="p-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded-lg transition"
                                             title="Watch Trailer"
@@ -333,6 +356,7 @@ export default function WatchlistPage({ libraryTmdbIds = [] }: Props) {
                         return (
                             <div
                                 key={item.id}
+                                onClick={() => openWatchlistItemOnline(item)}
                                 className="group relative bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-neutral-600 transition-all hover:scale-[1.02] hover:shadow-2xl"
                             >
                                 {/* Poster */}

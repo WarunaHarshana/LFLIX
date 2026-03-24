@@ -36,6 +36,7 @@ export async function GET(req: Request) {
                 tagline: movie.tagline || null,
                 genres: (movie.genres || []).map((g: any) => g.name).join(', '),
                 cast: ((movie as any).credits?.cast || []).slice(0, 8).map((c: any) => ({
+                    id: c.id,
                     name: c.name,
                     character: c.character,
                     profilePath: c.profile_path
@@ -89,6 +90,7 @@ export async function GET(req: Request) {
                         airDate: s.air_date || null,
                     })),
                 cast: ((show as any).credits?.cast || []).slice(0, 8).map((c: any) => ({
+                    id: c.id,
                     name: c.name,
                     character: c.character,
                     profilePath: c.profile_path

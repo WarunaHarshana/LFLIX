@@ -112,6 +112,18 @@ type IPTVChannel = {
   language?: string;
 };
 
+type DiscoverOnlineItem = {
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  title: string;
+  posterPath: string | null;
+  backdropPath: string | null;
+  overview: string | null;
+  rating: number | null;
+  year: string | null;
+  popularity: number;
+};
+
 export default function Home() {
   // Setup Wizard
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
@@ -123,7 +135,7 @@ export default function Home() {
   const [library, setLibrary] = useState<ContentItem[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'torrents' | 'discover'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'discover'>('all');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
   // IPTV State
@@ -171,7 +183,32 @@ export default function Home() {
   const [showLiveSports, setShowLiveSports] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
   const [activeDownloads, setActiveDownloads] = useState(0);
-  const [discoverInitialItem, setDiscoverInitialItem] = useState<any>(null);
+  const [discoverInitialItem, setDiscoverInitialItem] = useState<DiscoverOnlineItem | null>(null);
+  const [discoverMode, setDiscoverMode] = useState<'online' | 'torrents'>('online');
+  const [torrentInitialQuery, setTorrentInitialQuery] = useState('');
+
+  const switchTab = (tab: 'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'discover') => {
+    // Always open Discover in Online mode when navigating via top-level tabs.
+    if (tab === 'discover') {
+      setDiscoverMode('online');
+      setTorrentInitialQuery('');
+    }
+
+    // Leaving Discover should not persist previous Torrents mode/query.
+    if (tab !== 'discover' && activeTab === 'discover') {
+      setDiscoverMode('online');
+      setTorrentInitialQuery('');
+    }
+
+    setActiveTab(tab);
+  };
+
+  const openOnlineInDiscover = (item: DiscoverOnlineItem) => {
+    setDiscoverMode('online');
+    setDiscoverInitialItem(item);
+    setActiveTab('discover');
+    setTimeout(() => setDiscoverInitialItem(null), 500);
+  };
 
   // Force browser player (for TVs without VLC)
   const [forceBrowserPlayer, setForceBrowserPlayer] = useState(false);
@@ -769,32 +806,32 @@ export default function Home() {
           <h1 className="text-3xl font-bold text-red-600 tracking-tighter">LFLIX</h1>
           <div className="flex gap-2 text-base font-medium">
             <button
-              onClick={() => { setActiveTab('all'); setSelectedGenre(null); }}
+              onClick={() => { switchTab('all'); setSelectedGenre(null); }}
               className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px]", activeTab === 'all' ? "text-white bg-white/10" : "text-neutral-400")}
             >
               Home
             </button>
             <button
-              onClick={() => setActiveTab('discover')}
+              onClick={() => switchTab('discover')}
               className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'discover' ? "text-white bg-white/10" : "text-neutral-400")}
             >
               <Globe className="w-4 h-4" />
               Discover
             </button>
             <button
-              onClick={() => setActiveTab('show')}
+              onClick={() => switchTab('show')}
               className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px]", activeTab === 'show' ? "text-white bg-white/10" : "text-neutral-400")}
             >
               TV Shows
             </button>
             <button
-              onClick={() => setActiveTab('movie')}
+              onClick={() => switchTab('movie')}
               className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px]", activeTab === 'movie' ? "text-white bg-white/10" : "text-neutral-400")}
             >
               Movies
             </button>
             <button
-              onClick={() => setActiveTab('live')}
+              onClick={() => switchTab('live')}
               className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'live' ? "text-white bg-white/10" : "text-neutral-400")}
             >
               <Tv className="w-4 h-4" />
@@ -808,18 +845,11 @@ export default function Home() {
               Live Sports
             </button>
             <button
-              onClick={() => setActiveTab('watchlist')}
+              onClick={() => switchTab('watchlist')}
               className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'watchlist' ? "text-white bg-white/10" : "text-neutral-400")}
             >
               <Bookmark className="w-4 h-4" />
               Watchlist
-            </button>
-            <button
-              onClick={() => setActiveTab('torrents')}
-              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'torrents' ? "text-white bg-white/10" : "text-neutral-400")}
-            >
-              <Magnet className="w-4 h-4" />
-              Torrents
             </button>
           </div>
         </div>
@@ -838,9 +868,7 @@ export default function Home() {
               if (show) openShow(show);
             }}
             onOpenOnline={(item) => {
-              setDiscoverInitialItem(item);
-              setActiveTab('discover');
-              setTimeout(() => setDiscoverInitialItem(null), 500);
+              openOnlineInDiscover(item);
             }}
           />
           <button
@@ -928,7 +956,7 @@ export default function Home() {
       </nav>
 
       {/* Loading State - only show for movie/show tabs */}
-      {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'torrents' && activeTab !== 'discover' && (loading ? (
+      {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'discover' && (loading ? (
         <>
           <HeroSkeleton />
           <div className="px-12 pb-20 -mt-20 relative z-20">
@@ -1461,17 +1489,29 @@ export default function Home() {
       {activeTab === 'watchlist' && (
         <WatchlistPage
           libraryTmdbIds={library.map(item => item.tmdbId).filter((id): id is number => id != null)}
+          onOpenOnline={(item) => {
+            openOnlineInDiscover(item);
+          }}
         />
-      )}
-
-      {/* Torrent Search Section */}
-      {activeTab === 'torrents' && (
-        <TorrentSearchPage />
       )}
 
       {/* Discover Section */}
       {activeTab === 'discover' && (
-        <DiscoverPage initialItem={discoverInitialItem} />
+        discoverMode === 'online' ? (
+          <DiscoverPage
+            initialItem={discoverInitialItem}
+            onSwitchToTorrents={(query) => {
+              if (query) setTorrentInitialQuery(query);
+              setDiscoverMode('torrents');
+            }}
+          />
+        ) : (
+          <TorrentSearchPage
+            initialQuery={torrentInitialQuery}
+            onSwitchToOnline={() => setDiscoverMode('online')}
+            onOpenOnline={(item) => openOnlineInDiscover(item)}
+          />
+        )
       )}
 
       {/* Content Detail Modal */}
@@ -1485,6 +1525,10 @@ export default function Home() {
           }}
           onViewEpisodes={() => {
             openShow(selectedDetail);
+            setSelectedDetail(null);
+          }}
+          onOpenOnline={(item) => {
+            openOnlineInDiscover(item);
             setSelectedDetail(null);
           }}
         />
@@ -1614,7 +1658,7 @@ export default function Home() {
       {/* Mobile Navigation */}
       <MobileNav
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={switchTab}
         onShowQR={() => setShowMobileConnect(true)}
         onShowSettings={() => window.location.href = '/settings'}
         onShowSearch={() => setShowMobileSearch(true)}

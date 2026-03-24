@@ -30,7 +30,25 @@ type TorrentResult = {
     uploadTimestamp?: number;
 };
 
-export default function TorrentSearchPage() {
+type TMDBResult = {
+    tmdbId: number;
+    mediaType: 'movie' | 'tv';
+    title: string;
+    posterPath: string | null;
+    backdropPath: string | null;
+    overview: string | null;
+    rating: number | null;
+    year: string | null;
+    popularity: number;
+};
+
+type Props = {
+    onOpenOnline?: (item: TMDBResult) => void;
+    onSwitchToOnline?: () => void;
+    initialQuery?: string;
+};
+
+export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, initialQuery }: Props) {
     const [searchQuery, setSearchQuery] = useState('');
     const [results, setResults] = useState<TorrentResult[]>([]);
     const [searching, setSearching] = useState(false);
@@ -42,6 +60,7 @@ export default function TorrentSearchPage() {
     const [folders, setFolders] = useState<{ id: number; path: string; contentType: string }[]>([]);
     const [selectedFolder, setSelectedFolder] = useState<string>('');
     const [sortBy, setSortBy] = useState<SortMode>('seeds');
+    const [resolvingDetails, setResolvingDetails] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     // Trending state
@@ -88,21 +107,22 @@ export default function TorrentSearchPage() {
 
     const searchAbortRef = useRef<AbortController | null>(null);
 
-    const searchTorrents = async () => {
-        if (searchQuery.trim().length < 2) return;
+    const executeSearch = async (query: string) => {
+        if (query.trim().length < 2) return;
 
-        // Cancel previous search if still running
         if (searchAbortRef.current) {
             searchAbortRef.current.abort();
         }
+
         const controller = new AbortController();
         searchAbortRef.current = controller;
 
         setSearching(true);
         setError(null);
         setSearched(false);
+
         try {
-            const res = await fetch(`/api/torrent-search?q=${encodeURIComponent(searchQuery.trim())}`, {
+            const res = await fetch(`/api/torrent-search?q=${encodeURIComponent(query.trim())}`, {
                 signal: controller.signal,
             });
             const data = await res.json();
@@ -122,6 +142,16 @@ export default function TorrentSearchPage() {
             }
         }
     };
+
+    const searchTorrents = async () => {
+        await executeSearch(searchQuery);
+    };
+
+    useEffect(() => {
+        if (!initialQuery || initialQuery.trim().length < 2) return;
+        setSearchQuery(initialQuery);
+        void executeSearch(initialQuery);
+    }, [initialQuery]);
 
     const startDownload = async (magnetUri: string) => {
         setDownloading(magnetUri);
@@ -149,6 +179,25 @@ export default function TorrentSearchPage() {
         if (!magnet.startsWith('magnet:')) return;
         await startDownload(magnet);
         setManualMagnet('');
+    };
+
+    const openDetailsByTitle = async (title: string) => {
+        if (!onOpenOnline) return;
+        setResolvingDetails(title);
+        try {
+            const res = await fetch(`/api/tmdb-search?q=${encodeURIComponent(title)}&type=multi`);
+            const data = await res.json();
+            const best = (data.results || [])[0] as TMDBResult | undefined;
+            if (!best) {
+                setError(`No TMDB match found for "${title}"`);
+                return;
+            }
+            onOpenOnline(best);
+        } catch {
+            setError('Could not fetch title details');
+        } finally {
+            setResolvingDetails(null);
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -202,6 +251,15 @@ export default function TorrentSearchPage() {
                     <h1 className="text-3xl font-bold">Torrent Search</h1>
                 </div>
                 <p className="text-neutral-400 text-sm">Search for any torrent — movies, TV episodes, anything. Download directly to your library.</p>
+                {onSwitchToOnline && (
+                    <button
+                        onClick={onSwitchToOnline}
+                        className="mt-3 px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-xl hover:bg-neutral-800 transition text-sm text-neutral-300 flex items-center gap-2"
+                    >
+                        <Globe className="w-4 h-4 text-blue-400" />
+                        Switch to Online
+                    </button>
+                )}
             </div>
 
             {/* Search Bar */}
@@ -349,6 +407,14 @@ export default function TorrentSearchPage() {
                                     </div>
                                 </div>
                                 <button
+                                    onClick={() => openDetailsByTitle(result.title)}
+                                    disabled={downloading !== null || resolvingDetails !== null}
+                                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-neutral-600 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
+                                >
+                                    {resolvingDetails === result.title ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+                                    Details
+                                </button>
+                                <button
                                     onClick={() => startDownload(result.magnet)}
                                     disabled={downloading !== null || isStarted}
                                     className={`px-4 py-2.5 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0 ${isStarted
@@ -424,17 +490,39 @@ export default function TorrentSearchPage() {
                     {!loadingTrending && (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3">
                             {(trendingTab === 'movie' ? trendingMovies : trendingTv).map((item) => (
-                                <button
+                                <div
                                     key={item.tmdbId}
                                     onClick={() => {
                                         setSearchQuery(item.title);
                                         inputRef.current?.focus();
                                     }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setSearchQuery(item.title);
+                                            inputRef.current?.focus();
+                                        }
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
                                     className="group relative bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden hover:border-neutral-600 hover:scale-[1.03] transition-all duration-200 text-left cursor-pointer"
                                     title={`Search torrents for "${item.title}"`}
                                 >
                                     {/* Poster */}
                                     <div className="aspect-[2/3] relative bg-neutral-800">
+                                        {onOpenOnline && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onOpenOnline(item);
+                                                }}
+                                                className="absolute top-1.5 left-1.5 z-10 flex items-center gap-1 px-1.5 py-0.5 bg-indigo-600/90 hover:bg-indigo-500 text-white rounded-md text-[10px] font-bold transition"
+                                                title="Open details"
+                                            >
+                                                <Globe className="w-2.5 h-2.5" />
+                                                Details
+                                            </button>
+                                        )}
                                         {item.posterPath ? (
                                             <img
                                                 src={`https://image.tmdb.org/t/p/w300${item.posterPath}`}
@@ -471,7 +559,7 @@ export default function TorrentSearchPage() {
                                             <p className="text-[10px] text-neutral-500">{item.year}</p>
                                         )}
                                     </div>
-                                </button>
+                                </div>
                             ))}
                         </div>
                     )}

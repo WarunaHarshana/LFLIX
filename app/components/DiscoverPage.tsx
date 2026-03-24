@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, X, Star, Film, Tv, Loader2, Globe, TrendingUp, Play, Download, Bookmark, ChevronLeft, ChevronDown, Info, Clock, Filter } from 'lucide-react';
+import { Search, X, Star, Film, Tv, Loader2, Globe, TrendingUp, Play, Download, Bookmark, ChevronDown, Filter, User, Magnet } from 'lucide-react';
+import ContentCard, { type ContentItem as DiscoverContentCardItem } from './ContentCard';
 import StreamServerModal from './StreamServerModal';
 import DownloadModal from './DownloadModal';
 import TrailerModal from './TrailerModal';
@@ -93,7 +94,7 @@ type MovieDetails = {
     runtime: number | null;
     tagline: string | null;
     genres: string;
-    cast: { name: string; character: string; profilePath: string | null }[];
+    cast: { id: number; name: string; character: string; profilePath: string | null }[];
 };
 
 type TVDetails = {
@@ -109,7 +110,19 @@ type TVDetails = {
     genres: string;
     numberOfSeasons: number;
     seasons: { seasonNumber: number; name: string; episodeCount: number; posterPath: string | null; airDate: string | null }[];
-    cast: { name: string; character: string; profilePath: string | null }[];
+    cast: { id: number; name: string; character: string; profilePath: string | null }[];
+};
+
+type PersonCredit = TMDBResult & {
+    character: string | null;
+};
+
+type PersonDetails = {
+    id: number;
+    name: string;
+    profilePath: string | null;
+    biography: string | null;
+    credits: PersonCredit[];
 };
 
 type EpisodeInfo = {
@@ -124,9 +137,23 @@ type EpisodeInfo = {
 
 type DiscoverProps = {
     initialItem?: TMDBResult | null;
+    onSwitchToTorrents?: (query?: string) => void;
 };
 
-export default function DiscoverPage({ initialItem }: DiscoverProps) {
+function toDiscoverContentCardItem(item: TMDBResult): DiscoverContentCardItem {
+    return {
+        id: item.tmdbId,
+        type: item.mediaType === 'movie' ? 'movie' : 'show',
+        title: item.title,
+        posterPath: item.posterPath,
+        backdropPath: item.backdropPath,
+        overview: item.overview,
+        rating: item.rating,
+        year: item.year ? parseInt(item.year, 10) : undefined,
+    };
+}
+
+export default function DiscoverPage({ initialItem, onSwitchToTorrents }: DiscoverProps) {
     // Search
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<TMDBResult[]>([]);
@@ -160,6 +187,14 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
     const [movieDetails, setMovieDetails] = useState<MovieDetails | null>(null);
     const [tvDetails, setTVDetails] = useState<TVDetails | null>(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
+    const [similarItems, setSimilarItems] = useState<TMDBResult[]>([]);
+    const [loadingSimilar, setLoadingSimilar] = useState(false);
+
+    // Person modal
+    const [personModalOpen, setPersonModalOpen] = useState(false);
+    const [personData, setPersonData] = useState<PersonDetails | null>(null);
+    const [loadingPerson, setLoadingPerson] = useState(false);
+    const [visiblePersonCredits, setVisiblePersonCredits] = useState(8);
 
     // TV Episode browser
     const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
@@ -300,24 +335,80 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
         setSelectedResult(result);
         setMovieDetails(null);
         setTVDetails(null);
+        setSimilarItems([]);
         setSelectedSeason(null);
         setEpisodes([]);
         setWatchlistAdded(false);
         setLoadingDetails(true);
+        setLoadingSimilar(true);
 
         try {
-            const res = await fetch(`/api/tmdb-details?id=${result.tmdbId}&type=${result.mediaType}`);
-            const data = await res.json();
-            if (result.mediaType === 'movie') {
-                setMovieDetails(data);
-            } else {
-                setTVDetails(data);
+            const [detailsResp, similarResp] = await Promise.allSettled([
+                fetch(`/api/tmdb-details?id=${result.tmdbId}&type=${result.mediaType}`),
+                fetch(`/api/tmdb-similar?id=${result.tmdbId}&type=${result.mediaType}`)
+            ]);
+
+            if (detailsResp.status === 'fulfilled' && detailsResp.value.ok) {
+                const detailsData = await detailsResp.value.json();
+                if (result.mediaType === 'movie') {
+                    setMovieDetails(detailsData);
+                } else {
+                    setTVDetails(detailsData);
+                }
+            }
+
+            if (similarResp.status === 'fulfilled' && similarResp.value.ok) {
+                const similarData = await similarResp.value.json();
+                const filtered = (similarData.results || []).filter((item: TMDBResult) => item.tmdbId !== result.tmdbId);
+                setSimilarItems(filtered.slice(0, 8));
             }
         } catch (e) {
             console.error('Failed to fetch details', e);
         } finally {
             setLoadingDetails(false);
+            setLoadingSimilar(false);
         }
+    };
+
+    const openPerson = async (personId: number) => {
+        if (!personId) return;
+
+        setPersonModalOpen(true);
+        setPersonData(null);
+        setLoadingPerson(true);
+        setVisiblePersonCredits(8);
+
+        try {
+            const res = await fetch(`/api/tmdb-person?id=${personId}`);
+            if (!res.ok) {
+                throw new Error('Failed to load person details');
+            }
+            const data = await res.json();
+            setPersonData(data);
+        } catch (e) {
+            console.error('Failed to fetch person details', e);
+        } finally {
+            setLoadingPerson(false);
+        }
+    };
+
+    const openCreditFromPerson = (credit: PersonCredit) => {
+        setPersonModalOpen(false);
+        void openDetails({
+            tmdbId: credit.tmdbId,
+            mediaType: credit.mediaType,
+            title: credit.title,
+            posterPath: credit.posterPath,
+            backdropPath: credit.backdropPath,
+            overview: credit.overview,
+            rating: credit.rating,
+            year: credit.year,
+            popularity: credit.popularity,
+        });
+    };
+
+    const loadMorePersonCredits = () => {
+        setVisiblePersonCredits((prev) => prev + 8);
     };
 
     // Auto-open details when initialItem is passed from search
@@ -361,8 +452,11 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
         setSelectedResult(null);
         setMovieDetails(null);
         setTVDetails(null);
+        setSimilarItems([]);
         setSelectedSeason(null);
         setEpisodes([]);
+        setPersonModalOpen(false);
+        setPersonData(null);
     };
 
     const showingSearch = searchQuery.trim().length >= 2;
@@ -389,6 +483,15 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                         <p className="text-neutral-400 text-sm">Search any movie or TV show. Watch online instantly or download.</p>
                     </div>
                 </div>
+                {onSwitchToTorrents && (
+                    <button
+                        onClick={() => onSwitchToTorrents(searchQuery.trim() || undefined)}
+                        className="mt-3 px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-xl hover:bg-neutral-800 transition text-sm text-neutral-300 flex items-center gap-2"
+                    >
+                        <Magnet className="w-4 h-4 text-blue-400" />
+                        Switch to Torrents
+                    </button>
+                )}
             </div>
 
             {/* Search Bar */}
@@ -709,6 +812,14 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                                     >
                                         <Play className="w-4 h-4" /> Trailer
                                     </button>
+                                    {onSwitchToTorrents && (
+                                        <button
+                                            onClick={() => onSwitchToTorrents(selectedResult.title)}
+                                            className="px-5 py-2.5 bg-indigo-600/80 hover:bg-indigo-500 text-white font-semibold rounded-lg flex items-center gap-2 transition text-sm border border-indigo-500/50"
+                                        >
+                                            <Magnet className="w-4 h-4" /> Find Torrent
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => setDownloadModal({
                                             title: selectedResult.title,
@@ -764,7 +875,11 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                                         <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Cast</h3>
                                         <div className="flex flex-wrap gap-2">
                                             {movieDetails.cast.map((c, i) => (
-                                                <div key={i} className="flex items-center gap-2 bg-neutral-800 rounded-lg px-3 py-1.5">
+                                                <button
+                                                    key={`${c.id}-${i}`}
+                                                    onClick={() => openPerson(c.id)}
+                                                    className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-1.5 transition"
+                                                >
                                                     {c.profilePath && (
                                                         <img src={`https://image.tmdb.org/t/p/w45${c.profilePath}`} className="w-6 h-6 rounded-full object-cover" alt="" />
                                                     )}
@@ -772,9 +887,49 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                                                         <div className="text-xs font-medium">{c.name}</div>
                                                         <div className="text-[10px] text-neutral-500">{c.character}</div>
                                                     </div>
-                                                </div>
+                                                </button>
                                             ))}
                                         </div>
+                                    </div>
+                                )}
+
+                                {/* Similar */}
+                                {(loadingSimilar || similarItems.length > 0) && (
+                                    <div>
+                                        <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Similar Movies</h3>
+                                        {loadingSimilar ? (
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                {Array.from({ length: 8 }).map((_, idx) => (
+                                                    <div key={idx} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                                                        <div className="aspect-[2/3] bg-neutral-800" />
+                                                        <div className="p-2 space-y-2">
+                                                            <div className="h-3 bg-neutral-700 rounded" />
+                                                            <div className="h-3 w-2/3 bg-neutral-800 rounded" />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div
+                                                key={`similar-movie-${selectedResult?.tmdbId ?? 'none'}`}
+                                                className="grid grid-cols-2 sm:grid-cols-4 gap-2 animate-in fade-in duration-200"
+                                            >
+                                                {similarItems.map((item, idx) => (
+                                                    <div
+                                                        key={`${item.mediaType}-${item.tmdbId}-${idx}`}
+                                                        className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+                                                        style={{ animationDelay: `${idx * 45}ms`, animationFillMode: 'both' }}
+                                                    >
+                                                        <ContentCard
+                                                            item={toDiscoverContentCardItem(item)}
+                                                            onClick={() => openDetails(item)}
+                                                            showProgress={false}
+                                                            showRating={true}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -807,6 +962,14 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                                     >
                                         <Play className="w-4 h-4" /> Trailer
                                     </button>
+                                    {onSwitchToTorrents && (
+                                        <button
+                                            onClick={() => onSwitchToTorrents(selectedResult.title)}
+                                            className="px-5 py-2.5 bg-indigo-600/80 hover:bg-indigo-500 text-white font-semibold rounded-lg flex items-center gap-2 transition text-sm border border-indigo-500/50"
+                                        >
+                                            <Magnet className="w-4 h-4" /> Find Torrent
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => setDownloadModal({
                                             title: selectedResult.title,
@@ -866,7 +1029,11 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                                         <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Cast</h3>
                                         <div className="flex flex-wrap gap-2">
                                             {tvDetails.cast.map((c, i) => (
-                                                <div key={i} className="flex items-center gap-2 bg-neutral-800 rounded-lg px-3 py-1.5">
+                                                <button
+                                                    key={`${c.id}-${i}`}
+                                                    onClick={() => openPerson(c.id)}
+                                                    className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-1.5 transition"
+                                                >
                                                     {c.profilePath && (
                                                         <img src={`https://image.tmdb.org/t/p/w45${c.profilePath}`} className="w-6 h-6 rounded-full object-cover" alt="" />
                                                     )}
@@ -874,9 +1041,49 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                                                         <div className="text-xs font-medium">{c.name}</div>
                                                         <div className="text-[10px] text-neutral-500">{c.character}</div>
                                                     </div>
-                                                </div>
+                                                </button>
                                             ))}
                                         </div>
+                                    </div>
+                                )}
+
+                                {/* Similar */}
+                                {(loadingSimilar || similarItems.length > 0) && (
+                                    <div>
+                                        <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Similar TV Shows</h3>
+                                        {loadingSimilar ? (
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                {Array.from({ length: 8 }).map((_, idx) => (
+                                                    <div key={idx} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                                                        <div className="aspect-[2/3] bg-neutral-800" />
+                                                        <div className="p-2 space-y-2">
+                                                            <div className="h-3 bg-neutral-700 rounded" />
+                                                            <div className="h-3 w-2/3 bg-neutral-800 rounded" />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div
+                                                key={`similar-tv-${selectedResult?.tmdbId ?? 'none'}`}
+                                                className="grid grid-cols-2 sm:grid-cols-4 gap-2 animate-in fade-in duration-200"
+                                            >
+                                                {similarItems.map((item, idx) => (
+                                                    <div
+                                                        key={`${item.mediaType}-${item.tmdbId}-${idx}`}
+                                                        className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+                                                        style={{ animationDelay: `${idx * 45}ms`, animationFillMode: 'both' }}
+                                                    >
+                                                        <ContentCard
+                                                            item={toDiscoverContentCardItem(item)}
+                                                            onClick={() => openDetails(item)}
+                                                            showProgress={false}
+                                                            showRating={true}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -995,6 +1202,143 @@ export default function DiscoverPage({ initialItem }: DiscoverProps) {
                                 )}
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Person Modal */}
+            {personModalOpen && (
+                <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
+                    <div
+                        className="w-full max-w-4xl max-h-[90vh] bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-5 border-b border-neutral-800 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-bold">Cast Filmography</h3>
+                                {personData && <p className="text-xs text-neutral-400 mt-1">{personData.name}</p>}
+                            </div>
+                            <button
+                                onClick={() => setPersonModalOpen(false)}
+                                className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded-full transition"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-5 overflow-y-auto flex-1">
+                            {loadingPerson && (
+                                <div>
+                                    <div className="flex gap-4 mb-5 animate-pulse">
+                                        <div className="w-20 h-20 rounded-xl bg-neutral-800 shrink-0" />
+                                        <div className="flex-1 space-y-2">
+                                            <div className="h-5 w-48 bg-neutral-800 rounded" />
+                                            <div className="h-3 w-full bg-neutral-800 rounded" />
+                                            <div className="h-3 w-5/6 bg-neutral-800 rounded" />
+                                            <div className="h-3 w-3/4 bg-neutral-800 rounded" />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        {Array.from({ length: 8 }).map((_, idx) => (
+                                            <div key={idx} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                                                <div className="aspect-[2/3] bg-neutral-800" />
+                                                <div className="p-2 space-y-2">
+                                                    <div className="h-3 bg-neutral-700 rounded" />
+                                                    <div className="h-3 w-2/3 bg-neutral-800 rounded" />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {!loadingPerson && personData && (
+                                <>
+                                    <div className="flex gap-4 mb-5">
+                                        <div className="w-20 h-20 rounded-xl overflow-hidden bg-neutral-800 shrink-0 flex items-center justify-center">
+                                            {personData.profilePath ? (
+                                                <img
+                                                    src={`https://image.tmdb.org/t/p/w185${personData.profilePath}`}
+                                                    alt={personData.name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <User className="w-8 h-8 text-neutral-600" />
+                                            )}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h4 className="text-lg font-semibold">{personData.name}</h4>
+                                            {personData.biography && (
+                                                <p className="text-sm text-neutral-400 mt-1 line-clamp-4">{personData.biography}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <h5 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Movies & TV Shows</h5>
+                                    {personData.credits.length > 0 ? (
+                                        <>
+                                        <div
+                                            key={`person-credits-${personData.id}-${visiblePersonCredits}`}
+                                            className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-in fade-in duration-200"
+                                        >
+                                            {personData.credits.slice(0, visiblePersonCredits).map((credit, idx) => (
+                                                <div
+                                                    key={`${credit.mediaType}-${credit.tmdbId}-${idx}`}
+                                                    className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+                                                    style={{ animationDelay: `${idx * 40}ms`, animationFillMode: 'both' }}
+                                                >
+                                                    <button
+                                                        onClick={() => openCreditFromPerson(credit)}
+                                                        className="w-full text-left bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 rounded-xl overflow-hidden transition"
+                                                    >
+                                                        <div className="aspect-[2/3] bg-neutral-800">
+                                                            {credit.posterPath ? (
+                                                                <img
+                                                                    src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
+                                                                    alt={credit.title}
+                                                                    className="w-full h-full object-cover"
+                                                                    loading="lazy"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-full h-full flex items-center justify-center">
+                                                                    {credit.mediaType === 'movie' ? (
+                                                                        <Film className="w-8 h-8 text-neutral-700" />
+                                                                    ) : (
+                                                                        <Tv className="w-8 h-8 text-neutral-700" />
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="p-2">
+                                                            <div className="text-xs font-medium line-clamp-2">{credit.title}</div>
+                                                            <div className="text-[10px] text-neutral-500 mt-0.5">{credit.year || 'Unknown year'}</div>
+                                                            {credit.character && <div className="text-[10px] text-neutral-400 line-clamp-1 mt-1">as {credit.character}</div>}
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {personData.credits.length > visiblePersonCredits && (
+                                            <div className="flex justify-center mt-4">
+                                                <button
+                                                    onClick={loadMorePersonCredits}
+                                                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 transition"
+                                                >
+                                                    See All ({personData.credits.length - visiblePersonCredits} more)
+                                                </button>
+                                            </div>
+                                        )}
+                                        </>
+                                    ) : (
+                                        <p className="text-sm text-neutral-500">No credits available.</p>
+                                    )}
+                                </>
+                            )}
+
+                            {!loadingPerson && !personData && (
+                                <p className="text-sm text-neutral-500 text-center py-8">Unable to load cast details.</p>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

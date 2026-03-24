@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Play, Star, Clock, Film, Tv, HardDrive, Info, PlayCircle, Globe } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, Play, Star, Clock, Film, Tv, Loader2, Info, PlayCircle, Globe, User } from 'lucide-react';
 import TrailerModal from './TrailerModal';
 import StreamServerModal from './StreamServerModal';
+import ContentCard, { type ContentItem as DiscoverContentCardItem } from './ContentCard';
 
 type ContentItem = {
     id: number;
@@ -35,6 +36,64 @@ type Props = {
     onClose: () => void;
     onPlay: () => void;
     onViewEpisodes?: () => void;
+    onOpenOnline?: (item: {
+        tmdbId: number;
+        mediaType: 'movie' | 'tv';
+        title: string;
+        posterPath: string | null;
+        backdropPath: string | null;
+        overview: string | null;
+        rating: number | null;
+        year: string | null;
+        popularity: number;
+    }) => void;
+};
+
+type TmdbCast = {
+    id: number;
+    name: string;
+    character: string;
+    profilePath: string | null;
+};
+
+type TmdbMovieDetails = {
+    overview: string | null;
+    tagline: string | null;
+    genres: string;
+    runtime: number | null;
+    cast: TmdbCast[];
+};
+
+type TmdbTvDetails = {
+    overview: string | null;
+    tagline: string | null;
+    genres: string;
+    status: string | null;
+    cast: TmdbCast[];
+};
+
+type TmdbResult = {
+    tmdbId: number;
+    mediaType: 'movie' | 'tv';
+    title: string;
+    posterPath: string | null;
+    backdropPath: string | null;
+    overview: string | null;
+    rating: number | null;
+    year: string | null;
+    popularity: number;
+};
+
+type PersonCredit = TmdbResult & {
+    character: string | null;
+};
+
+type PersonDetails = {
+    id: number;
+    name: string;
+    profilePath: string | null;
+    biography: string | null;
+    credits: PersonCredit[];
 };
 
 function formatDuration(seconds: number): string {
@@ -44,14 +103,132 @@ function formatDuration(seconds: number): string {
     return `${m}m`;
 }
 
-export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisodes }: Props) {
+function toDiscoverContentCardItem(item: TmdbResult): DiscoverContentCardItem {
+    return {
+        id: item.tmdbId,
+        type: item.mediaType === 'movie' ? 'movie' : 'show',
+        title: item.title,
+        posterPath: item.posterPath,
+        backdropPath: item.backdropPath,
+        overview: item.overview,
+        rating: item.rating,
+        year: item.year ? parseInt(item.year, 10) : undefined,
+    };
+}
+
+export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisodes, onOpenOnline }: Props) {
     const [imgLoaded, setImgLoaded] = useState(false);
     const [showTrailer, setShowTrailer] = useState(false);
     const [showStreamServers, setShowStreamServers] = useState(false);
+    const [tmdbMovieDetails, setTmdbMovieDetails] = useState<TmdbMovieDetails | null>(null);
+    const [tmdbTvDetails, setTmdbTvDetails] = useState<TmdbTvDetails | null>(null);
+    const [loadingTmdbDetails, setLoadingTmdbDetails] = useState(false);
+    const [similarItems, setSimilarItems] = useState<TmdbResult[]>([]);
+    const [loadingSimilar, setLoadingSimilar] = useState(false);
+
+    const [personModalOpen, setPersonModalOpen] = useState(false);
+    const [personData, setPersonData] = useState<PersonDetails | null>(null);
+    const [loadingPerson, setLoadingPerson] = useState(false);
+    const [visiblePersonCredits, setVisiblePersonCredits] = useState(8);
+
     const year = item.year || (item.firstAirDate ? item.firstAirDate.substring(0, 4) : '');
     const progressPercent = item.watchProgress && item.watchProgress.duration > 0
         ? (item.watchProgress.progress / item.watchProgress.duration) * 100
         : 0;
+    const mediaType = item.type === 'show' ? 'tv' : 'movie';
+
+    const activeDetails = mediaType === 'movie' ? tmdbMovieDetails : tmdbTvDetails;
+    const displayOverview = activeDetails?.overview || item.overview;
+    const displayGenres = activeDetails?.genres || item.genres;
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchTmdbDetails = async () => {
+            if (!item.tmdbId) {
+                setTmdbMovieDetails(null);
+                setTmdbTvDetails(null);
+                setSimilarItems([]);
+                setLoadingTmdbDetails(false);
+                setLoadingSimilar(false);
+                return;
+            }
+
+            setLoadingTmdbDetails(true);
+            setLoadingSimilar(true);
+            setTmdbMovieDetails(null);
+            setTmdbTvDetails(null);
+            setSimilarItems([]);
+
+            try {
+                const [detailsResp, similarResp] = await Promise.allSettled([
+                    fetch(`/api/tmdb-details?id=${item.tmdbId}&type=${mediaType}`),
+                    fetch(`/api/tmdb-similar?id=${item.tmdbId}&type=${mediaType}`),
+                ]);
+
+                if (!cancelled && detailsResp.status === 'fulfilled' && detailsResp.value.ok) {
+                    const detailsData = await detailsResp.value.json();
+                    if (mediaType === 'movie') {
+                        setTmdbMovieDetails(detailsData);
+                    } else {
+                        setTmdbTvDetails(detailsData);
+                    }
+                }
+
+                if (!cancelled && similarResp.status === 'fulfilled' && similarResp.value.ok) {
+                    const similarData = await similarResp.value.json();
+                    const filtered = (similarData.results || []).filter((s: TmdbResult) => s.tmdbId !== item.tmdbId);
+                    setSimilarItems(filtered.slice(0, 8));
+                }
+            } catch (e) {
+                console.error('Failed to fetch modal TMDB details', e);
+            } finally {
+                if (!cancelled) {
+                    setLoadingTmdbDetails(false);
+                    setLoadingSimilar(false);
+                }
+            }
+        };
+
+        void fetchTmdbDetails();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [item.tmdbId, mediaType]);
+
+    const openPerson = async (personId: number) => {
+        if (!personId) return;
+
+        setPersonModalOpen(true);
+        setPersonData(null);
+        setLoadingPerson(true);
+        setVisiblePersonCredits(8);
+
+        try {
+            const res = await fetch(`/api/tmdb-person?id=${personId}`);
+            if (!res.ok) {
+                throw new Error('Failed to load person details');
+            }
+            const data = await res.json();
+            setPersonData(data);
+        } catch (e) {
+            console.error('Failed to fetch person details', e);
+        } finally {
+            setLoadingPerson(false);
+        }
+    };
+
+    const loadMorePersonCredits = () => {
+        setVisiblePersonCredits((prev) => prev + 8);
+    };
+
+    const openOnlineResult = (result: TmdbResult) => {
+        if (!onOpenOnline) return;
+        onOpenOnline(result);
+        setPersonModalOpen(false);
+        onClose();
+    };
 
     return (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
@@ -197,22 +374,112 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                     )}
 
                     {/* Overview */}
-                    {item.overview && (
+                    {displayOverview && (
                         <div className="mb-6">
-                            <p className="text-neutral-300 leading-relaxed">{item.overview}</p>
+                            {activeDetails?.tagline && (
+                                <p className="text-neutral-400 italic text-sm mb-3">&quot;{activeDetails.tagline}&quot;</p>
+                            )}
+                            <p className="text-neutral-300 leading-relaxed">{displayOverview}</p>
                         </div>
                     )}
 
                     {/* Genres */}
-                    {item.genres && (
+                    {displayGenres && (
                         <div className="mb-6">
                             <div className="flex flex-wrap gap-2">
-                                {item.genres.split(',').map((genre, i) => (
+                                {displayGenres.split(',').map((genre, i) => (
                                     <span key={i} className="px-3 py-1 bg-neutral-800 text-neutral-300 text-sm rounded-full border border-neutral-700">
                                         {genre.trim()}
                                     </span>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Runtime / Status */}
+                    {(tmdbMovieDetails?.runtime || tmdbTvDetails?.status) && (
+                        <div className="mb-6 flex flex-wrap gap-4 text-sm text-neutral-400">
+                            {tmdbMovieDetails?.runtime && (
+                                <div>
+                                    <span className="text-neutral-500 text-xs uppercase tracking-wider">Runtime</span>
+                                    <p className="text-neutral-200">{Math.floor(tmdbMovieDetails.runtime / 60)}h {tmdbMovieDetails.runtime % 60}m</p>
+                                </div>
+                            )}
+                            {tmdbTvDetails?.status && (
+                                <div>
+                                    <span className="text-neutral-500 text-xs uppercase tracking-wider">Status</span>
+                                    <p className="text-neutral-200">{tmdbTvDetails.status}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Cast */}
+                    {activeDetails?.cast && activeDetails.cast.length > 0 && (
+                        <div className="mb-6">
+                            <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Cast</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {activeDetails.cast.map((c, i) => (
+                                    <button
+                                        key={`${c.id}-${i}`}
+                                        onClick={() => openPerson(c.id)}
+                                        className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-1.5 transition"
+                                    >
+                                        {c.profilePath && (
+                                            <img src={`https://image.tmdb.org/t/p/w45${c.profilePath}`} className="w-6 h-6 rounded-full object-cover" alt="" />
+                                        )}
+                                        <div>
+                                            <div className="text-xs font-medium">{c.name}</div>
+                                            <div className="text-[10px] text-neutral-500">{c.character}</div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Similar */}
+                    {item.tmdbId && (loadingSimilar || similarItems.length > 0) && (
+                        <div className="mb-6">
+                            <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">
+                                {mediaType === 'movie' ? 'Similar Movies' : 'Similar TV Shows'}
+                            </h3>
+                            {loadingSimilar ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    {Array.from({ length: 8 }).map((_, idx) => (
+                                        <div key={idx} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                                            <div className="aspect-[2/3] bg-neutral-800" />
+                                            <div className="p-2 space-y-2">
+                                                <div className="h-3 bg-neutral-700 rounded" />
+                                                <div className="h-3 w-2/3 bg-neutral-800 rounded" />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 animate-in fade-in duration-200">
+                                    {similarItems.map((similar, idx) => (
+                                        <div
+                                            key={`${similar.mediaType}-${similar.tmdbId}-${idx}`}
+                                            className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+                                            style={{ animationDelay: `${idx * 45}ms`, animationFillMode: 'both' }}
+                                        >
+                                            <ContentCard
+                                                item={toDiscoverContentCardItem(similar)}
+                                                onClick={() => openOnlineResult(similar)}
+                                                showProgress={false}
+                                                showRating={true}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {item.tmdbId && loadingTmdbDetails && !activeDetails && (
+                        <div className="flex justify-center py-6">
+                            <Loader2 className="w-6 h-6 animate-spin text-neutral-500" />
                         </div>
                     )}
 
@@ -272,6 +539,140 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                     title={item.title}
                     onClose={() => setShowStreamServers(false)}
                 />
+            )}
+
+            {/* Person Modal */}
+            {personModalOpen && (
+                <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
+                    <div
+                        className="w-full max-w-4xl max-h-[90vh] bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-5 border-b border-neutral-800 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-bold">Cast Filmography</h3>
+                                {personData && <p className="text-xs text-neutral-400 mt-1">{personData.name}</p>}
+                            </div>
+                            <button
+                                onClick={() => setPersonModalOpen(false)}
+                                className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded-full transition"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-5 overflow-y-auto flex-1">
+                            {loadingPerson && (
+                                <div>
+                                    <div className="flex gap-4 mb-5 animate-pulse">
+                                        <div className="w-20 h-20 rounded-xl bg-neutral-800 shrink-0" />
+                                        <div className="flex-1 space-y-2">
+                                            <div className="h-5 w-48 bg-neutral-800 rounded" />
+                                            <div className="h-3 w-full bg-neutral-800 rounded" />
+                                            <div className="h-3 w-5/6 bg-neutral-800 rounded" />
+                                            <div className="h-3 w-3/4 bg-neutral-800 rounded" />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        {Array.from({ length: 8 }).map((_, idx) => (
+                                            <div key={idx} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                                                <div className="aspect-[2/3] bg-neutral-800" />
+                                                <div className="p-2 space-y-2">
+                                                    <div className="h-3 bg-neutral-700 rounded" />
+                                                    <div className="h-3 w-2/3 bg-neutral-800 rounded" />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {!loadingPerson && personData && (
+                                <>
+                                    <div className="flex gap-4 mb-5">
+                                        <div className="w-20 h-20 rounded-xl overflow-hidden bg-neutral-800 shrink-0 flex items-center justify-center">
+                                            {personData.profilePath ? (
+                                                <img
+                                                    src={`https://image.tmdb.org/t/p/w185${personData.profilePath}`}
+                                                    alt={personData.name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <User className="w-8 h-8 text-neutral-600" />
+                                            )}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h4 className="text-lg font-semibold">{personData.name}</h4>
+                                            {personData.biography && (
+                                                <p className="text-sm text-neutral-400 mt-1 line-clamp-4">{personData.biography}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <h5 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Movies & TV Shows</h5>
+                                    {personData.credits.length > 0 ? (
+                                        <>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-in fade-in duration-200">
+                                                {personData.credits.slice(0, visiblePersonCredits).map((credit, idx) => (
+                                                    <div
+                                                        key={`${credit.mediaType}-${credit.tmdbId}-${idx}`}
+                                                        className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+                                                        style={{ animationDelay: `${idx * 40}ms`, animationFillMode: 'both' }}
+                                                    >
+                                                        <button
+                                                            onClick={() => openOnlineResult(credit)}
+                                                            className="w-full text-left bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 rounded-xl overflow-hidden transition"
+                                                        >
+                                                            <div className="aspect-[2/3] bg-neutral-800">
+                                                                {credit.posterPath ? (
+                                                                    <img
+                                                                        src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
+                                                                        alt={credit.title}
+                                                                        className="w-full h-full object-cover"
+                                                                        loading="lazy"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center">
+                                                                        {credit.mediaType === 'movie' ? (
+                                                                            <Film className="w-8 h-8 text-neutral-700" />
+                                                                        ) : (
+                                                                            <Tv className="w-8 h-8 text-neutral-700" />
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="p-2">
+                                                                <div className="text-xs font-medium line-clamp-2">{credit.title}</div>
+                                                                <div className="text-[10px] text-neutral-500 mt-0.5">{credit.year || 'Unknown year'}</div>
+                                                                {credit.character && <div className="text-[10px] text-neutral-400 line-clamp-1 mt-1">as {credit.character}</div>}
+                                                            </div>
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {personData.credits.length > visiblePersonCredits && (
+                                                <div className="flex justify-center mt-4">
+                                                    <button
+                                                        onClick={loadMorePersonCredits}
+                                                        className="px-4 py-2 text-sm font-semibold rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 transition"
+                                                    >
+                                                        See All ({personData.credits.length - visiblePersonCredits} more)
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <p className="text-sm text-neutral-500">No credits available.</p>
+                                    )}
+                                </>
+                            )}
+
+                            {!loadingPerson && !personData && (
+                                <p className="text-sm text-neutral-500 text-center py-8">Unable to load cast details.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
