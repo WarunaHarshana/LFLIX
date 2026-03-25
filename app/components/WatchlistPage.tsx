@@ -169,7 +169,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
             {/* Header */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
-                    <Bookmark className="w-8 h-8 text-amber-500" />
+                    <Bookmark className="w-8 h-8 text-[var(--text-secondary)]" />
                     <h1 className="text-3xl font-bold">My Watchlist</h1>
                 </div>
                 <p className="text-neutral-400 text-sm">Search TMDB for movies & shows you want to watch. Save them here so you can download and add to your library later.</p>
@@ -186,7 +186,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                             value={searchQuery}
                             onChange={(e) => handleSearchChange(e.target.value)}
                             placeholder="Search movies & shows on TMDB..."
-                            className="w-full bg-black border border-neutral-700 rounded-xl pl-12 pr-10 py-3.5 outline-none focus:border-amber-500 transition text-sm"
+                            className="w-full bg-black border border-neutral-700 rounded-xl pl-12 pr-10 py-3.5 outline-none focus:border-white/70 transition text-sm"
                             autoFocus
                         />
                         {searchQuery && (
@@ -204,7 +204,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                                 key={type}
                                 onClick={() => handleTypeChange(type)}
                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition ${searchType === type
-                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                    ? 'bg-white text-black border border-white/80'
                                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
                                     }`}
                             >
@@ -217,7 +217,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                 {/* Search Results */}
                 {searching && (
                     <div className="flex items-center justify-center py-8">
-                        <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+                        <Loader2 className="w-6 h-6 animate-spin text-[var(--text-secondary)]" />
                         <span className="ml-3 text-neutral-400">Searching TMDB...</span>
                     </div>
                 )}
@@ -259,7 +259,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                                             {result.year && <span>{result.year}</span>}
                                             {result.rating != null && result.rating > 0 && (
                                                 <span className="flex items-center gap-1">
-                                                    <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                                                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
                                                     {result.rating.toFixed(1)}
                                                 </span>
                                             )}
@@ -273,14 +273,14 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                         <button
                                             onClick={() => onOpenOnline?.(result)}
-                                            className="p-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg transition"
+                                            className="p-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition"
                                             title="Open Details"
                                         >
                                             <Globe className="w-3.5 h-3.5" />
                                         </button>
                                         <button
                                             onClick={() => setTrailerItem({ tmdbId: result.tmdbId, mediaType: result.mediaType, title: result.title })}
-                                            className="p-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded-lg transition"
+                                            className="p-2 bg-neutral-700/80 hover:bg-neutral-600 text-white rounded-lg transition border border-neutral-600"
                                             title="Watch Trailer"
                                         >
                                             <Play className="w-3.5 h-3.5" />
@@ -290,7 +290,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                                                 In Library
                                             </span>
                                         ) : inWatchlist ? (
-                                            <span className="px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-medium flex items-center gap-1">
+                                            <span className="px-3 py-1.5 bg-white/15 text-white border border-white/30 rounded-lg text-xs font-medium flex items-center gap-1">
                                                 <Check className="w-3.5 h-3.5" />
                                                 Added
                                             </span>
@@ -298,7 +298,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                                             <button
                                                 onClick={() => addToWatchlist(result)}
                                                 disabled={addingIds.has(result.tmdbId)}
-                                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1 transition"
+                                                className="px-3 py-1.5 bg-white hover:bg-neutral-200 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1 transition"
                                             >
                                                 {addingIds.has(result.tmdbId) ? (
                                                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -332,7 +332,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
             {/* Watchlist Grid */}
             <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Bookmark className="w-5 h-5 text-amber-500" />
+                    <Bookmark className="w-5 h-5 text-[var(--text-secondary)]" />
                     Saved ({watchlist.length})
                 </h2>
             </div>
@@ -382,14 +382,14 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                                         <div className="flex gap-1.5 w-full">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setTrailerItem(item); }}
-                                                className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition"
+                                                className="flex-1 py-1.5 bg-neutral-700/80 hover:bg-neutral-600 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition border border-neutral-600"
                                             >
                                                 <Play className="w-3.5 h-3.5" />
                                                 Trailer
                                             </button>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setDownloadItem(item); }}
-                                                className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-600 text-black text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition"
+                                                className="flex-1 py-1.5 bg-white hover:bg-neutral-200 text-black text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition"
                                             >
                                                 <Download className="w-3.5 h-3.5" />
                                                 Download

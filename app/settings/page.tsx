@@ -34,7 +34,7 @@ function RefreshMetadataButton() {
             <button
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-neutral-700 text-white font-medium rounded-lg flex items-center gap-2 transition"
+                className="px-4 py-2 bg-white hover:bg-neutral-200 disabled:bg-neutral-700 text-black font-medium rounded-lg flex items-center gap-2 transition"
             >
                 <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                 {refreshing ? 'Refreshing...' : 'Refresh Missing Metadata'}
@@ -72,7 +72,7 @@ function ReprobeButton() {
             <button
                 onClick={handleReprobe}
                 disabled={reprobing}
-                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-neutral-700 text-white font-medium rounded-lg flex items-center gap-2 transition"
+                className="px-4 py-2 bg-white hover:bg-neutral-200 disabled:bg-neutral-700 text-black font-medium rounded-lg flex items-center gap-2 transition"
             >
                 <HardDrive className={`w-4 h-4 ${reprobing ? 'animate-pulse' : ''}`} />
                 {reprobing ? 'Re-probing...' : 'Re-probe Media Info'}
@@ -164,7 +164,7 @@ export default function SettingsPage() {
                         <ArrowLeft className="w-5 h-5" />
                     </Link>
                     <div className="flex items-center gap-3">
-                        <SettingsIcon className="w-6 h-6 text-red-500" />
+                        <SettingsIcon className="w-6 h-6 text-[var(--text-secondary)]" />
                         <h1 className="text-2xl font-bold">Settings</h1>
                     </div>
                 </div>
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                 {/* VLC Path */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
                     <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
-                        <Monitor className="w-5 h-5 text-blue-500" />
+                        <Monitor className="w-5 h-5 text-[var(--text-secondary)]" />
                         <h2 className="text-lg font-semibold">Video Player</h2>
                     </div>
                     <div className="p-6">
@@ -184,7 +184,7 @@ export default function SettingsPage() {
                             type="text"
                             value={settings.vlcPath}
                             onChange={(e) => setSettings(prev => ({ ...prev, vlcPath: e.target.value }))}
-                            className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-red-600 transition font-mono text-sm"
+                            className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-white/70 transition font-mono text-sm"
                             placeholder="C:\Program Files\VideoLAN\VLC\vlc.exe"
                         />
                         <p className="text-xs text-neutral-500 mt-2">
@@ -196,7 +196,7 @@ export default function SettingsPage() {
                 {/* Download Path */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
                     <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
-                        <Download className="w-5 h-5 text-amber-500" />
+                        <Download className="w-5 h-5 text-[var(--text-secondary)]" />
                         <h2 className="text-lg font-semibold">Download Path</h2>
                     </div>
                     <div className="p-6">
@@ -205,7 +205,7 @@ export default function SettingsPage() {
                             type="text"
                             value={settings.downloadPath}
                             onChange={(e) => setSettings(prev => ({ ...prev, downloadPath: e.target.value }))}
-                            className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-red-600 transition font-mono text-sm"
+                            className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-white/70 transition font-mono text-sm"
                             placeholder="C:\Users\you\Downloads\Movies"
                         />
                         <p className="text-xs text-neutral-500 mt-2">
@@ -226,12 +226,12 @@ export default function SettingsPage() {
                             type="password"
                             value={settings.tmdbApiKey}
                             onChange={(e) => setSettings(prev => ({ ...prev, tmdbApiKey: e.target.value }))}
-                            className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-red-600 transition font-mono text-sm"
+                            className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-white/70 transition font-mono text-sm"
                             placeholder="Enter your TMDB API key"
                         />
                         <p className="text-xs text-neutral-500 mt-2">
                             Used to fetch movie/show metadata, posters, and ratings. Get a free key at{' '}
-                            <a href="https://www.themoviedb.org/settings/api" target="_blank" className="text-red-500 hover:underline">
+                            <a href="https://www.themoviedb.org/settings/api" target="_blank" className="text-white hover:underline">
                                 themoviedb.org
                             </a>
                         </p>
@@ -241,7 +241,7 @@ export default function SettingsPage() {
                 {/* Display Preferences */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
                     <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
-                        <Eye className="w-5 h-5 text-violet-500" />
+                        <Eye className="w-5 h-5 text-[var(--text-secondary)]" />
                         <h2 className="text-lg font-semibold">Display Preferences</h2>
                     </div>
                     <div className="p-6 space-y-5">
@@ -253,11 +253,11 @@ export default function SettingsPage() {
                             <button
                                 onClick={() => updateDisplayPref('showTitles', !displayPrefs.showTitles)}
                                 className={`w-11 h-6 rounded-full transition-colors relative ${
-                                    displayPrefs.showTitles ? 'bg-red-600' : 'bg-neutral-700'
+                                    displayPrefs.showTitles ? 'bg-white' : 'bg-neutral-700'
                                 }`}
                             >
                                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                                    displayPrefs.showTitles ? 'translate-x-5' : ''
+                                    displayPrefs.showTitles ? 'translate-x-5 bg-black' : ''
                                 }`} />
                             </button>
                         </label>
@@ -266,11 +266,11 @@ export default function SettingsPage() {
                             <button
                                 onClick={() => updateDisplayPref('showRatings', !displayPrefs.showRatings)}
                                 className={`w-11 h-6 rounded-full transition-colors relative ${
-                                    displayPrefs.showRatings ? 'bg-red-600' : 'bg-neutral-700'
+                                    displayPrefs.showRatings ? 'bg-white' : 'bg-neutral-700'
                                 }`}
                             >
                                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                                    displayPrefs.showRatings ? 'translate-x-5' : ''
+                                    displayPrefs.showRatings ? 'translate-x-5 bg-black' : ''
                                 }`} />
                             </button>
                         </label>
@@ -279,11 +279,11 @@ export default function SettingsPage() {
                             <button
                                 onClick={() => updateDisplayPref('cinematicMode', !displayPrefs.cinematicMode)}
                                 className={`w-11 h-6 rounded-full transition-colors relative ${
-                                    displayPrefs.cinematicMode ? 'bg-red-600' : 'bg-neutral-700'
+                                    displayPrefs.cinematicMode ? 'bg-white' : 'bg-neutral-700'
                                 }`}
                             >
                                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                                    displayPrefs.cinematicMode ? 'translate-x-5' : ''
+                                    displayPrefs.cinematicMode ? 'translate-x-5 bg-black' : ''
                                 }`} />
                             </button>
                         </label>
@@ -293,7 +293,7 @@ export default function SettingsPage() {
                 {/* Keyboard Shortcuts Reference */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
                     <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
-                        <Keyboard className="w-5 h-5 text-green-500" />
+                        <Keyboard className="w-5 h-5 text-[var(--text-secondary)]" />
                         <h2 className="text-lg font-semibold">Keyboard Shortcuts</h2>
                     </div>
                     <div className="p-6">
@@ -331,7 +331,7 @@ export default function SettingsPage() {
                 {/* Metadata Refresh */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
                     <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
-                        <RefreshCw className="w-5 h-5 text-purple-500" />
+                        <RefreshCw className="w-5 h-5 text-[var(--text-secondary)]" />
                         <h2 className="text-lg font-semibold">Metadata Refresh</h2>
                     </div>
                     <div className="p-6">
@@ -347,7 +347,7 @@ export default function SettingsPage() {
                 {/* Re-probe Media Info */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
                     <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
-                        <HardDrive className="w-5 h-5 text-teal-500" />
+                        <HardDrive className="w-5 h-5 text-[var(--text-secondary)]" />
                         <h2 className="text-lg font-semibold">Media Info</h2>
                     </div>
                     <div className="p-6">
@@ -362,7 +362,7 @@ export default function SettingsPage() {
                 {/* Library Info */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
                     <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
-                        <Folder className="w-5 h-5 text-orange-500" />
+                        <Folder className="w-5 h-5 text-[var(--text-secondary)]" />
                         <h2 className="text-lg font-semibold">Library</h2>
                     </div>
                     <div className="p-6">
@@ -386,7 +386,7 @@ export default function SettingsPage() {
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="px-8 py-3 bg-red-600 hover:bg-red-700 disabled:bg-neutral-700 text-white font-bold rounded-lg flex items-center gap-2 transition"
+                        className="px-8 py-3 bg-white hover:bg-neutral-200 disabled:bg-neutral-700 text-black font-bold rounded-lg flex items-center gap-2 transition"
                     >
                         {saving ? (
                             <RefreshCw className="w-5 h-5 animate-spin" />

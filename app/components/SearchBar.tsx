@@ -146,7 +146,7 @@ export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }:
                         setIsOpen(true);
                         setTimeout(() => inputRef.current?.focus(), 100);
                     }}
-                    className="p-2 hover:bg-white/10 rounded-full transition"
+                    className="p-2 hover:bg-[var(--surface-hover)] rounded-full transition"
                 >
                     <Search className="w-5 h-5" />
                 </button>
@@ -159,13 +159,13 @@ export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }:
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder="Search local & online..."
-                        className="flex-1 bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2 text-sm outline-none focus:border-red-600 transition"
+                        className="flex-1 bg-[var(--surface-2)] border border-[var(--border-default)] rounded-lg px-4 py-2 text-sm outline-none focus:border-white/70 transition"
                         autoFocus
                     />
                 )}
 
                 {isOpen && (
-                    <button onClick={handleClose} className="p-2 hover:bg-white/10 rounded-full">
+                    <button onClick={handleClose} className="p-2 hover:bg-[var(--surface-hover)] rounded-full">
                         <X className="w-4 h-4" />
                     </button>
                 )}
@@ -173,18 +173,18 @@ export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }:
 
             {/* Search Results Dropdown */}
             {isOpen && hasResults && (
-                <div className="absolute top-full right-0 mt-2 w-96 bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
+                <div className="absolute top-full right-0 mt-2 w-96 bg-[var(--surface-2)] border border-[var(--border-default)] rounded-xl shadow-2xl overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
                     {/* Local results */}
                     {localResults.length > 0 && (
                         <>
-                            <div className="px-3 py-1.5 bg-neutral-800/50 text-[10px] font-bold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+                            <div className="px-3 py-1.5 bg-[var(--surface-3)] text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
                                 <Film className="w-3 h-3" /> Local Library
                             </div>
                             {localResults.map((item, index) => (
                                 <div
                                     key={`local-${item.type}-${item.id}`}
                                     onClick={() => handleSelectLocal(item)}
-                                    className={`flex items-center gap-3 p-3 cursor-pointer transition ${index === selectedIndex ? 'bg-neutral-800' : 'hover:bg-neutral-800/50'
+                                    className={`flex items-center gap-3 p-3 cursor-pointer transition ${index === selectedIndex ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface-hover)]/70'
                                         }`}
                                 >
                                     {item.posterPath ? (
@@ -194,19 +194,19 @@ export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }:
                                             className="w-10 h-14 object-cover rounded"
                                         />
                                     ) : (
-                                        <div className="w-10 h-14 bg-neutral-700 rounded flex items-center justify-center">
-                                            {item.type === 'movie' ? <Film className="w-4 h-4 text-neutral-500" /> : <Tv className="w-4 h-4 text-neutral-500" />}
+                                        <div className="w-10 h-14 bg-[var(--border-default)] rounded flex items-center justify-center">
+                                            {item.type === 'movie' ? <Film className="w-4 h-4 text-[var(--text-muted)]" /> : <Tv className="w-4 h-4 text-[var(--text-muted)]" />}
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                        <h4 className="font-medium text-white text-sm truncate">{item.title}</h4>
-                                        <div className="flex items-center gap-2 text-xs text-neutral-400">
+                                        <h4 className="font-medium text-[var(--text-primary)] text-sm truncate">{item.title}</h4>
+                                        <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                                             <span className="uppercase">{item.type}</span>
                                             <span>•</span>
                                             <span>{item.year || (item.firstAirDate?.substring(0, 4) || 'N/A')}</span>
                                         </div>
                                     </div>
-                                    <Play className="w-4 h-4 text-neutral-500" />
+                                    <Play className="w-4 h-4 text-[var(--text-muted)]" />
                                 </div>
                             ))}
                         </>
@@ -215,7 +215,7 @@ export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }:
                     {/* Online results */}
                     {onlineResults.length > 0 && (
                         <>
-                            <div className="px-3 py-1.5 bg-blue-900/20 text-[10px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5 border-t border-neutral-800">
+                            <div className="px-3 py-1.5 bg-[var(--surface-3)] text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5 border-t border-[var(--border-subtle)]">
                                 <Globe className="w-3 h-3" /> Online — Watch, Download, or Save
                             </div>
                             {onlineResults.map((item, i) => {
@@ -224,7 +224,7 @@ export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }:
                                     <div
                                         key={`online-${item.mediaType}-${item.tmdbId}`}
                                         onClick={() => handleSelectOnline(item)}
-                                        className={`flex items-center gap-3 p-3 cursor-pointer transition ${globalIndex === selectedIndex ? 'bg-neutral-800' : 'hover:bg-neutral-800/50'
+                                        className={`flex items-center gap-3 p-3 cursor-pointer transition ${globalIndex === selectedIndex ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface-hover)]/70'
                                             }`}
                                     >
                                         {item.posterPath ? (
@@ -234,14 +234,14 @@ export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }:
                                                 className="w-10 h-14 object-cover rounded"
                                             />
                                         ) : (
-                                            <div className="w-10 h-14 bg-neutral-700 rounded flex items-center justify-center">
-                                                {item.mediaType === 'movie' ? <Film className="w-4 h-4 text-neutral-500" /> : <Tv className="w-4 h-4 text-neutral-500" />}
+                                            <div className="w-10 h-14 bg-[var(--border-default)] rounded flex items-center justify-center">
+                                                {item.mediaType === 'movie' ? <Film className="w-4 h-4 text-[var(--text-muted)]" /> : <Tv className="w-4 h-4 text-[var(--text-muted)]" />}
                                             </div>
                                         )}
                                         <div className="flex-1 min-w-0">
-                                            <h4 className="font-medium text-white text-sm truncate">{item.title}</h4>
-                                            <div className="flex items-center gap-2 text-xs text-neutral-400">
-                                                <span className="px-1 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[9px] font-bold uppercase">{item.mediaType === 'movie' ? 'Movie' : 'TV'}</span>
+                                            <h4 className="font-medium text-[var(--text-primary)] text-sm truncate">{item.title}</h4>
+                                            <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                                                <span className="px-1 py-0.5 bg-white/15 text-[var(--text-primary)] rounded text-[9px] font-bold uppercase">{item.mediaType === 'movie' ? 'Movie' : 'TV'}</span>
                                                 <span>{item.year || 'N/A'}</span>
                                                 {item.rating != null && item.rating > 0 && (
                                                     <span className="text-yellow-400 flex items-center gap-0.5">
@@ -251,7 +251,7 @@ export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }:
                                                 )}
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-1 text-[10px] text-blue-400 font-medium shrink-0">
+                                        <div className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)] font-medium shrink-0">
                                             <Globe className="w-3 h-3" /> View
                                         </div>
                                     </div>
@@ -270,7 +270,7 @@ export default function SearchBar({ onPlay, onOpenShow, onOpenOnline, onClose }:
 
             {/* No results */}
             {isOpen && query.length >= 2 && !loading && !hasResults && (
-                <div className="absolute top-full right-0 mt-2 w-80 bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-center text-neutral-400 text-sm">
+                <div className="absolute top-full right-0 mt-2 w-80 bg-[var(--surface-2)] border border-[var(--border-default)] rounded-xl p-4 text-center text-[var(--text-secondary)] text-sm">
                     No results found for &quot;{query}&quot;
                 </div>
             )}

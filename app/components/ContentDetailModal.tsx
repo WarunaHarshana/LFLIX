@@ -295,9 +295,9 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     const tags: { label: string; cls: string }[] = [];
                                     const fp = item.filePath?.toUpperCase() || '';
                                     if (item.resolution)
-                                        tags.push({ label: item.resolution === '2160p' ? '4K' : item.resolution, cls: 'bg-blue-500/80 text-white' });
+                                        tags.push({ label: item.resolution === '2160p' ? '4K' : item.resolution, cls: 'bg-white/20 text-white border border-white/20' });
                                     if (item.isHDR || /\bHDR\b/.test(fp))
-                                        tags.push({ label: /HDR10\+|HDR10PLUS/.test(fp) ? 'HDR10+' : /HDR10/.test(fp) ? 'HDR10' : 'HDR', cls: 'bg-amber-500/90 text-black' });
+                                        tags.push({ label: /HDR10\+|HDR10PLUS/.test(fp) ? 'HDR10+' : /HDR10/.test(fp) ? 'HDR10' : 'HDR', cls: 'bg-white/20 text-white border border-white/20' });
                                     else
                                         tags.push({ label: 'SDR', cls: 'bg-neutral-600/80 text-neutral-300' });
                                     if (/\bDOVI\b|\bDV\b|DOLBY.?VISION/.test(fp))
@@ -345,7 +345,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                 {item.tmdbId && (
                                     <button
                                         onClick={() => setShowStreamServers(true)}
-                                        className="px-5 py-2.5 bg-blue-600/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-blue-500 transition text-sm border border-blue-500/50"
+                                        className="px-5 py-2.5 bg-white text-black font-semibold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
                                     >
                                         <Globe className="w-4 h-4" /> Watch Online
                                     </button>
@@ -366,7 +366,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                             </div>
                             <div className="h-1.5 w-full max-w-md bg-neutral-800 rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-red-600 rounded-full transition-all"
+                                    className="h-full bg-white rounded-full transition-all"
                                     style={{ width: `${progressPercent}%` }}
                                 />
                             </div>

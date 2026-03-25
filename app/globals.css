@@ -2,7 +2,32 @@
 
 :root {
   --background: #000000;
-  --foreground: #ededed;
+  --foreground: #f5f5f5;
+
+  --surface-1: #0a0a0a;
+  --surface-2: #141414;
+  --surface-3: #1f1f1f;
+  --surface-hover: #2a2a2a;
+
+  --text-primary: #f5f5f5;
+  --text-secondary: #d4d4d4;
+  --text-muted: #a3a3a3;
+
+  --border-subtle: #262626;
+  --border-default: #3f3f46;
+  --border-strong: #52525b;
+
+  --focus-ring: rgba(245, 245, 245, 0.55);
+  --overlay-soft: rgba(0, 0, 0, 0.55);
+  --overlay-strong: rgba(0, 0, 0, 0.88);
+
+  --btn-primary-bg: #f5f5f5;
+  --btn-primary-text: #0a0a0a;
+  --btn-primary-hover: #e5e5e5;
+
+  --btn-secondary-bg: rgba(64, 64, 64, 0.85);
+  --btn-secondary-bg-hover: rgba(82, 82, 82, 0.95);
+  --btn-secondary-text: #f5f5f5;
 }
 
 @theme inline {
@@ -21,7 +46,7 @@ body {
 /* Scrollbar Styling */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: #404040 transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -34,12 +59,12 @@ body {
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #404040;
+  background: var(--border-default);
   border-radius: 3px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #525252;
+  background: var(--border-strong);
 }
 
 /* Hide scrollbar but keep functionality */
@@ -66,7 +91,7 @@ body {
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0.08) 50%,
     rgba(255, 255, 255, 0) 100%
   );
   background-size: 200% 100%;
@@ -76,8 +101,28 @@ body {
 /* Focus visible for keyboard nav */
 .focus-visible-ring:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 2px var(--focus-ring);
   border-radius: 0.5rem;
+}
+
+/* Reusable neutral action styles */
+.theme-btn-primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+.theme-btn-primary:hover {
+  background: var(--btn-primary-hover);
+}
+
+.theme-btn-secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: 1px solid var(--border-default);
+}
+
+.theme-btn-secondary:hover {
+  background: var(--btn-secondary-bg-hover);
 }
 
 /* Slide in animation */

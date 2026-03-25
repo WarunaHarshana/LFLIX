@@ -30,13 +30,13 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
   return (
     <>
       {/* Mobile Header */}
-      <div className="fixed top-0 left-0 right-0 z-[90] bg-black/95 backdrop-blur-md border-b border-neutral-800 md:hidden pt-[env(safe-area-inset-top)]">
+      <div className="fixed top-0 left-0 right-0 z-[90] bg-[var(--overlay-strong)] backdrop-blur-md border-b border-[var(--border-subtle)] md:hidden pt-[env(safe-area-inset-top)]">
         <div className="flex items-center justify-between px-4 py-3">
           <h1 className="text-xl font-bold tracking-tighter text-red-600">LFLIX</h1>
           <div className="flex items-center gap-2">
             <button
               onClick={onShowSearch}
-              className="p-3 hover:bg-neutral-800 rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-3 hover:bg-[var(--surface-hover)] rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="Search"
               style={{ touchAction: 'manipulation' }}
             >
@@ -44,7 +44,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
             </button>
             <button
               onClick={onShowQR}
-              className="p-3 hover:bg-neutral-800 rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-3 hover:bg-[var(--surface-hover)] rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="Connect Mobile"
               style={{ touchAction: 'manipulation' }}
             >
@@ -52,7 +52,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
             </button>
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="p-3 hover:bg-neutral-800 rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-3 hover:bg-[var(--surface-hover)] rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
               style={{ touchAction: 'manipulation' }}
             >
               {isOpen ? <X className="w-6 h-6 pointer-events-none" /> : <Menu className="w-6 h-6 pointer-events-none" />}
@@ -62,7 +62,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
 
         {/* Mobile Menu */}
         {isOpen && (
-          <div className="border-t border-neutral-800 py-2">
+          <div className="border-t border-[var(--border-subtle)] py-2">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -73,8 +73,8 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
                 className={clsx(
                   "w-full flex items-center gap-3 px-4 py-4 transition",
                   activeTab === tab.id
-                    ? 'bg-red-600 text-white'
-                    : 'text-neutral-400 hover:bg-neutral-800'
+                    ? 'bg-white text-black'
+                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'
                 )}
                 style={{ touchAction: 'manipulation' }}
               >
@@ -82,13 +82,13 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
                 <span className="font-medium">{tab.label}</span>
               </button>
             ))}
-            <div className="border-t border-neutral-800 mt-2 pt-2">
+            <div className="border-t border-[var(--border-subtle)] mt-2 pt-2">
               <button
                 onClick={() => {
                   onShowLiveSports();
                   setIsOpen(false);
                 }}
-                className="w-full flex items-center gap-3 px-4 py-4 text-neutral-400 hover:bg-neutral-800 transition"
+                className="w-full flex items-center gap-3 px-4 py-4 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] transition"
                 style={{ touchAction: 'manipulation' }}
               >
                 <Trophy className="w-5 h-5" />
@@ -99,7 +99,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
                   onShowSettings();
                   setIsOpen(false);
                 }}
-                className="w-full flex items-center gap-3 px-4 py-4 text-neutral-400 hover:bg-neutral-800 transition"
+                className="w-full flex items-center gap-3 px-4 py-4 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] transition"
                 style={{ touchAction: 'manipulation' }}
               >
                 <Settings className="w-5 h-5" />
@@ -111,7 +111,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
       </div>
 
       {/* Mobile Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 z-[90] bg-black/95 backdrop-blur-md border-t border-neutral-800 md:hidden">
+      <div className="fixed bottom-0 left-0 right-0 z-[90] bg-[var(--overlay-strong)] backdrop-blur-md border-t border-[var(--border-subtle)] md:hidden">
         <div className="flex justify-around py-2">
           {tabs.map((tab) => (
             <button
@@ -120,8 +120,8 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
               className={clsx(
                 "flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition min-w-[64px]",
                 activeTab === tab.id
-                  ? 'text-red-500'
-                  : 'text-neutral-500 hover:text-neutral-300'
+                  ? 'bg-white text-black'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
               )}
               style={{ touchAction: 'manipulation' }}
             >

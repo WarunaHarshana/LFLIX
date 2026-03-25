@@ -4,6 +4,25 @@ import { getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
 
+function pickBestLogoPath(logos: any[] | undefined): string | null {
+    if (!Array.isArray(logos) || logos.length === 0) {
+        return null;
+    }
+
+    const ranked = [...logos].sort((a: any, b: any) => {
+        const scoreA = (a.vote_average || 0) * (a.vote_count || 0);
+        const scoreB = (b.vote_average || 0) * (b.vote_count || 0);
+        return scoreB - scoreA;
+    });
+
+    const preferred =
+        ranked.find((logo: any) => logo.iso_639_1 === 'en') ||
+        ranked.find((logo: any) => !logo.iso_639_1 || logo.iso_639_1 === 'xx') ||
+        ranked[0];
+
+    return preferred?.file_path || null;
+}
+
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
@@ -21,8 +40,10 @@ export async function GET(req: Request) {
 
         if (type === 'movie') {
             const movie = await rateLimitedTmdbCall(() =>
-                moviedb.movieInfo({ id: tmdbId, append_to_response: 'credits' })
+                moviedb.movieInfo({ id: tmdbId, append_to_response: 'credits,images' })
             );
+
+            const logoPath = pickBestLogoPath((movie as any).images?.logos);
 
             return NextResponse.json({
                 id: movie.id,
@@ -35,6 +56,7 @@ export async function GET(req: Request) {
                 runtime: movie.runtime || null,
                 tagline: movie.tagline || null,
                 genres: (movie.genres || []).map((g: any) => g.name).join(', '),
+                logoPath,
                 cast: ((movie as any).credits?.cast || []).slice(0, 8).map((c: any) => ({
                     id: c.id,
                     name: c.name,
@@ -65,8 +87,10 @@ export async function GET(req: Request) {
 
             // Otherwise fetch show info with seasons
             const show = await rateLimitedTmdbCall(() =>
-                moviedb.tvInfo({ id: tmdbId, append_to_response: 'credits' })
+                moviedb.tvInfo({ id: tmdbId, append_to_response: 'credits,images' })
             );
+
+            const logoPath = pickBestLogoPath((show as any).images?.logos);
 
             return NextResponse.json({
                 id: show.id,
@@ -79,6 +103,7 @@ export async function GET(req: Request) {
                 status: show.status || null,
                 tagline: show.tagline || null,
                 genres: (show.genres || []).map((g: any) => g.name).join(', '),
+                logoPath,
                 numberOfSeasons: show.number_of_seasons || 0,
                 seasons: (show.seasons || [])
                     .filter((s: any) => s.season_number > 0) // exclude specials
