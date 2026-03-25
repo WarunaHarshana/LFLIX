@@ -34,6 +34,7 @@ import WatchlistPage from './components/WatchlistPage';
 import DownloadsPanel from './components/DownloadsPanel';
 import TorrentSearchPage from './components/TorrentSearchPage';
 import DiscoverPage from './components/DiscoverPage';
+import DetailTabNav from './components/DetailTabNav';
 
 // Types
 type ContentItem = {
@@ -215,7 +216,14 @@ export default function Home() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const requestedTab = new URLSearchParams(window.location.search).get('tab');
+    const searchParams = new URLSearchParams(window.location.search);
+    const requestedTab = searchParams.get('tab');
+    const openLiveSports = searchParams.get('liveSports') === '1';
+
+    if (openLiveSports) {
+      setShowLiveSports(true);
+    }
+
     if (!isValidTab(requestedTab)) return;
 
     if (requestedTab === 'all') {
@@ -866,159 +874,44 @@ export default function Home() {
     <main className="min-h-screen bg-black text-white font-sans selection:bg-red-900 pb-20 md:pb-0">
 
       {/* Navbar - Desktop (hidden on mobile) */}
-      <nav className="fixed top-0 w-full z-40 glass-nav px-8 py-6 items-center justify-between hidden md:flex">
-        <div className="flex items-center gap-8">
-          <h1 className="text-3xl font-bold text-red-600 tracking-tighter">LFLIX</h1>
-          <div className="flex gap-2 text-base font-medium">
-            <button
-              onClick={() => { switchTab('all'); setSelectedGenre(null); }}
-              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px]", activeTab === 'all' ? "text-white bg-white/10" : "text-neutral-400")}
-            >
-              Home
-            </button>
-            <button
-              onClick={() => switchTab('discover')}
-              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'discover' ? "text-white bg-white/10" : "text-neutral-400")}
-            >
-              <Globe className="w-4 h-4" />
-              Discover
-            </button>
-            <button
-              onClick={() => switchTab('show')}
-              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px]", activeTab === 'show' ? "text-white bg-white/10" : "text-neutral-400")}
-            >
-              TV Shows
-            </button>
-            <button
-              onClick={() => switchTab('movie')}
-              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px]", activeTab === 'movie' ? "text-white bg-white/10" : "text-neutral-400")}
-            >
-              Movies
-            </button>
-            <button
-              onClick={() => switchTab('live')}
-              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'live' ? "text-white bg-white/10" : "text-neutral-400")}
-            >
-              <Tv className="w-4 h-4" />
-              Live TV
-            </button>
-            <button
-              onClick={() => setShowLiveSports(true)}
-              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", showLiveSports ? "text-white bg-white/10" : "text-neutral-400")}
-            >
-              <Trophy className="w-4 h-4" />
-              Live Sports
-            </button>
-            <button
-              onClick={() => switchTab('watchlist')}
-              className={clsx("px-4 py-2 rounded-lg transition hover:text-white hover:bg-white/10 cursor-pointer min-w-[80px] flex items-center gap-2", activeTab === 'watchlist' ? "text-white bg-white/10" : "text-neutral-400")}
-            >
-              <Bookmark className="w-4 h-4" />
-              Watchlist
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <SearchBar
-            onPlay={(filePath) => {
-              // Search returns filePath, but we need to find the movie and call playFile with its ID
-              const movie = library.find(m => m.type === 'movie' && m.filePath === filePath);
-              if (movie) {
-                playFile('movie', movie.id);
-              }
-            }}
-            onOpenShow={(result) => {
-              const show = library.find(l => l.type === 'show' && l.id === result.id);
-              if (show) openShow(show);
-            }}
-            onOpenOnline={(item) => {
-              openOnlineInDiscover(item);
-            }}
-          />
-          <button
-            onClick={() => setShowMobileConnect(true)}
-            className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center"
-            title="Connect Mobile"
-          >
-            <Smartphone className="w-6 h-6" />
-          </button>
-          <button
-            onClick={() => setShowDlna(true)}
-            className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center"
-            title="DLNA Server (VLC)"
-          >
-            <Cast className="w-6 h-6" />
-          </button>
-          <button
-            onClick={() => setShowDownloads(true)}
-            className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center relative"
-            title="Downloads"
-          >
-            <Download className="w-6 h-6" />
-            {activeDownloads > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-amber-500 text-black text-[10px] font-bold rounded-full flex items-center justify-center">
-                {activeDownloads}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setForceBrowserPlayer(!forceBrowserPlayer)}
-            className={clsx(
-              "p-3 hover:bg-white/10 rounded-full transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center",
-              forceBrowserPlayer && "text-blue-400"
-            )}
-            title={forceBrowserPlayer ? "Browser Player ON (click to use VLC)" : "Use Browser Player (for TV)"}
-          >
-            <Monitor className="w-6 h-6" />
-          </button>
-          <button
-            onClick={handleRescanAll}
-            disabled={loading}
-            className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] flex items-center justify-center"
-            title="Refresh Library (Scan for new files)"
-          >
-            <RotateCw className={clsx("w-6 h-6", loading && "animate-spin")} />
-          </button>
-          <button
-            onClick={() => setShowFolderManager(true)}
-            className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
-            title="Manage Folders (F)"
-          >
-            <Plus className="w-7 h-7" />
-          </button>
-          <Link
-            href="/settings"
-            className="p-2 hover:bg-white/10 rounded-full transition"
-            title="Settings"
-          >
-            <Settings className="w-5 h-5" />
-          </Link>
-          {/* HDR Display Indicator */}
-          <div
-            className={clsx(
-              "px-2 py-1 rounded text-[10px] font-bold tracking-wider border select-none",
-              hdrDisplaySupported
-                ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
-                : "bg-neutral-800 text-neutral-500 border-neutral-700"
-            )}
-            title={hdrDisplaySupported ? "This display supports HDR" : "This display does not support HDR"}
-          >
-            HDR {hdrDisplaySupported ? 'ON' : 'OFF'}
-          </div>
-          <button
-            onClick={async () => {
-              // Call logout endpoint to clear cookie properly
-              await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'same-origin' });
-              setIsAuthenticated(false);
-            }}
-            className="p-2 hover:bg-white/10 rounded-full transition text-neutral-400 hover:text-white text-xs"
-            title="Logout"
-          >
-            Exit
-          </button>
-        </div>
-      </nav>
+      <DetailTabNav
+        activeTab={activeTab}
+        showLiveSportsActive={showLiveSports}
+        onTabChange={(tab) => {
+          if (tab === 'all') {
+            setSelectedGenre(null);
+          }
+          switchTab(tab);
+        }}
+        onShowLiveSports={() => setShowLiveSports(true)}
+        onSearchPlay={(filePath) => {
+          const movie = library.find((m) => m.type === 'movie' && m.filePath === filePath);
+          if (movie) {
+            playFile('movie', movie.id);
+          }
+        }}
+        onSearchOpenShow={(result) => {
+          const show = library.find((l) => l.type === 'show' && l.id === result.id);
+          if (show) openShow(show);
+        }}
+        onSearchOpenOnline={(item) => {
+          openOnlineInDiscover(item as DiscoverOnlineItem);
+        }}
+        onShowMobileConnect={() => setShowMobileConnect(true)}
+        onShowDlna={() => setShowDlna(true)}
+        onShowDownloads={() => setShowDownloads(true)}
+        activeDownloads={activeDownloads}
+        forceBrowserPlayer={forceBrowserPlayer}
+        onToggleBrowserPlayer={() => setForceBrowserPlayer(!forceBrowserPlayer)}
+        onRescan={handleRescanAll}
+        scanning={loading}
+        onShowFolderManager={() => setShowFolderManager(true)}
+        hdrDisplaySupported={hdrDisplaySupported}
+        onLogout={async () => {
+          await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'same-origin' });
+          setIsAuthenticated(false);
+        }}
+      />
 
       {/* Loading State - only show for movie/show tabs */}
       {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'discover' && (loading ? (

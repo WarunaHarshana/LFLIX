@@ -377,6 +377,15 @@ export default function DiscoverDetailPage() {
   const genreList = (activeDetails?.genres || '').split(',').map((g) => g.trim()).filter(Boolean);
   const logoUrl = activeDetails?.logoPath ? `https://image.tmdb.org/t/p/w500${activeDetails.logoPath}` : null;
   const heroCast = activeDetails?.cast?.slice(0, 8) || [];
+  const tvSeasonCount = tvDetails?.numberOfSeasons ?? null;
+  const totalEpisodeCount = useMemo(() => {
+    if (!tvDetails?.seasons?.length) {
+      return null;
+    }
+
+    const total = tvDetails.seasons.reduce((sum, season) => sum + (season.episodeCount || 0), 0);
+    return total > 0 ? total : null;
+  }, [tvDetails?.seasons]);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -386,7 +395,7 @@ export default function DiscoverDetailPage() {
 
         <button
           onClick={() => router.back()}
-          className="absolute left-4 top-24 z-40 h-10 w-10 rounded-full bg-black/45 text-white border border-neutral-500/60 hover:bg-black/70 transition inline-flex items-center justify-center backdrop-blur-md md:left-6 md:top-24"
+          className="absolute left-4 top-20 z-40 h-10 w-10 rounded-full bg-black/45 text-white border border-neutral-500/60 hover:bg-black/70 transition inline-flex items-center justify-center backdrop-blur-md md:left-6 md:top-28"
           title="Back to Discover"
           aria-label="Back to Discover"
         >
@@ -417,7 +426,7 @@ export default function DiscoverDetailPage() {
         <div className="absolute inset-0 bg-gradient-to-r from-black/62 via-black/22 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/35 to-transparent" />
 
-        <div className="relative z-20 flex-1 px-4 sm:px-6 md:px-10 lg:px-12 pt-32 sm:pt-36 md:pt-40 flex flex-col items-start justify-start pb-10 sm:pb-14 md:pb-20">
+        <div className="relative z-20 flex-1 px-4 sm:px-6 md:px-10 lg:px-12 pt-24 sm:pt-28 md:pt-44 flex flex-col items-start justify-start pb-10 sm:pb-14 md:pb-20">
           {loadingDetails ? (
             <div className="flex items-center gap-3 text-neutral-300 pb-12">
               <Loader2 className="w-6 h-6 animate-spin" />
@@ -430,6 +439,12 @@ export default function DiscoverDetailPage() {
                 {activeDetails?.year && <span className="text-neutral-200">{activeDetails.year}</span>}
                 {mediaType === 'movie' && movieDetails?.runtime && <span className="text-neutral-200">{Math.floor(movieDetails.runtime / 60)}h {movieDetails.runtime % 60}m</span>}
                 {mediaType === 'tv' && tvDetails?.status && <span className="text-neutral-200">{tvDetails.status}</span>}
+                {mediaType === 'tv' && tvSeasonCount !== null && tvSeasonCount > 0 && (
+                  <span className="text-neutral-200">{tvSeasonCount} Season{tvSeasonCount > 1 ? 's' : ''}</span>
+                )}
+                {mediaType === 'tv' && totalEpisodeCount !== null && (
+                  <span className="text-neutral-200">{totalEpisodeCount} Episode{totalEpisodeCount > 1 ? 's' : ''}</span>
+                )}
               </div>
 
               {logoUrl ? (
@@ -576,32 +591,6 @@ export default function DiscoverDetailPage() {
       </section>
 
       <main className="px-6 md:px-12 py-6 md:py-8 space-y-10">
-        <section>
-          <h2 className="text-lg font-bold mb-3">More Like This</h2>
-          {loadingSimilar ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-              {Array.from({ length: 8 }).map((_, idx) => (
-                <div key={idx} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
-                  <div className="aspect-[2/3] bg-neutral-800" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-              {similarItems.map((item, idx) => (
-                <div key={`${item.mediaType}-${item.tmdbId}-${idx}`}>
-                  <ContentCard
-                    item={toDiscoverContentCardItem(item)}
-                    onClick={() => router.push(`/discover/${item.mediaType}/${item.tmdbId}`)}
-                    showProgress={false}
-                    showRating
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
         {mediaType === 'tv' && tvDetails && (
           <section className="space-y-4">
             <h2 className="text-lg font-bold">Seasons & Episodes</h2>
@@ -676,6 +665,32 @@ export default function DiscoverDetailPage() {
             )}
           </section>
         )}
+
+        <section>
+          <h2 className="text-lg font-bold mb-3">More Like This</h2>
+          {loadingSimilar ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+              {Array.from({ length: 8 }).map((_, idx) => (
+                <div key={idx} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                  <div className="aspect-[2/3] bg-neutral-800" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+              {similarItems.map((item, idx) => (
+                <div key={`${item.mediaType}-${item.tmdbId}-${idx}`}>
+                  <ContentCard
+                    item={toDiscoverContentCardItem(item)}
+                    onClick={() => router.push(`/discover/${item.mediaType}/${item.tmdbId}`)}
+                    showProgress={false}
+                    showRating
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
 
       {personModalOpen && (
