@@ -125,6 +125,14 @@ type DiscoverOnlineItem = {
   popularity: number;
 };
 
+type TabId = 'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'discover';
+
+const VALID_TABS: TabId[] = ['all', 'movie', 'show', 'live', 'watchlist', 'discover'];
+
+function isValidTab(value: string | null): value is TabId {
+  return value !== null && VALID_TABS.includes(value as TabId);
+}
+
 export default function Home() {
   // Setup Wizard
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
@@ -136,7 +144,7 @@ export default function Home() {
   const [library, setLibrary] = useState<ContentItem[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'discover'>('all');
+  const [activeTab, setActiveTab] = useState<TabId>('all');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
   // IPTV State
@@ -188,7 +196,7 @@ export default function Home() {
   const [discoverMode, setDiscoverMode] = useState<'online' | 'torrents'>('online');
   const [torrentInitialQuery, setTorrentInitialQuery] = useState('');
 
-  const switchTab = (tab: 'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'discover') => {
+  const switchTab = (tab: TabId) => {
     // Always open Discover in Online mode when navigating via top-level tabs.
     if (tab === 'discover') {
       setDiscoverMode('online');
@@ -203,6 +211,24 @@ export default function Home() {
 
     setActiveTab(tab);
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const requestedTab = new URLSearchParams(window.location.search).get('tab');
+    if (!isValidTab(requestedTab)) return;
+
+    if (requestedTab === 'all') {
+      setSelectedGenre(null);
+    }
+
+    if (requestedTab === 'discover') {
+      setDiscoverMode('online');
+      setTorrentInitialQuery('');
+    }
+
+    setActiveTab(requestedTab);
+  }, []);
 
   const openOnlineInDiscover = (item: DiscoverOnlineItem) => {
     setDiscoverMode('online');

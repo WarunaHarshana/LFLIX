@@ -21,6 +21,7 @@ import StreamServerModal from '../../../components/StreamServerModal';
 import DownloadModal from '../../../components/DownloadModal';
 import TrailerModal from '../../../components/TrailerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from '../../../components/ContentCard';
+import DetailTabNav from '../../../components/DetailTabNav';
 
 type TMDBResult = {
   tmdbId: number;
@@ -379,12 +380,13 @@ export default function DiscoverDetailPage() {
 
   return (
     <div className="min-h-screen bg-black text-white">
+      <DetailTabNav activeTab="discover" />
       <section className="relative min-h-screen overflow-hidden border-b border-neutral-900 flex flex-col">
         <div className="absolute inset-0 bg-black" />
 
         <button
           onClick={() => router.back()}
-          className="absolute left-4 top-5 z-40 h-10 w-10 rounded-full bg-black/45 text-white border border-neutral-500/60 hover:bg-black/70 transition inline-flex items-center justify-center backdrop-blur-md md:left-6 md:top-6"
+          className="absolute left-4 top-24 z-40 h-10 w-10 rounded-full bg-black/45 text-white border border-neutral-500/60 hover:bg-black/70 transition inline-flex items-center justify-center backdrop-blur-md md:left-6 md:top-24"
           title="Back to Discover"
           aria-label="Back to Discover"
         >
@@ -415,7 +417,7 @@ export default function DiscoverDetailPage() {
         <div className="absolute inset-0 bg-gradient-to-r from-black/62 via-black/22 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/35 to-transparent" />
 
-        <div className="relative z-20 flex-1 px-4 sm:px-6 md:px-10 lg:px-12 pt-16 sm:pt-20 md:pt-24 flex flex-col items-start justify-start pb-10 sm:pb-14 md:pb-20">
+        <div className="relative z-20 flex-1 px-4 sm:px-6 md:px-10 lg:px-12 pt-32 sm:pt-36 md:pt-40 flex flex-col items-start justify-start pb-10 sm:pb-14 md:pb-20">
           {loadingDetails ? (
             <div className="flex items-center gap-3 text-neutral-300 pb-12">
               <Loader2 className="w-6 h-6 animate-spin" />
