@@ -366,6 +366,20 @@ export default function Home() {
     }
   }, []);
 
+  const fetchActiveDownloads = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl('/api/downloads'), { credentials: 'include' });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const downloads = Array.isArray(data.downloads) ? data.downloads : [];
+      const count = downloads.filter((d: any) => d.status === 'downloading' || d.status === 'paused').length;
+      setActiveDownloads(count);
+    } catch {
+      // Keep existing badge value on transient API failures.
+    }
+  }, []);
+
   // Fetch IPTV channels
   const fetchIPTVChannels = useCallback(async () => {
     setLoadingIPTV(true);
@@ -412,6 +426,23 @@ export default function Home() {
     fetchContinueWatching();
     fetchIPTVChannels();
   }, [fetchLibrary, fetchContinueWatching, fetchIPTVChannels]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      await fetchActiveDownloads();
+    };
+
+    void tick();
+    const interval = setInterval(tick, 8000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [fetchActiveDownloads]);
 
   // Connect to folder watcher for real-time updates
   useEffect(() => {
