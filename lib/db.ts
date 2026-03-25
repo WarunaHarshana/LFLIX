@@ -165,6 +165,21 @@ db.exec(`
     completedAt DATETIME,
     FOREIGN KEY(watchlistId) REFERENCES watchlist(id) ON DELETE SET NULL
   );
+
+  -- Stream server quality observations (online providers)
+  CREATE TABLE IF NOT EXISTS stream_server_quality_cache (
+    serverId TEXT NOT NULL,
+    tmdbId INTEGER NOT NULL,
+    mediaType TEXT NOT NULL,
+    seasonNumber INTEGER NOT NULL DEFAULT 0,
+    episodeNumber INTEGER NOT NULL DEFAULT 0,
+    maxQuality TEXT NOT NULL DEFAULT 'unknown',
+    confidence REAL NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'fast',
+    checkedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (serverId, tmdbId, mediaType, seasonNumber, episodeNumber)
+  );
 `);
 
 // Run migrations for existing databases (add columns if they don't exist)
@@ -314,6 +329,100 @@ export const iptvDb = {
     insertMany(channels);
     return channels.length;
   }
+};
+
+export type StreamQualityValue = '2160p' | '1080p' | '720p' | 'unknown';
+
+type StreamQualityObservation = {
+  serverId: string;
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  seasonNumber?: number;
+  episodeNumber?: number;
+  maxQuality: StreamQualityValue;
+  confidence: number;
+  source?: 'fast' | 'deep' | 'cached';
+};
+
+type StreamQualityRow = {
+  serverId: string;
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  seasonNumber: number;
+  episodeNumber: number;
+  maxQuality: StreamQualityValue;
+  confidence: number;
+  source: 'fast' | 'deep' | 'cached';
+  checkedAt: string;
+  updatedAt: string;
+};
+
+export const streamQualityDb = {
+  getObservation: (params: {
+    serverId: string;
+    tmdbId: number;
+    mediaType: 'movie' | 'tv';
+    seasonNumber?: number;
+    episodeNumber?: number;
+  }) => {
+    const row = db
+      .prepare(
+        `
+          SELECT *
+          FROM stream_server_quality_cache
+          WHERE serverId = ?
+            AND tmdbId = ?
+            AND mediaType = ?
+            AND seasonNumber = ?
+            AND episodeNumber = ?
+          LIMIT 1
+        `
+      )
+      .get(
+        params.serverId,
+        params.tmdbId,
+        params.mediaType,
+        params.seasonNumber ?? 0,
+        params.episodeNumber ?? 0
+      ) as StreamQualityRow | undefined;
+
+    return row || null;
+  },
+
+  upsertObservation: (observation: StreamQualityObservation) => {
+    const stmt = db.prepare(`
+      INSERT INTO stream_server_quality_cache (
+        serverId,
+        tmdbId,
+        mediaType,
+        seasonNumber,
+        episodeNumber,
+        maxQuality,
+        confidence,
+        source,
+        checkedAt,
+        updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(serverId, tmdbId, mediaType, seasonNumber, episodeNumber)
+      DO UPDATE SET
+        maxQuality = excluded.maxQuality,
+        confidence = excluded.confidence,
+        source = excluded.source,
+        checkedAt = CURRENT_TIMESTAMP,
+        updatedAt = CURRENT_TIMESTAMP
+    `);
+
+    return stmt.run(
+      observation.serverId,
+      observation.tmdbId,
+      observation.mediaType,
+      observation.seasonNumber ?? 0,
+      observation.episodeNumber ?? 0,
+      observation.maxQuality,
+      observation.confidence,
+      observation.source || 'fast'
+    );
+  },
 };
 
 export default db;

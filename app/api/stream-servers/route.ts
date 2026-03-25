@@ -1,22 +1,155 @@
 import { NextResponse } from 'next/server';
+import { streamQualityDb, type StreamQualityValue } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 type StreamServer = {
+  id: string;
   name: string;
   url: string;
   color: string;
+  order: number;
+  baselineQuality: Exclude<StreamQualityValue, 'unknown'>;
 };
 
-const SERVER_CHECK_TIMEOUT_MS = 4000;
+type ProbeState = 'cached' | 'fast' | 'deep-pending';
+
+type StreamServerResponse = StreamServer & {
+  isReachable: boolean;
+  availabilityState: 'reachable' | 'blocked' | 'unreachable';
+  probeError: string | null;
+  probeCheckedAt: string;
+  qualityHint: StreamQualityValue;
+  confidence: number;
+  probeState: ProbeState;
+  lastCheckedAt: string | null;
+  latencyMs: number;
+};
+
+const BASE_SERVER_CHECK_TIMEOUT_MS = 4500;
+const MAX_SERVER_CHECK_TIMEOUT_MS = 10000;
 const SERVER_CHECK_CACHE_TTL_MS = 90_000;
+const OBSERVATION_STALE_MS = 6 * 60 * 60 * 1000;
 
 type ProbeCacheEntry = {
   working: boolean;
+  blocked: boolean;
+  htmlSnippet: string;
+  checkedAt: number;
+  latencyMs: number;
+  probeError: string | null;
   expiresAt: number;
 };
 
 const probeCache = new Map<string, ProbeCacheEntry>();
+
+const QUALITY_RANK: Record<StreamQualityValue, number> = {
+  unknown: 0,
+  '720p': 1,
+  '1080p': 2,
+  '2160p': 3,
+};
+
+type ServerRegistryEntry = {
+  id: string;
+  name: string;
+  color: string;
+  baselineQuality: Exclude<StreamQualityValue, 'unknown'>;
+  buildUrl: (tmdbId: number, type: 'movie' | 'tv', season?: number, episode?: number) => string;
+};
+
+const SERVER_REGISTRY: ServerRegistryEntry[] = [
+  {
+    id: 'zxcstream-1',
+    name: 'ZXCSTREAM',
+    color: '#3b82f6',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      `https://vidsrc.xyz/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
+  },
+  {
+    id: 'vidlink',
+    name: 'VIDLINK',
+    color: '#ef4444',
+    baselineQuality: '2160p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidlink.pro/movie/${tmdbId}`
+        : `https://vidlink.pro/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+  },
+  {
+    id: 'frembed',
+    name: 'FREMBED',
+    color: '#10b981',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://frembed.pro/api/film.php?id=${tmdbId}`
+        : `https://frembed.pro/api/serie.php?id=${tmdbId}&sa=${season || 1}&epi=${episode || 1}`,
+  },
+  {
+    id: 'vixsrc',
+    name: 'VIXSRC',
+    color: '#f97316',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      `https://vidsrc.cc/v2/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
+  },
+  {
+    id: 'rgshows',
+    name: 'RGSHOWS',
+    color: '#8b5cf6',
+    baselineQuality: '2160p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`
+        : `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season || 1}&e=${episode || 1}`,
+  },
+  {
+    id: 'superflix',
+    name: 'SUPERFLIX',
+    color: '#ec4899',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      `https://vidsrc.xyz/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
+  },
+  {
+    id: 'modocine',
+    name: 'MODOCINE',
+    color: '#06b6d4',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      `https://vidsrc.cc/v2/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
+  },
+  {
+    id: 'zxcstream-2',
+    name: 'ZXCSTREAM',
+    color: '#60a5fa',
+    baselineQuality: '720p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      `https://vidsrc.me/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
+  },
+  {
+    id: '2embed',
+    name: '2EMBED',
+    color: '#f59e0b',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`
+        : `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season || 1}&e=${episode || 1}`,
+  },
+  {
+    id: 'smashystream',
+    name: 'SMASHYSTREAM',
+    color: '#a855f7',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://embed.smashystream.com/playere.php?tmdb=${tmdbId}`
+        : `https://embed.smashystream.com/playere.php?tmdb=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
+  },
+];
 
 const EMBED_ALLOW_MARKERS = [
   'iframe',
@@ -37,6 +170,12 @@ const EMBED_BLOCK_MARKERS = [
   'just a moment',
   'forbidden',
   'verify you are human',
+  'checking your browser',
+  'checking connection security',
+  'request blocked',
+  'enable javascript and cookies',
+  'waf',
+  'cf-browser-verification',
 ];
 
 function looksLikeEmbeddablePage(contentType: string | null, html: string): boolean {
@@ -68,15 +207,138 @@ function looksLikeEmbeddablePage(contentType: string | null, html: string): bool
   return (hasHtmlStructure && hasEmbedMarker) || hasReasonableHtmlPayload;
 }
 
-async function isServerWorking(server: StreamServer): Promise<boolean> {
+function hasBlockedMarker(html: string): boolean {
+  return EMBED_BLOCK_MARKERS.some((marker) => html.includes(marker));
+}
+
+function normalizeConfidence(value: number): number {
+  return Math.max(0, Math.min(1, Number(value.toFixed(2))));
+}
+
+function detectQualityFromHtml(htmlSnippet: string): { quality: StreamQualityValue; confidence: number } {
+  const html = htmlSnippet.toLowerCase();
+  if (!html) {
+    return { quality: 'unknown', confidence: 0.2 };
+  }
+
+  const m3u8Matches = [...html.matchAll(/resolution\s*=\s*(\d+)x(\d+)/gi)];
+  if (m3u8Matches.length > 0) {
+    let maxHeight = 0;
+    for (const match of m3u8Matches) {
+      const height = Number.parseInt(match[2], 10);
+      if (!Number.isNaN(height) && height > maxHeight) {
+        maxHeight = height;
+      }
+    }
+
+    if (maxHeight >= 1800) {
+      return { quality: '2160p', confidence: 0.95 };
+    }
+    if (maxHeight >= 900) {
+      return { quality: '1080p', confidence: 0.9 };
+    }
+    if (maxHeight >= 600) {
+      return { quality: '720p', confidence: 0.85 };
+    }
+  }
+
+  if (/2160|4k|uhd|3840x2160/.test(html)) {
+    return { quality: '2160p', confidence: 0.85 };
+  }
+  if (/1080|full\s*hd|1920x1080|fhd/.test(html)) {
+    return { quality: '1080p', confidence: 0.78 };
+  }
+  if (/720|1280x720|hd/.test(html)) {
+    return { quality: '720p', confidence: 0.7 };
+  }
+
+  return { quality: 'unknown', confidence: 0.35 };
+}
+
+function inferFastQuality(server: StreamServer): { quality: StreamQualityValue; confidence: number } {
+  if (/4k|2160/.test(server.url.toLowerCase())) {
+    return { quality: '2160p', confidence: 0.7 };
+  }
+
+  return {
+    quality: server.baselineQuality,
+    confidence: server.baselineQuality === '2160p' ? 0.58 : 0.5,
+  };
+}
+
+function isObservationStale(checkedAt: string): boolean {
+  const timestamp = Date.parse(checkedAt);
+  if (Number.isNaN(timestamp)) {
+    return true;
+  }
+
+  return Date.now() - timestamp > OBSERVATION_STALE_MS;
+}
+
+function pickBestQualityCandidate(
+  cached: { maxQuality: StreamQualityValue; confidence: number; checkedAt: string } | null,
+  fast: { quality: StreamQualityValue; confidence: number }
+): {
+  qualityHint: StreamQualityValue;
+  confidence: number;
+  probeState: ProbeState;
+  lastCheckedAt: string | null;
+  shouldDeepProbe: boolean;
+} {
+  if (cached && !isObservationStale(cached.checkedAt)) {
+    return {
+      qualityHint: cached.maxQuality,
+      confidence: normalizeConfidence(cached.confidence),
+      probeState: 'cached',
+      lastCheckedAt: cached.checkedAt,
+      shouldDeepProbe: false,
+    };
+  }
+
+  if (cached) {
+    const cachedRank = QUALITY_RANK[cached.maxQuality] ?? 0;
+    const fastRank = QUALITY_RANK[fast.quality] ?? 0;
+    if (cachedRank >= fastRank) {
+      return {
+        qualityHint: cached.maxQuality,
+        confidence: normalizeConfidence(Math.max(cached.confidence * 0.9, fast.confidence)),
+        probeState: 'deep-pending',
+        lastCheckedAt: cached.checkedAt,
+        shouldDeepProbe: true,
+      };
+    }
+  }
+
+  return {
+    qualityHint: fast.quality,
+    confidence: normalizeConfidence(fast.confidence),
+    probeState: 'deep-pending',
+    lastCheckedAt: cached?.checkedAt || null,
+    shouldDeepProbe: true,
+  };
+}
+
+function getQualityRank(value: StreamQualityValue): number {
+  return QUALITY_RANK[value] ?? 0;
+}
+
+async function isServerWorking(server: StreamServer): Promise<ProbeCacheEntry> {
   const now = Date.now();
   const cached = probeCache.get(server.url);
   if (cached && cached.expiresAt > now) {
-    return cached.working;
+    return cached;
   }
 
+  const adaptiveTimeoutMs = cached
+    ? Math.min(
+        MAX_SERVER_CHECK_TIMEOUT_MS,
+        Math.max(BASE_SERVER_CHECK_TIMEOUT_MS, Math.round(cached.latencyMs * 2.2))
+      )
+    : BASE_SERVER_CHECK_TIMEOUT_MS;
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), SERVER_CHECK_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), adaptiveTimeoutMs);
+  const startedAt = Date.now();
 
   try {
     const response = await fetch(server.url, {
@@ -92,26 +354,45 @@ async function isServerWorking(server: StreamServer): Promise<boolean> {
     });
 
     if (!response.ok) {
-      probeCache.set(server.url, {
+      const entry = {
         working: false,
+        blocked: response.status === 401 || response.status === 403 || response.status === 429,
+        htmlSnippet: '',
+        checkedAt: now,
+        latencyMs: Date.now() - startedAt,
+        probeError: `http_${response.status}`,
         expiresAt: now + SERVER_CHECK_CACHE_TTL_MS,
-      });
-      return false;
+      };
+      probeCache.set(server.url, entry);
+      return entry;
     }
 
     const text = (await response.text()).slice(0, 30_000).toLowerCase();
+    const blocked = hasBlockedMarker(text);
     const working = looksLikeEmbeddablePage(response.headers.get('content-type'), text);
-    probeCache.set(server.url, {
+    const entry = {
       working,
+      blocked,
+      htmlSnippet: text,
+      checkedAt: now,
+      latencyMs: Date.now() - startedAt,
+      probeError: blocked ? 'blocked_page' : null,
       expiresAt: now + SERVER_CHECK_CACHE_TTL_MS,
-    });
-    return working;
+    };
+    probeCache.set(server.url, entry);
+    return entry;
   } catch {
-    probeCache.set(server.url, {
+    const entry = {
       working: false,
+      blocked: false,
+      htmlSnippet: '',
+      checkedAt: now,
+      latencyMs: adaptiveTimeoutMs,
+      probeError: 'network_error',
       expiresAt: now + SERVER_CHECK_CACHE_TTL_MS,
-    });
-    return false;
+    };
+    probeCache.set(server.url, entry);
+    return entry;
   } finally {
     clearTimeout(timeout);
   }
@@ -123,113 +404,46 @@ function buildServerUrls(
   season?: number,
   episode?: number
 ): StreamServer[] {
-  const servers: StreamServer[] = [];
-  const episodeSuffix = type === 'tv' && season && episode ? `/${season}/${episode}` : '';
+  return SERVER_REGISTRY.map((entry, index) => ({
+    id: entry.id,
+    name: entry.name,
+    url: entry.buildUrl(tmdbId, type, season, episode),
+    color: entry.color,
+    order: index,
+    baselineQuality: entry.baselineQuality,
+  }));
+}
 
-  // ZXCSTREAM
-  servers.push({
-    name: 'ZXCSTREAM',
-    url: `https://vidsrc.xyz/embed/${type}/${tmdbId}${episodeSuffix}`,
-    color: '#3b82f6', // Blue
+function startDeepProbeForServer(
+  server: StreamServer,
+  tmdbId: number,
+  type: 'movie' | 'tv',
+  season: number | undefined,
+  episode: number | undefined,
+  htmlSnippet: string
+) {
+  // Fire-and-forget: enrich quality cache without delaying response.
+  void Promise.resolve().then(() => {
+    const deepQuality = detectQualityFromHtml(htmlSnippet);
+    if (deepQuality.quality === 'unknown' && deepQuality.confidence < 0.5) {
+      return;
+    }
+
+    try {
+      streamQualityDb.upsertObservation({
+        serverId: server.id,
+        tmdbId,
+        mediaType: type,
+        seasonNumber: season,
+        episodeNumber: episode,
+        maxQuality: deepQuality.quality,
+        confidence: normalizeConfidence(deepQuality.confidence),
+        source: 'deep',
+      });
+    } catch (error) {
+      console.warn(`[stream-servers] deep-probe-cache-failed server=${server.id}`, error);
+    }
   });
-
-  // VIDLINK
-  if (type === 'movie') {
-    servers.push({
-      name: 'VIDLINK',
-      url: `https://vidlink.pro/movie/${tmdbId}`,
-      color: '#ef4444', // Red
-    });
-  } else {
-    servers.push({
-      name: 'VIDLINK',
-      url: `https://vidlink.pro/tv/${tmdbId}/${season || 1}/${episode || 1}`,
-      color: '#ef4444', // Red
-    });
-  }
-
-  // FREMBED
-  if (type === 'movie') {
-    servers.push({
-      name: 'FREMBED',
-      url: `https://frembed.pro/api/film.php?id=${tmdbId}`,
-      color: '#10b981', // Green
-    });
-  } else {
-    servers.push({
-      name: 'FREMBED',
-      url: `https://frembed.pro/api/serie.php?id=${tmdbId}&sa=${season || 1}&epi=${episode || 1}`,
-      color: '#10b981', // Green
-    });
-  }
-
-  // VIXSRC (Using reliable vidsrc.cc backend)
-  servers.push({
-    name: 'VIXSRC',
-    url: `https://vidsrc.cc/v2/embed/${type}/${tmdbId}${episodeSuffix}`,
-    color: '#f97316', // Orange
-  });
-
-  // RGSHOWS (Using reliable multiembed backend)
-  if (type === 'movie') {
-    servers.push({
-      name: 'RGSHOWS',
-      url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`,
-      color: '#8b5cf6', // Purple
-    });
-  } else {
-    servers.push({
-      name: 'RGSHOWS',
-      url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season || 1}&e=${episode || 1}`,
-      color: '#8b5cf6', // Purple
-    });
-  }
-
-  // SUPERFLIX (Using vidsrc.xyz backend)
-  servers.push({
-    name: 'SUPERFLIX',
-    url: `https://vidsrc.xyz/embed/${type}/${tmdbId}${episodeSuffix}`,
-    color: '#ec4899', // Pink
-  });
-
-  // MODOCINE (Using vidsrc.cc backend)
-  servers.push({
-    name: 'MODOCINE',
-    url: `https://vidsrc.cc/v2/embed/${type}/${tmdbId}${episodeSuffix}`,
-    color: '#06b6d4', // Cyan
-  });
-
-  // 2EMBED (Using multiembed backend)
-  if (type === 'movie') {
-    servers.push({
-      name: '2EMBED',
-      url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`,
-      color: '#f59e0b', // Yellow
-    });
-  } else {
-    servers.push({
-      name: '2EMBED',
-      url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season || 1}&e=${episode || 1}`,
-      color: '#f59e0b', // Yellow
-    });
-  }
-
-  // SMASHYSTREAM
-  if (type === 'movie') {
-    servers.push({
-      name: 'SMASHYSTREAM',
-      url: `https://embed.smashystream.com/playere.php?tmdb=${tmdbId}`,
-      color: '#8b5cf6', // Purple
-    });
-  } else {
-    servers.push({
-      name: 'SMASHYSTREAM',
-      url: `https://embed.smashystream.com/playere.php?tmdb=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
-      color: '#8b5cf6', // Purple
-    });
-  }
-
-  return servers;
 }
 
 export async function GET(req: Request) {
@@ -263,22 +477,116 @@ export async function GET(req: Request) {
     const checks = await Promise.all(
       servers.map(async (server) => ({
         server,
-        working: await isServerWorking(server),
+        probe: await isServerWorking(server),
       }))
     );
 
-    const workingServers = checks
-      .filter((check) => check.working)
-      .map((check) => check.server);
+    const responseServers: StreamServerResponse[] = [];
+    for (const check of checks) {
+      const cachedObservation = streamQualityDb.getObservation({
+        serverId: check.server.id,
+        tmdbId: parsedTmdbId,
+        mediaType: type,
+        seasonNumber: season ? parseInt(season, 10) : 0,
+        episodeNumber: episode ? parseInt(episode, 10) : 0,
+      });
+
+      const fastQuality = inferFastQuality(check.server);
+      const qualityDecision = pickBestQualityCandidate(
+        cachedObservation
+          ? {
+              maxQuality: cachedObservation.maxQuality,
+              confidence: cachedObservation.confidence,
+              checkedAt: cachedObservation.checkedAt,
+            }
+          : null,
+        fastQuality
+      );
+
+      if (!cachedObservation) {
+        try {
+          streamQualityDb.upsertObservation({
+            serverId: check.server.id,
+            tmdbId: parsedTmdbId,
+            mediaType: type,
+            seasonNumber: season ? parseInt(season, 10) : undefined,
+            episodeNumber: episode ? parseInt(episode, 10) : undefined,
+            maxQuality: qualityDecision.qualityHint,
+            confidence: qualityDecision.confidence,
+            source: 'fast',
+          });
+        } catch (error) {
+          console.warn(`[stream-servers] fast-cache-upsert-failed server=${check.server.id}`, error);
+        }
+      }
+
+      if (check.probe.working && qualityDecision.shouldDeepProbe) {
+        startDeepProbeForServer(
+          check.server,
+          parsedTmdbId,
+          type,
+          season ? parseInt(season, 10) : undefined,
+          episode ? parseInt(episode, 10) : undefined,
+          check.probe.htmlSnippet
+        );
+      }
+
+      responseServers.push({
+        ...check.server,
+        isReachable: check.probe.working,
+        availabilityState: check.probe.working
+          ? 'reachable'
+          : check.probe.blocked
+            ? 'blocked'
+            : 'unreachable',
+        probeError: check.probe.probeError,
+        probeCheckedAt: new Date(check.probe.checkedAt).toISOString(),
+        qualityHint: qualityDecision.qualityHint,
+        confidence: qualityDecision.confidence,
+        probeState: qualityDecision.probeState,
+        lastCheckedAt: qualityDecision.lastCheckedAt,
+        latencyMs: check.probe.latencyMs,
+      });
+    }
+
+    responseServers.sort((a, b) => {
+      const qualityDiff = getQualityRank(b.qualityHint) - getQualityRank(a.qualityHint);
+      if (qualityDiff !== 0) {
+        return qualityDiff;
+      }
+
+      const reachableDiff = Number(b.isReachable) - Number(a.isReachable);
+      if (reachableDiff !== 0) {
+        return reachableDiff;
+      }
+
+      const latencyA = Number.isFinite(a.latencyMs) ? a.latencyMs : Number.MAX_SAFE_INTEGER;
+      const latencyB = Number.isFinite(b.latencyMs) ? b.latencyMs : Number.MAX_SAFE_INTEGER;
+      if (latencyA !== latencyB) {
+        return latencyA - latencyB;
+      }
+
+      if (Math.abs(b.confidence - a.confidence) > 0.01) {
+        return b.confidence - a.confidence;
+      }
+
+      return a.order - b.order;
+    });
+
+    const workingCount = checks.filter((check) => check.probe.working).length;
+    const bestServerIndex = responseServers.length > 0 ? 0 : -1;
 
     console.info(
-      `[stream-servers] tmdbId=${parsedTmdbId} type=${type} working=${workingServers.length}/${servers.length}`
+      `[stream-servers] tmdbId=${parsedTmdbId} type=${type} reachable=${workingCount}/${servers.length}`
     );
 
     return NextResponse.json({
-      servers: workingServers,
+      servers: responseServers,
       totalCount: servers.length,
-      workingCount: workingServers.length,
+      workingCount,
+      bestServerIndex,
+      qualityMode: 'hybrid',
+      filterMode: 'all',
     });
   } catch (e: any) {
     console.error('Stream servers error:', e);

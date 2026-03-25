@@ -4,12 +4,112 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward } from 'lucide-react';
 
 type StreamServer = {
+  id: string;
   name: string;
   url: string;
   color: string;
+  order: number;
+  isReachable: boolean;
+  availabilityState: 'reachable' | 'blocked' | 'unreachable';
+  probeError: string | null;
+  probeCheckedAt: string;
+  qualityHint: '2160p' | '1080p' | '720p' | 'unknown';
+  confidence: number;
+  probeState: 'cached' | 'fast' | 'deep-pending';
+  lastCheckedAt: string | null;
+  latencyMs: number;
 };
 
 const AUTO_FAILOVER_TIMEOUT_MS = 15000;
+const IFRAME_BOOTSTRAP_MS = 2500;
+const PLAYBACK_GRACE_MS = 18000;
+const QUALITY_RANK: Record<StreamServer['qualityHint'], number> = {
+  unknown: 0,
+  '720p': 1,
+  '1080p': 2,
+  '2160p': 3,
+};
+
+function rankServersByQuality(servers: StreamServer[]): StreamServer[] {
+  return [...servers].sort((a, b) => {
+    const rankDiff = QUALITY_RANK[b.qualityHint] - QUALITY_RANK[a.qualityHint];
+    if (rankDiff !== 0) {
+      return rankDiff;
+    }
+
+    const reachableDiff = Number(b.isReachable) - Number(a.isReachable);
+    if (reachableDiff !== 0) {
+      return reachableDiff;
+    }
+
+    const latencyA = Number.isFinite(a.latencyMs) ? a.latencyMs : Number.MAX_SAFE_INTEGER;
+    const latencyB = Number.isFinite(b.latencyMs) ? b.latencyMs : Number.MAX_SAFE_INTEGER;
+    if (latencyA !== latencyB) {
+      return latencyA - latencyB;
+    }
+
+    if (Math.abs(b.confidence - a.confidence) > 0.01) {
+      return b.confidence - a.confidence;
+    }
+
+    return a.order - b.order;
+  });
+}
+
+function getServerLabel(index: number): string {
+  return `Server ${index + 1}`;
+}
+
+function getAvailabilityBadge(server: StreamServer): {
+  text: string;
+  className: string;
+} {
+  if (server.availabilityState === 'reachable') {
+    return { text: 'Reachable', className: 'text-emerald-300 bg-emerald-500/15' };
+  }
+  if (server.availabilityState === 'blocked') {
+    return { text: 'Probe Blocked (VPN)', className: 'text-amber-300 bg-amber-500/15' };
+  }
+  return { text: 'Unreachable', className: 'text-rose-300 bg-rose-500/15' };
+}
+
+function formatProbeStatus(server: StreamServer | undefined, autoSwitching: boolean): string {
+  if (!server) {
+    return 'Searching for best stream...';
+  }
+
+  if (!autoSwitching) {
+    if (server.qualityHint === '2160p') {
+      return 'Connecting to 4K stream...';
+    }
+    return 'Searching for best stream...';
+  }
+
+  if (server.qualityHint === '1080p') {
+    return '4K unavailable, switching to 1080p...';
+  }
+  if (server.qualityHint === '720p') {
+    return 'Higher quality not found, trying 720p...';
+  }
+
+  return 'Trying remaining servers...';
+}
+
+function getNetworkHint(server: StreamServer | undefined): string | null {
+  if (!server || !Number.isFinite(server.latencyMs)) {
+    return null;
+  }
+
+  if (server.latencyMs >= 2500) {
+    return `Slow network/VPN route detected (${server.latencyMs}ms)`;
+  }
+
+  if (server.latencyMs >= 1600) {
+    return `High latency route (${server.latencyMs}ms)`;
+  }
+
+  return null;
+}
 
 type Props = {
   tmdbId: number;
@@ -23,11 +123,14 @@ type Props = {
 export default function StreamServerModal({ tmdbId, type, title, season, episode, onClose }: Props) {
   const [servers, setServers] = useState<StreamServer[]>([]);
   const [activeServer, setActiveServer] = useState<number>(0);
-  const [attemptedServers, setAttemptedServers] = useState<number[]>([0]);
+  const [attemptedServers, setAttemptedServers] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [iframeLoading, setIframeLoading] = useState(true);
   const [iframeError, setIframeError] = useState(false);
   const [autoSwitching, setAutoSwitching] = useState(false);
+  const [showSources, setShowSources] = useState(false);
+  const [iframeBootstrapped, setIframeBootstrapped] = useState(false);
+  const [playbackReady, setPlaybackReady] = useState(false);
   const attemptedServersRef = useRef<number[]>([0]);
 
   useEffect(() => {
@@ -46,13 +149,21 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
         const res = await fetch(`/api/stream-servers?${params}`);
         const data = await res.json();
         if (data.servers) {
-          setServers(data.servers);
-          setActiveServer(0);
-          setAttemptedServers([0]);
-          attemptedServersRef.current = [0];
+          const rankedServers = rankServersByQuality(data.servers as StreamServer[]);
+          const bestServerIndex = typeof data.bestServerIndex === 'number' ? data.bestServerIndex : 0;
+          const firstIndex = rankedServers.length > 0 ? Math.max(0, Math.min(bestServerIndex, rankedServers.length - 1)) : -1;
+
+          setServers(rankedServers);
+          setActiveServer(Math.max(firstIndex, 0));
+          const initialAttempted = firstIndex >= 0 ? [firstIndex] : [];
+          setAttemptedServers(initialAttempted);
+          attemptedServersRef.current = initialAttempted;
           setIframeError(false);
-          setIframeLoading(true);
+          setIframeLoading(rankedServers.length > 0);
           setAutoSwitching(false);
+          setShowSources(false);
+          setIframeBootstrapped(false);
+          setPlaybackReady(false);
         }
       } catch (e) {
         console.error('Failed to fetch servers:', e);
@@ -67,6 +178,9 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     setActiveServer(index);
     setIframeLoading(true);
     setIframeError(false);
+    setIframeBootstrapped(false);
+    setPlaybackReady(false);
+    setShowSources(true);
     setAttemptedServers([index]);
     attemptedServersRef.current = [index];
     setAutoSwitching(false);
@@ -78,6 +192,13 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     }
 
     const attempted = attemptedServersRef.current;
+    for (let step = 1; step < servers.length; step += 1) {
+      const candidate = (currentIndex + step) % servers.length;
+      if (!attempted.includes(candidate) && servers[candidate]?.isReachable) {
+        return candidate;
+      }
+    }
+
     for (let step = 1; step < servers.length; step += 1) {
       const candidate = (currentIndex + step) % servers.length;
       if (!attempted.includes(candidate)) {
@@ -103,13 +224,15 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     setActiveServer(nextServerIndex);
     setIframeLoading(true);
     setIframeError(false);
+    setIframeBootstrapped(false);
+    setPlaybackReady(false);
+    setShowSources((prev) => prev || mode === 'auto');
     setAutoSwitching(mode === 'auto');
     return true;
   };
 
   const handleIframeLoad = () => {
-    setIframeLoading(false);
-    setAutoSwitching(false);
+    setIframeBootstrapped(true);
   };
 
   const currentServer = servers[activeServer];
@@ -124,20 +247,54 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
   }, []);
 
   useEffect(() => {
-    if (loading || servers.length === 0 || !iframeLoading) {
+    if (loading || servers.length === 0 || playbackReady || iframeError) {
       return;
     }
 
-    const watchdog = window.setTimeout(() => {
+    const attemptIndex = Math.max(0, attemptedServersRef.current.length - 1);
+    const backoffMultiplier = Math.min(1.8, 1 + attemptIndex * 0.2);
+    const connectTimeout = Math.round(AUTO_FAILOVER_TIMEOUT_MS * backoffMultiplier);
+    const playbackGraceTimeout = Math.round(PLAYBACK_GRACE_MS * backoffMultiplier);
+
+    if (!iframeBootstrapped) {
+      setIframeLoading(true);
+      const connectWatchdog = window.setTimeout(() => {
+        const switched = tryNextServer(activeServer, 'auto');
+        if (!switched) {
+          setIframeLoading(false);
+          setIframeError(true);
+        }
+      }, connectTimeout);
+
+      return () => window.clearTimeout(connectWatchdog);
+    }
+
+    setIframeLoading(true);
+    const bootstrapTimer = window.setTimeout(() => {
+      setAutoSwitching(false);
+    }, IFRAME_BOOTSTRAP_MS);
+
+    const playbackWatchdog = window.setTimeout(() => {
       const switched = tryNextServer(activeServer, 'auto');
       if (!switched) {
         setIframeLoading(false);
+        setPlaybackReady(true);
         setIframeError(true);
       }
-    }, AUTO_FAILOVER_TIMEOUT_MS);
+    }, playbackGraceTimeout);
 
-    return () => window.clearTimeout(watchdog);
-  }, [activeServer, iframeLoading, loading, servers.length]);
+    const releaseOverlayTimer = window.setTimeout(() => {
+      setIframeLoading(false);
+      setPlaybackReady(true);
+      setAutoSwitching(false);
+    }, Math.min(playbackGraceTimeout - 1000, IFRAME_BOOTSTRAP_MS + 4500));
+
+    return () => {
+      window.clearTimeout(bootstrapTimer);
+      window.clearTimeout(playbackWatchdog);
+      window.clearTimeout(releaseOverlayTimer);
+    };
+  }, [activeServer, iframeBootstrapped, iframeError, loading, playbackReady, servers.length]);
 
   return (
     <div className="fixed inset-0 z-[90] bg-black flex flex-col">
@@ -157,11 +314,19 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowSources((prev) => !prev)}
+            className="px-3 py-1.5 rounded-full text-xs font-medium transition bg-neutral-800 hover:bg-neutral-700 text-neutral-200"
+            title="Show or hide source list"
+          >
+            {showSources ? 'Hide Sources' : 'Show Sources'}
+          </button>
+          <button
             onClick={() => {
               const switched = tryNextServer(activeServer, 'manual');
               if (!switched) {
                 setIframeLoading(false);
                 setIframeError(true);
+                setShowSources(true);
               }
             }}
             disabled={!hasAlternateServer}
@@ -196,24 +361,37 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       </div>
 
       {/* Server Tabs */}
-      {!loading && servers.length > 0 && (
+      {!loading && servers.length > 0 && showSources && (
         <div className="px-4 py-2.5 bg-neutral-900/80 backdrop-blur border-b border-neutral-800 shrink-0">
           <div className="flex gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700 pb-1">
             {servers.map((server, i) => (
               <button
                 key={i}
                 onClick={() => handleServerChange(i)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
+                className={`server-chip-enter px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
                   activeServer === i
-                    ? 'text-white shadow-lg scale-105'
+                    ? 'text-white shadow-lg scale-105 server-chip-active-ring'
                     : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white'
                 }`}
-                style={activeServer === i ? {
-                  backgroundColor: server.color,
-                  boxShadow: `0 0 20px ${server.color}40`,
-                } : {}}
+                style={{
+                  ...(activeServer === i
+                    ? {
+                        backgroundColor: server.color,
+                        boxShadow: `0 0 20px ${server.color}40`,
+                      }
+                    : {}),
+                  animationDelay: `${Math.min(i * 55, 450)}ms`,
+                }}
               >
-                {server.name}
+                <span className="inline-flex items-center gap-2">
+                  <span>{getServerLabel(i)}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-black/35">
+                    {server.qualityHint.toUpperCase()}
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${getAvailabilityBadge(server).className}`}>
+                    {getAvailabilityBadge(server).text}
+                  </span>
+                </span>
               </button>
             ))}
           </div>
@@ -250,10 +428,23 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                       style={{ borderColor: `${currentServer?.color || '#3b82f6'} transparent transparent transparent` }}
                     />
                   </div>
-                  <p className="text-neutral-300 font-medium">{currentServer?.name}</p>
+                  <p className="text-neutral-300 font-medium">{getServerLabel(activeServer)}</p>
                   <p className="text-neutral-500 text-sm mt-1">
-                    {autoSwitching ? 'Trying next server...' : 'Connecting to server...'}
+                    {formatProbeStatus(currentServer, autoSwitching)}
                   </p>
+                  {currentServer && !currentServer.isReachable && (
+                    <p className="text-xs text-neutral-400 mt-2">
+                      Probe says {currentServer.availabilityState}, but manual test may still work on VPN.
+                    </p>
+                  )}
+                  {getNetworkHint(currentServer) && (
+                    <p className="text-amber-400 text-xs mt-2">{getNetworkHint(currentServer)}</p>
+                  )}
+                  {autoSwitching && (
+                    <div className="server-switch-progress mt-3 h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+                      <div className="h-full bg-blue-500" />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -269,6 +460,8 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                     onClick={() => {
                       setIframeError(false);
                       setIframeLoading(true);
+                      setIframeBootstrapped(false);
+                      setPlaybackReady(false);
                     }}
                     className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-sm flex items-center gap-2 mx-auto transition"
                   >
@@ -285,7 +478,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               className="w-full h-full border-0"
               allowFullScreen
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-              referrerPolicy="origin"
+              referrerPolicy="no-referrer"
               onLoad={handleIframeLoad}
               onError={() => {
                 const switched = tryNextServer(activeServer, 'auto');
@@ -294,6 +487,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                 }
 
                 setIframeLoading(false);
+                setPlaybackReady(true);
                 setIframeError(true);
               }}
             />
@@ -303,7 +497,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
       {/* Footer hint */}
       <div className="px-4 py-2 bg-neutral-900 border-t border-neutral-800 text-center text-xs text-neutral-500 shrink-0">
-        Not working? Try switching servers above · Streams provided by third-party services
+        Best quality source starts automatically · source list appears on failover or with Show Sources
       </div>
     </div>
   );
