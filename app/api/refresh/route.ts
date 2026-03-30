@@ -124,7 +124,7 @@ export async function POST(req: Request) {
             FROM episodes e
             JOIN shows s ON s.id = e.showId
             WHERE s.tmdbId IS NOT NULL AND s.tmdbId > 0
-            AND (e.stillPath IS NULL OR e.title LIKE 'S% E%')
+            AND (e.stillPath IS NULL OR e.rating IS NULL OR e.title LIKE 'S% E%')
         `).all() as { id: number; showId: number; seasonNumber: number; episodeNumber: number; title: string; stillPath: string | null; tmdbId: number }[];
 
         let episodesRefreshed = 0;
@@ -132,9 +132,9 @@ export async function POST(req: Request) {
             try {
                 const epMeta = await fetchEpisodeMetadata(ep.tmdbId, ep.seasonNumber, ep.episodeNumber);
                 // Only update if we got real data (not fallback)
-                if (epMeta.stillPath || (epMeta.title && !/^S\d+ E\d+$/.test(epMeta.title))) {
-                    db.prepare(`UPDATE episodes SET title = ?, overview = ?, stillPath = ? WHERE id = ?`)
-                        .run(epMeta.title, epMeta.overview, epMeta.stillPath, ep.id);
+                if (epMeta.stillPath || epMeta.rating !== null || (epMeta.title && !/^S\d+ E\d+$/.test(epMeta.title))) {
+                    db.prepare(`UPDATE episodes SET title = ?, overview = ?, stillPath = ?, rating = ? WHERE id = ?`)
+                        .run(epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, ep.id);
                     episodesRefreshed++;
                 }
             } catch (e: any) {

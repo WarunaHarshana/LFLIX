@@ -95,13 +95,13 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
 
     // Check if already indexed
     const movieExists = db.prepare('SELECT id, resolution FROM movies WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null } | undefined;
-    const epExists = db.prepare('SELECT id, resolution, title, stillPath, showId, seasonNumber, episodeNumber FROM episodes WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null; title: string | null; stillPath: string | null; showId: number; seasonNumber: number; episodeNumber: number } | undefined;
+    const epExists = db.prepare('SELECT id, resolution, title, stillPath, rating, showId, seasonNumber, episodeNumber FROM episodes WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null; title: string | null; stillPath: string | null; rating: number | null; showId: number; seasonNumber: number; episodeNumber: number } | undefined;
 
     if (movieExists || epExists) {
       // Check if media info or episode metadata needs updating
       const needsMediaUpdate = (movieExists && !movieExists.resolution) || (epExists && !epExists.resolution);
       // Episode needs metadata refresh if title is fallback pattern (e.g., "S1 E1") or stillPath is null
-      const needsEpMetadata = epExists && (!epExists.stillPath || /^S\d+ E\d+$/.test(epExists.title || ''));
+      const needsEpMetadata = epExists && (!epExists.stillPath || epExists.rating === null || /^S\d+ E\d+$/.test(epExists.title || ''));
 
       if (!needsMediaUpdate && !needsEpMetadata) {
         return { added: false };
@@ -114,9 +114,9 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
           if (show?.tmdbId && show.tmdbId > 0) {
             const epMeta = await fetchEpisodeMetadata(show.tmdbId, epExists.seasonNumber, epExists.episodeNumber);
             // Only update if we got real data (not fallback)
-            if (epMeta.stillPath || (epMeta.title && !/^S\d+ E\d+$/.test(epMeta.title))) {
-              db.prepare(`UPDATE episodes SET title = ?, overview = ?, stillPath = ? WHERE id = ?`)
-                .run(epMeta.title, epMeta.overview, epMeta.stillPath, epExists.id);
+            if (epMeta.stillPath || epMeta.rating !== null || (epMeta.title && !/^S\d+ E\d+$/.test(epMeta.title))) {
+              db.prepare(`UPDATE episodes SET title = ?, overview = ?, stillPath = ?, rating = ? WHERE id = ?`)
+                .run(epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, epExists.id);
               console.log(`[Scanner] Updated episode metadata for ${fileName}: "${epMeta.title}" still=${!!epMeta.stillPath}`);
             }
           }
@@ -210,11 +210,11 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
 
       // Insert episode with TMDB metadata and media info
       db.prepare(`INSERT OR IGNORE INTO episodes 
-        (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath, rating, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           showId, filePath, fileName, tvInfo.season, tvInfo.episode,
-          epMeta.title, epMeta.overview, epMeta.stillPath, isHDR,
+          epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, isHDR,
           resolution || null, videoCodec || null,
           audioCodec || null, audioChannels || null,
           mediaInfo?.bitrate || null, mediaInfo?.duration || null,

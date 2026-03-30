@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import db from '@/lib/db';
-import { fetchMovieMetadata, fetchShowMetadata, getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
-import { MovieDb } from 'moviedb-promise';
+import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -133,8 +132,8 @@ export async function POST(req: Request) {
     `);
 
     const insertEpisode = db.prepare(`
-      INSERT OR IGNORE INTO episodes (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath)
-      VALUES (@showId, @filePath, @fileName, @seasonNumber, @episodeNumber, @title, @overview, @stillPath)
+      INSERT OR IGNORE INTO episodes (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath, rating)
+      VALUES (@showId, @filePath, @fileName, @seasonNumber, @episodeNumber, @title, @overview, @stillPath, @rating)
     `);
 
     for (const filePath of files) {
@@ -150,7 +149,7 @@ export async function POST(req: Request) {
 
       if (tvInfo) {
         // --- TV SHOW ---
-        let rawShowName = tvInfo.name.replace(/[\(\[].*?[\)\]]/g, "").replace(/-$/, "").trim();
+        const rawShowName = tvInfo.name.replace(/[\(\[].*?[\)\]]/g, "").replace(/-$/, "").trim();
 
         // Use shared library to fetch metadata
         const showMeta = await fetchShowMetadata(rawShowName);
@@ -191,15 +190,18 @@ export async function POST(req: Request) {
           }
         }
 
+        const epMeta = await fetchEpisodeMetadata(showMeta.tmdbId || 0, tvInfo.season, tvInfo.episode);
+
         insertEpisode.run({
           showId,
           filePath,
           fileName,
           seasonNumber: tvInfo.season,
           episodeNumber: tvInfo.episode,
-          title: `S${tvInfo.season} E${tvInfo.episode}`,
-          overview: null,
-          stillPath: null
+          title: epMeta.title,
+          overview: epMeta.overview,
+          stillPath: epMeta.stillPath,
+          rating: epMeta.rating,
         });
 
       } else {

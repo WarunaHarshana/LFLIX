@@ -630,7 +630,14 @@ export default function DiscoverDetailPage() {
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold">E{ep.episodeNumber} · {ep.title}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold">E{ep.episodeNumber} · {ep.title}</p>
+                        {ep.rating != null && ep.rating > 0 && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-semibold">
+                            IMDb {ep.rating.toFixed(1)}
+                          </span>
+                        )}
+                      </div>
                       {ep.overview && <p className="text-xs text-neutral-400 mt-1 line-clamp-2">{ep.overview}</p>}
                       <div className="mt-2 flex gap-2">
                         <button

@@ -4,12 +4,6 @@ import { useState, useEffect } from 'react';
 import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Info, Star, Globe, BarChart3 } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 
-type EpisodeRating = {
-    season: number;
-    episode: number;
-    rating: number | null;
-};
-
 type Episode = {
     id: number;
     seasonNumber: number;
@@ -18,6 +12,7 @@ type Episode = {
     filePath: string;
     overview?: string | null;
     stillPath?: string | null;
+    rating?: number | null;
     isHDR?: boolean;
     resolution?: string | null;
     videoCodec?: string | null;
@@ -67,28 +62,12 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
     const [showStreamServers, setShowStreamServers] = useState(false);
     const [showRatingGrid, setShowRatingGrid] = useState(true);
-    const [episodeRatings, setEpisodeRatings] = useState<EpisodeRating[]>([]);
     const [hoveredRating, setHoveredRating] = useState<{ season: number; episode: number; rating: number | null; x: number; y: number } | null>(null);
 
     // Reset active season when seasons change (new show opened)
     useEffect(() => {
         setActiveSeason(seasons[0]?.season || 1);
         setSelectedEpisode(null);
-    }, [seasons]);
-
-    // Build episode ratings from the episodes data (using available data)
-    useEffect(() => {
-        const ratings: EpisodeRating[] = [];
-        for (const s of seasons) {
-            for (const ep of s.episodes) {
-                ratings.push({
-                    season: s.season,
-                    episode: ep.episodeNumber,
-                    rating: null, // We'll derive a visual rating from watch progress or leave neutral
-                });
-            }
-        }
-        setEpisodeRatings(ratings);
     }, [seasons]);
 
     const currentSeason = seasons.find(s => s.season === activeSeason);
@@ -150,6 +129,15 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                     <span>{show.title}</span>
                                     <span>•</span>
                                     <span>S{selectedEpisode.seasonNumber} E{selectedEpisode.episodeNumber}</span>
+                                    {selectedEpisode.rating != null && selectedEpisode.rating > 0 && (
+                                        <>
+                                            <span>•</span>
+                                            <span className="inline-flex items-center gap-1 text-amber-400">
+                                                <Star className="w-3.5 h-3.5 fill-amber-400" />
+                                                {selectedEpisode.rating.toFixed(1)}
+                                            </span>
+                                        </>
+                                    )}
                                 </div>
                             </>
                         ) : (
@@ -327,7 +315,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                                     setHoveredRating({
                                                                         season,
                                                                         episode: ep.episodeNumber,
-                                                                        rating: null,
+                                                                        rating: ep.rating ?? null,
                                                                         x: rect.left + rect.width / 2,
                                                                         y: rect.top - 8
                                                                     });
@@ -409,6 +397,12 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                         <h4 className="font-medium text-neutral-200 group-hover:text-red-500 transition truncate">
                                                             {ep.title}
                                                         </h4>
+                                                        {ep.rating != null && ep.rating > 0 && (
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] rounded font-semibold">
+                                                                <Star className="w-2.5 h-2.5 fill-amber-300" />
+                                                                {ep.rating.toFixed(1)}
+                                                            </span>
+                                                        )}
                                                     </div>
 
                                                     {ep.overview && (
@@ -500,6 +494,17 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                     episode={selectedEpisode.episodeNumber}
                     onClose={() => setShowStreamServers(false)}
                 />
+            )}
+
+            {hoveredRating && (
+                <div
+                    className="fixed z-[70] -translate-x-1/2 -translate-y-full px-2 py-1 rounded bg-black/90 border border-neutral-700 text-[11px] text-neutral-200 pointer-events-none"
+                    style={{ left: hoveredRating.x, top: hoveredRating.y }}
+                >
+                    {hoveredRating.rating != null && hoveredRating.rating > 0
+                        ? `S${hoveredRating.season}E${hoveredRating.episode} - ${hoveredRating.rating.toFixed(1)}★`
+                        : `S${hoveredRating.season}E${hoveredRating.episode} - No rating`}
+                </div>
             )}
         </div>
     );

@@ -76,6 +76,7 @@ type Episode = {
   filePath: string;
   overview?: string | null;
   stillPath?: string | null;
+  rating?: number | null;
   isHDR?: boolean;
   resolution?: string | null;
   videoCodec?: string | null;

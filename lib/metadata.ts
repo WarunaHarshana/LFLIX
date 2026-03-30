@@ -202,6 +202,7 @@ export interface EpisodeMetadata {
   title: string;
   overview: string | null;
   stillPath: string | null;
+  rating: number | null;
 }
 
 // Cache season data within a scan session to avoid redundant API calls
@@ -216,6 +217,7 @@ export async function fetchEpisodeMetadata(
     title: `S${seasonNumber} E${episodeNumber}`,
     overview: null,
     stillPath: null,
+    rating: null,
   };
 
   if (!tmdbShowId || tmdbShowId <= 0) return fallback;
@@ -237,6 +239,7 @@ export async function fetchEpisodeMetadata(
           title: ep.name || `Episode ${ep.episode_number}`,
           overview: ep.overview || null,
           stillPath: ep.still_path || null,
+          rating: ep.vote_average ?? null,
         }));
         seasonCache.set(cacheKey, episodes);
       } else {
@@ -253,6 +256,7 @@ export async function fetchEpisodeMetadata(
         title: episode.title,
         overview: episode.overview,
         stillPath: episode.stillPath,
+        rating: episode.rating,
       };
     }
   } catch (e) {

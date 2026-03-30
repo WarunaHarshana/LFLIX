@@ -188,7 +188,7 @@ const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_f
 const VALID_COLUMNS: Record<string, string[]> = {
   movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   shows: ['genres', 'backdropPath', 'overview', 'rating'],
-  episodes: ['stillPath', 'overview', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
+  episodes: ['stillPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
   settings: []
@@ -222,6 +222,7 @@ function addColumnIfNotExists(table: string, column: string, type: string) {
 // Add genres column to movies and shows if missing (for existing databases)
 addColumnIfNotExists('movies', 'genres', 'TEXT');
 addColumnIfNotExists('shows', 'genres', 'TEXT');
+addColumnIfNotExists('episodes', 'rating', 'REAL');
 
 // Add HDR detection column
 addColumnIfNotExists('movies', 'isHDR', 'INTEGER DEFAULT 0');
