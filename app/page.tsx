@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy, Bookmark, Download, Magnet } from 'lucide-react';
+import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy, Bookmark, Download, Magnet, ArrowUpDown, Eye, EyeOff, Keyboard } from 'lucide-react';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { Capacitor } from '@capacitor/core';
@@ -56,6 +56,7 @@ type ContentItem = {
   audioChannels?: string | null;
   genres?: string | null;
   tmdbId?: number | null;
+  addedAt?: string;
   watchProgress?: {
     progress: number;
     duration: number;
@@ -148,6 +149,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('all');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'added' | 'title-asc' | 'title-desc' | 'year-new' | 'year-old' | 'rating'>('added');
 
   // IPTV State
   const [iptvChannels, setIptvChannels] = useState<IPTVChannel[]>([]);
@@ -162,6 +164,9 @@ export default function Home() {
 
   // Continue Watching
   const [continueWatching, setContinueWatching] = useState<ContinueItem[]>([]);
+
+  // Keyboard Shortcut Help
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
 
   // Show Details Modal
   const [selectedShow, setSelectedShow] = useState<ContentItem | null>(null);
@@ -579,9 +584,14 @@ export default function Home() {
           e.preventDefault();
           setShowFolderManager(true);
           break;
+        case '?':
+          e.preventDefault();
+          setShowShortcutHelp(prev => !prev);
+          break;
         case 'Escape':
           setSelectedShow(null);
           setShowFolderManager(false);
+          setShowShortcutHelp(false);
           setContextMenu(null);
           setFocusedIndex(-1);
           break;
@@ -825,11 +835,52 @@ export default function Home() {
     }
   };
 
+  // Mark as watched/unwatched
+  const handleMarkWatched = async (item: ContentItem, watched: boolean, episodeId?: number) => {
+    try {
+      const res = await fetch(apiUrl('/api/history/mark'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          contentType: item.type,
+          contentId: item.id,
+          episodeId,
+          watched
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      showToast(watched ? `Marked "${item.title}" as watched` : `Marked "${item.title}" as unwatched`, 'success');
+      setContextMenu(null);
+      await fetchContinueWatching();
+      await fetchLibrary();
+    } catch (e) {
+      showToast('Failed to update watch status', 'error');
+    }
+  };
+
   // Filter library
   const filteredLibrary = library.filter(item => {
     const matchesTab = activeTab === 'all' || item.type === activeTab;
     const matchesGenre = !selectedGenre || (item.genres && item.genres.includes(selectedGenre));
     return matchesTab && matchesGenre;
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case 'title-asc':
+        return a.title.localeCompare(b.title);
+      case 'title-desc':
+        return b.title.localeCompare(a.title);
+      case 'year-new':
+        return (b.year || 0) - (a.year || 0);
+      case 'year-old':
+        return (a.year || 0) - (b.year || 0);
+      case 'rating':
+        return (b.rating || 0) - (a.rating || 0);
+      case 'added':
+      default:
+        return new Date(b.addedAt || 0).getTime() - new Date(a.addedAt || 0).getTime();
+    }
   });
 
   // Hero candidates: top 5 items with backdrops
@@ -1100,23 +1151,56 @@ export default function Home() {
 
           {/* Content Grid */}
           <div className="px-12 pb-20 relative z-20">
-            <h3 className="text-xl font-semibold mb-6 text-neutral-200 flex items-center gap-3">
-              {activeTab === 'all' ? 'My Library' : activeTab === 'movie' ? 'Movies' : 'TV Shows'}
-              {selectedGenre && (
-                <span className="text-sm font-normal px-3 py-1 bg-neutral-800 rounded-full text-neutral-400">
-                  {selectedGenre}
-                  <button
-                    onClick={() => setSelectedGenre(null)}
-                    className="ml-2 text-neutral-500 hover:text-white"
-                  >
-                    ×
-                  </button>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-neutral-200 flex items-center gap-3">
+                {activeTab === 'all' ? 'My Library' : activeTab === 'movie' ? 'Movies' : 'TV Shows'}
+                {selectedGenre && (
+                  <span className="text-sm font-normal px-3 py-1 bg-neutral-800 rounded-full text-neutral-400">
+                    {selectedGenre}
+                    <button
+                      onClick={() => setSelectedGenre(null)}
+                      className="ml-2 text-neutral-500 hover:text-white"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+                <span className="text-sm font-normal text-neutral-500">
+                  ({filteredLibrary.length} items)
                 </span>
-              )}
-              <span className="text-sm font-normal text-neutral-500">
-                ({filteredLibrary.length} items)
-              </span>
-            </h3>
+              </h3>
+              <div className="relative group/sort">
+                <button className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 rounded-lg text-sm text-neutral-300 hover:text-white transition-colors border border-neutral-700/50">
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">
+                    {sortBy === 'added' ? 'Date Added' : sortBy === 'title-asc' ? 'Title A–Z' : sortBy === 'title-desc' ? 'Title Z–A' : sortBy === 'year-new' ? 'Year (Newest)' : sortBy === 'year-old' ? 'Year (Oldest)' : 'Rating'}
+                  </span>
+                </button>
+                <div className="absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden opacity-0 invisible group-hover/sort:opacity-100 group-hover/sort:visible transition-all duration-200 z-30">
+                  {[
+                    { value: 'added', label: 'Date Added' },
+                    { value: 'title-asc', label: 'Title A–Z' },
+                    { value: 'title-desc', label: 'Title Z–A' },
+                    { value: 'year-new', label: 'Year (Newest)' },
+                    { value: 'year-old', label: 'Year (Oldest)' },
+                    { value: 'rating', label: 'Rating' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setSortBy(opt.value as typeof sortBy)}
+                      className={clsx(
+                        'w-full text-left px-4 py-2.5 text-sm transition-colors',
+                        sortBy === opt.value
+                          ? 'bg-red-600/20 text-red-400 font-medium'
+                          : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {filteredLibrary.length === 0 ? (
               <EmptyState type="no-results" searchQuery={selectedGenre || ''} />
@@ -1542,6 +1626,10 @@ export default function Home() {
             onClose={() => setSelectedShow(null)}
             onPlayEpisode={(episodeId, startTime) => playFile('show', selectedShow.id, episodeId, startTime)}
             onDeleteEpisode={handleDeleteEpisode}
+            onMarkWatched={async (episode, watched) => {
+              await handleMarkWatched({ ...selectedShow, type: 'show', title: episode.title } as ContentItem, watched, episode.id);
+              if (selectedShow) openShow(selectedShow);
+            }}
           />
         )
       }
@@ -1569,9 +1657,26 @@ export default function Home() {
               <div className="px-4 py-2 border-b border-neutral-700">
                 <p className="text-sm font-medium truncate max-w-48">{contextMenu.item.title}</p>
               </div>
+              {contextMenu.item.watchProgress?.completed ? (
+                <button
+                  onClick={() => handleMarkWatched(contextMenu.item, false)}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
+                >
+                  <EyeOff className="w-4 h-4" />
+                  Mark as Unwatched
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleMarkWatched(contextMenu.item, true)}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
+                >
+                  <Eye className="w-4 h-4" />
+                  Mark as Watched
+                </button>
+              )}
               <button
                 onClick={() => handleDelete(contextMenu.item)}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-red-600 transition w-full text-left"
+                className="flex items-center gap-3 px-4 py-3 hover:bg-red-600 transition w-full text-left border-t border-neutral-700"
               >
                 <Trash2 className="w-4 h-4" />
                 Remove from Library
@@ -1580,6 +1685,71 @@ export default function Home() {
           </>
         )
       }
+
+      {/* Keyboard Shortcut Help Overlay */}
+      {showShortcutHelp && (
+        <>
+          <div className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm" onClick={() => setShowShortcutHelp(false)} />
+          <div className="fixed inset-0 z-[91] flex items-center justify-center p-4" onClick={() => setShowShortcutHelp(false)}>
+            <div
+              className="bg-neutral-900 border border-neutral-700/50 rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+                <div className="flex items-center gap-3">
+                  <Keyboard className="w-5 h-5 text-red-400" />
+                  <h3 className="text-lg font-bold text-white">Keyboard Shortcuts</h3>
+                </div>
+                <button onClick={() => setShowShortcutHelp(false)} className="p-1.5 hover:bg-neutral-800 rounded-lg transition">
+                  <X className="w-5 h-5 text-neutral-400" />
+                </button>
+              </div>
+              <div className="p-6 space-y-5">
+                {[
+                  {
+                    title: 'Navigation',
+                    shortcuts: [
+                      { keys: ['←', '→', '↑', '↓'], desc: 'Navigate through library grid' },
+                      { keys: ['Enter'], desc: 'Open selected item details' },
+                      { keys: ['Esc'], desc: 'Close modals / clear selection' },
+                    ]
+                  },
+                  {
+                    title: 'Actions',
+                    shortcuts: [
+                      { keys: ['/'], desc: 'Focus search bar' },
+                      { keys: ['F'], desc: 'Open folder manager' },
+                      { keys: ['?'], desc: 'Toggle this help overlay' },
+                    ]
+                  },
+                ].map((section) => (
+                  <div key={section.title}>
+                    <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">{section.title}</h4>
+                    <div className="space-y-2">
+                      {section.shortcuts.map((s, i) => (
+                        <div key={i} className="flex items-center justify-between py-1.5">
+                          <span className="text-sm text-neutral-300">{s.desc}</span>
+                          <div className="flex items-center gap-1.5">
+                            {s.keys.map((k, j) => (
+                              <span key={j}>
+                                <kbd className="px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-md text-xs font-mono text-neutral-200 shadow-sm min-w-[28px] text-center inline-block">{k}</kbd>
+                                {j < s.keys.length - 1 && s.keys.length > 1 && <span className="text-neutral-600 mx-0.5"></span>}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-3 border-t border-neutral-800">
+                  <p className="text-xs text-neutral-500 text-center">Right-click any item for more options</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Toast Notifications */}
       {

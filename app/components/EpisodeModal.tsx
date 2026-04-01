@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Star, Globe, BarChart3 } from 'lucide-react';
+import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 
 type Episode = {
@@ -47,6 +47,7 @@ type Props = {
     onClose: () => void;
     onPlayEpisode: (episodeId: number, startTime?: number) => void;
     onDeleteEpisode?: (episodeId: number) => void;
+    onMarkWatched?: (episode: Episode, watched: boolean) => void;
 };
 
 function formatDuration(seconds: number): string {
@@ -56,9 +57,9 @@ function formatDuration(seconds: number): string {
     return `${m}m`;
 }
 
-export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEpisode, onDeleteEpisode }: Props) {
+export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEpisode, onDeleteEpisode, onMarkWatched }: Props) {
     const [activeSeason, setActiveSeason] = useState(seasons[0]?.season || 1);
-    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; episodeId: number } | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; episode: Episode } | null>(null);
     const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
     const [showStreamServers, setShowStreamServers] = useState(false);
     const [showRatingGrid, setShowRatingGrid] = useState(true);
@@ -72,14 +73,14 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
 
     const currentSeason = seasons.find(s => s.season === activeSeason);
 
-    const handleContextMenu = (e: React.MouseEvent, episodeId: number) => {
+    const handleContextMenu = (e: React.MouseEvent, episode: Episode) => {
         e.preventDefault();
-        setContextMenu({ x: e.clientX, y: e.clientY, episodeId });
+        setContextMenu({ x: e.clientX, y: e.clientY, episode });
     };
 
     const handleDelete = () => {
         if (contextMenu && onDeleteEpisode) {
-            onDeleteEpisode(contextMenu.episodeId);
+            onDeleteEpisode(contextMenu.episode.id);
         }
         setContextMenu(null);
     };
@@ -244,6 +245,86 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             </div>
                         )}
 
+                        {/* Up Next */}
+                        {(() => {
+                            // Find next episode: same season next ep, or first ep of next season
+                            const currentSeasonData = seasons.find(s => s.season === selectedEpisode.seasonNumber);
+                            const currentEpIdx = currentSeasonData?.episodes.findIndex(e => e.id === selectedEpisode.id) ?? -1;
+                            let nextEp: Episode | null = null;
+                            let nextSeasonNum: number | null = null;
+
+                            if (currentSeasonData && currentEpIdx >= 0 && currentEpIdx < currentSeasonData.episodes.length - 1) {
+                                nextEp = currentSeasonData.episodes[currentEpIdx + 1];
+                                nextSeasonNum = selectedEpisode.seasonNumber;
+                            } else {
+                                // Try first episode of next season
+                                const nextSeason = seasons.find(s => s.season === selectedEpisode.seasonNumber + 1);
+                                if (nextSeason && nextSeason.episodes.length > 0) {
+                                    nextEp = nextSeason.episodes[0];
+                                    nextSeasonNum = nextSeason.season;
+                                }
+                            }
+
+                            if (!nextEp) return null;
+
+                            return (
+                                <div className="mt-4 pt-4 border-t border-neutral-800">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <SkipForward className="w-4 h-4 text-neutral-400" />
+                                        <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Up Next</span>
+                                    </div>
+                                    <div
+                                        onClick={() => {
+                                            if (nextSeasonNum && nextSeasonNum !== selectedEpisode.seasonNumber) {
+                                                setActiveSeason(nextSeasonNum);
+                                            }
+                                            setSelectedEpisode(nextEp);
+                                        }}
+                                        className="flex gap-3 p-3 rounded-xl bg-neutral-800/50 hover:bg-neutral-800 cursor-pointer group/next transition-all border border-transparent hover:border-neutral-700"
+                                    >
+                                        {nextEp.stillPath ? (
+                                            <div className="shrink-0 w-28 h-16 rounded-lg overflow-hidden bg-neutral-700 relative">
+                                                <img
+                                                    src={`https://image.tmdb.org/t/p/w300${nextEp.stillPath}`}
+                                                    className="w-full h-full object-cover"
+                                                    alt={nextEp.title}
+                                                    loading="lazy"
+                                                />
+                                                <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover/next:opacity-100 transition">
+                                                    <div className="p-1.5 bg-white/20 backdrop-blur-sm rounded-full">
+                                                        <Play className="w-3.5 h-3.5 text-white fill-white" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="shrink-0 w-28 h-16 rounded-lg bg-neutral-700 flex items-center justify-center">
+                                                <span className="text-lg font-bold text-neutral-500">{nextEp.episodeNumber}</span>
+                                            </div>
+                                        )}
+                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[11px] text-neutral-500 font-medium">
+                                                    S{nextSeasonNum || nextEp.seasonNumber} E{nextEp.episodeNumber}
+                                                </span>
+                                            </div>
+                                            <h5 className="text-sm font-medium text-neutral-200 group-hover/next:text-white transition truncate">{nextEp.title}</h5>
+                                            {nextEp.overview && (
+                                                <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">{nextEp.overview}</p>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onPlayEpisode(nextEp!.id, nextEp!.watchProgress?.progress);
+                                            }}
+                                            className="self-center px-3 py-1.5 bg-white text-black font-bold rounded-md text-xs hover:bg-neutral-200 transition flex items-center gap-1.5 shrink-0"
+                                        >
+                                            <Play className="w-3 h-3 fill-black" /> Play
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                     </div>
                 ) : (
@@ -352,7 +433,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                             <div
                                                 key={ep.id}
                                                 onClick={() => setSelectedEpisode(ep)}
-                                                onContextMenu={(e) => handleContextMenu(e, ep.id)}
+                                                onContextMenu={(e) => handleContextMenu(e, ep)}
                                                 className="relative flex gap-4 p-4 rounded-xl hover:bg-neutral-800 cursor-pointer group transition border border-transparent hover:border-neutral-700"
                                             >
                                                 {/* Episode thumbnail */}
@@ -456,12 +537,38 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                 <>
                     <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)} />
                     <div
-                        className="fixed z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden"
+                        className="fixed z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-48"
                         style={{ left: contextMenu.x, top: contextMenu.y }}
                     >
+                        <div className="px-4 py-2 border-b border-neutral-700">
+                            <p className="text-sm font-medium truncate max-w-48 text-neutral-100">{contextMenu.episode.title}</p>
+                        </div>
+                        {contextMenu.episode.watchProgress?.completed === 1 ? (
+                            <button
+                                onClick={() => {
+                                    if (onMarkWatched) onMarkWatched(contextMenu.episode, false);
+                                    setContextMenu(null);
+                                }}
+                                className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
+                            >
+                                <EyeOff className="w-4 h-4" />
+                                Mark as Unwatched
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => {
+                                    if (onMarkWatched) onMarkWatched(contextMenu.episode, true);
+                                    setContextMenu(null);
+                                }}
+                                className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
+                            >
+                                <Eye className="w-4 h-4" />
+                                Mark as Watched
+                            </button>
+                        )}
                         <button
                             onClick={handleDelete}
-                            className="flex items-center gap-2 px-4 py-3 hover:bg-red-600 transition w-full text-left"
+                            className="flex items-center gap-3 px-4 py-3 hover:bg-red-600 transition w-full text-left border-t border-neutral-700 text-neutral-200"
                         >
                             <Trash2 className="w-4 h-4" />
                             Delete Episode
