@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Info, Star, Globe, BarChart3 } from 'lucide-react';
+import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Star, Globe, BarChart3 } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 
 type Episode = {
@@ -139,6 +139,33 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                         </>
                                     )}
                                 </div>
+                                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                    {selectedEpisode.resolution && (
+                                        <span className="px-1.5 py-0.5 text-[10px] rounded font-bold tracking-wide bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                                            {selectedEpisode.resolution === '2160p' ? '4K' : selectedEpisode.resolution}
+                                        </span>
+                                    )}
+                                    {selectedEpisode.isHDR && (
+                                        <span className="px-1.5 py-0.5 text-[10px] rounded font-bold tracking-wide bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">
+                                            HDR
+                                        </span>
+                                    )}
+                                    {selectedEpisode.videoCodec && (
+                                        <span className="px-1.5 py-0.5 text-[10px] rounded font-bold tracking-wide bg-violet-500/20 text-violet-300 border border-violet-500/40">
+                                            {selectedEpisode.videoCodec.toUpperCase()}
+                                        </span>
+                                    )}
+                                    {selectedEpisode.audioCodec && (
+                                        <span className="px-1.5 py-0.5 text-[10px] rounded font-bold tracking-wide bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                                            {selectedEpisode.audioCodec.toUpperCase()}
+                                        </span>
+                                    )}
+                                    {selectedEpisode.audioChannels && (
+                                        <span className="px-1.5 py-0.5 text-[10px] rounded font-bold tracking-wide bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                            {selectedEpisode.audioChannels}
+                                        </span>
+                                    )}
+                                </div>
                             </>
                         ) : (
                             <>
@@ -217,48 +244,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             </div>
                         )}
 
-                        {/* Media Info Badges */}
-                        {(selectedEpisode.resolution || selectedEpisode.videoCodec || selectedEpisode.audioCodec || selectedEpisode.audioChannels || selectedEpisode.isHDR) && (
-                            <div className="mb-6">
-                                <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                                    <Info className="w-3.5 h-3.5" /> Technical Info
-                                </h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {selectedEpisode.resolution && (
-                                        <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-800">
-                                            <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Resolution</div>
-                                            <div className="text-sm font-semibold text-neutral-200 mt-1">
-                                                {selectedEpisode.resolution === '2160p' ? '4K UHD' : selectedEpisode.resolution}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {selectedEpisode.videoCodec && (
-                                        <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-800">
-                                            <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Video</div>
-                                            <div className="text-sm font-semibold text-neutral-200 mt-1">{selectedEpisode.videoCodec}</div>
-                                        </div>
-                                    )}
-                                    {selectedEpisode.audioCodec && (
-                                        <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-800">
-                                            <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Audio</div>
-                                            <div className="text-sm font-semibold text-neutral-200 mt-1">{selectedEpisode.audioCodec}</div>
-                                        </div>
-                                    )}
-                                    {selectedEpisode.audioChannels && (
-                                        <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-800">
-                                            <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Channels</div>
-                                            <div className="text-sm font-semibold text-neutral-200 mt-1">{selectedEpisode.audioChannels}</div>
-                                        </div>
-                                    )}
-                                    {selectedEpisode.isHDR && (
-                                        <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/30">
-                                            <div className="text-[10px] text-amber-500 uppercase tracking-wider">HDR</div>
-                                            <div className="text-sm font-semibold text-amber-400 mt-1">High Dynamic Range</div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+
                     </div>
                 ) : (
                     <>
@@ -412,22 +398,22 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                     {/* Media info badges */}
                                                     <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                                                         {ep.resolution && (
-                                                            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] rounded font-semibold">
+                                                            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] rounded font-semibold">
                                                                 {ep.resolution === '2160p' ? '4K' : ep.resolution}
                                                             </span>
                                                         )}
                                                         {ep.isHDR && (
-                                                            <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] rounded font-semibold">
+                                                            <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 text-[10px] rounded font-semibold">
                                                                 HDR
                                                             </span>
                                                         )}
                                                         {ep.videoCodec && (
-                                                            <span className="px-1.5 py-0.5 bg-neutral-700/50 text-neutral-400 text-[10px] rounded font-semibold">
+                                                            <span className="px-1.5 py-0.5 bg-violet-500/20 text-violet-300 text-[10px] rounded font-semibold">
                                                                 {ep.videoCodec}
                                                             </span>
                                                         )}
                                                         {ep.audioChannels && (
-                                                            <span className="px-1.5 py-0.5 bg-neutral-700/50 text-neutral-400 text-[10px] rounded font-semibold">
+                                                            <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] rounded font-semibold">
                                                                 {ep.audioChannels}
                                                             </span>
                                                         )}

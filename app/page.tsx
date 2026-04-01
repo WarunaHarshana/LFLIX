@@ -994,20 +994,20 @@ export default function Home() {
                   {featured.rating && <span className="text-green-400">Match {Math.round(featured.rating * 10)}%</span>}
                   <span className="text-neutral-300">{featured.year || (featured.firstAirDate ? featured.firstAirDate.substring(0, 4) : '')}</span>
                   {featured.isHDR && (
-                    <span className="px-1.5 py-0.5 bg-amber-500/90 text-black text-xs rounded font-bold tracking-wide">
+                    <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 text-xs rounded font-bold tracking-wide border border-yellow-500/40">
                       HDR
                     </span>
                   )}
                   {featured.resolution && (
-                    <span className="px-1.5 py-0.5 bg-blue-500/80 text-white text-xs rounded font-bold tracking-wide">
+                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded font-bold tracking-wide border border-blue-500/40">
                       {featured.resolution === '2160p' ? '4K' : featured.resolution}
                     </span>
                   )}
                   {featured.videoCodec && (
-                    <span className="text-neutral-400 text-xs">{featured.videoCodec}</span>
+                    <span className="px-1.5 py-0.5 bg-violet-500/20 text-violet-300 text-xs rounded font-bold tracking-wide border border-violet-500/40">{featured.videoCodec}</span>
                   )}
                   {featured.audioChannels && (
-                    <span className="text-neutral-400 text-xs">{featured.audioChannels}</span>
+                    <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-xs rounded font-bold tracking-wide border border-amber-500/40">{featured.audioChannels}</span>
                   )}
                   {featured.genres && (
                     <span className="text-neutral-400">{featured.genres.split(',').slice(0, 2).join(' • ')}</span>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Play, Star, Clock, Film, Tv, Loader2, Info, PlayCircle, Globe, User } from 'lucide-react';
+import { X, Play, Star, Clock, Film, Tv, Loader2, PlayCircle, Globe, User } from 'lucide-react';
 import TrailerModal from './TrailerModal';
 import StreamServerModal from './StreamServerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from './ContentCard';
@@ -295,11 +295,11 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     const tags: { label: string; cls: string }[] = [];
                                     const fp = item.filePath?.toUpperCase() || '';
                                     if (item.resolution)
-                                        tags.push({ label: item.resolution === '2160p' ? '4K' : item.resolution, cls: 'bg-white/20 text-white border border-white/20' });
+                                        tags.push({ label: item.resolution === '2160p' ? '4K' : item.resolution, cls: 'bg-blue-500/20 text-blue-300 border border-blue-500/40' });
                                     if (item.isHDR || /\bHDR\b/.test(fp))
-                                        tags.push({ label: /HDR10\+|HDR10PLUS/.test(fp) ? 'HDR10+' : /HDR10/.test(fp) ? 'HDR10' : 'HDR', cls: 'bg-white/20 text-white border border-white/20' });
+                                        tags.push({ label: /HDR10\+|HDR10PLUS/.test(fp) ? 'HDR10+' : /HDR10/.test(fp) ? 'HDR10' : 'HDR', cls: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40' });
                                     else
-                                        tags.push({ label: 'SDR', cls: 'bg-neutral-600/80 text-neutral-300' });
+                                        tags.push({ label: 'SDR', cls: 'bg-neutral-600/40 text-neutral-400 border border-neutral-600/40' });
                                     if (/\bDOVI\b|\bDV\b|DOLBY.?VISION/.test(fp))
                                         tags.push({ label: 'DV', cls: 'bg-fuchsia-500/90 text-white' });
                                     if (/\bIMAX\b/.test(fp))
@@ -312,6 +312,12 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                         tags.push({ label: 'DTS-HD', cls: 'bg-sky-500/80 text-white' });
                                     if (/\bTRUEHD\b|\bTRUE[\s.-]?HD/.test(fp))
                                         tags.push({ label: 'TrueHD', cls: 'bg-sky-500/80 text-white' });
+                                    if (item.videoCodec)
+                                        tags.push({ label: item.videoCodec.toUpperCase(), cls: 'bg-violet-500/20 text-violet-300 border border-violet-500/40' });
+                                    if (item.audioCodec)
+                                        tags.push({ label: item.audioCodec.toUpperCase(), cls: 'bg-teal-500/20 text-teal-300 border border-teal-500/40' });
+                                    if (item.audioChannels)
+                                        tags.push({ label: item.audioChannels, cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/40' });
                                     return tags.map((t, i) => (
                                         <span key={i} className={`px-1.5 py-0.5 text-xs rounded font-bold tracking-wide ${t.cls}`}>{t.label}</span>
                                     ));
@@ -483,42 +489,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                         </div>
                     )}
 
-                    {/* Technical Details */}
-                    {(item.videoCodec || item.audioCodec || item.audioChannels || item.resolution) && (
-                        <div className="mb-2">
-                            <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                                <Info className="w-3.5 h-3.5" /> Technical Info
-                            </h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                {item.resolution && (
-                                    <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-800">
-                                        <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Resolution</div>
-                                        <div className="text-sm font-semibold text-neutral-200 mt-1">
-                                            {item.resolution === '2160p' ? '4K UHD' : item.resolution}
-                                        </div>
-                                    </div>
-                                )}
-                                {item.videoCodec && (
-                                    <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-800">
-                                        <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Video</div>
-                                        <div className="text-sm font-semibold text-neutral-200 mt-1">{item.videoCodec}</div>
-                                    </div>
-                                )}
-                                {item.audioCodec && (
-                                    <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-800">
-                                        <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Audio</div>
-                                        <div className="text-sm font-semibold text-neutral-200 mt-1">{item.audioCodec}</div>
-                                    </div>
-                                )}
-                                {item.audioChannels && (
-                                    <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-800">
-                                        <div className="text-[10px] text-neutral-500 uppercase tracking-wider">Channels</div>
-                                        <div className="text-sm font-semibold text-neutral-200 mt-1">{item.audioChannels}</div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
+
                 </div>
             </div>
 
