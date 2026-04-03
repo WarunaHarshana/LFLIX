@@ -18,7 +18,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { apiUrl } from '@/lib/mobileConfig';
-import SearchBar from './SearchBar';
+import { Search } from 'lucide-react';
 import MobileConnectModal from './MobileConnectModal';
 import DlnaModal from './DlnaModal';
 import DownloadsPanel from './DownloadsPanel';
@@ -39,9 +39,7 @@ type DetailTabNavProps = {
   showLiveSportsActive?: boolean;
   onTabChange?: (tab: TabId) => void;
   onShowLiveSports?: () => void;
-  onSearchPlay?: (filePath: string) => void;
-  onSearchOpenShow?: (show: ShowSearchItem) => void;
-  onSearchOpenOnline?: (item: OnlineSearchItem) => void;
+  onShowSearch?: () => void;
   onShowMobileConnect?: () => void;
   onShowDlna?: () => void;
   onShowDownloads?: () => void;
@@ -70,9 +68,7 @@ export default function DetailTabNav({
   showLiveSportsActive = false,
   onTabChange,
   onShowLiveSports,
-  onSearchPlay,
-  onSearchOpenShow,
-  onSearchOpenOnline,
+  onShowSearch,
   onShowMobileConnect,
   onShowDlna,
   onShowDownloads,
@@ -211,29 +207,15 @@ export default function DetailTabNav({
         </div>
 
         <div className="flex items-center gap-2">
-          <SearchBar
-            onPlay={(filePath) => {
-              if (onSearchPlay) {
-                onSearchPlay(filePath);
-              } else {
-                router.push('/?tab=all');
-              }
+          <button
+            onClick={() => {
+              if (onShowSearch) onShowSearch();
             }}
-            onOpenShow={(show) => {
-              if (onSearchOpenShow) {
-                onSearchOpenShow(show);
-              } else {
-                router.push('/?tab=show');
-              }
-            }}
-            onOpenOnline={(item) => {
-              if (onSearchOpenOnline) {
-                onSearchOpenOnline(item);
-              } else {
-                router.push(`/discover/${item.mediaType}/${item.tmdbId}`);
-              }
-            }}
-          />
+            className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer min-w-[44px] min-h-[44px] items-center justify-center flex"
+            title="Search (Press /)"
+          >
+            <Search className="w-5 h-5" />
+          </button>
 
           <button
             onClick={() => {

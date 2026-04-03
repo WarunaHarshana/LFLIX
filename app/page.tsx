@@ -41,6 +41,7 @@ import DownloadsPanel from './components/DownloadsPanel';
 import TorrentSearchPage from './components/TorrentSearchPage';
 import DiscoverPage from './components/DiscoverPage';
 import DetailTabNav from './components/DetailTabNav';
+import GlobalSearchModal from './components/GlobalSearchModal';
 
 // New section components
 import HeroSection from './components/HeroSection';
@@ -79,6 +80,7 @@ export default function Home() {
   const [showDlna, setShowDlna] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showLiveSports, setShowLiveSports] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [discoverInitialItem, setDiscoverInitialItem] = useState<DiscoverOnlineItem | null>(null);
   const [discoverMode, setDiscoverMode] = useState<'online' | 'torrents'>('online');
   const [torrentInitialQuery, setTorrentInitialQuery] = useState('');
@@ -229,7 +231,7 @@ export default function Home() {
         return matchesTab && matchesGenre;
       });
       switch (e.key) {
-        case '/': e.preventDefault(); break;
+        case '/': e.preventDefault(); setShowSearchModal(true); break;
         case 'f': case 'F': e.preventDefault(); setShowFolderManager(true); break;
         case '?': e.preventDefault(); setShowShortcutHelp(prev => !prev); break;
         case 'Escape':
@@ -357,15 +359,7 @@ export default function Home() {
         showLiveSportsActive={showLiveSports}
         onTabChange={(tab) => { if (tab === 'all') setSelectedGenre(null); switchTab(tab); }}
         onShowLiveSports={() => setShowLiveSports(true)}
-        onSearchPlay={(filePath) => {
-          const movie = library.find((m) => m.type === 'movie' && m.filePath === filePath);
-          if (movie) playback.playFile('movie', movie.id);
-        }}
-        onSearchOpenShow={(result) => {
-          const show = library.find((l) => l.type === 'show' && l.id === result.id);
-          if (show) openShow(show);
-        }}
-        onSearchOpenOnline={(item) => openOnlineInDiscover(item as DiscoverOnlineItem)}
+        onShowSearch={() => setShowSearchModal(true)}
         onShowMobileConnect={() => setShowMobileConnect(true)}
         onShowDlna={() => setShowDlna(true)}
         onShowDownloads={() => setShowDownloads(true)}
@@ -532,6 +526,36 @@ export default function Home() {
           onDelete={handleDelete}
         />
       )}
+
+      {/* Global Search Modal */}
+      {(showFolderManager || iptv.showIPTVManager || showMobileConnect || showDlna || showSearchModal) && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]" />
+      )}
+      <GlobalSearchModal
+        isOpen={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        onPlay={(filePath: string) => {
+          const movie = library.find((m) => m.type === 'movie' && m.filePath === filePath);
+          if (movie) {
+            playback.playFile('movie', movie.id);
+          }
+        }}
+        onOpenShow={(result) => {
+          const showItem = library.find(i => i.id === result.id && i.type === 'show');
+          if (showItem) openShow(showItem);
+          else {
+            setSelectedGenre(null);
+            setActiveTab('show');
+          }
+        }}
+        onOpenOnline={(item) => openOnlineInDiscover(item as DiscoverOnlineItem)}
+        onSwitchToTorrents={(query) => {
+          setActiveTab('discover');
+          setDiscoverMode('torrents');
+          setTorrentInitialQuery(query);
+          setShowSearchModal(false);
+        }}
+      />
 
       {/* Keyboard Shortcut Help Overlay */}
       {showShortcutHelp && (
