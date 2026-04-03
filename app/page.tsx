@@ -1,17 +1,23 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, RefreshCw, Film, Tv, Settings, Trash2, Folder, Smartphone, Cast, RotateCw, Monitor, Loader2, X, Search, Globe, Trophy, Bookmark, Download, Magnet, ArrowUpDown, Eye, EyeOff, Keyboard } from 'lucide-react';
-import clsx from 'clsx';
-import Link from 'next/link';
+import { Keyboard, X } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
+import { apiUrl } from '@/lib/mobileConfig';
+import type { ContentItem, Season, DiscoverOnlineItem, TabId } from './types';
+import { isValidTab } from './types';
 
-// Mobile config
-import { apiUrl, isNativeApp, getServerUrl } from '@/lib/mobileConfig';
+// Hooks
+import { useToast } from './hooks/useToast';
+import { useAuth } from './hooks/useAuth';
+import { useLibrary } from './hooks/useLibrary';
+import { usePlayback } from './hooks/usePlayback';
+import { useIPTV } from './hooks/useIPTV';
+import { useContinueWatching } from './hooks/useContinueWatching';
+import { useHero } from './hooks/useHero';
+import { useDownloads } from './hooks/useDownloads';
 
-// Components
-import SearchBar from './components/SearchBar';
-import ContentCard from './components/ContentCard';
+// Components (existing)
 import ContinueWatching from './components/ContinueWatching';
 import EpisodeModal from './components/EpisodeModal';
 import ContentDetailModal from './components/ContentDetailModal';
@@ -36,211 +42,90 @@ import TorrentSearchPage from './components/TorrentSearchPage';
 import DiscoverPage from './components/DiscoverPage';
 import DetailTabNav from './components/DetailTabNav';
 
-// Types
-type ContentItem = {
-  id: number;
-  type: 'movie' | 'show';
-  title: string;
-  logoPath?: string | null;
-  posterPath: string | null;
-  backdropPath: string | null;
-  overview: string | null;
-  year?: number;
-  firstAirDate?: string | null;
-  rating: number | null;
-  filePath?: string;
-  isHDR?: boolean;
-  resolution?: string | null;
-  videoCodec?: string | null;
-  audioCodec?: string | null;
-  audioChannels?: string | null;
-  genres?: string | null;
-  tmdbId?: number | null;
-  addedAt?: string;
-  watchProgress?: {
-    progress: number;
-    duration: number;
-    completed: number;
-  };
-};
-
-type Season = {
-  season: number;
-  episodes: Episode[];
-};
-
-type Episode = {
-  id: number;
-  seasonNumber: number;
-  episodeNumber: number;
-  title: string;
-  filePath: string;
-  overview?: string | null;
-  stillPath?: string | null;
-  rating?: number | null;
-  isHDR?: boolean;
-  resolution?: string | null;
-  videoCodec?: string | null;
-  audioCodec?: string | null;
-  audioChannels?: string | null;
-  watchProgress?: {
-    progress: number;
-    duration: number;
-    completed: number;
-  };
-};
-
-type ContinueItem = {
-  id: number;
-  contentType: 'movie' | 'show';
-  contentId: number;
-  title: string;
-  posterPath: string | null;
-  backdropPath: string | null;
-  progress: number;
-  duration: number;
-  filePath?: string;
-  episodeFilePath?: string;
-  seasonNumber?: number;
-  episodeNumber?: number;
-  episodeTitle?: string;
-};
-
-type IPTVChannel = {
-  id: number;
-  name: string;
-  url: string;
-  logo?: string;
-  category: string;
-  country?: string;
-  language?: string;
-};
-
-type DiscoverOnlineItem = {
-  tmdbId: number;
-  mediaType: 'movie' | 'tv';
-  title: string;
-  posterPath: string | null;
-  backdropPath: string | null;
-  overview: string | null;
-  rating: number | null;
-  year: string | null;
-  popularity: number;
-};
-
-type TabId = 'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'discover';
-
-const VALID_TABS: TabId[] = ['all', 'movie', 'show', 'live', 'watchlist', 'discover'];
-
-function isValidTab(value: string | null): value is TabId {
-  return value !== null && VALID_TABS.includes(value as TabId);
-}
+// New section components
+import HeroSection from './components/HeroSection';
+import LibraryGrid from './components/LibraryGrid';
+import LiveTVSection from './components/LiveTVSection';
+import ContextMenuOverlay from './components/ContextMenuOverlay';
+import ToastNotification from './components/ToastNotification';
 
 export default function Home() {
-  // Setup Wizard
-  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
+  // ──────────────────── Hooks ────────────────────
+  const { toast, showToast } = useToast();
+  const { setupComplete, setSetupComplete, isAuthenticated, setIsAuthenticated, logout } = useAuth();
+  const {
+    library, genres, loading, setLoading,
+    selectedGenre, setSelectedGenre,
+    sortBy, setSortBy,
+    displayPrefs,
+    fetchLibrary, handleScan, getFilteredLibrary,
+  } = useLibrary(showToast);
+  const { continueWatching, fetchContinueWatching } = useContinueWatching();
+  const iptv = useIPTV();
+  const { activeDownloads, showDownloads, setShowDownloads } = useDownloads();
+  const playback = usePlayback(library, showToast);
 
-  // Authentication
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Library State
-  const [library, setLibrary] = useState<ContentItem[]>([]);
-  const [genres, setGenres] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ──────────────────── Local State ────────────────────
   const [activeTab, setActiveTab] = useState<TabId>('all');
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'added' | 'title-asc' | 'title-desc' | 'year-new' | 'year-old' | 'rating'>('added');
-
-  // IPTV State
-  const [iptvChannels, setIptvChannels] = useState<IPTVChannel[]>([]);
-  const [iptvCategories, setIptvCategories] = useState<string[]>([]);
-  const [iptvCountries, setIptvCountries] = useState<string[]>([]);
-  const [selectedIPTVCategory, setSelectedIPTVCategory] = useState<string>('all');
-  const [selectedIPTVCountry, setSelectedIPTVCountry] = useState<string>('all');
-  const [iptvSearchQuery, setIptvSearchQuery] = useState('');
-  const [selectedIPTVChannel, setSelectedIPTVChannel] = useState<IPTVChannel | null>(null);
-  const [showIPTVManager, setShowIPTVManager] = useState(false);
-  const [loadingIPTV, setLoadingIPTV] = useState(false);
-
-  // Continue Watching
-  const [continueWatching, setContinueWatching] = useState<ContinueItem[]>([]);
-
-  // Keyboard Shortcut Help
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
-
-  // Show Details Modal
   const [selectedShow, setSelectedShow] = useState<ContentItem | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
-
-  // Folder Manager
   const [showFolderManager, setShowFolderManager] = useState(false);
-
-  // Context Menu
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: ContentItem } | null>(null);
-
-  // Content Detail Modal
   const [selectedDetail, setSelectedDetail] = useState<ContentItem | null>(null);
-
-  // Keyboard Navigation
   const [focusedIndex, setFocusedIndex] = useState(-1);
-
-  // Video Player (for mobile streaming)
-  const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number; isHDR?: boolean } | null>(null);
-
-  // Mobile Connect QR Modal
   const [showMobileConnect, setShowMobileConnect] = useState(false);
-
-  // DLNA Server Modal
   const [showDlna, setShowDlna] = useState(false);
-
-  // Mobile Search Modal
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showLiveSports, setShowLiveSports] = useState(false);
-  const [showDownloads, setShowDownloads] = useState(false);
-  const [activeDownloads, setActiveDownloads] = useState(0);
   const [discoverInitialItem, setDiscoverInitialItem] = useState<DiscoverOnlineItem | null>(null);
   const [discoverMode, setDiscoverMode] = useState<'online' | 'torrents'>('online');
   const [torrentInitialQuery, setTorrentInitialQuery] = useState('');
 
+  // ──────────────────── Computed ────────────────────
+  const filteredLibrary = getFilteredLibrary(activeTab);
+  const hero = useHero(filteredLibrary);
+
+  // ──────────────────── Refs ────────────────────
+  const libraryRef = useRef(library);
+  const activeTabRef = useRef(activeTab);
+  const selectedGenreRef = useRef(selectedGenre);
+  const focusedIndexRef = useRef(focusedIndex);
+
+  useEffect(() => {
+    libraryRef.current = library;
+    activeTabRef.current = activeTab;
+    selectedGenreRef.current = selectedGenre;
+    focusedIndexRef.current = focusedIndex;
+  }, [library, activeTab, selectedGenre, focusedIndex]);
+
+  // ──────────────────── Tab Switching ────────────────────
   const switchTab = (tab: TabId) => {
-    // Always open Discover in Online mode when navigating via top-level tabs.
     if (tab === 'discover') {
       setDiscoverMode('online');
       setTorrentInitialQuery('');
     }
-
-    // Leaving Discover should not persist previous Torrents mode/query.
     if (tab !== 'discover' && activeTab === 'discover') {
       setDiscoverMode('online');
       setTorrentInitialQuery('');
     }
-
     setActiveTab(tab);
   };
 
+  // Tab from URL
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
     const searchParams = new URLSearchParams(window.location.search);
     const requestedTab = searchParams.get('tab');
     const openLiveSports = searchParams.get('liveSports') === '1';
-
-    if (openLiveSports) {
-      setShowLiveSports(true);
-    }
-
+    if (openLiveSports) setShowLiveSports(true);
     if (!isValidTab(requestedTab)) return;
-
-    if (requestedTab === 'all') {
-      setSelectedGenre(null);
-    }
-
+    if (requestedTab === 'all') setSelectedGenre(null);
     if (requestedTab === 'discover') {
       setDiscoverMode('online');
       setTorrentInitialQuery('');
     }
-
     setActiveTab(requestedTab);
   }, []);
 
@@ -251,217 +136,25 @@ export default function Home() {
     setTimeout(() => setDiscoverInitialItem(null), 500);
   };
 
-  // Force browser player (for TVs without VLC)
-  const [forceBrowserPlayer, setForceBrowserPlayer] = useState(false);
-
-  // Hero auto-rotate
-  const [heroIndex, setHeroIndex] = useState(0);
-  const [heroLogoPaths, setHeroLogoPaths] = useState<Record<string, string | null>>({});
-
-  // HDR display detection (live — updates when moving between monitors)
-  const [hdrDisplaySupported, setHdrDisplaySupported] = useState(false);
+  // ──────────────────── Data Fetch on Mount ────────────────────
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(dynamic-range: high)');
-    setHdrDisplaySupported(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setHdrDisplaySupported(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  // Play Choice Modal (for mobile)
-  const [playChoice, setPlayChoice] = useState<{
-    title: string;
-    streamUrl: string;
-    contentType: 'movie' | 'show';
-    contentId: number;
-    episodeId?: number;
-    onPlayBrowser: () => void
-  } | null>(null);
-
-  // Detect mobile device (but not TVs!)
-  const isMobile = useCallback(() => {
-    if (typeof window === 'undefined') return false;
-    const ua = navigator.userAgent;
-    console.log('User Agent:', ua);
-    // Check for mobile devices but exclude TVs
-    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    const isTV = /SmartTV|AppleTV|HbbTV|NetCast|WebOS.+TV|Tizen.+TV|GoogleTV|PlayStation|Xbox|Nintendo/i.test(ua);
-    console.log('isMobileDevice:', isMobileDevice, 'isTV:', isTV);
-    return isMobileDevice && !isTV;
-  }, []);
-
-  // Check if setup is complete on first load
-  useEffect(() => {
-    const checkSetup = async () => {
-      // In native app, check if server URL is configured
-      if (isNativeApp()) {
-        const serverUrl = getServerUrl();
-        if (!serverUrl) {
-          // No server configured, redirect to launcher
-          window.location.href = '/index.html';
-          return;
-        }
-      }
-
-      try {
-        const res = await fetch(apiUrl('/api/setup'), { credentials: 'include' });
-        const data = await res.json();
-        setSetupComplete(data.setupComplete);
-      } catch {
-        // If API fails, assume setup is needed
-        setSetupComplete(false);
-      }
-    };
-    checkSetup();
-  }, []);
-  const gridRef = useRef<HTMLDivElement>(null);
-
-  // Display preferences from localStorage
-  const [displayPrefs, setDisplayPrefs] = useState({ showTitles: true, showRatings: true, cinematicMode: false });
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('lflix-display-prefs');
-      if (saved) setDisplayPrefs(JSON.parse(saved));
-    } catch {}
-  }, []);
-
-  // Toast Notifications
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-  // Refs for stable access in event handlers
-  const libraryRef = useRef(library);
-  const activeTabRef = useRef(activeTab);
-  const selectedGenreRef = useRef(selectedGenre);
-  const focusedIndexRef = useRef(focusedIndex);
-
-  // Keep refs updated
-  useEffect(() => {
-    libraryRef.current = library;
-    activeTabRef.current = activeTab;
-    selectedGenreRef.current = selectedGenre;
-    focusedIndexRef.current = focusedIndex;
-  }, [library, activeTab, selectedGenre, focusedIndex]);
-
-  // Fetch library
-  const fetchLibrary = useCallback(async () => {
-    try {
-      const res = await fetch(apiUrl('/api/content'), { credentials: 'include' });
-      const data = await res.json();
-      if (data.content) {
-        setLibrary(data.content);
-        setGenres(data.genres || []);
-      } else if (Array.isArray(data)) {
-        setLibrary(data);
-      }
-    } catch (e) {
-      showToast('Failed to load library', 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Fetch continue watching
-  const fetchContinueWatching = useCallback(async () => {
-    try {
-      const res = await fetch(apiUrl('/api/history'), { credentials: 'include' });
-      const data = await res.json();
-      setContinueWatching(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error('Failed to load continue watching', e);
-    }
-  }, []);
-
-  const fetchActiveDownloads = useCallback(async () => {
-    try {
-      const res = await fetch(apiUrl('/api/downloads'), { credentials: 'include' });
-      if (!res.ok) return;
-
-      const data = await res.json();
-      const downloads = Array.isArray(data.downloads) ? data.downloads : [];
-      const count = downloads.filter((d: any) => d.status === 'downloading' || d.status === 'paused').length;
-      setActiveDownloads(count);
-    } catch {
-      // Keep existing badge value on transient API failures.
-    }
-  }, []);
-
-  // Fetch IPTV channels
-  const fetchIPTVChannels = useCallback(async () => {
-    setLoadingIPTV(true);
-    try {
-      const res = await fetch(apiUrl('/api/iptv/channels'));
-      const data = await res.json();
-      if (data.channels) {
-        setIptvChannels(data.channels);
-        // Extract unique categories
-        const cats = [...new Set(data.channels.map((c: IPTVChannel) => c.category).filter(Boolean))] as string[];
-        setIptvCategories(cats);
-        // Extract unique countries
-        const countries = [...new Set(data.channels.map((c: IPTVChannel) => c.country).filter(Boolean))] as string[];
-        setIptvCountries(countries.sort());
-      }
-    } catch (e) {
-      console.error('Failed to load IPTV channels', e);
-    } finally {
-      setLoadingIPTV(false);
-    }
-  }, []);
-
-  // Delete individual IPTV channel
-  const deleteIPTVChannel = async (channelId: number) => {
-    try {
-      const res = await fetch(apiUrl(`/api/iptv/channels?id=${channelId}`), {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        // Remove from local state
-        setIptvChannels(prev => prev.filter(c => c.id !== channelId));
-        // Clear selected if this was the selected channel
-        if (selectedIPTVChannel?.id === channelId) {
-          setSelectedIPTVChannel(null);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to delete channel', e);
-    }
-  };
-
-  useEffect(() => {
+    if (!isAuthenticated) return;
     fetchLibrary();
     fetchContinueWatching();
-    fetchIPTVChannels();
-  }, [fetchLibrary, fetchContinueWatching, fetchIPTVChannels]);
+    iptv.fetchIPTVChannels();
+  }, [isAuthenticated, fetchLibrary, fetchContinueWatching, iptv.fetchIPTVChannels]);
 
+  // ──────────────────── SSE Watcher ────────────────────
   useEffect(() => {
-    let cancelled = false;
-
-    const tick = async () => {
-      if (cancelled) return;
-      await fetchActiveDownloads();
-    };
-
-    void tick();
-    const interval = setInterval(tick, 8000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [fetchActiveDownloads]);
-
-  // Connect to folder watcher for real-time updates
-  useEffect(() => {
+    if (!isAuthenticated) return;
     let eventSource: EventSource | null = null;
     let reconnectTimer: NodeJS.Timeout | null = null;
 
     const connect = () => {
       eventSource = new EventSource('/api/watcher');
-
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-
           if (data.type === 'new_file') {
             showToast('New video detected, scanning...', 'success');
           } else if (data.type === 'scan_complete' && data.added > 0) {
@@ -477,154 +170,41 @@ export default function Home() {
           console.error('SSE parse error:', e);
         }
       };
-
       eventSource.onerror = () => {
         eventSource?.close();
-        // Reconnect after 5 seconds
         reconnectTimer = setTimeout(connect, 5000);
       };
     };
 
     connect();
-
     return () => {
       eventSource?.close();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, [fetchLibrary, fetchContinueWatching]);
+  }, [isAuthenticated, fetchLibrary, fetchContinueWatching]);
 
-  // Handle native back button (Android)
+  // ──────────────────── Android Back Button ────────────────────
   useEffect(() => {
-    // Dynamic import to avoid SSR issues
     import('@capacitor/app').then(({ App }) => {
       App.addListener('backButton', () => {
-        // Priority 1: Close Video Player
-        if (!!document.querySelector('.fixed.inset-0.z-\\[100\\]')) {
-          setVideoPlayer(null);
-          return;
-        }
-
-        // Priority 2: Close Modals
-        if (selectedShow) {
-          setSelectedShow(null);
-          return;
-        }
-        if (showFolderManager) {
-          setShowFolderManager(false);
-          return;
-        }
-        if (showMobileConnect) {
-          setShowMobileConnect(false);
-          return;
-        }
-        if (showDlna) {
-          setShowDlna(false);
-          return;
-        }
-        if (showMobileSearch) {
-          setShowMobileSearch(false);
-          return;
-        }
-        if (showLiveSports) {
-          setShowLiveSports(false);
-          return;
-        }
-        if (showIPTVManager) {
-          setShowIPTVManager(false);
-          return;
-        }
-
-        // Priority 3: Navigate Tabs
-        if (activeTabRef.current !== 'all') {
-          setActiveTab('all');
-          return;
-        }
-
-        // Priority 4: Exit App
+        if (!!document.querySelector('.fixed.inset-0.z-\\[100\\]')) { playback.setVideoPlayer(null); return; }
+        if (selectedShow) { setSelectedShow(null); return; }
+        if (showFolderManager) { setShowFolderManager(false); return; }
+        if (showMobileConnect) { setShowMobileConnect(false); return; }
+        if (showDlna) { setShowDlna(false); return; }
+        if (showMobileSearch) { setShowMobileSearch(false); return; }
+        if (showLiveSports) { setShowLiveSports(false); return; }
+        if (iptv.showIPTVManager) { iptv.setShowIPTVManager(false); return; }
+        if (activeTabRef.current !== 'all') { setActiveTab('all'); return; }
         App.exitApp();
       });
-    }).catch(() => {
-      // Capacitor not available (running in browser)
-    });
-
+    }).catch(() => {});
     return () => {
-      import('@capacitor/app').then(({ App }) => {
-        App.removeAllListeners();
-      }).catch(() => { });
+      import('@capacitor/app').then(({ App }) => { App.removeAllListeners(); }).catch(() => {});
     };
-  }, [selectedShow, showFolderManager, showMobileConnect, showDlna, showMobileSearch, showLiveSports, showIPTVManager]); // Dependencies crucial for closure scope
+  }, [selectedShow, showFolderManager, showMobileConnect, showDlna, showMobileSearch, showLiveSports, iptv.showIPTVManager]);
 
-  // Keyboard navigation - with SSR safety
-  useEffect(() => {
-    // Only run on client
-    if (typeof window === 'undefined') return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't handle if typing in input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      const cols = getGridColumns();
-      // Compute filtered library fresh to avoid stale closure
-      const currentLibrary = libraryRef.current;
-      const currentTab = activeTabRef.current;
-      const currentGenre = selectedGenreRef.current;
-      const filtered = currentLibrary.filter(item => {
-        const matchesTab = currentTab === 'all' || item.type === currentTab;
-        const matchesGenre = !currentGenre || (item.genres && item.genres.includes(currentGenre));
-        return matchesTab && matchesGenre;
-      });
-
-      switch (e.key) {
-        case '/':
-          e.preventDefault();
-          // Search bar will handle this via its own listener
-          break;
-        case 'f':
-        case 'F':
-          e.preventDefault();
-          setShowFolderManager(true);
-          break;
-        case '?':
-          e.preventDefault();
-          setShowShortcutHelp(prev => !prev);
-          break;
-        case 'Escape':
-          setSelectedShow(null);
-          setShowFolderManager(false);
-          setShowShortcutHelp(false);
-          setContextMenu(null);
-          setFocusedIndex(-1);
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          setFocusedIndex(prev => Math.min(prev + 1, filtered.length - 1));
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          setFocusedIndex(prev => Math.max(prev - 1, 0));
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          setFocusedIndex(prev => Math.min(prev + cols, filtered.length - 1));
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setFocusedIndex(prev => Math.max(prev - cols, 0));
-          break;
-        case 'Enter':
-          const currentFocusedIndex = focusedIndexRef.current;
-          if (currentFocusedIndex >= 0 && filtered[currentFocusedIndex]) {
-            const item = filtered[currentFocusedIndex];
-            setSelectedDetail(item);
-          }
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []); // Empty deps - uses refs for fresh values
-
+  // ──────────────────── Keyboard Navigation ────────────────────
   const getGridColumns = useCallback(() => {
     if (typeof window === 'undefined') return 8;
     const width = window.innerWidth;
@@ -635,106 +215,41 @@ export default function Home() {
     return 2;
   }, []);
 
-  // Show toast
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  // Play file - uses secure ID-based lookup instead of filePath
-  const playFile = async (contentType: 'movie' | 'show', contentId: number, episodeId?: number, startTime?: number) => {
-    console.log('playFile called:', { contentType, contentId, episodeId, startTime });
-    try {
-      const mobile = isMobile();
-      const isNative = Capacitor.isNativePlatform();
-      console.log('isMobile result:', mobile, 'isNative:', isNative);
-
-      // Native App: Use Built-in Player (Capacitor)
-      if (isNative) {
-        // Generate token for auth-less streaming
-        const tokenRes = await fetch(apiUrl('/api/token'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contentType, contentId, episodeId })
-        });
-        const { token } = await tokenRes.json();
-
-        if (!token) throw new Error('Failed to generate playback token');
-
-        const streamUrl = apiUrl(`/api/stream?token=${token}`);
-
-        // Get title for video player
-        let title = 'Unknown';
-        let isHDR = false;
-        if (contentType === 'movie') {
-          const movie = library.find(m => m.id === contentId);
-          title = movie?.title || 'Movie';
-          isHDR = !!movie?.isHDR;
-        } else {
-          const show = library.find(s => s.id === contentId);
-          title = show?.title || 'TV Show';
-        }
-
-        setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR });
-        return;
-      }
-
-      // Mobile Browser or TV (force browser): Show browser player choice
-      if (mobile || forceBrowserPlayer) {
-        const params = new URLSearchParams({
-          contentType,
-          contentId: contentId.toString(),
-          ...(episodeId && { episodeId: episodeId.toString() })
-        });
-        const streamUrl = `/api/stream?${params.toString()}`;
-
-        // Get title for video player
-        let title = 'Unknown';
-        let isHDR = false;
-        if (contentType === 'movie') {
-          const movie = library.find(m => m.id === contentId);
-          title = movie?.title || 'Movie';
-          isHDR = !!movie?.isHDR;
-        } else {
-          const show = library.find(s => s.id === contentId);
-          title = show?.title || 'TV Show';
-        }
-
-        // Show choice modal
-        setPlayChoice({
-          title,
-          streamUrl: window.location.origin + streamUrl,
-          contentType,
-          contentId,
-          episodeId,
-          onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR })
-        });
-        return;
-      }
-
-      // Desktop: Launch VLC (or TV uses browser)
-      console.log('Desktop/VLC path - calling /api/play');
-      const res = await fetch(apiUrl('/api/play'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ contentType, contentId, episodeId, startTime })
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const cols = getGridColumns();
+      const currentLibrary = libraryRef.current;
+      const currentTab = activeTabRef.current;
+      const currentGenre = selectedGenreRef.current;
+      const filtered = currentLibrary.filter(item => {
+        const matchesTab = currentTab === 'all' || item.type === currentTab;
+        const matchesGenre = !currentGenre || (item.genres && item.genres.includes(currentGenre));
+        return matchesTab && matchesGenre;
       });
-      console.log('Play response:', res.status);
-      const data = await res.json();
-      console.log('Play data:', data);
-      if (!res.ok) {
-        showToast(data.error || 'Failed to play file', 'error');
-      } else {
-        console.log('Play successful');
+      switch (e.key) {
+        case '/': e.preventDefault(); break;
+        case 'f': case 'F': e.preventDefault(); setShowFolderManager(true); break;
+        case '?': e.preventDefault(); setShowShortcutHelp(prev => !prev); break;
+        case 'Escape':
+          setSelectedShow(null); setShowFolderManager(false); setShowShortcutHelp(false);
+          setContextMenu(null); setFocusedIndex(-1); break;
+        case 'ArrowRight': e.preventDefault(); setFocusedIndex(prev => Math.min(prev + 1, filtered.length - 1)); break;
+        case 'ArrowLeft': e.preventDefault(); setFocusedIndex(prev => Math.max(prev - 1, 0)); break;
+        case 'ArrowDown': e.preventDefault(); setFocusedIndex(prev => Math.min(prev + cols, filtered.length - 1)); break;
+        case 'ArrowUp': e.preventDefault(); setFocusedIndex(prev => Math.max(prev - cols, 0)); break;
+        case 'Enter':
+          const fi = focusedIndexRef.current;
+          if (fi >= 0 && filtered[fi]) setSelectedDetail(filtered[fi]);
+          break;
       }
-    } catch (e: any) {
-      console.error('Play error:', e);
-      showToast('Failed to play file: ' + e.message, 'error');
-    }
-  };
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
-  // Open show details
+  // ──────────────────── Cross-Hook Handlers ────────────────────
   const openShow = async (show: ContentItem) => {
     setSelectedShow(show);
     setLoadingEpisodes(true);
@@ -749,34 +264,11 @@ export default function Home() {
     }
   };
 
-  // Scan folder
-  const handleScan = async (folderPath: string) => {
-    const res = await fetch(apiUrl('/api/scan'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify({ folderPath })
-    });
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || 'Scan failed');
-    }
-
-    showToast(`Added ${data.added} items to library`, 'success');
-    await fetchLibrary();
-  };
-
-  // Manual rescan all folders
   const handleRescanAll = async () => {
     setLoading(true);
     try {
-      const res = await fetch(apiUrl('/api/rescan'), {
-        method: 'POST',
-        credentials: 'include'
-      });
+      const res = await fetch(apiUrl('/api/rescan'), { method: 'POST', credentials: 'include' });
       const data = await res.json();
-
       if (data.success) {
         showToast(`Rescanned ${data.folders} folders. Added ${data.added} new items.`, 'success');
         await fetchLibrary();
@@ -791,19 +283,15 @@ export default function Home() {
     }
   };
 
-  // Delete item
   const handleDelete = async (item: ContentItem) => {
     const confirmed = confirm(`Delete "${item.title}" from library AND local disk permanently?`);
     if (!confirmed) return;
-
     try {
       const res = await fetch(apiUrl(`/api/delete?type=${item.type}&id=${item.id}&deleteFile=1`), {
-        method: 'DELETE',
-        credentials: 'same-origin'
+        method: 'DELETE', credentials: 'same-origin'
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Delete failed');
-
       showToast(`Deleted (${data.filesDeleted ?? 0} file(s) removed from disk)`, 'success');
       setContextMenu(null);
       await fetchLibrary();
@@ -812,42 +300,30 @@ export default function Home() {
     }
   };
 
-  // Delete episode
   const handleDeleteEpisode = async (episodeId: number) => {
     const confirmed = confirm('Delete this episode from library AND local disk permanently?');
     if (!confirmed) return;
-
     try {
       const res = await fetch(apiUrl(`/api/delete?type=episode&id=${episodeId}&deleteFile=1`), {
-        method: 'DELETE',
-        credentials: 'same-origin'
+        method: 'DELETE', credentials: 'same-origin'
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Delete failed');
-
       showToast(`Episode deleted (${data.filesDeleted ?? 0} file removed)`, 'success');
-      if (selectedShow) {
-        openShow(selectedShow); // Refresh episodes
-      }
+      if (selectedShow) openShow(selectedShow);
       await fetchLibrary();
     } catch (e) {
       showToast('Failed to delete episode', 'error');
     }
   };
 
-  // Mark as watched/unwatched
   const handleMarkWatched = async (item: ContentItem, watched: boolean, episodeId?: number) => {
     try {
       const res = await fetch(apiUrl('/api/history/mark'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({
-          contentType: item.type,
-          contentId: item.id,
-          episodeId,
-          watched
-        })
+        body: JSON.stringify({ contentType: item.type, contentId: item.id, episodeId, watched })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
@@ -860,143 +336,50 @@ export default function Home() {
     }
   };
 
-  // Filter library
-  const filteredLibrary = library.filter(item => {
-    const matchesTab = activeTab === 'all' || item.type === activeTab;
-    const matchesGenre = !selectedGenre || (item.genres && item.genres.includes(selectedGenre));
-    return matchesTab && matchesGenre;
-  }).sort((a, b) => {
-    switch (sortBy) {
-      case 'title-asc':
-        return a.title.localeCompare(b.title);
-      case 'title-desc':
-        return b.title.localeCompare(a.title);
-      case 'year-new':
-        return (b.year || 0) - (a.year || 0);
-      case 'year-old':
-        return (a.year || 0) - (b.year || 0);
-      case 'rating':
-        return (b.rating || 0) - (a.rating || 0);
-      case 'added':
-      default:
-        return new Date(b.addedAt || 0).getTime() - new Date(a.addedAt || 0).getTime();
-    }
-  });
-
-  // Hero candidates: top 5 items with backdrops
-  const heroCandidates = filteredLibrary.filter(item => item.backdropPath).slice(0, 5);
-  if (heroCandidates.length === 0 && filteredLibrary.length > 0) heroCandidates.push(filteredLibrary[0]);
-  const featured = heroCandidates[heroIndex % Math.max(heroCandidates.length, 1)] || filteredLibrary[0];
-  const featuredLogoKey = featured?.tmdbId ? `${featured.type}-${featured.tmdbId}` : null;
-  const featuredLogoPath = featuredLogoKey ? heroLogoPaths[featuredLogoKey] : null;
-  const featuredLogoUrl = featuredLogoPath ? `https://image.tmdb.org/t/p/w500${featuredLogoPath}` : null;
-
-  // Auto-rotate hero every 8 seconds
-  useEffect(() => {
-    if (heroCandidates.length <= 1) return;
-    const timer = setInterval(() => setHeroIndex(i => i + 1), 8000);
-    return () => clearInterval(timer);
-  }, [heroCandidates.length]);
-
-  useEffect(() => {
-    if (!featured?.tmdbId) return;
-
-    const cacheKey = `${featured.type}-${featured.tmdbId}`;
-    if (cacheKey in heroLogoPaths) return;
-
-    let cancelled = false;
-
-    const fetchLogo = async () => {
-      try {
-        const mediaType = featured.type === 'show' ? 'tv' : 'movie';
-        const res = await fetch(apiUrl(`/api/tmdb-details?id=${featured.tmdbId}&type=${mediaType}`), { credentials: 'same-origin' });
-        if (!res.ok || cancelled) return;
-
-        const data = await res.json();
-        const logoPath = data.logoPath || null;
-
-        if (!cancelled) {
-          setHeroLogoPaths((prev) => ({ ...prev, [cacheKey]: logoPath }));
-        }
-      } catch {
-        if (!cancelled) {
-          setHeroLogoPaths((prev) => ({ ...prev, [cacheKey]: null }));
-        }
-      }
-    };
-
-    void fetchLogo();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [featured?.tmdbId, featured?.type, heroLogoPaths]);
-
-  // Show setup wizard if first run
-  if (setupComplete === false) {
-    return <SetupWizard onComplete={() => setSetupComplete(true)} />;
-  }
-
-  // Show loading while checking setup
+  // ──────────────────── Guards ────────────────────
+  if (setupComplete === false) return <SetupWizard onComplete={() => setSetupComplete(true)} />;
   if (setupComplete === null) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-pulse">
-          <h1 className="text-4xl font-bold text-red-600 tracking-tighter">LFLIX</h1>
-        </div>
+        <div className="animate-pulse"><h1 className="text-4xl font-bold text-red-600 tracking-tighter">LFLIX</h1></div>
       </div>
     );
   }
+  if (!isAuthenticated) return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
 
-  // Show login screen if not authenticated
-  if (!isAuthenticated) {
-    return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
-  }
-
+  // ──────────────────── Render ────────────────────
   return (
     <main className="min-h-screen bg-black text-white font-sans selection:bg-red-900 pb-20 md:pb-0">
 
-      {/* Navbar - Desktop (hidden on mobile) */}
+      {/* Navbar */}
       <DetailTabNav
         activeTab={activeTab}
         showLiveSportsActive={showLiveSports}
-        onTabChange={(tab) => {
-          if (tab === 'all') {
-            setSelectedGenre(null);
-          }
-          switchTab(tab);
-        }}
+        onTabChange={(tab) => { if (tab === 'all') setSelectedGenre(null); switchTab(tab); }}
         onShowLiveSports={() => setShowLiveSports(true)}
         onSearchPlay={(filePath) => {
           const movie = library.find((m) => m.type === 'movie' && m.filePath === filePath);
-          if (movie) {
-            playFile('movie', movie.id);
-          }
+          if (movie) playback.playFile('movie', movie.id);
         }}
         onSearchOpenShow={(result) => {
           const show = library.find((l) => l.type === 'show' && l.id === result.id);
           if (show) openShow(show);
         }}
-        onSearchOpenOnline={(item) => {
-          openOnlineInDiscover(item as DiscoverOnlineItem);
-        }}
+        onSearchOpenOnline={(item) => openOnlineInDiscover(item as DiscoverOnlineItem)}
         onShowMobileConnect={() => setShowMobileConnect(true)}
         onShowDlna={() => setShowDlna(true)}
         onShowDownloads={() => setShowDownloads(true)}
         activeDownloads={activeDownloads}
-        forceBrowserPlayer={forceBrowserPlayer}
-        onToggleBrowserPlayer={() => setForceBrowserPlayer(!forceBrowserPlayer)}
+        forceBrowserPlayer={playback.forceBrowserPlayer}
+        onToggleBrowserPlayer={() => playback.setForceBrowserPlayer(!playback.forceBrowserPlayer)}
         onRescan={handleRescanAll}
         scanning={loading}
         onShowFolderManager={() => setShowFolderManager(true)}
-        hdrDisplaySupported={hdrDisplaySupported}
-        onLogout={async () => {
-          await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'same-origin' });
-          setIsAuthenticated(false);
-        }}
+        hdrDisplaySupported={playback.hdrDisplaySupported}
+        onLogout={logout}
       />
 
-      {/* Loading State - only show for movie/show tabs */}
+      {/* Library Content (movie/show/all tabs) */}
       {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'discover' && (loading ? (
         <>
           <HeroSkeleton />
@@ -1012,113 +395,17 @@ export default function Home() {
       ) : (
         <>
           {/* Hero Section */}
-          {featured && (
-            <div className="relative h-[80vh] w-full overflow-hidden">
-              <div className="absolute inset-0" key={`hero-${heroIndex}`}>
-                {(featured.backdropPath || featured.posterPath) ? (
-                  <img
-                    src={`https://image.tmdb.org/t/p/original${featured.backdropPath || featured.posterPath}`}
-                    alt="Hero"
-                    className="w-full h-full object-cover opacity-60 animate-heroFade"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-neutral-900" />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-transparent to-transparent" />
-              </div>
-
-              <div className="absolute bottom-0 left-0 p-12 pb-24 space-y-6 max-w-2xl z-10 animate-slideUp" key={`hero-info-${heroIndex}`}>
-                {featuredLogoUrl ? (
-                  <img
-                    src={featuredLogoUrl}
-                    alt={featured.title}
-                    className="h-16 sm:h-20 md:h-24 lg:h-28 max-w-[90%] object-contain drop-shadow-2xl"
-                  />
-                ) : (
-                  <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold drop-shadow-2xl leading-tight">{featured.title}</h2>
-                )}
-                <div className="flex items-center gap-3 text-sm font-semibold">
-                  <span className="px-2 py-0.5 bg-neutral-800 rounded border border-neutral-600 uppercase tracking-wide text-neutral-300">
-                    {featured.type}
-                  </span>
-                  {featured.rating && <span className="text-green-400">Match {Math.round(featured.rating * 10)}%</span>}
-                  <span className="text-neutral-300">{featured.year || (featured.firstAirDate ? featured.firstAirDate.substring(0, 4) : '')}</span>
-                  {featured.isHDR && (
-                    <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 text-xs rounded font-bold tracking-wide border border-yellow-500/40">
-                      HDR
-                    </span>
-                  )}
-                  {featured.resolution && (
-                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded font-bold tracking-wide border border-blue-500/40">
-                      {featured.resolution === '2160p' ? '4K' : featured.resolution}
-                    </span>
-                  )}
-                  {featured.videoCodec && (
-                    <span className="px-1.5 py-0.5 bg-violet-500/20 text-violet-300 text-xs rounded font-bold tracking-wide border border-violet-500/40">{featured.videoCodec}</span>
-                  )}
-                  {featured.audioChannels && (
-                    <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-xs rounded font-bold tracking-wide border border-amber-500/40">{featured.audioChannels}</span>
-                  )}
-                  {featured.genres && (
-                    <span className="text-neutral-400">{featured.genres.split(',').slice(0, 2).join(' • ')}</span>
-                  )}
-                </div>
-                {featured.overview && (
-                  <p className="text-lg text-neutral-200 line-clamp-3 drop-shadow-md leading-relaxed">{featured.overview}</p>
-                )}
-                <div className="flex gap-4 pt-2">
-                  {featured.type === 'movie' ? (
-                    <>
-                      <button
-                        onClick={() => playFile('movie', featured.id)}
-                        className="px-8 py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-neutral-200 transition"
-                      >
-                        <Play className="w-6 h-6 fill-black" /> Play
-                      </button>
-                      <button
-                        onClick={() => setSelectedDetail(featured)}
-                        className="px-8 py-3 bg-neutral-700/80 text-white font-bold rounded flex items-center gap-2 hover:bg-neutral-600 transition"
-                      >
-                        More Info
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => openShow(featured)}
-                        className="px-8 py-3 bg-white text-black font-bold rounded flex items-center gap-2 hover:bg-neutral-200 transition"
-                      >
-                        <Play className="w-6 h-6 fill-black" /> View Episodes
-                      </button>
-                      <button
-                        onClick={() => setSelectedDetail(featured)}
-                        className="px-8 py-3 bg-neutral-700/80 text-white font-bold rounded flex items-center gap-2 hover:bg-neutral-600 transition"
-                      >
-                        More Info
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Hero indicator dots */}
-              {heroCandidates.length > 1 && (
-                <div className="absolute bottom-6 right-12 flex gap-2 z-10">
-                  {heroCandidates.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setHeroIndex(i)}
-                      className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
-                        (heroIndex % heroCandidates.length) === i
-                          ? 'bg-white scale-125 hero-dot-active'
-                          : 'bg-white/30 hover:bg-white/60'
-                      }`}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+          {hero.featured && (
+            <HeroSection
+              featured={hero.featured}
+              featuredLogoUrl={hero.featuredLogoUrl}
+              heroCandidates={hero.heroCandidates}
+              heroIndex={hero.heroIndex}
+              onSetHeroIndex={hero.setHeroIndex}
+              onPlay={() => playback.playFile('movie', hero.featured.id)}
+              onMoreInfo={() => setSelectedDetail(hero.featured)}
+              onViewEpisodes={() => openShow(hero.featured)}
+            />
           )}
 
           {/* Continue Watching */}
@@ -1126,12 +413,8 @@ export default function Home() {
             <ContinueWatching
               items={continueWatching}
               onPlay={(filePath, startTime) => {
-                // ContinueWatching provides filePath, but playFile needs contentType and contentId
-                // Find the movie by filePath and call playFile with its ID
                 const movie = library.find(m => m.type === 'movie' && m.filePath === filePath);
-                if (movie) {
-                  playFile('movie', movie.id, undefined, startTime);
-                }
+                if (movie) playback.playFile('movie', movie.id, undefined, startTime);
               }}
               onOpenShow={(showId) => {
                 const show = library.find(l => l.type === 'show' && l.id === showId);
@@ -1142,438 +425,50 @@ export default function Home() {
 
           {/* Genre Filter */}
           {genres.length > 0 && (
-            <GenreFilter
-              genres={genres}
-              selectedGenre={selectedGenre}
-              onSelect={setSelectedGenre}
-            />
+            <GenreFilter genres={genres} selectedGenre={selectedGenre} onSelect={setSelectedGenre} />
           )}
 
           {/* Content Grid */}
-          <div className="px-12 pb-20 relative z-20">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-neutral-200 flex items-center gap-3">
-                {activeTab === 'all' ? 'My Library' : activeTab === 'movie' ? 'Movies' : 'TV Shows'}
-                {selectedGenre && (
-                  <span className="text-sm font-normal px-3 py-1 bg-neutral-800 rounded-full text-neutral-400">
-                    {selectedGenre}
-                    <button
-                      onClick={() => setSelectedGenre(null)}
-                      className="ml-2 text-neutral-500 hover:text-white"
-                    >
-                      ×
-                    </button>
-                  </span>
-                )}
-                <span className="text-sm font-normal text-neutral-500">
-                  ({filteredLibrary.length} items)
-                </span>
-              </h3>
-              <div className="relative group/sort">
-                <button className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 rounded-lg text-sm text-neutral-300 hover:text-white transition-colors border border-neutral-700/50">
-                  <ArrowUpDown className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">
-                    {sortBy === 'added' ? 'Date Added' : sortBy === 'title-asc' ? 'Title A–Z' : sortBy === 'title-desc' ? 'Title Z–A' : sortBy === 'year-new' ? 'Year (Newest)' : sortBy === 'year-old' ? 'Year (Oldest)' : 'Rating'}
-                  </span>
-                </button>
-                <div className="absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden opacity-0 invisible group-hover/sort:opacity-100 group-hover/sort:visible transition-all duration-200 z-30">
-                  {[
-                    { value: 'added', label: 'Date Added' },
-                    { value: 'title-asc', label: 'Title A–Z' },
-                    { value: 'title-desc', label: 'Title Z–A' },
-                    { value: 'year-new', label: 'Year (Newest)' },
-                    { value: 'year-old', label: 'Year (Oldest)' },
-                    { value: 'rating', label: 'Rating' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setSortBy(opt.value as typeof sortBy)}
-                      className={clsx(
-                        'w-full text-left px-4 py-2.5 text-sm transition-colors',
-                        sortBy === opt.value
-                          ? 'bg-red-600/20 text-red-400 font-medium'
-                          : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {filteredLibrary.length === 0 ? (
-              <EmptyState type="no-results" searchQuery={selectedGenre || ''} />
-            ) : (
-              <div
-                ref={gridRef}
-                className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
-              >
-                {filteredLibrary.map((item, index) => (
-                  <div
-                    key={`${item.type}-${item.id}`}
-                    className={clsx(
-                      "transition-all duration-200",
-                      focusedIndex === index && "ring-2 ring-white ring-offset-2 ring-offset-black rounded-lg"
-                    )}
-                  >
-                    <ContentCard
-                      item={item}
-                      onClick={() => setSelectedDetail(item)}
-                      showTitle={displayPrefs.showTitles}
-                      showRating={displayPrefs.showRatings}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setContextMenu({ x: e.clientX, y: e.clientY, item });
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <LibraryGrid
+            filteredLibrary={filteredLibrary}
+            activeTab={activeTab}
+            selectedGenre={selectedGenre}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            onGenreClear={() => setSelectedGenre(null)}
+            focusedIndex={focusedIndex}
+            displayPrefs={displayPrefs}
+            onCardClick={(item) => setSelectedDetail(item)}
+            onContextMenu={(e, item) => setContextMenu({ x: e.clientX, y: e.clientY, item })}
+          />
         </>
       ))}
 
       {/* Live TV Section */}
       {activeTab === 'live' && (
-        <div className="min-h-screen bg-gradient-to-b from-neutral-950 via-black to-neutral-950">
-          {/* Hero Section with Video Player */}
-          <div className="relative pt-20">
-            {/* Background gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-b from-red-950/20 via-transparent to-transparent pointer-events-none" />
-
-            <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-12">
-              {/* Header */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 sm:mb-8 pt-4 sm:pt-6">
-                <div>
-                  <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white flex items-center gap-3 sm:gap-4">
-                    <div className="p-2 sm:p-3 bg-gradient-to-br from-red-600 to-red-700 rounded-xl sm:rounded-2xl shadow-lg shadow-red-900/30">
-                      <Tv className="w-5 h-5 sm:w-8 sm:h-8" />
-                    </div>
-                    Live TV
-                  </h1>
-                  <p className="text-neutral-400 text-lg mt-2 ml-1">
-                    {iptvChannels.length.toLocaleString()} channels available
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowIPTVManager(true)}
-                  className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-red-900/30 flex items-center justify-center gap-2 hover:scale-105 text-sm sm:text-base"
-                >
-                  <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                  Manage Channels
-                </button>
-              </div>
-
-              {/* Main Layout - Player + Now Playing Info */}
-              {selectedIPTVChannel && (
-                <div className="mb-6 sm:mb-10">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-                    {/* Video Player - Takes 2/3 of the space */}
-                    <div className="lg:col-span-2">
-                      <div className="relative bg-black rounded-xl sm:rounded-2xl overflow-hidden border border-neutral-800/50 shadow-2xl shadow-black/50 aspect-video">
-                        <video
-                          key={selectedIPTVChannel.id}
-                          src={selectedIPTVChannel.url}
-                          controls
-                          autoPlay
-                          className="w-full h-full object-contain bg-black"
-                          playsInline
-                        />
-                        {/* Live indicator */}
-                        <div className="absolute top-2 left-2 sm:top-4 sm:left-4 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-red-600/90 backdrop-blur-sm rounded-full">
-                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse" />
-                          <span className="text-white text-xs sm:text-sm font-medium">LIVE</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Now Playing Info Panel */}
-                    <div className="lg:col-span-1">
-                      <div className="bg-gradient-to-br from-neutral-900/90 to-neutral-950/90 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-neutral-800/50 p-4 sm:p-6 h-full">
-                        <p className="text-xs sm:text-sm text-neutral-500 uppercase tracking-wider mb-3 sm:mb-4">Now Playing</p>
-                        <div className="flex items-start gap-3 sm:gap-4 mb-4 sm:mb-6">
-                          {selectedIPTVChannel.logo ? (
-                            <div className="w-14 h-14 sm:w-20 sm:h-20 bg-neutral-800 rounded-lg sm:rounded-xl flex items-center justify-center p-1.5 sm:p-2 shrink-0">
-                              <img
-                                src={selectedIPTVChannel.logo}
-                                alt={selectedIPTVChannel.name}
-                                className="max-w-full max-h-full object-contain"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).style.display = 'none';
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-14 h-14 sm:w-20 sm:h-20 bg-neutral-800 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
-                              <Tv className="w-7 h-7 sm:w-10 sm:h-10 text-neutral-600" />
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <h2 className="text-lg sm:text-2xl font-bold text-white truncate">{selectedIPTVChannel.name}</h2>
-                            <span className="inline-block mt-1.5 sm:mt-2 px-2 sm:px-3 py-0.5 sm:py-1 bg-neutral-800 text-neutral-300 text-xs sm:text-sm rounded-full">
-                              {selectedIPTVChannel.category}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Channel Actions */}
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2 text-neutral-400 text-sm">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                            Stream Status: Active
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Empty State when no channel selected */}
-              {!selectedIPTVChannel && iptvChannels.length > 0 && (
-                <div className="mb-6 sm:mb-10">
-                  <div className="bg-gradient-to-br from-neutral-900/50 to-neutral-950/50 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-neutral-800/30 p-6 sm:p-12 text-center">
-                    <div className="w-16 h-16 sm:w-24 sm:h-24 bg-neutral-800/50 rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto mb-4 sm:mb-6 border border-neutral-700/50">
-                      <Tv className="w-8 h-8 sm:w-12 sm:h-12 text-neutral-500" />
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-white mb-2 sm:mb-3">Select a Channel</h2>
-                    <p className="text-sm sm:text-base text-neutral-400 max-w-md mx-auto">Choose a channel from the list below to start watching live content</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Search & Category Filter */}
-              <div className="mb-6 sm:mb-8 space-y-3 sm:space-y-4">
-                {/* Search Bar */}
-                <div className="relative w-full sm:max-w-md">
-                  <input
-                    type="text"
-                    placeholder="Search channels..."
-                    value={iptvSearchQuery}
-                    onChange={(e) => setIptvSearchQuery(e.target.value)}
-                    className="w-full bg-neutral-900/80 backdrop-blur-sm border border-neutral-800 rounded-lg sm:rounded-xl px-4 sm:px-5 py-3 sm:py-3.5 pl-10 sm:pl-12 text-sm sm:text-base text-white placeholder-neutral-500 focus:ring-2 focus:ring-red-600/50 focus:border-red-600/50 outline-none transition-all"
-                  />
-                  <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-neutral-500" />
-                  {iptvSearchQuery && (
-                    <button
-                      onClick={() => setIptvSearchQuery('')}
-                      className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 p-1 text-neutral-500 hover:text-white hover:bg-neutral-800 rounded-full transition-all"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Category Pills */}
-                {iptvCategories.length > 0 && (
-                  <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 sm:pb-3 -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'thin' }}>
-                    <button
-                      onClick={() => setSelectedIPTVCategory('all')}
-                      className={clsx(
-                        "px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all",
-                        selectedIPTVCategory === 'all'
-                          ? "bg-white text-black shadow-lg"
-                          : "bg-neutral-800/80 text-neutral-300 hover:bg-neutral-700 hover:text-white active:bg-neutral-600"
-                      )}
-                    >
-                      All
-                    </button>
-                    {iptvCategories.map((cat) => (
-                      <button
-                        key={cat}
-                        onClick={() => setSelectedIPTVCategory(cat)}
-                        className={clsx(
-                          "px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all",
-                          selectedIPTVCategory === cat
-                            ? "bg-white text-black shadow-lg"
-                            : "bg-neutral-800/80 text-neutral-300 hover:bg-neutral-700 hover:text-white active:bg-neutral-600"
-                        )}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Country Filter */}
-                {iptvCountries.length > 0 && (
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <label className="text-xs sm:text-sm text-neutral-500 font-medium flex items-center gap-1.5 sm:gap-2">
-                      <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                      Filter by Country
-                    </label>
-                    <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 sm:pb-3 -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'thin' }}>
-                      <button
-                        onClick={() => setSelectedIPTVCountry('all')}
-                        className={clsx(
-                          "px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all border",
-                          selectedIPTVCountry === 'all'
-                            ? "bg-red-600 text-white border-red-600"
-                            : "bg-neutral-900/80 text-neutral-300 border-neutral-700 hover:bg-neutral-800 hover:text-white active:bg-neutral-700"
-                        )}
-                      >
-                        🌍 All ({iptvChannels.length})
-                      </button>
-                      {iptvCountries.slice(0, 20).map((country) => (
-                        <button
-                          key={country}
-                          onClick={() => setSelectedIPTVCountry(country)}
-                          className={clsx(
-                            "px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all border",
-                            selectedIPTVCountry === country
-                              ? "bg-red-600 text-white border-red-600"
-                              : "bg-neutral-900/80 text-neutral-300 border-neutral-700 hover:bg-neutral-800 hover:text-white active:bg-neutral-700"
-                          )}
-                        >
-                          {country} ({iptvChannels.filter(c => c.country === country).length})
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Channels Grid */}
-              <div className="pb-20">
-                {loadingIPTV ? (
-                  <div className="flex justify-center py-20">
-                    <div className="text-center">
-                      <Loader2 className="w-12 h-12 animate-spin text-red-600 mx-auto mb-4" />
-                      <p className="text-neutral-400">Loading channels...</p>
-                    </div>
-                  </div>
-                ) : iptvChannels.length === 0 ? (
-                  <div className="text-center py-12 sm:py-20">
-                    <div className="w-16 h-16 sm:w-24 sm:h-24 bg-neutral-900 rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto mb-4 sm:mb-6 border border-neutral-800">
-                      <Tv className="w-8 h-8 sm:w-12 sm:h-12 text-neutral-600" />
-                    </div>
-                    <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 sm:mb-3">No channels yet</h3>
-                    <p className="text-sm sm:text-base text-neutral-400 mb-6 sm:mb-8 max-w-md mx-auto px-4">
-                      Add IPTV channels manually or import from an M3U playlist to start watching live TV
-                    </p>
-                    <button
-                      onClick={() => setShowIPTVManager(true)}
-                      className="px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-red-900/30 hover:scale-105 text-sm sm:text-base"
-                    >
-                      <Plus className="w-4 h-4 sm:w-5 sm:h-5 inline mr-2" />
-                      Add Channels
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    {/* Filtered results count */}
-                    {(iptvSearchQuery || selectedIPTVCountry !== 'all' || selectedIPTVCategory !== 'all') && (
-                      <p className="text-sm text-neutral-500 mb-3 sm:mb-4">
-                        {iptvChannels.filter(ch => {
-                          const matchesCategory = selectedIPTVCategory === 'all' || ch.category === selectedIPTVCategory;
-                          const matchesCountry = selectedIPTVCountry === 'all' || ch.country === selectedIPTVCountry;
-                          const matchesSearch = !iptvSearchQuery || ch.name.toLowerCase().includes(iptvSearchQuery.toLowerCase()) ||
-                            ch.category.toLowerCase().includes(iptvSearchQuery.toLowerCase()) ||
-                            (ch.country && ch.country.toLowerCase().includes(iptvSearchQuery.toLowerCase()));
-                          return matchesCategory && matchesCountry && matchesSearch;
-                        }).length} channels found
-                      </p>
-                    )}
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-4">
-                      {iptvChannels
-                        .filter((ch) => {
-                          const matchesCategory = selectedIPTVCategory === 'all' || ch.category === selectedIPTVCategory;
-                          const matchesCountry = selectedIPTVCountry === 'all' || ch.country === selectedIPTVCountry;
-                          const matchesSearch = !iptvSearchQuery ||
-                            ch.name.toLowerCase().includes(iptvSearchQuery.toLowerCase()) ||
-                            ch.category.toLowerCase().includes(iptvSearchQuery.toLowerCase()) ||
-                            (ch.country && ch.country.toLowerCase().includes(iptvSearchQuery.toLowerCase()));
-                          return matchesCategory && matchesCountry && matchesSearch;
-                        })
-                        .map((channel) => (
-                          <div
-                            key={channel.id}
-                            onClick={() => setSelectedIPTVChannel(channel)}
-                            className={clsx(
-                              "group cursor-pointer rounded-lg sm:rounded-xl overflow-hidden transition-all duration-300 sm:hover:scale-105 hover:z-10 active:scale-95",
-                              selectedIPTVChannel?.id === channel.id
-                                ? "ring-2 ring-red-500 ring-offset-1 sm:ring-offset-2 ring-offset-black bg-gradient-to-br from-neutral-800 to-neutral-900"
-                                : "bg-neutral-900/80 hover:bg-neutral-800/90 border border-neutral-800/50 hover:border-neutral-700"
-                            )}
-                          >
-                            {/* Channel Logo */}
-                            <div className="aspect-video bg-neutral-800/50 flex items-center justify-center p-2 sm:p-4 relative overflow-hidden">
-                              {/* Subtle gradient overlay */}
-                              <div className="absolute inset-0 bg-gradient-to-t from-neutral-900/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
-                              {channel.logo ? (
-                                <img
-                                  src={channel.logo}
-                                  alt={channel.name}
-                                  className="max-w-full max-h-full object-contain transition-transform group-hover:scale-110"
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = 'none';
-                                  }}
-                                />
-                              ) : (
-                                <Tv className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-600 group-hover:text-neutral-500 transition-colors" />
-                              )}
-
-                              {/* Playing indicator */}
-                              {selectedIPTVChannel?.id === channel.id && (
-                                <div className="absolute top-1 right-1 sm:top-2 sm:right-2 flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-600 rounded-full">
-                                  <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-white rounded-full animate-pulse" />
-                                  <span className="text-[10px] sm:text-xs font-medium text-white">LIVE</span>
-                                </div>
-                              )}
-
-                              {/* Play overlay on hover - hidden on mobile */}
-                              <div className="absolute inset-0 hidden sm:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="p-2 sm:p-3 bg-red-600/90 rounded-full transform scale-0 group-hover:scale-100 transition-transform">
-                                  <Play className="w-4 h-4 sm:w-6 sm:h-6 text-white fill-white" />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Channel Info */}
-                            <div className="p-2 sm:p-3 flex items-start justify-between gap-1 sm:gap-2">
-                              <div className="min-w-0 flex-1">
-                                <h4 className="font-medium text-white text-xs sm:text-sm truncate group-hover:text-red-400 transition-colors">
-                                  {channel.name}
-                                </h4>
-                                <span className="text-[10px] sm:text-xs text-neutral-500 truncate block">
-                                  {channel.category}{channel.country ? ` • ${channel.country}` : ''}
-                                </span>
-                              </div>
-                              {/* Delete button - visible on mobile tap, hover on desktop */}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteIPTVChannel(channel.id);
-                                }}
-                                className="p-1 sm:p-1.5 text-neutral-600 hover:text-red-500 hover:bg-red-900/30 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all shrink-0"
-                                title="Delete channel"
-                              >
-                                <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )
-      }
+        <LiveTVSection
+          iptvChannels={iptv.iptvChannels}
+          iptvCategories={iptv.iptvCategories}
+          iptvCountries={iptv.iptvCountries}
+          selectedIPTVCategory={iptv.selectedIPTVCategory}
+          setSelectedIPTVCategory={iptv.setSelectedIPTVCategory}
+          selectedIPTVCountry={iptv.selectedIPTVCountry}
+          setSelectedIPTVCountry={iptv.setSelectedIPTVCountry}
+          iptvSearchQuery={iptv.iptvSearchQuery}
+          setIptvSearchQuery={iptv.setIptvSearchQuery}
+          selectedIPTVChannel={iptv.selectedIPTVChannel}
+          setSelectedIPTVChannel={iptv.setSelectedIPTVChannel}
+          loadingIPTV={iptv.loadingIPTV}
+          onManageChannels={() => iptv.setShowIPTVManager(true)}
+          onDeleteChannel={iptv.deleteIPTVChannel}
+        />
+      )}
 
       {/* Watchlist Section */}
       {activeTab === 'watchlist' && (
         <WatchlistPage
           libraryTmdbIds={library.map(item => item.tmdbId).filter((id): id is number => id != null)}
-          onOpenOnline={(item) => {
-            openOnlineInDiscover(item);
-          }}
+          onOpenOnline={(item) => openOnlineInDiscover(item)}
         />
       )}
 
@@ -1582,10 +477,7 @@ export default function Home() {
         discoverMode === 'online' ? (
           <DiscoverPage
             initialItem={discoverInitialItem}
-            onSwitchToTorrents={(query) => {
-              if (query) setTorrentInitialQuery(query);
-              setDiscoverMode('torrents');
-            }}
+            onSwitchToTorrents={(query) => { if (query) setTorrentInitialQuery(query); setDiscoverMode('torrents'); }}
           />
         ) : (
           <TorrentSearchPage
@@ -1601,38 +493,27 @@ export default function Home() {
         <ContentDetailModal
           item={selectedDetail}
           onClose={() => setSelectedDetail(null)}
-          onPlay={() => {
-            playFile('movie', selectedDetail.id, undefined, selectedDetail.watchProgress?.progress);
-            setSelectedDetail(null);
-          }}
-          onViewEpisodes={() => {
-            openShow(selectedDetail);
-            setSelectedDetail(null);
-          }}
-          onOpenOnline={(item) => {
-            openOnlineInDiscover(item);
-            setSelectedDetail(null);
-          }}
+          onPlay={() => { playback.playFile('movie', selectedDetail.id, undefined, selectedDetail.watchProgress?.progress); setSelectedDetail(null); }}
+          onViewEpisodes={() => { openShow(selectedDetail); setSelectedDetail(null); }}
+          onOpenOnline={(item) => { openOnlineInDiscover(item); setSelectedDetail(null); }}
         />
       )}
 
       {/* Episode Modal */}
-      {
-        selectedShow && (
-          <EpisodeModal
-            show={selectedShow}
-            seasons={seasons}
-            loading={loadingEpisodes}
-            onClose={() => setSelectedShow(null)}
-            onPlayEpisode={(episodeId, startTime) => playFile('show', selectedShow.id, episodeId, startTime)}
-            onDeleteEpisode={handleDeleteEpisode}
-            onMarkWatched={async (episode, watched) => {
-              await handleMarkWatched({ ...selectedShow, type: 'show', title: episode.title } as ContentItem, watched, episode.id);
-              if (selectedShow) openShow(selectedShow);
-            }}
-          />
-        )
-      }
+      {selectedShow && (
+        <EpisodeModal
+          show={selectedShow}
+          seasons={seasons}
+          loading={loadingEpisodes}
+          onClose={() => setSelectedShow(null)}
+          onPlayEpisode={(episodeId, startTime) => playback.playFile('show', selectedShow.id, episodeId, startTime)}
+          onDeleteEpisode={handleDeleteEpisode}
+          onMarkWatched={async (episode, watched) => {
+            await handleMarkWatched({ ...selectedShow, type: 'show', title: episode.title } as ContentItem, watched, episode.id);
+            if (selectedShow) openShow(selectedShow);
+          }}
+        />
+      )}
 
       {/* Folder Manager */}
       <FolderManager
@@ -1643,58 +524,21 @@ export default function Home() {
       />
 
       {/* Context Menu */}
-      {
-        contextMenu && (
-          <>
-            <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)} />
-            <div
-              className="fixed z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-48"
-              style={{
-                left: Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1920) - 200),
-                top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 1080) - 120)
-              }}
-            >
-              <div className="px-4 py-2 border-b border-neutral-700">
-                <p className="text-sm font-medium truncate max-w-48">{contextMenu.item.title}</p>
-              </div>
-              {contextMenu.item.watchProgress?.completed ? (
-                <button
-                  onClick={() => handleMarkWatched(contextMenu.item, false)}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
-                >
-                  <EyeOff className="w-4 h-4" />
-                  Mark as Unwatched
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleMarkWatched(contextMenu.item, true)}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
-                >
-                  <Eye className="w-4 h-4" />
-                  Mark as Watched
-                </button>
-              )}
-              <button
-                onClick={() => handleDelete(contextMenu.item)}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-red-600 transition w-full text-left border-t border-neutral-700"
-              >
-                <Trash2 className="w-4 h-4" />
-                Remove from Library
-              </button>
-            </div>
-          </>
-        )
-      }
+      {contextMenu && (
+        <ContextMenuOverlay
+          contextMenu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onMarkWatched={(item, watched) => handleMarkWatched(item, watched)}
+          onDelete={handleDelete}
+        />
+      )}
 
       {/* Keyboard Shortcut Help Overlay */}
       {showShortcutHelp && (
         <>
           <div className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm" onClick={() => setShowShortcutHelp(false)} />
           <div className="fixed inset-0 z-[91] flex items-center justify-center p-4" onClick={() => setShowShortcutHelp(false)}>
-            <div
-              className="bg-neutral-900 border border-neutral-700/50 rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="bg-neutral-900 border border-neutral-700/50 rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
                 <div className="flex items-center gap-3">
                   <Keyboard className="w-5 h-5 text-red-400" />
@@ -1706,22 +550,16 @@ export default function Home() {
               </div>
               <div className="p-6 space-y-5">
                 {[
-                  {
-                    title: 'Navigation',
-                    shortcuts: [
-                      { keys: ['←', '→', '↑', '↓'], desc: 'Navigate through library grid' },
-                      { keys: ['Enter'], desc: 'Open selected item details' },
-                      { keys: ['Esc'], desc: 'Close modals / clear selection' },
-                    ]
-                  },
-                  {
-                    title: 'Actions',
-                    shortcuts: [
-                      { keys: ['/'], desc: 'Focus search bar' },
-                      { keys: ['F'], desc: 'Open folder manager' },
-                      { keys: ['?'], desc: 'Toggle this help overlay' },
-                    ]
-                  },
+                  { title: 'Navigation', shortcuts: [
+                    { keys: ['←', '→', '↑', '↓'], desc: 'Navigate through library grid' },
+                    { keys: ['Enter'], desc: 'Open selected item details' },
+                    { keys: ['Esc'], desc: 'Close modals / clear selection' },
+                  ]},
+                  { title: 'Actions', shortcuts: [
+                    { keys: ['/'], desc: 'Focus search bar' },
+                    { keys: ['F'], desc: 'Open folder manager' },
+                    { keys: ['?'], desc: 'Toggle this help overlay' },
+                  ]},
                 ].map((section) => (
                   <div key={section.title}>
                     <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">{section.title}</h4>
@@ -1752,76 +590,48 @@ export default function Home() {
       )}
 
       {/* Toast Notifications */}
-      {
-        toast && (
-          <div
-            className={clsx(
-              "fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom duration-300",
-              toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-            )}
-          >
-            {toast.type === 'success' ? '✓' : '✕'}
-            <span>{toast.message}</span>
-          </div>
-        )
-      }
+      {toast && <ToastNotification toast={toast} />}
 
       {/* Video Player (Mobile) */}
-      {
-        videoPlayer && (
-          <VideoPlayer
-            src={videoPlayer.src}
-            title={videoPlayer.title}
-            initialTime={videoPlayer.initialTime}
-            isHDR={videoPlayer.isHDR}
-            onClose={() => setVideoPlayer(null)}
-          />
-        )
-      }
+      {playback.videoPlayer && (
+        <VideoPlayer
+          src={playback.videoPlayer.src}
+          title={playback.videoPlayer.title}
+          initialTime={playback.videoPlayer.initialTime}
+          isHDR={playback.videoPlayer.isHDR}
+          onClose={() => playback.setVideoPlayer(null)}
+        />
+      )}
 
       {/* Play Choice Modal (Mobile) */}
-      {
-        playChoice && (
-          <PlayChoiceModal
-            title={playChoice.title}
-            streamUrl={playChoice.streamUrl}
-            contentType={playChoice.contentType}
-            contentId={playChoice.contentId}
-            episodeId={playChoice.episodeId}
-            onPlayBrowser={playChoice.onPlayBrowser}
-            onClose={() => setPlayChoice(null)}
-          />
-        )
-      }
+      {playback.playChoice && (
+        <PlayChoiceModal
+          title={playback.playChoice.title}
+          streamUrl={playback.playChoice.streamUrl}
+          contentType={playback.playChoice.contentType}
+          contentId={playback.playChoice.contentId}
+          episodeId={playback.playChoice.episodeId}
+          onPlayBrowser={playback.playChoice.onPlayBrowser}
+          onClose={() => playback.setPlayChoice(null)}
+        />
+      )}
 
       {/* Mobile Connect QR Modal */}
-      {
-        showMobileConnect && (
-          <MobileConnectModal onClose={() => setShowMobileConnect(false)} />
-        )
-      }
+      {showMobileConnect && <MobileConnectModal onClose={() => setShowMobileConnect(false)} />}
 
       {/* DLNA Server Modal */}
-      {
-        showDlna && (
-          <DlnaModal onClose={() => setShowDlna(false)} />
-        )
-      }
+      {showDlna && <DlnaModal onClose={() => setShowDlna(false)} />}
 
       {/* Mobile Search Modal */}
-      {
-        showMobileSearch && (
-          <MobileSearchModal
-            isOpen={showMobileSearch}
-            onClose={() => setShowMobileSearch(false)}
-            library={library}
-            onPlay={(contentType, contentId, episodeId) => {
-              playFile(contentType, contentId, episodeId);
-            }}
-            onOpenShow={openShow}
-          />
-        )
-      }
+      {showMobileSearch && (
+        <MobileSearchModal
+          isOpen={showMobileSearch}
+          onClose={() => setShowMobileSearch(false)}
+          library={library}
+          onPlay={(contentType, contentId, episodeId) => playback.playFile(contentType, contentId, episodeId)}
+          onOpenShow={openShow}
+        />
+      )}
 
       {/* Mobile Navigation */}
       <MobileNav
@@ -1837,26 +647,19 @@ export default function Home() {
       <FloatingQRButton />
 
       {/* Live Sports Modal */}
-      {showLiveSports && (
-        <LiveSports onClose={() => setShowLiveSports(false)} />
-      )}
+      {showLiveSports && <LiveSports onClose={() => setShowLiveSports(false)} />}
 
       {/* IPTV Manager */}
-      {
-        showIPTVManager && (
-          <IPTVManager
-            onClose={() => setShowIPTVManager(false)}
-            onChannelsUpdated={fetchIPTVChannels}
-          />
-        )
-      }
+      {iptv.showIPTVManager && (
+        <IPTVManager
+          onClose={() => iptv.setShowIPTVManager(false)}
+          onChannelsUpdated={iptv.fetchIPTVChannels}
+        />
+      )}
 
       {/* Downloads Panel */}
-      <DownloadsPanel
-        isOpen={showDownloads}
-        onClose={() => setShowDownloads(false)}
-      />
+      <DownloadsPanel isOpen={showDownloads} onClose={() => setShowDownloads(false)} />
 
-    </main >
+    </main>
   );
 }

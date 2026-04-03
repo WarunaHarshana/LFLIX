@@ -22,6 +22,7 @@ LFLIX is a feature-rich local media server with **30 components**, **36 API rout
 - Mobile access via QR code + Capacitor Android app
 - PIN-based authentication
 - Technical info badges (4K, HDR, codec, channels)
+- Extracted `page.tsx` into 8 modular hooks and 5 section components
 
 ---
 
@@ -41,7 +42,6 @@ LFLIX is a feature-rich local media server with **30 components**, **36 API rout
 
 | # | Feature | Effort | Impact |
 |---|---------|--------|--------|
-| 9 | **Decompose `page.tsx` (1693 lines!)** — Extract into custom hooks (`useLibrary`, `usePlayback`, `useIPTV`), separate page sections into components. Currently a maintenance nightmare. | Large | 🔥🔥🔥 |
 | 10 | **Improved search experience** — Unified search across library + TMDB + torrents with tabbed results, search history, and "Press `/` to search" hint | Medium | 🔥🔥🔥 |
 | 11 | **Smooth page transitions** — Add route-based transitions and shared element animations when navigating between views | Medium | 🔥🔥 |
 | 12 | **Better mobile layout** — The current UI is desktop-first. Optimize card sizes, navigation, and modals for mobile/tablet screens | Large | 🔥🔥🔥 |
@@ -81,10 +81,9 @@ LFLIX is a feature-rich local media server with **30 components**, **36 API rout
 
 ## Next Priority Recommendation
 
-Now that #2, #3, #5, #6, and #7 have been completed, the top 5 highest-impact remaining tasks are:
+Now that the major `page.tsx` refactor is completed, the codebase is much safer to build upon. The top highest-impact remaining tasks are:
 
-1. **#1 Subtitle support in browser player** — Crucial for anime and foreign media viewing.
-2. **#9 Decompose page.tsx** — Moving logic to components and hooks will prevent bugs going forward.
+1. **#10 Improved search experience** — Combines all content tabs into a much better unified search modal (Currently working on this).
+2. **#1 Subtitle support in browser player** — Crucial for anime and foreign media viewing.
 3. **#16 TMDB in-memory cache** — Easiest and biggest performance win.
-4. **#10 Improved search experience** — Combines all content tabs into a much better unified search modal.
-5. **#17 State management (Zustand)** — Replaces the many `useStates` in Next.js to make rendering bulletproof.
+4. **#17 State management (Zustand)** — Replaces the many `useStates` in Next.js to make rendering bulletproof.
