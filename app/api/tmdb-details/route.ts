@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
+import { getTmdbApiKey, cachedTmdbCall } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
         const tmdbId = parseInt(id, 10);
 
         if (type === 'movie') {
-            const movie = await rateLimitedTmdbCall(() =>
+            const movie = await cachedTmdbCall(`movie-info-${tmdbId}`, () =>
                 moviedb.movieInfo({ id: tmdbId, append_to_response: 'credits,images' })
             );
 
@@ -67,7 +67,7 @@ export async function GET(req: Request) {
         } else if (type === 'tv') {
             // If season specified, fetch that season's episodes
             if (seasonNum) {
-                const season = await rateLimitedTmdbCall(() =>
+                const season = await cachedTmdbCall(`tv-season-${tmdbId}-${seasonNum}`, () =>
                     moviedb.seasonInfo({ id: tmdbId, season_number: parseInt(seasonNum, 10) })
                 );
 
@@ -86,7 +86,7 @@ export async function GET(req: Request) {
             }
 
             // Otherwise fetch show info with seasons
-            const show = await rateLimitedTmdbCall(() =>
+            const show = await cachedTmdbCall(`tv-info-${tmdbId}`, () =>
                 moviedb.tvInfo({ id: tmdbId, append_to_response: 'credits,images' })
             );
 

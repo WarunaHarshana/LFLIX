@@ -182,6 +182,38 @@ db.exec(`
   );
 `);
 
+// Create indexes for frequently queried columns
+db.exec(`
+  -- Movies: looked up by tmdbId during scan/refresh, sorted by addedAt on content page
+  CREATE INDEX IF NOT EXISTS idx_movies_tmdbId ON movies(tmdbId);
+  CREATE INDEX IF NOT EXISTS idx_movies_title ON movies(title);
+  CREATE INDEX IF NOT EXISTS idx_movies_addedAt ON movies(addedAt DESC);
+
+  -- Shows: looked up by tmdbId and title during scan, refresh, and dedup
+  CREATE INDEX IF NOT EXISTS idx_shows_tmdbId ON shows(tmdbId);
+  CREATE INDEX IF NOT EXISTS idx_shows_title ON shows(title);
+  CREATE INDEX IF NOT EXISTS idx_shows_addedAt ON shows(addedAt DESC);
+
+  -- Episodes: constantly joined/filtered by showId, checked by filePath during scan
+  CREATE INDEX IF NOT EXISTS idx_episodes_showId ON episodes(showId);
+  CREATE INDEX IF NOT EXISTS idx_episodes_filePath ON episodes(filePath);
+  CREATE INDEX IF NOT EXISTS idx_episodes_season_episode ON episodes(showId, seasonNumber, episodeNumber);
+
+  -- Watch History: queried by contentType+contentId on every detail modal, sorted by lastWatched for continue watching
+  CREATE INDEX IF NOT EXISTS idx_watch_history_content ON watch_history(contentType, contentId);
+  CREATE INDEX IF NOT EXISTS idx_watch_history_lastWatched ON watch_history(lastWatched DESC);
+
+  -- Watchlist: checked by tmdbId+mediaType for duplicates
+  CREATE INDEX IF NOT EXISTS idx_watchlist_tmdbId ON watchlist(tmdbId, mediaType);
+  CREATE INDEX IF NOT EXISTS idx_watchlist_addedAt ON watchlist(addedAt DESC);
+
+  -- IPTV Channels: filtered by category
+  CREATE INDEX IF NOT EXISTS idx_iptv_channels_category ON iptv_channels(category);
+
+  -- Downloads: filtered by status
+  CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
+`);
+
 // Run migrations for existing databases (add columns if they don't exist)
 // WHITELIST of valid tables and columns to prevent SQL injection
 const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads'];

@@ -1,10 +1,10 @@
-# LFLIX Improvement Plan — Updated Analysis & New Ideas
+# LFLIX Implementation Plan
 
-## Current State Analysis
+## What's Been Built ✅
 
-### What's Already Built ✅
-LFLIX is a feature-rich local media server with **30 components**, **36 API routes**, and **10 lib modules**. Key features already working:
+LFLIX is a feature-rich local media server with **30 components**, **36 API routes**, and **10 lib modules**.
 
+### Core Platform
 - Netflix-style UI with hero banners, poster grids, dark theme
 - Auto-scanning folders with TMDB metadata enrichment
 - Multi-player support (VLC, PotPlayer, MPC-HC, mpv, HTML5)
@@ -22,67 +22,79 @@ LFLIX is a feature-rich local media server with **30 components**, **36 API rout
 - Mobile access via QR code + Capacitor Android app
 - PIN-based authentication
 - Technical info badges (4K, HDR, codec, channels)
+
+### Recent Architecture Improvements
 - Extracted `page.tsx` into 8 modular hooks and 5 section components
 - **Unified Global Search Modal** — Press `/` to search across Local Library, TMDB, and Torrents all at once
-- **Theme Engine** — Custom base themes (Dark/OLED) with selectable accent colors in settings
+- **Theme Engine** — Custom base themes (Dark/OLED) with selectable accent colors in Settings
 - **Smooth Page Transitions** — Route-based enter/exit animations using Framer Motion
+- **Subtitle Support** — Auto-detects `.srt` files next to videos, converts to WebVTT on the fly via `/api/subtitles` (`app/api/subtitles/route.ts`)
+- **In-Memory TMDB Cache** — 30-minute TTL cache (`lib/cache.ts`) wrapping all outbound TMDB calls in `lib/metadata.ts`, eliminating redundant network requests
+- **Zustand State Management** — Global store (`app/store/useAppStore.ts`) replacing 15+ `useState` calls in `page.tsx` for cleaner rendering and state sharing
+- **Database Indexing** — 15 indexes across all tables (movies, shows, episodes, watch_history, watchlist, iptv_channels, downloads) for faster queries at scale (`lib/db.ts`)
 
 ---
 
-## Remaining Improvements — Organized by Phase
+## What's Left — Organized by Phase
 
-### 🟢 Phase 0: Quick Wins (Pending)
+### 🟢 Phase 0: Quick Wins
 
-| # | Feature | Effort | Impact |
-|---|---------|--------|--------|
-| 1 | **Subtitle support in browser player** — Detect `.srt`/`.ass` files next to video, serve as WebVTT tracks | Medium | 🔥🔥🔥 |
-| 4 | **Collections/Lists** — Group movies into custom playlists (e.g., "Marvel Marathon", "Weekend Picks") | Medium | 🔥🔥 |
-| 8 | **Multiple user profiles** — Each profile has its own watchlist, continue watching, and watch history | Large | 🔥🔥🔥 |
+| # | Feature | Effort | Impact | Status |
+|---|---------|--------|--------|--------|
+| 4 | **Collections/Lists** — Group movies into custom playlists (e.g., "Marvel Marathon", "Weekend Picks") | Medium | 🔥🔥 | Pending |
 
 ---
 
-### 🔵 Phase 1: UX Excellence (3-5 days each)
+### 🔵 Phase 1: UX Excellence
 
-| # | Feature | Effort | Impact |
-|---|---------|--------|--------|
-| 12 | **Better mobile layout** — The current UI is desktop-first. Optimize card sizes, navigation, and modals for mobile/tablet screens | Large | 🔥🔥🔥 |
-| 13 | **Drag & drop torrent files or magnet links** — Drop a `.torrent` file or magnet link anywhere to start downloading | Medium | 🔥🔥 |
-| 14 | **Watch party / sync playback** — Allow two browsers to sync playback position (WebSocket-based) | Large | 🔥🔥 |
+| # | Feature | Effort | Impact | Status |
+|---|---------|--------|--------|--------|
+| 12 | **Better mobile layout** — Optimize card sizes, navigation, and modals for mobile/tablet screens | Large | 🔥🔥🔥 | Pending |
+| 13 | **Drag & drop torrent files or magnet links** — Drop a `.torrent` file or magnet link anywhere to start downloading | Medium | 🔥🔥 | Pending |
 
 ---
 
 ### 🟡 Phase 2: Architecture & Performance
 
-| # | Feature | Effort | Impact |
-|---|---------|--------|--------|
-| 16 | **In-memory TMDB cache** — Cache discover/trending/similar results for 15-30 min. Currently every modal open re-fetches TMDB. Simple `Map` with TTL would eliminate many API calls | Small | 🔥🔥🔥 |
-| 17 | **State management (Zustand)** — Replace 30+ `useState` calls in `page.tsx` with a proper store. Makes the app faster and less buggy | Medium | 🔥🔥🔥 |
-| 18 | **Lazy load components** — Use `React.lazy()` + `Suspense` for heavy modals (StreamServer, IPTV, Torrent, downloads). Cuts initial bundle size | Small | 🔥🔥 |
-| 19 | **Image optimization** — Use Next.js `<Image>` component with automatic poster/backdrop resizing instead of raw `<img>` tags everywhere | Medium | 🔥🔥 |
-| 20 | **Database indexing** — Add indexes on frequently queried columns (tmdbId, type, title) for faster library queries as collections grow | Small | 🔥🔥 |
-| 21 | **Background metadata refresh** — Periodic background job to re-fetch TMDB data for items with missing posters/ratings | Medium | 🔥 |
+| # | Feature | Effort | Impact | Status |
+|---|---------|--------|--------|--------|
+| 18 | **Lazy load components** — Use `React.lazy()` + `Suspense` for heavy modals (StreamServer, IPTV, Torrent, Downloads). Cuts initial bundle size | Small | 🔥🔥 | Pending |
+| 19 | **Image optimization** — Use Next.js `<Image>` component with automatic poster/backdrop resizing instead of raw `<img>` tags | Medium | 🔥🔥 | Pending |
+| 21 | **Background metadata refresh** — Periodic background job to re-fetch TMDB data for items with missing posters/ratings | Medium | 🔥 | Pending |
 
 ---
 
 ### 🔴 Phase 3: New Features
 
-| # | Feature | Effort | Impact |
-|---|---------|--------|--------|
-| 22 | **Movie/show recommendations engine** — "Because you watched X" using TMDB genre/keyword similarity matching across your library | Large | 🔥🔥🔥 |
-| 23 | **Built-in subtitle search** — Search and download subtitles from OpenSubtitles API directly from the player or detail modal | Large | 🔥🔥🔥 |
-| 24 | **Trakt.tv integration** — Sync watch history, ratings, and watchlists with Trakt | Large | 🔥🔥 |
-| 25 | **Scheduled recordings** — For IPTV channels, allow recording scheduled programs | Very Large | 🔥🔥 |
-| 26 | **Multi-server support** — Connect multiple LFLIX instances across different PCs and browse a unified library | Very Large | 🔥🔥🔥 |
-| 27 | **AI-powered content summary** — Generate "what happened last time" recaps for TV shows using episode descriptions | Medium | 🔥🔥 |
-| 28 | **Parental controls** — Content ratings filter and separate kids profile with age-appropriate content only | Large | 🔥🔥 |
-| 29 | **Stats dashboard** — Total watch time, most watched genres, library growth over time, storage usage breakdown | Medium | 🔥🔥 |
+| # | Feature | Effort | Impact | Status |
+|---|---------|--------|--------|--------|
+| 22 | **Movie/show recommendations engine** — "Because you watched X" using TMDB genre/keyword similarity matching | Large | 🔥🔥🔥 | Pending |
+| 23 | **Built-in subtitle search** — Search and download subtitles from OpenSubtitles API directly from the player or detail modal | Large | 🔥🔥🔥 | Pending |
+| 24 | **Trakt.tv integration** — Sync watch history, ratings, and watchlists with Trakt | Large | 🔥🔥 | Pending |
+| 25 | **Scheduled recordings** — For IPTV channels, allow recording scheduled programs | Very Large | 🔥🔥 | Pending |
+| 26 | **Multi-server support** — Connect multiple LFLIX instances across different PCs and browse a unified library | Very Large | 🔥🔥🔥 | Pending |
+| 27 | **AI-powered content summary** — Generate "what happened last time" recaps for TV shows using episode descriptions | Medium | 🔥🔥 | Pending |
+| 28 | **Parental controls** — Content ratings filter and separate kids profile with age-appropriate content only | Large | 🔥🔥 | Pending |
+| 29 | **Stats dashboard** — Total watch time, most watched genres, library growth over time, storage usage breakdown | Medium | 🔥🔥 | Pending |
+
+---
+
+## Completed Items Summary
+
+| # | Feature | Completed In |
+|---|---------|-------------|
+| 1 | Subtitle support (SRT → WebVTT) | `app/api/subtitles/route.ts` |
+| 16 | In-memory TMDB cache (30-min TTL) | `lib/cache.ts`, `lib/metadata.ts` |
+| 17 | Zustand state management | `app/store/useAppStore.ts`, `app/page.tsx` |
+| 20 | Database indexing (15 indexes) | `lib/db.ts` |
 
 ---
 
 ## Next Priority Recommendation
 
-Now that the major `page.tsx` refactoring and the unified search modal are complete, the codebase is much safer and easier to navigate. The highest-impact remaining tasks are:
+The architecture is now solid with caching, proper state management, and indexed queries. The highest-impact remaining tasks are:
 
-1. **#1 Subtitle support in browser player** — Crucial for anime and foreign media viewing. Detect `.srt`/`.ass` files locally and serve as tracks.
-2. **#16 TMDB in-memory cache** — Easiest and biggest performance win. Eliminates duplicate TMDB network requests.
-3. **#17 State management (Zustand)** — Replaces the many remaining `useStates` across the application to make rendering bulletproof.
+1. **#18 Lazy load components** — Quick win to cut initial bundle size by deferring heavy modals.
+2. **#4 Collections/Lists** — Custom playlists for curated movie nights and marathons.
+3. **#19 Image optimization** — Use Next.js `<Image>` for automatic poster resizing.
+4. **#23 Built-in subtitle search** — Search and download subtitles from OpenSubtitles directly.

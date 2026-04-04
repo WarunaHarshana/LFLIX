@@ -428,18 +428,41 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
           </div>
         )}
 
-        <video
-          ref={videoRef}
-          src={src}
-          controls
-          autoPlay
-          className="max-w-full max-h-full"
-          playsInline
-          onError={handleError}
-          onCanPlay={handleCanPlay}
-        >
-          Your browser does not support the video tag.
-        </video>
+        {/* Subtitle track derived from path parameter */}
+        {(() => {
+          let subtitleUrl = '';
+          try {
+            const parsedUrl = new URL(src, window.location.origin);
+            const pathParam = parsedUrl.searchParams.get('path');
+            if (pathParam) {
+              subtitleUrl = `/api/subtitles?path=${encodeURIComponent(pathParam)}`;
+            }
+          } catch (e) {}
+
+          return (
+            <video
+              ref={videoRef}
+              src={src}
+              controls
+              autoPlay
+              className="max-w-full max-h-full"
+              playsInline
+              onError={handleError}
+              onCanPlay={handleCanPlay}
+            >
+              {subtitleUrl && (
+                <track
+                  kind="subtitles"
+                  src={subtitleUrl}
+                  srcLang="en"
+                  label="English (Auto-detected)"
+                  default
+                />
+              )}
+              Your browser does not support the video tag.
+            </video>
+          );
+        })()}
       </div>
 
       {/* HDR Compatibility Warning */}

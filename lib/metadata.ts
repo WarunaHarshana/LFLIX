@@ -1,5 +1,6 @@
 import { MovieDb } from 'moviedb-promise';
 import db from './db';
+import { tmdbCache } from './cache';
 
 // --- Configuration & Rate Limiting ---
 
@@ -41,6 +42,17 @@ export async function rateLimitedTmdbCall<T>(fn: () => Promise<T>): Promise<T> {
     }
     throw error;
   }
+}
+
+export async function cachedTmdbCall<T>(cacheKey: string, fn: () => Promise<T>, ttlMins = 30): Promise<T> {
+  const cached = tmdbCache.get(cacheKey) as T | null;
+  if (cached) return cached;
+  
+  const result = await rateLimitedTmdbCall(fn);
+  if (result !== undefined && result !== null) {
+    tmdbCache.set(cacheKey, result, ttlMins * 60 * 1000);
+  }
+  return result;
 }
 
 // --- Filename Cleaning ---

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Keyboard, X } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { apiUrl } from '@/lib/mobileConfig';
+import { useAppStore } from './store/useAppStore';
 import type { ContentItem, Season, DiscoverOnlineItem, TabId } from './types';
 import { isValidTab } from './types';
 
@@ -66,24 +67,26 @@ export default function Home() {
   const { activeDownloads, showDownloads, setShowDownloads } = useDownloads();
   const playback = usePlayback(library, showToast);
 
-  // ──────────────────── Local State ────────────────────
-  const [activeTab, setActiveTab] = useState<TabId>('all');
-  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
-  const [selectedShow, setSelectedShow] = useState<ContentItem | null>(null);
-  const [seasons, setSeasons] = useState<Season[]>([]);
-  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
-  const [showFolderManager, setShowFolderManager] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: ContentItem } | null>(null);
-  const [selectedDetail, setSelectedDetail] = useState<ContentItem | null>(null);
-  const [focusedIndex, setFocusedIndex] = useState(-1);
-  const [showMobileConnect, setShowMobileConnect] = useState(false);
-  const [showDlna, setShowDlna] = useState(false);
-  const [showMobileSearch, setShowMobileSearch] = useState(false);
-  const [showLiveSports, setShowLiveSports] = useState(false);
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const [discoverInitialItem, setDiscoverInitialItem] = useState<DiscoverOnlineItem | null>(null);
-  const [discoverMode, setDiscoverMode] = useState<'online' | 'torrents'>('online');
-  const [torrentInitialQuery, setTorrentInitialQuery] = useState('');
+  // ──────────────────── Local State (Zustand) ────────────────────
+  const {
+    activeTab, setActiveTab,
+    showShortcutHelp, setShowShortcutHelp,
+    selectedShow, setSelectedShow,
+    seasons, setSeasons,
+    loadingEpisodes, setLoadingEpisodes,
+    showFolderManager, setShowFolderManager,
+    contextMenu, setContextMenu,
+    selectedDetail, setSelectedDetail,
+    focusedIndex, setFocusedIndex,
+    showMobileConnect, setShowMobileConnect,
+    showDlna, setShowDlna,
+    showMobileSearch, setShowMobileSearch,
+    showLiveSports, setShowLiveSports,
+    showSearchModal, setShowSearchModal,
+    discoverInitialItem, setDiscoverInitialItem,
+    discoverMode, setDiscoverMode,
+    torrentInitialQuery, setTorrentInitialQuery
+  } = useAppStore();
 
   // ──────────────────── Computed ────────────────────
   const filteredLibrary = getFilteredLibrary(activeTab);
