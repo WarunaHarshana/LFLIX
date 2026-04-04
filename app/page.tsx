@@ -7,6 +7,7 @@ import { apiUrl } from '@/lib/mobileConfig';
 import { useAppStore } from './store/useAppStore';
 import type { ContentItem, Season, DiscoverOnlineItem, TabId } from './types';
 import { isValidTab } from './types';
+import dynamic from 'next/dynamic';
 
 // Hooks
 import { useToast } from './hooks/useToast';
@@ -18,10 +19,8 @@ import { useContinueWatching } from './hooks/useContinueWatching';
 import { useHero } from './hooks/useHero';
 import { useDownloads } from './hooks/useDownloads';
 
-// Components (existing)
+// Components — always visible or lightweight (static imports)
 import ContinueWatching from './components/ContinueWatching';
-import EpisodeModal from './components/EpisodeModal';
-import ContentDetailModal from './components/ContentDetailModal';
 import GenreFilter from './components/GenreFilter';
 import EmptyState from './components/EmptyState';
 import { HeroSkeleton, CardGridSkeleton, ContinueWatchingSkeleton } from './components/LoadingStates';
@@ -30,26 +29,30 @@ import LoginScreen from './components/LoginScreen';
 import SetupWizard from './components/SetupWizard';
 import VideoPlayer from './components/VideoPlayer';
 import MobileNav from './components/MobileNav';
-import MobileConnectModal from './components/MobileConnectModal';
 import FloatingQRButton from './components/FloatingQRButton';
-import DlnaModal from './components/DlnaModal';
 import MobileSearchModal from './components/MobileSearchModal';
 import PlayChoiceModal from './components/PlayChoiceModal';
-import IPTVManager from './components/IPTVManager';
-import LiveSports from './components/LiveSports';
-import WatchlistPage from './components/WatchlistPage';
-import DownloadsPanel from './components/DownloadsPanel';
-import TorrentSearchPage from './components/TorrentSearchPage';
-import DiscoverPage from './components/DiscoverPage';
 import DetailTabNav from './components/DetailTabNav';
-import GlobalSearchModal from './components/GlobalSearchModal';
 
-// New section components
+// Section components (lightweight, used on main page)
 import HeroSection from './components/HeroSection';
 import LibraryGrid from './components/LibraryGrid';
 import LiveTVSection from './components/LiveTVSection';
 import ContextMenuOverlay from './components/ContextMenuOverlay';
 import ToastNotification from './components/ToastNotification';
+
+// Heavy modals & pages — lazy loaded (only fetched when opened)
+const EpisodeModal = dynamic(() => import('./components/EpisodeModal'), { ssr: false });
+const ContentDetailModal = dynamic(() => import('./components/ContentDetailModal'), { ssr: false });
+const GlobalSearchModal = dynamic(() => import('./components/GlobalSearchModal'), { ssr: false });
+const DiscoverPage = dynamic(() => import('./components/DiscoverPage'), { ssr: false });
+const TorrentSearchPage = dynamic(() => import('./components/TorrentSearchPage'), { ssr: false });
+const WatchlistPage = dynamic(() => import('./components/WatchlistPage'), { ssr: false });
+const LiveSports = dynamic(() => import('./components/LiveSports'), { ssr: false });
+const IPTVManager = dynamic(() => import('./components/IPTVManager'), { ssr: false });
+const DlnaModal = dynamic(() => import('./components/DlnaModal'), { ssr: false });
+const MobileConnectModal = dynamic(() => import('./components/MobileConnectModal'), { ssr: false });
+const DownloadsPanel = dynamic(() => import('./components/DownloadsPanel'), { ssr: false });
 
 export default function Home() {
   // ──────────────────── Hooks ────────────────────

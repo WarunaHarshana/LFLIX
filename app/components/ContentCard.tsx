@@ -1,6 +1,7 @@
 'use client';
 
 import { Film, Tv, Play } from 'lucide-react';
+import TMDBImage from './TMDBImage';
 
 type WatchProgress = {
     progress: number;
@@ -50,11 +51,13 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
             className="group relative aspect-[2/3] bg-[var(--surface-3)] rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:z-30 hover:shadow-2xl hover:shadow-black/50 hover:ring-2 hover:ring-white/60"
         >
             {item.posterPath ? (
-                <img
-                    src={`https://image.tmdb.org/t/p/w500${item.posterPath}`}
+                <TMDBImage
+                    src={item.posterPath}
                     alt={item.title}
+                    tmdbSize="w500"
+                    fill
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, (max-width: 1536px) 16vw, 12vw"
                     className="w-full h-full object-cover transition duration-500 group-hover:brightness-75"
-                    loading="lazy"
                 />
             ) : (
                 <div className="w-full h-full flex items-center justify-center p-4 text-center text-[var(--text-muted)] bg-[var(--surface-2)]">

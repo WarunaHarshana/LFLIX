@@ -13,6 +13,13 @@ const nextConfig: NextConfig = {
   // Images must be unoptimized for static export
   images: {
     unoptimized: isExport,
+    remotePatterns: isExport ? [] : [
+      {
+        protocol: 'https',
+        hostname: 'image.tmdb.org',
+        pathname: '/t/p/**',
+      },
+    ],
   },
   // Prevent Turbopack from bundling native Node modules
   serverExternalPackages: ['webtorrent', 'node-datachannel'],

@@ -2,6 +2,7 @@
 
 import { Play } from 'lucide-react';
 import type { ContentItem } from '@/app/types';
+import TMDBImage from './TMDBImage';
 
 type HeroSectionProps = {
   featured: ContentItem;
@@ -28,9 +29,14 @@ export default function HeroSection({
     <div className="relative h-[80vh] w-full overflow-hidden">
       <div className="absolute inset-0" key={`hero-${heroIndex}`}>
         {(featured.backdropPath || featured.posterPath) ? (
-          <img
-            src={`https://image.tmdb.org/t/p/original${featured.backdropPath || featured.posterPath}`}
+          <TMDBImage
+            src={featured.backdropPath || featured.posterPath}
             alt="Hero"
+            tmdbSize="original"
+            fill
+            priority
+            quality={90}
+            sizes="100vw"
             className="w-full h-full object-cover opacity-60 animate-heroFade"
           />
         ) : (
@@ -42,10 +48,13 @@ export default function HeroSection({
 
       <div className="absolute bottom-0 left-0 p-12 pb-24 space-y-6 max-w-2xl z-10 animate-slideUp" key={`hero-info-${heroIndex}`}>
         {featuredLogoUrl ? (
-          <img
+          <TMDBImage
             src={featuredLogoUrl}
             alt={featured.title}
-            className="h-16 sm:h-20 md:h-24 lg:h-28 max-w-[90%] object-contain drop-shadow-2xl"
+            width={400}
+            height={120}
+            priority
+            className="h-16 sm:h-20 md:h-24 lg:h-28 max-w-[90%] w-auto object-contain drop-shadow-2xl"
           />
         ) : (
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold drop-shadow-2xl leading-tight">{featured.title}</h2>

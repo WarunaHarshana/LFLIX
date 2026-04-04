@@ -170,6 +170,131 @@ class FolderWatcher {
 
         // Auto-rescan: if library is empty but folders exist, trigger initial scan
         this.autoRescanIfNeeded(paths);
+
+        // Start background metadata refresh cycle (every 6 hours)
+        this.startBackgroundRefresh();
+    }
+
+    // Periodically refresh items with missing metadata (posters, ratings, etc.)
+    private refreshTimer: NodeJS.Timeout | null = null;
+    private isRefreshing: boolean = false;
+
+    private startBackgroundRefresh() {
+        // Clear any existing timer
+        if (this.refreshTimer) {
+            clearInterval(this.refreshTimer);
+        }
+
+        // Run initial refresh after 60 seconds (let the app fully boot)
+        setTimeout(() => this.runBackgroundRefresh(), 60_000);
+
+        // Then repeat every 6 hours
+        this.refreshTimer = setInterval(() => this.runBackgroundRefresh(), 6 * 60 * 60 * 1000);
+    }
+
+    private async runBackgroundRefresh() {
+        if (this.isRefreshing) return;
+        this.isRefreshing = true;
+
+        try {
+            const { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata } = await import('./metadata');
+
+            // Find items with missing posters
+            const moviesNeedRefresh = db.prepare(
+                'SELECT id, title, year, fileName FROM movies WHERE posterPath IS NULL'
+            ).all() as { id: number; title: string; year: number; fileName: string }[];
+
+            const showsNeedRefresh = db.prepare(
+                'SELECT id, title FROM shows WHERE posterPath IS NULL'
+            ).all() as { id: number; title: string }[];
+
+            // Find items with missing ratings
+            const moviesNoRating = db.prepare(
+                'SELECT id, title, year, fileName FROM movies WHERE rating IS NULL AND posterPath IS NOT NULL'
+            ).all() as { id: number; title: string; year: number; fileName: string }[];
+
+            const showsNoRating = db.prepare(
+                'SELECT id, title FROM shows WHERE rating IS NULL AND posterPath IS NOT NULL'
+            ).all() as { id: number; title: string }[];
+
+            const totalItems = moviesNeedRefresh.length + showsNeedRefresh.length + moviesNoRating.length + showsNoRating.length;
+            if (totalItems === 0) {
+                this.isRefreshing = false;
+                return;
+            }
+
+            console.log(`[BackgroundRefresh] Found ${totalItems} items needing metadata refresh`);
+            let refreshed = 0;
+
+            // Refresh movies without posters
+            for (const movie of moviesNeedRefresh) {
+                try {
+                    const source = movie.fileName || movie.title;
+                    const metadata = await fetchMovieMetadata(source);
+                    if (metadata.tmdbId) {
+                        db.prepare(`
+                            UPDATE movies SET title = @title, tmdbId = @tmdbId, posterPath = @posterPath,
+                            backdropPath = @backdropPath, overview = @overview, rating = @rating,
+                            genres = @genres, year = COALESCE(@year, year) WHERE id = @id
+                        `).run({ ...metadata, id: movie.id });
+                        refreshed++;
+                    }
+                } catch { /* skip */ }
+                await new Promise(r => setTimeout(r, 200)); // Rate limit
+            }
+
+            // Refresh shows without posters
+            for (const show of showsNeedRefresh) {
+                try {
+                    const metadata = await fetchShowMetadata(show.title);
+                    if (metadata.tmdbId) {
+                        db.prepare(`
+                            UPDATE shows SET title = @title, tmdbId = @tmdbId, posterPath = @posterPath,
+                            backdropPath = @backdropPath, overview = @overview, rating = @rating,
+                            genres = @genres WHERE id = @id
+                        `).run({ ...metadata, id: show.id });
+                        refreshed++;
+                    }
+                } catch { /* skip */ }
+                await new Promise(r => setTimeout(r, 200));
+            }
+
+            // Refresh movies with missing ratings (already have poster but no rating)
+            for (const movie of moviesNoRating) {
+                try {
+                    const source = movie.fileName || movie.title;
+                    const metadata = await fetchMovieMetadata(source);
+                    if (metadata.tmdbId && metadata.rating) {
+                        db.prepare('UPDATE movies SET rating = ?, overview = COALESCE(overview, ?) WHERE id = ?')
+                            .run(metadata.rating, metadata.overview, movie.id);
+                        refreshed++;
+                    }
+                } catch { /* skip */ }
+                await new Promise(r => setTimeout(r, 200));
+            }
+
+            // Refresh shows with missing ratings
+            for (const show of showsNoRating) {
+                try {
+                    const metadata = await fetchShowMetadata(show.title);
+                    if (metadata.tmdbId && metadata.rating) {
+                        db.prepare('UPDATE shows SET rating = ?, overview = COALESCE(overview, ?) WHERE id = ?')
+                            .run(metadata.rating, metadata.overview, show.id);
+                        refreshed++;
+                    }
+                } catch { /* skip */ }
+                await new Promise(r => setTimeout(r, 200));
+            }
+
+            if (refreshed > 0) {
+                console.log(`[BackgroundRefresh] Refreshed ${refreshed}/${totalItems} items`);
+                this.emit({ type: 'scan_complete', added: 0 }); // Trigger UI refresh
+            }
+        } catch (e) {
+            console.error('[BackgroundRefresh] Error:', e);
+        } finally {
+            this.isRefreshing = false;
+        }
     }
 
     // Check if library is empty and trigger a background rescan

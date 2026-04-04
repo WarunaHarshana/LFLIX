@@ -5,6 +5,7 @@ import { X, Play, Star, Clock, Film, Tv, Loader2, PlayCircle, Globe, User } from
 import TrailerModal from './TrailerModal';
 import StreamServerModal from './StreamServerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from './ContentCard';
+import TMDBImage from './TMDBImage';
 
 type ContentItem = {
     id: number;
@@ -239,10 +240,13 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                 {/* Backdrop Header */}
                 <div className="relative h-72 sm:h-96 shrink-0">
                     {(item.backdropPath || item.posterPath) ? (
-                        <img
-                            src={`https://image.tmdb.org/t/p/original${item.backdropPath || item.posterPath}`}
-                            className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-60' : 'opacity-0'}`}
+                        <TMDBImage
+                            src={item.backdropPath || item.posterPath}
                             alt=""
+                            tmdbSize="original"
+                            fill
+                            sizes="(max-width: 768px) 100vw, 896px"
+                            className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-60' : 'opacity-0'}`}
                             onLoad={() => setImgLoaded(true)}
                         />
                     ) : (
@@ -264,10 +268,13 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                         {/* Poster thumbnail */}
                         {item.posterPath && (
                             <div className="hidden sm:block shrink-0 w-32 h-48 rounded-xl overflow-hidden shadow-2xl border-2 border-neutral-700/50 -mb-16 relative z-10">
-                                <img
-                                    src={`https://image.tmdb.org/t/p/w300${item.posterPath}`}
-                                    className="w-full h-full object-cover"
+                                <TMDBImage
+                                    src={item.posterPath}
                                     alt={item.title}
+                                    tmdbSize="w300"
+                                    fill
+                                    sizes="128px"
+                                    className="w-full h-full object-cover"
                                 />
                             </div>
                         )}
@@ -432,7 +439,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                         className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-1.5 transition"
                                     >
                                         {c.profilePath && (
-                                            <img src={`https://image.tmdb.org/t/p/w45${c.profilePath}`} className="w-6 h-6 rounded-full object-cover" alt="" />
+                                            <TMDBImage src={c.profilePath} alt="" tmdbSize="w45" width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
                                         )}
                                         <div>
                                             <div className="text-xs font-medium">{c.name}</div>
@@ -563,9 +570,12 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     <div className="flex gap-4 mb-5">
                                         <div className="w-20 h-20 rounded-xl overflow-hidden bg-neutral-800 shrink-0 flex items-center justify-center">
                                             {personData.profilePath ? (
-                                                <img
-                                                    src={`https://image.tmdb.org/t/p/w185${personData.profilePath}`}
+                                                <TMDBImage
+                                                    src={personData.profilePath}
                                                     alt={personData.name}
+                                                    tmdbSize="w185"
+                                                    fill
+                                                    sizes="80px"
                                                     className="w-full h-full object-cover"
                                                 />
                                             ) : (
@@ -596,11 +606,13 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                                         >
                                                             <div className="aspect-[2/3] bg-neutral-800">
                                                                 {credit.posterPath ? (
-                                                                    <img
-                                                                        src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
+                                                                    <TMDBImage
+                                                                        src={credit.posterPath}
                                                                         alt={credit.title}
+                                                                        tmdbSize="w342"
+                                                                        fill
+                                                                        sizes="(max-width: 640px) 50vw, 25vw"
                                                                         className="w-full h-full object-cover"
-                                                                        loading="lazy"
                                                                     />
                                                                 ) : (
                                                                     <div className="w-full h-full flex items-center justify-center">

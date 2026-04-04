@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { Play, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import TMDBImage from './TMDBImage';
 
 type ContinueItem = {
     id: number;
@@ -102,9 +103,12 @@ export default function ContinueWatching({ items, onPlay, onOpenShow }: Props) {
                             {/* Backdrop/Poster */}
                             <div className="relative h-40">
                                 {item.backdropPath || item.posterPath ? (
-                                    <img
-                                        src={`https://image.tmdb.org/t/p/w500${item.backdropPath || item.posterPath}`}
+                                    <TMDBImage
+                                        src={item.backdropPath || item.posterPath}
                                         alt={item.title}
+                                        tmdbSize="w500"
+                                        fill
+                                        sizes="288px"
                                         className="w-full h-full object-cover"
                                     />
                                 ) : (
