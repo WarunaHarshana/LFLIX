@@ -184,12 +184,12 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
 
                 {/* Episode Detail View */}
                 {selectedEpisode ? (
-                    <div className="flex-1 overflow-y-auto p-8">
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-8">
                         {/* Play Button */}
                         <div className="flex gap-3 mb-6">
                             <button
                                 onClick={() => onPlayEpisode(selectedEpisode.id, selectedEpisode.watchProgress?.progress)}
-                                className="px-6 py-2.5 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
+                                className="px-4 sm:px-6 py-2 sm:py-2.5 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
                             >
                                 <Play className="w-5 h-5 fill-black" />
                                 {selectedEpisode.watchProgress && selectedEpisode.watchProgress.progress > 0
@@ -199,7 +199,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             {show.tmdbId && (
                                 <button
                                     onClick={() => setShowStreamServers(true)}
-                                    className="px-5 py-2.5 bg-blue-600/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-blue-500 transition text-sm border border-blue-500/50"
+                                    className="px-4 py-2 sm:px-5 sm:py-2.5 bg-blue-600/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-blue-500 transition text-sm border border-blue-500/50"
                                 >
                                     <Globe className="w-4 h-4" /> Watch Online
                                 </button>
@@ -331,7 +331,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                     <>
                         {/* Season Tabs */}
                         {seasons.length > 1 && (
-                            <div className="px-8 py-4 border-b border-neutral-800">
+                            <div className="px-4 sm:px-8 py-4 border-b border-neutral-800">
                                 <div className="flex gap-2 overflow-x-auto">
                                     {seasons.map(({ season }) => (
                                         <button
@@ -351,7 +351,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
 
                         {/* Episode Rating Grid */}
                         {seasons.length > 0 && (
-                            <div className="px-8 py-4 border-b border-neutral-800">
+                            <div className="px-4 sm:px-8 py-4 border-b border-neutral-800">
                                 <button
                                     onClick={() => setShowRatingGrid(!showRatingGrid)}
                                     className="flex items-center gap-2 text-sm font-medium text-neutral-400 hover:text-white transition mb-3"
@@ -409,7 +409,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                         )}
 
                         {/* Episode List */}
-                        <div className="flex-1 overflow-y-auto p-8">
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-8">
                             <h3 className="text-lg font-bold mb-4 text-neutral-300 flex items-center gap-2">
                                 <ChevronDown className="w-4 h-4" />
                                 {seasons.length > 1 ? `Season ${activeSeason}` : 'Episodes'}
@@ -438,7 +438,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                             >
                                                 {/* Episode thumbnail */}
                                                 {ep.stillPath ? (
-                                                    <div className="shrink-0 w-36 h-20 rounded-lg overflow-hidden bg-neutral-800 relative">
+                                                    <div className="shrink-0 w-28 sm:w-36 h-16 sm:h-20 rounded-lg overflow-hidden bg-neutral-800 relative">
                                                         <img
                                                             src={`https://image.tmdb.org/t/p/w300${ep.stillPath}`}
                                                             className="w-full h-full object-cover"
@@ -453,7 +453,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="shrink-0 w-36 h-20 rounded-lg bg-neutral-800 flex items-center justify-center">
+                                                    <div className="shrink-0 w-28 sm:w-36 h-16 sm:h-20 rounded-lg bg-neutral-800 flex items-center justify-center">
                                                         <span className="text-2xl font-bold text-neutral-600">{ep.episodeNumber}</span>
                                                     </div>
                                                 )}

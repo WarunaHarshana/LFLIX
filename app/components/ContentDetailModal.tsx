@@ -264,7 +264,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                     </button>
 
                     {/* Title + Actions overlaid on backdrop */}
-                    <div className="absolute bottom-0 left-0 right-0 p-8 flex gap-6">
+                    <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-8 flex gap-4 sm:gap-6">
                         {/* Poster thumbnail */}
                         {item.posterPath && (
                             <div className="hidden sm:block shrink-0 w-32 h-48 rounded-xl overflow-hidden shadow-2xl border-2 border-neutral-700/50 -mb-16 relative z-10">
@@ -332,11 +332,11 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="flex gap-3 mt-4">
+                            <div className="flex gap-2 sm:gap-3 mt-4 flex-wrap">
                                 {item.type === 'movie' ? (
                                     <button
                                         onClick={onPlay}
-                                        className="px-6 py-2.5 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
+                                        className="px-4 sm:px-6 py-2 sm:py-2.5 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
                                     >
                                         <Play className="w-5 h-5 fill-black" />
                                         {progressPercent > 0 && progressPercent < 95 ? 'Resume' : 'Play'}
@@ -344,21 +344,21 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                 ) : (
                                     <button
                                         onClick={onViewEpisodes}
-                                        className="px-6 py-2.5 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
+                                        className="px-4 sm:px-6 py-2 sm:py-2.5 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
                                     >
                                         <Play className="w-5 h-5 fill-black" /> View Episodes
                                     </button>
                                 )}
                                 <button
                                     onClick={() => setShowTrailer(true)}
-                                    className="px-5 py-2.5 bg-neutral-700/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-neutral-600 transition text-sm border border-neutral-600"
+                                    className="px-4 py-2 sm:px-5 sm:py-2.5 bg-neutral-700/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-neutral-600 transition text-sm border border-neutral-600"
                                 >
                                     <PlayCircle className="w-4 h-4" /> Trailer
                                 </button>
                                 {item.tmdbId && (
                                     <button
                                         onClick={() => setShowStreamServers(true)}
-                                        className="px-5 py-2.5 bg-white text-black font-semibold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
+                                        className="px-4 py-2 sm:px-5 sm:py-2.5 bg-white text-black font-semibold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
                                     >
                                         <Globe className="w-4 h-4" /> Watch Online
                                     </button>
@@ -369,7 +369,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                 </div>
 
                 {/* Content Body */}
-                <div className="p-8 pt-4 sm:pl-48 overflow-y-auto flex-1">
+                <div className="p-4 sm:p-8 pt-4 sm:pl-48 overflow-y-auto flex-1">
                     {/* Watch Progress */}
                     {item.type === 'movie' && progressPercent > 0 && progressPercent < 95 && item.watchProgress && (
                         <div className="mb-6">

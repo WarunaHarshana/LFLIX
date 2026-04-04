@@ -46,7 +46,7 @@ export default function LibraryGrid({
   const sortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Date Added';
 
   return (
-    <div className="px-12 pb-20 relative z-20">
+    <div className="px-4 md:px-12 pb-20 relative z-20">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-xl font-semibold text-neutral-200 flex items-center gap-3">
           {activeTab === 'all' ? 'My Library' : activeTab === 'movie' ? 'Movies' : 'TV Shows'}

@@ -159,7 +159,8 @@ export default function MobileConnectModal({ onClose }: Props) {
           {/* Troubleshooting */}
           <div className="mt-4 text-center">
             <p className="text-neutral-500 text-xs">
-              Not working? Try typing the URL manually in your phone's browser
+              Getting <strong>ERR_SSL_PROTOCOL_ERROR</strong>? Your browser upgraded to HTTPS. 
+              <br/>Tap the address bar and manually specify <strong>http://</strong> before the IP.
             </p>
           </div>
         </div>

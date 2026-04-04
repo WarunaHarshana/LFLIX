@@ -112,13 +112,13 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
 
       {/* Mobile Bottom Nav */}
       <div className="fixed bottom-0 left-0 right-0 z-[90] bg-[var(--overlay-strong)] backdrop-blur-md border-t border-[var(--border-subtle)] md:hidden">
-        <div className="flex justify-around py-2">
+        <div className="flex overflow-x-auto scrollbar-hide py-2 px-2 gap-2 snap-x">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={clsx(
-                "flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition min-w-[64px]",
+                "flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-lg transition min-w-[72px] snap-center",
                 activeTab === tab.id
                   ? 'bg-white text-black'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'

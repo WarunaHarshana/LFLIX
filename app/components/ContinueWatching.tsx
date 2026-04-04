@@ -59,7 +59,7 @@ export default function ContinueWatching({ items, onPlay, onOpenShow }: Props) {
     };
 
     return (
-        <section className="px-12 mb-10 relative group/cw">
+        <section className="px-4 md:px-12 mb-10 relative group/cw">
             <div className="flex items-center gap-3 mb-4">
                 <Clock className="w-5 h-5 text-red-500" />
                 <h3 className="text-xl font-semibold text-neutral-200">Continue Watching</h3>
@@ -98,7 +98,7 @@ export default function ContinueWatching({ items, onPlay, onOpenShow }: Props) {
                         <div
                             key={item.id}
                             onClick={() => handleClick(item)}
-                            className="group relative flex-shrink-0 w-72 bg-neutral-800 rounded-xl overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/20 transition-all duration-300 hover:scale-[1.03] scroll-snap-start"
+                            className="group relative flex-shrink-0 w-64 md:w-72 bg-neutral-800 rounded-xl overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/20 transition-all duration-300 hover:scale-[1.03] scroll-snap-start"
                         >
                             {/* Backdrop/Poster */}
                             <div className="relative h-40">
