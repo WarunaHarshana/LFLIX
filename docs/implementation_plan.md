@@ -23,6 +23,9 @@ LFLIX is a feature-rich local media server with **30 components**, **36 API rout
 - PIN-based authentication
 - Technical info badges (4K, HDR, codec, channels)
 - Extracted `page.tsx` into 8 modular hooks and 5 section components
+- **Unified Global Search Modal** — Press `/` to search across Local Library, TMDB, and Torrents all at once
+- **Theme Engine** — Custom base themes (Dark/OLED) with selectable accent colors in settings
+- **Smooth Page Transitions** — Route-based enter/exit animations using Framer Motion
 
 ---
 
@@ -42,12 +45,9 @@ LFLIX is a feature-rich local media server with **30 components**, **36 API rout
 
 | # | Feature | Effort | Impact |
 |---|---------|--------|--------|
-| 10 | **Improved search experience** — Unified search across library + TMDB + torrents with tabbed results, search history, and "Press `/` to search" hint | Medium | 🔥🔥🔥 |
-| 11 | **Smooth page transitions** — Add route-based transitions and shared element animations when navigating between views | Medium | 🔥🔥 |
 | 12 | **Better mobile layout** — The current UI is desktop-first. Optimize card sizes, navigation, and modals for mobile/tablet screens | Large | 🔥🔥🔥 |
 | 13 | **Drag & drop torrent files or magnet links** — Drop a `.torrent` file or magnet link anywhere to start downloading | Medium | 🔥🔥 |
 | 14 | **Watch party / sync playback** — Allow two browsers to sync playback position (WebSocket-based) | Large | 🔥🔥 |
-| 15 | **Theme customization** — Let users pick accent color (red, blue, purple, green) and toggle between dark/OLED black modes | Medium | 🔥🔥 |
 
 ---
 
@@ -81,9 +81,8 @@ LFLIX is a feature-rich local media server with **30 components**, **36 API rout
 
 ## Next Priority Recommendation
 
-Now that the major `page.tsx` refactor is completed, the codebase is much safer to build upon. The top highest-impact remaining tasks are:
+Now that the major `page.tsx` refactoring and the unified search modal are complete, the codebase is much safer and easier to navigate. The highest-impact remaining tasks are:
 
-1. **#10 Improved search experience** — Combines all content tabs into a much better unified search modal (Currently working on this).
-2. **#1 Subtitle support in browser player** — Crucial for anime and foreign media viewing.
-3. **#16 TMDB in-memory cache** — Easiest and biggest performance win.
-4. **#17 State management (Zustand)** — Replaces the many `useStates` in Next.js to make rendering bulletproof.
+1. **#1 Subtitle support in browser player** — Crucial for anime and foreign media viewing. Detect `.srt`/`.ass` files locally and serve as tracks.
+2. **#16 TMDB in-memory cache** — Easiest and biggest performance win. Eliminates duplicate TMDB network requests.
+3. **#17 State management (Zustand)** — Replaces the many remaining `useStates` across the application to make rendering bulletproof.

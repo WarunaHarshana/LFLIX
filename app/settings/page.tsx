@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye, Palette } from 'lucide-react';
 import Link from 'next/link';
+import { useTheme } from '../components/ThemeProvider';
 
 type Settings = {
     vlcPath: string;
@@ -95,6 +96,8 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+
+    const { theme, setTheme, accent, setAccent, isMounted } = useTheme();
 
     // Display preferences (localStorage only)
     const [displayPrefs, setDisplayPrefs] = useState({ showTitles: true, showRatings: true, cinematicMode: false });
@@ -289,6 +292,73 @@ export default function SettingsPage() {
                         </label>
                     </div>
                 </section>
+
+                {/* Appearance Preferences */}
+                {isMounted && (
+                    <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
+                        <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
+                            <Palette className="w-5 h-5 text-[var(--text-secondary)]" />
+                            <h2 className="text-lg font-semibold">Appearance</h2>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            {/* Theme Toggle */}
+                            <div>
+                                <h3 className="text-sm text-neutral-400 mb-3">Base Theme</h3>
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={() => setTheme('dark')}
+                                        className={`flex-1 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition ${
+                                            theme === 'dark' 
+                                                ? 'bg-neutral-800 border-white text-white' 
+                                                : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:bg-neutral-800'
+                                        }`}
+                                    >
+                                        <div className="w-4 h-4 rounded-full bg-[#141414] border border-neutral-600"></div>
+                                        Dark Theme
+                                    </button>
+                                    <button
+                                        onClick={() => setTheme('oled')}
+                                        className={`flex-1 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition ${
+                                            theme === 'oled' 
+                                                ? 'bg-neutral-800 border-white text-white' 
+                                                : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:bg-neutral-800'
+                                        }`}
+                                    >
+                                        <div className="w-4 h-4 rounded-full bg-black border border-neutral-600"></div>
+                                        OLED Black
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Accent Color */}
+                            <div>
+                                <h3 className="text-sm text-neutral-400 mb-3">Accent Color</h3>
+                                <div className="flex gap-4 flex-wrap">
+                                    {[
+                                        { id: 'default', color: '#f5f5f5', label: 'Default' },
+                                        { id: 'red', color: '#e50914', label: 'Netflix Red' },
+                                        { id: 'blue', color: '#3b82f6', label: 'Blue' },
+                                        { id: 'purple', color: '#8b5cf6', label: 'Purple' },
+                                        { id: 'green', color: '#10b981', label: 'Green' },
+                                    ].map((acc) => (
+                                        <button
+                                            key={acc.id}
+                                            onClick={() => setAccent(acc.id as any)}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-full border transition ${
+                                                accent === acc.id 
+                                                    ? 'border-white bg-neutral-800 text-white' 
+                                                    : 'border-neutral-800 bg-neutral-900 text-neutral-400 hover:bg-neutral-800'
+                                            }`}
+                                        >
+                                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: acc.color }}></div>
+                                            {acc.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                )}
 
                 {/* Keyboard Shortcuts Reference */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">

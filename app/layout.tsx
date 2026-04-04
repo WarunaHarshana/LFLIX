@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-
+import { ThemeProvider } from "./components/ThemeProvider";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -25,11 +25,27 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var theme = localStorage.getItem('lflix-theme') || 'dark';
+                var accent = localStorage.getItem('lflix-accent') || 'default';
+                document.documentElement.setAttribute('data-theme', theme);
+                document.documentElement.setAttribute('data-accent', accent);
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[var(--background)]`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[var(--background)] transition-colors duration-300`}
         suppressHydrationWarning
       >
-        {children}
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

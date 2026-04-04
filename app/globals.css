@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root {
+:root, [data-theme="oled"] {
   --background: #000000;
   --foreground: #f5f5f5;
 
@@ -28,6 +28,44 @@
   --btn-secondary-bg: rgba(64, 64, 64, 0.85);
   --btn-secondary-bg-hover: rgba(82, 82, 82, 0.95);
   --btn-secondary-text: #f5f5f5;
+}
+
+[data-theme="dark"] {
+  --background: #141414;
+  --foreground: #e5e5e5;
+
+  --surface-1: #1f1f1f;
+  --surface-2: #262626;
+  --surface-3: #3f3f46;
+  --surface-hover: #52525b;
+
+  --border-subtle: #262626;
+  --border-default: #3f3f46;
+  --border-strong: #52525b;
+}
+
+[data-accent="red"] {
+  --btn-primary-bg: #e50914;
+  --btn-primary-text: #ffffff;
+  --btn-primary-hover: #f40612;
+}
+
+[data-accent="blue"] {
+  --btn-primary-bg: #3b82f6;
+  --btn-primary-text: #ffffff;
+  --btn-primary-hover: #60a5fa;
+}
+
+[data-accent="purple"] {
+  --btn-primary-bg: #8b5cf6;
+  --btn-primary-text: #ffffff;
+  --btn-primary-hover: #a78bfa;
+}
+
+[data-accent="green"] {
+  --btn-primary-bg: #10b981;
+  --btn-primary-text: #ffffff;
+  --btn-primary-hover: #34d399;
 }
 
 @theme inline {
