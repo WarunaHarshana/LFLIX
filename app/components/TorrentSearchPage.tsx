@@ -303,7 +303,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                         {['Vikings S01E01', 'Inception 2010 1080p', 'Breaking Bad S05E16 4K', 'Interstellar BluRay'].map(q => (
                             <button
                                 key={q}
-                                onClick={() => { setSearchQuery(q); }}
+                                onClick={() => { setSearchQuery(q); executeSearch(q); }}
                                 className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 text-xs rounded-lg transition"
                             >
                                 {q}
@@ -494,12 +494,14 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                     key={item.tmdbId}
                                     onClick={() => {
                                         setSearchQuery(item.title);
+                                        executeSearch(item.title);
                                         inputRef.current?.focus();
                                     }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' || e.key === ' ') {
                                             e.preventDefault();
                                             setSearchQuery(item.title);
+                                            executeSearch(item.title);
                                             inputRef.current?.focus();
                                         }
                                     }}

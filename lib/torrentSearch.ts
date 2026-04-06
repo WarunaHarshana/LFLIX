@@ -472,10 +472,11 @@ export async function searchTorrents(
     title: string,
     options?: { year?: string; type?: 'movie' | 'tv' }
 ): Promise<TorrentResult[]> {
-    const query = options?.year ? `${title} ${options.year}` : title;
+    // Use title without appending year directly, as appending year drops many valid tracker results
+    const query = title;
 
-    // Determine TPB category: 201 = Movies, 205 = TV, 200 = all video
-    const tpbCategory = options?.type === 'tv' ? '205' : options?.type === 'movie' ? '201' : '200';
+    // Always use 200 (All Video) for TPB to ensure we don't filter out HD categories (207, 208)
+    const tpbCategory = '200';
 
     // Search ALL sources in parallel — working ones contribute, blocked ones fail silently
     const [tpbResults, ytsResults, knabenResults, nyaaResults, ddlResults] = await Promise.allSettled([
