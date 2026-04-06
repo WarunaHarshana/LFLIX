@@ -45,6 +45,14 @@ export async function GET(req: Request) {
 
             const logoPath = pickBestLogoPath((movie as any).images?.logos);
 
+            const collectionRaw = (movie as any).belongs_to_collection;
+            const collection = collectionRaw ? {
+                id: collectionRaw.id,
+                name: collectionRaw.name,
+                posterPath: collectionRaw.poster_path || null,
+                backdropPath: collectionRaw.backdrop_path || null,
+            } : null;
+
             return NextResponse.json({
                 id: movie.id,
                 title: movie.title || 'Unknown',
@@ -57,6 +65,7 @@ export async function GET(req: Request) {
                 tagline: movie.tagline || null,
                 genres: (movie.genres || []).map((g: any) => g.name).join(', '),
                 logoPath,
+                collection,
                 cast: ((movie as any).credits?.cast || []).slice(0, 8).map((c: any) => ({
                     id: c.id,
                     name: c.name,

@@ -104,8 +104,14 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
 
             {/* Format tags */}
             {(() => {
+                if (item.filePath === undefined) return null;
                 const tags: { label: string; cls: string }[] = [];
-                const fp = item.filePath?.toUpperCase() || '';
+                const fp = item.filePath.toUpperCase();
+                
+                if (item.resolution) {
+                    tags.push({ label: item.resolution === '2160p' ? '4K' : item.resolution, cls: 'bg-blue-500/90 text-white' });
+                }
+
                 if (item.isHDR || /\bHDR\b/.test(fp))
                     tags.push({ label: /HDR10\+|HDR10PLUS/.test(fp) ? 'HDR10+' : /HDR10/.test(fp) ? 'HDR10' : 'HDR', cls: 'bg-amber-500/90 text-black' });
                 if (/\bDOVI\b|\bDV\b|DOLBY.?VISION/.test(fp))
@@ -119,9 +125,9 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
                 if (tags.length === 0 && !item.isHDR)
                     tags.push({ label: 'SDR', cls: 'bg-neutral-600/80 text-neutral-200' });
                 return tags.length > 0 ? (
-                    <div className="absolute top-2 left-2 flex flex-col gap-1">
+                    <div className="absolute top-2 left-2 flex flex-col gap-1 z-10 pointer-events-none">
                         {tags.map((t, i) => (
-                            <span key={i} className={`px-1.5 py-0.5 text-[10px] rounded font-bold tracking-wide backdrop-blur-sm ${t.cls}`}>{t.label}</span>
+                            <span key={i} className={`px-1.5 py-0.5 text-[10px] rounded font-bold tracking-wide backdrop-blur-sm shadow-sm ${t.cls}`}>{t.label}</span>
                         ))}
                     </div>
                 ) : null;

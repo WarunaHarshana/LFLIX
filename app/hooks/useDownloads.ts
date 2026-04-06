@@ -36,5 +36,5 @@ export function useDownloads() {
     };
   }, [fetchActiveDownloads]);
 
-  return { activeDownloads, showDownloads, setShowDownloads };
+  return { activeDownloads, showDownloads, setShowDownloads, fetchDownloads: fetchActiveDownloads };
 }

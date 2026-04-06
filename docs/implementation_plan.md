@@ -49,20 +49,12 @@ LFLIX is a feature-rich local media server with **30 components**, **36 API rout
 
 | # | Feature | Effort | Impact | Status |
 |---|---------|--------|--------|--------|
-| 12 | **Better mobile layout** — Optimize card sizes, navigation, and modals for mobile/tablet screens | Large | 🔥🔥🔥 | Completed |
+
 | 13 | **Drag & drop torrent files or magnet links** — Drop a `.torrent` file or magnet link anywhere to start downloading | Medium | 🔥🔥 | Pending |
 
 ---
 
-### 🟡 Phase 2: Architecture & Performance
 
-| # | Feature | Effort | Impact | Status |
-|---|---------|--------|--------|--------|
-| 18 | **Lazy load components** — Use `React.lazy()` + `Suspense` for heavy modals (StreamServer, IPTV, Torrent, Downloads). Cuts initial bundle size | Small | 🔥🔥 | Completed |
-| 19 | **Image optimization** — Use Next.js `<Image>` component with automatic poster/backdrop resizing instead of raw `<img>` tags | Medium | 🔥🔥 | Completed |
-| 21 | **Background metadata refresh** — Periodic background job to re-fetch TMDB data for items with missing posters/ratings | Medium | 🔥 | Completed |
-
----
 
 ### 🔴 Phase 3: New Features
 
@@ -90,14 +82,14 @@ LFLIX is a feature-rich local media server with **30 components**, **36 API rout
 | 18 | Lazy load heavy components | `app/page.tsx` |
 | 19 | Next.js Image optimization | `app/components/TMDBImage.tsx`, `next.config.ts`, Various components |
 | 21 | Background metadata refresh | `lib/watcher.ts` |
+| 12 | Better mobile layout & Connect Fix | `package.json`, Multiple Components |
 
 ---
 
 ## Next Priority Recommendation
 
-Phase 2 (Architecture & Performance) is complete! The highest-impact remaining tasks from the roadmap are:
+The highest-impact remaining tasks from the roadmap are:
 
 1. **#4 Collections/Lists** — Custom playlists for curated movie nights and marathons.
 2. **#23 Built-in subtitle search** — Search and download subtitles from OpenSubtitles directly.
-3. **#12 Better mobile layout** — Optimize UI for smaller screens.
-4. **#13 Drag & drop torrent files** — Effortless downloading mechanism.
+3. **#13 Drag & drop torrent files** — Effortless downloading mechanism.

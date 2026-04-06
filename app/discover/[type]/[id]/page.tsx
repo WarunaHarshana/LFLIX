@@ -47,7 +47,31 @@ type MovieDetails = {
   tagline: string | null;
   genres: string;
   logoPath: string | null;
+  collection: {
+    id: number;
+    name: string;
+    posterPath: string | null;
+    backdropPath: string | null;
+  } | null;
   cast: { id: number; name: string; character: string; profilePath: string | null }[];
+};
+
+type CollectionData = {
+  id: number;
+  name: string;
+  posterPath: string | null;
+  backdropPath: string | null;
+  overview: string | null;
+  parts: {
+    tmdbId: number;
+    title: string;
+    posterPath: string | null;
+    backdropPath: string | null;
+    overview: string | null;
+    rating: number | null;
+    year: string | null;
+    releaseDate: string | null;
+  }[];
 };
 
 type TVDetails = {
@@ -127,6 +151,8 @@ export default function DiscoverDetailPage() {
   const [movieDetails, setMovieDetails] = useState<MovieDetails | null>(null);
   const [tvDetails, setTVDetails] = useState<TVDetails | null>(null);
   const [similarItems, setSimilarItems] = useState<TMDBResult[]>([]);
+  const [collectionData, setCollectionData] = useState<CollectionData | null>(null);
+  const [loadingCollection, setLoadingCollection] = useState(false);
 
   const [trailerLoading, setTrailerLoading] = useState(false);
   const [trailer, setTrailer] = useState<TrailerData | null>(null);
@@ -163,6 +189,7 @@ export default function DiscoverDetailPage() {
       setMovieDetails(null);
       setTVDetails(null);
       setSimilarItems([]);
+      setCollectionData(null);
       setSelectedSeason(null);
       setEpisodes([]);
 
@@ -175,7 +202,24 @@ export default function DiscoverDetailPage() {
         if (!cancelled && detailsResp.status === 'fulfilled' && detailsResp.value.ok) {
           const detailsData = await detailsResp.value.json();
           if (mediaType === 'movie') {
-            setMovieDetails(detailsData as MovieDetails);
+            const movieObj = detailsData as MovieDetails;
+            setMovieDetails(movieObj);
+            
+            // If it belongs to a collection, fetch collection details
+            if (movieObj.collection?.id) {
+              setLoadingCollection(true);
+              try {
+                const collectionResp = await fetch(`/api/tmdb-collection?id=${movieObj.collection.id}`);
+                if (!cancelled && collectionResp.ok) {
+                  const collData = await collectionResp.json();
+                  setCollectionData(collData as CollectionData);
+                }
+              } catch (e) {
+                console.error('Failed to fetch collection data', e);
+              } finally {
+                if (!cancelled) setLoadingCollection(false);
+              }
+            }
           } else {
             const tvData = detailsData as TVDetails;
             setTVDetails(tvData);
@@ -669,6 +713,51 @@ export default function DiscoverDetailPage() {
               </div>
             ) : (
               <p className="text-sm text-neutral-500">No episodes available for this season.</p>
+            )}
+          </section>
+        )}
+
+        {(loadingCollection || collectionData) && (
+          <section className="mb-10">
+            <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <Film className="w-5 h-5 text-blue-500" />
+              {collectionData ? `Part of ${collectionData.name}` : 'Loading Collection...'}
+            </h2>
+            {loadingCollection ? (
+              <div className="flex gap-3 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                  <div key={idx} className="w-36 sm:w-44 shrink-0 rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                    <div className="aspect-[2/3] bg-neutral-800" />
+                  </div>
+                ))}
+              </div>
+            ) : collectionData && (
+              <div className="flex gap-3 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar">
+                {collectionData.parts.map((part) => {
+                  const isCurrent = part.tmdbId === tmdbId;
+                  return (
+                    <div key={part.tmdbId} className={`w-36 sm:w-44 shrink-0 ${isCurrent ? 'ring-2 ring-blue-500 rounded-xl scale-[1.02] transition-transform' : ''}`}>
+                      <ContentCard
+                        item={{
+                          id: part.tmdbId,
+                          type: 'movie',
+                          title: part.title,
+                          posterPath: part.posterPath,
+                          backdropPath: part.backdropPath,
+                          overview: part.overview,
+                          rating: part.rating,
+                          year: part.year ? parseInt(part.year, 10) : undefined,
+                        }}
+                        onClick={() => {
+                          if (!isCurrent) router.push(`/discover/movie/${part.tmdbId}`);
+                        }}
+                        showProgress={false}
+                        showRating
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </section>
         )}

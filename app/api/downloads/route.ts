@@ -17,16 +17,48 @@ export async function GET() {
 // POST — start a new download (torrent or HTTP direct)
 export async function POST(req: Request) {
     try {
-        const { magnetUri, httpUrl, watchlistId, downloadPath } = await req.json();
+        const { magnetUri, httpUrl, watchlistId, downloadPath, torrentBase64, filename } = await req.json();
 
-        // Support both magnet URIs and HTTP direct download URLs
-        const uri = magnetUri || (httpUrl ? `http-direct:${httpUrl}` : null);
+        let uri = magnetUri || (httpUrl ? `http-direct:${httpUrl}` : null);
 
-        if (!uri) {
-            return NextResponse.json({ error: 'Missing magnetUri or httpUrl' }, { status: 400 });
+        if (torrentBase64 && filename) {
+            const fs = require('fs');
+            const path = require('path');
+            
+            let resolvedDownloadPath = downloadPath;
+            if (!resolvedDownloadPath) {
+                const db = require('@/lib/db').default;
+                try {
+                    const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('downloadPath');
+                    if (setting?.value && fs.existsSync(setting.value)) {
+                        resolvedDownloadPath = setting.value;
+                    }
+                } catch { /* ignore */ }
+                if (!resolvedDownloadPath) {
+                    resolvedDownloadPath = path.join(process.cwd(), 'downloads');
+                }
+            }
+
+            const torrentsDir = path.join(resolvedDownloadPath, '.torrents');
+            if (!fs.existsSync(torrentsDir)) {
+                fs.mkdirSync(torrentsDir, { recursive: true });
+            }
+
+            const uniqueFilename = `${Date.now()}_${filename.replace(/[^a-z0-9.]/gi, '_')}`;
+            const torrentFilePath = path.join(torrentsDir, uniqueFilename);
+            
+            const base64Data = torrentBase64.includes(',') ? torrentBase64.split(',')[1] : torrentBase64;
+            const buffer = Buffer.from(base64Data, 'base64');
+            fs.writeFileSync(torrentFilePath, buffer);
+            
+            uri = torrentFilePath;
         }
 
-        if (!uri.startsWith('magnet:') && !uri.startsWith('http-direct:')) {
+        if (!uri) {
+            return NextResponse.json({ error: 'Missing magnetUri, httpUrl, or torrent file' }, { status: 400 });
+        }
+
+        if (!uri.startsWith('magnet:') && !uri.startsWith('http-direct:') && !uri.endsWith('.torrent')) {
             return NextResponse.json({ error: 'Invalid download URI' }, { status: 400 });
         }
 

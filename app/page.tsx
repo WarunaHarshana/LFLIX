@@ -33,6 +33,7 @@ import FloatingQRButton from './components/FloatingQRButton';
 import MobileSearchModal from './components/MobileSearchModal';
 import PlayChoiceModal from './components/PlayChoiceModal';
 import DetailTabNav from './components/DetailTabNav';
+import GlobalDropzone from './components/GlobalDropzone';
 
 // Section components (lightweight, used on main page)
 import HeroSection from './components/HeroSection';
@@ -689,6 +690,9 @@ export default function Home() {
 
       {/* Downloads Panel */}
       <DownloadsPanel isOpen={showDownloads} onClose={() => setShowDownloads(false)} />
+
+      {/* Global Drag & Drop Zone */}
+      <GlobalDropzone />
 
     </main>
   );

@@ -62,6 +62,12 @@ type TmdbMovieDetails = {
     tagline: string | null;
     genres: string;
     runtime: number | null;
+    collection: {
+        id: number;
+        name: string;
+        posterPath: string | null;
+        backdropPath: string | null;
+    } | null;
     cast: TmdbCast[];
 };
 
@@ -97,6 +103,24 @@ type PersonDetails = {
     credits: PersonCredit[];
 };
 
+type CollectionData = {
+    id: number;
+    name: string;
+    posterPath: string | null;
+    backdropPath: string | null;
+    overview: string | null;
+    parts: {
+        tmdbId: number;
+        title: string;
+        posterPath: string | null;
+        backdropPath: string | null;
+        overview: string | null;
+        rating: number | null;
+        year: string | null;
+        releaseDate: string | null;
+    }[];
+};
+
 function formatDuration(seconds: number): string {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -126,6 +150,8 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
     const [loadingTmdbDetails, setLoadingTmdbDetails] = useState(false);
     const [similarItems, setSimilarItems] = useState<TmdbResult[]>([]);
     const [loadingSimilar, setLoadingSimilar] = useState(false);
+    const [collectionData, setCollectionData] = useState<CollectionData | null>(null);
+    const [loadingCollection, setLoadingCollection] = useState(false);
 
     const [personModalOpen, setPersonModalOpen] = useState(false);
     const [personData, setPersonData] = useState<PersonDetails | null>(null);
@@ -150,8 +176,10 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                 setTmdbMovieDetails(null);
                 setTmdbTvDetails(null);
                 setSimilarItems([]);
+                setCollectionData(null);
                 setLoadingTmdbDetails(false);
                 setLoadingSimilar(false);
+                setLoadingCollection(false);
                 return;
             }
 
@@ -160,6 +188,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
             setTmdbMovieDetails(null);
             setTmdbTvDetails(null);
             setSimilarItems([]);
+            setCollectionData(null);
 
             try {
                 const [detailsResp, similarResp] = await Promise.allSettled([
@@ -171,6 +200,18 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                     const detailsData = await detailsResp.value.json();
                     if (mediaType === 'movie') {
                         setTmdbMovieDetails(detailsData);
+                        if (detailsData.collection?.id) {
+                            setLoadingCollection(true);
+                            fetch(`/api/tmdb-collection?id=${detailsData.collection.id}`)
+                                .then(res => res.json())
+                                .then(collData => {
+                                    if (!cancelled) setCollectionData(collData as CollectionData);
+                                })
+                                .catch(e => console.error('Failed to fetch modal collection data', e))
+                                .finally(() => {
+                                    if (!cancelled) setLoadingCollection(false);
+                                });
+                        }
                     } else {
                         setTmdbTvDetails(detailsData);
                     }
@@ -448,6 +489,64 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     </button>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Collection */}
+                    {(loadingCollection || collectionData) && (
+                        <div className="mb-6">
+                            <h3 className="text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Film className="w-4 h-4" />
+                                {collectionData ? `Part of ${collectionData.name}` : 'Loading Collection...'}
+                            </h3>
+                            {loadingCollection ? (
+                                <div className="flex gap-2 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar">
+                                    {Array.from({ length: 4 }).map((_, idx) => (
+                                        <div key={idx} className="w-28 sm:w-36 shrink-0 rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                                            <div className="aspect-[2/3] bg-neutral-800" />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : collectionData && (
+                                <div className="flex gap-2 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar">
+                                    {collectionData.parts.map((part) => {
+                                        const isCurrent = part.tmdbId === item.tmdbId;
+                                        return (
+                                            <div key={part.tmdbId} className={`w-28 sm:w-36 shrink-0 ${isCurrent ? 'ring-2 ring-blue-500 rounded-xl scale-[1.02] transition-transform' : ''}`}>
+                                                <ContentCard
+                                                    item={{
+                                                        id: part.tmdbId,
+                                                        type: 'movie',
+                                                        title: part.title,
+                                                        posterPath: part.posterPath,
+                                                        backdropPath: part.backdropPath,
+                                                        overview: part.overview,
+                                                        rating: part.rating,
+                                                        year: part.year ? parseInt(part.year, 10) : undefined,
+                                                    }}
+                                                    onClick={() => {
+                                                        if (!isCurrent && onOpenOnline) {
+                                                            onOpenOnline({
+                                                                tmdbId: part.tmdbId,
+                                                                mediaType: 'movie',
+                                                                title: part.title,
+                                                                posterPath: part.posterPath,
+                                                                backdropPath: part.backdropPath,
+                                                                overview: part.overview,
+                                                                rating: part.rating,
+                                                                year: part.year,
+                                                                popularity: 0,
+                                                            });
+                                                        }
+                                                    }}
+                                                    showProgress={false}
+                                                    showRating
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
 
