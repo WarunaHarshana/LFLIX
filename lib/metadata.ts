@@ -144,7 +144,17 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
   };
 
   try {
-    const res = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: rawName, year: year }));
+    let res = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: rawName, year: year }));
+
+    // Fallback 1: Year might actually be part of the title (e.g., Blade Runner 2049, 2001 A Space Odyssey)
+    if ((!res.results || res.results.length === 0) && year) {
+      res = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: `${rawName} ${year}`.trim() }));
+    }
+
+    // Fallback 2: The extracted year might be incorrect or missing from TMDB, try without it
+    if ((!res.results || res.results.length === 0) && year) {
+      res = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: rawName }));
+    }
 
     if (res.results && res.results.length > 0) {
       const hit = res.results[0];
