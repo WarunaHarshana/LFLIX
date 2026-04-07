@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff } from 'lucide-react';
+import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 
 type Episode = {
@@ -64,6 +64,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     const [showStreamServers, setShowStreamServers] = useState(false);
     const [showRatingGrid, setShowRatingGrid] = useState(true);
     const [hoveredRating, setHoveredRating] = useState<{ season: number; episode: number; rating: number | null; x: number; y: number } | null>(null);
+    const [isDownloadingMissing, setIsDownloadingMissing] = useState(false);
 
     // Reset active season when seasons change (new show opened)
     useEffect(() => {
@@ -83,6 +84,30 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
             onDeleteEpisode(contextMenu.episode.id);
         }
         setContextMenu(null);
+    };
+
+    const handleDownloadMissing = async () => {
+        if (!show.tmdbId) return;
+        setIsDownloadingMissing(true);
+        try {
+            const res = await fetch('/api/auto-download/season', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    showId: show.id,
+                    tmdbId: show.tmdbId,
+                    seasonNumber: activeSeason
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                // Could toast here if we had a toast system
+                console.log(data.message);
+            }
+        } catch { /* ignore */ }
+        
+        // Brief timeout so button doesn't flash immediately on quick resolves
+        setTimeout(() => setIsDownloadingMissing(false), 1000);
     };
 
     return (
@@ -410,13 +435,26 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
 
                         {/* Episode List */}
                         <div className="flex-1 overflow-y-auto p-4 sm:p-8">
-                            <h3 className="text-lg font-bold mb-4 text-neutral-300 flex items-center gap-2">
-                                <ChevronDown className="w-4 h-4" />
-                                {seasons.length > 1 ? `Season ${activeSeason}` : 'Episodes'}
-                                <span className="text-neutral-500 font-normal">
-                                    ({currentSeason?.episodes.length || 0} episodes)
-                                </span>
-                            </h3>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-bold text-neutral-300 flex items-center gap-2">
+                                    <ChevronDown className="w-4 h-4" />
+                                    {seasons.length > 1 ? `Season ${activeSeason}` : 'Episodes'}
+                                    <span className="text-neutral-500 font-normal">
+                                        ({currentSeason?.episodes.length || 0} local)
+                                    </span>
+                                </h3>
+                                {show.tmdbId && (
+                                    <button
+                                        onClick={handleDownloadMissing}
+                                        disabled={isDownloadingMissing}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs font-semibold text-neutral-300 rounded-lg transition border border-neutral-700"
+                                        title={`Download missing episodes in Season ${activeSeason}`}
+                                    >
+                                        <DownloadCloud className={`w-3.5 h-3.5 ${isDownloadingMissing ? 'animate-pulse text-blue-400' : ''}`} />
+                                        {isDownloadingMissing ? 'Checking...' : 'Fetch Missing'}
+                                    </button>
+                                )}
+                            </div>
 
                             {loading ? (
                                 <div className="flex justify-center py-10">

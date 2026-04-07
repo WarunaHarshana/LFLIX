@@ -180,6 +180,50 @@ db.exec(`
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (serverId, tmdbId, mediaType, seasonNumber, episodeNumber)
   );
+
+  -- Auto-track: which shows to monitor for new episodes
+  CREATE TABLE IF NOT EXISTS auto_track (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    showId INTEGER NOT NULL,
+    tmdbId INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    qualityPreference TEXT DEFAULT '1080p',
+    lastCheckedAt DATETIME,
+    addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(showId)
+  );
+
+  -- In-app notifications log
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    showId INTEGER,
+    tmdbId INTEGER,
+    seasonNumber INTEGER,
+    episodeNumber INTEGER,
+    posterPath TEXT,
+    read INTEGER DEFAULT 0,
+    actionUrl TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Episode release tracking cache
+  CREATE TABLE IF NOT EXISTS episode_releases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tmdbId INTEGER NOT NULL,
+    seasonNumber INTEGER NOT NULL,
+    episodeNumber INTEGER NOT NULL,
+    episodeTitle TEXT,
+    airDate TEXT,
+    notified INTEGER DEFAULT 0,
+    downloadAttempted INTEGER DEFAULT 0,
+    downloadId INTEGER,
+    lastAttemptAt DATETIME,
+    UNIQUE(tmdbId, seasonNumber, episodeNumber)
+  );
 `);
 
 // Create indexes for frequently queried columns
@@ -212,11 +256,22 @@ db.exec(`
 
   -- Downloads: filtered by status
   CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
+
+  -- Auto-track: lookup by showId and tmdbId
+  CREATE INDEX IF NOT EXISTS idx_auto_track_showId ON auto_track(showId);
+  CREATE INDEX IF NOT EXISTS idx_auto_track_tmdbId ON auto_track(tmdbId);
+
+  -- Notifications: filtered by read status, sorted by creation
+  CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
+  CREATE INDEX IF NOT EXISTS idx_notifications_createdAt ON notifications(createdAt DESC);
+
+  -- Episode releases: lookup by tmdbId
+  CREATE INDEX IF NOT EXISTS idx_episode_releases_tmdbId ON episode_releases(tmdbId);
 `);
 
 // Run migrations for existing databases (add columns if they don't exist)
 // WHITELIST of valid tables and columns to prevent SQL injection
-const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads'];
+const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads', 'auto_track', 'notifications', 'episode_releases'];
 const VALID_COLUMNS: Record<string, string[]> = {
   movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   shows: ['genres', 'backdropPath', 'overview', 'rating'],

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { X, Play, Star, Clock, Film, Tv, Loader2, PlayCircle, Globe, User } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { X, Play, Star, Clock, Film, Tv, Loader2, PlayCircle, Globe, User, BellRing, BellOff } from 'lucide-react';
 import TrailerModal from './TrailerModal';
 import StreamServerModal from './StreamServerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from './ContentCard';
@@ -163,6 +163,71 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
         ? (item.watchProgress.progress / item.watchProgress.duration) * 100
         : 0;
     const mediaType = item.type === 'show' ? 'tv' : 'movie';
+
+    // Auto-track state (TV shows only)
+    const [isTracking, setIsTracking] = useState(false);
+    const [trackLoading, setTrackLoading] = useState(false);
+    const [qualityPref, setQualityPref] = useState('best');
+
+    // Check if show is being tracked
+    const checkTrackingStatus = useCallback(async () => {
+        if (item.type !== 'show' || !item.tmdbId) return;
+        try {
+            const res = await fetch('/api/auto-track');
+            if (!res.ok) return;
+            const data = await res.json();
+            const tracked = (data.tracked || []).find((t: any) => t.showId === item.id);
+            if (tracked) {
+                setIsTracking(!!tracked.enabled);
+                setQualityPref(tracked.qualityPreference || 'best');
+            } else {
+                setIsTracking(false);
+            }
+        } catch { /* ignore */ }
+    }, [item.id, item.type, item.tmdbId]);
+
+    useEffect(() => {
+        checkTrackingStatus();
+    }, [checkTrackingStatus]);
+
+    const toggleTracking = async () => {
+        if (!item.tmdbId) return;
+        setTrackLoading(true);
+        try {
+            if (isTracking) {
+                // Remove tracking
+                await fetch(`/api/auto-track?showId=${item.id}`, { method: 'DELETE' });
+                setIsTracking(false);
+            } else {
+                // Add tracking
+                await fetch('/api/auto-track', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        showId: item.id,
+                        tmdbId: item.tmdbId,
+                        title: item.title,
+                        qualityPreference: qualityPref,
+                    }),
+                });
+                setIsTracking(true);
+            }
+        } catch { /* ignore */ }
+        setTrackLoading(false);
+    };
+
+    const updateQualityPref = async (quality: string) => {
+        setQualityPref(quality);
+        if (isTracking) {
+            try {
+                await fetch('/api/auto-track', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ showId: item.id, qualityPreference: quality }),
+                });
+            } catch { /* ignore */ }
+        }
+    };
 
     const activeDetails = mediaType === 'movie' ? tmdbMovieDetails : tmdbTvDetails;
     const displayOverview = activeDetails?.overview || item.overview;
@@ -405,6 +470,41 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     </button>
                                 )}
                             </div>
+
+                            {/* Auto-Track Toggle (TV Shows only) */}
+                            {item.type === 'show' && item.tmdbId && (
+                                <div className="flex items-center gap-2 mt-3">
+                                    <button
+                                        onClick={toggleTracking}
+                                        disabled={trackLoading}
+                                        className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-semibold transition-all ${
+                                            isTracking
+                                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 hover:bg-blue-500/30'
+                                                : 'bg-neutral-700/50 text-neutral-400 border border-neutral-600/50 hover:bg-neutral-700 hover:text-white'
+                                        } ${trackLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                        title={isTracking ? 'Stop tracking new episodes' : 'Auto-track new episodes & download'}
+                                        id="auto-track-toggle"
+                                    >
+                                        {isTracking ? <BellRing className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
+                                        {isTracking ? 'Tracking' : 'Auto-Track'}
+                                    </button>
+                                    {isTracking && (
+                                        <select
+                                            value={qualityPref}
+                                            onChange={(e) => updateQualityPref(e.target.value)}
+                                            className="bg-neutral-800 text-neutral-300 text-xs rounded-lg px-2 py-1.5 border border-neutral-700 focus:outline-none focus:border-blue-500 cursor-pointer"
+                                            title="Preferred download quality"
+                                            id="quality-preference-select"
+                                        >
+                                            <option value="best">Best Available Quality</option>
+                                            <option value="2160p">4K / 2160p</option>
+                                            <option value="1080p">1080p</option>
+                                            <option value="720p">720p</option>
+                                            <option value="any">Fallback (Any)</option>
+                                        </select>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

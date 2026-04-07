@@ -661,6 +661,38 @@ setImmediate(async () => {
         setTimeout(async () => {
             try { await downloadManager.recoverAll(); } catch (e) { console.error('[DownloadManager] Recovery failed:', e); }
         }, 1500);
+
+        // Start Release Monitor & Auto Downloader after a delay to let the server fully boot
+        setTimeout(async () => {
+            try {
+                const { default: releaseMonitor } = await import('./releaseMonitor');
+                const { default: autoDownloader } = await import('./autoDownloader');
+
+                // Start the release monitor (checks every 30 minutes)
+                releaseMonitor.start(30 * 60 * 1000);
+                console.log('[Startup] Release monitor started');
+
+                // Retry any pending episode downloads from previous sessions
+                autoDownloader.retryPendingEpisodes().catch(e =>
+                    console.error('[Startup] Auto-download retry failed:', e)
+                );
+                console.log('[Startup] Auto-downloader initialized');
+
+                // Hook: when release monitor finds new episodes, auto-download them
+                const originalCheckAll = releaseMonitor.checkAllTrackedShows.bind(releaseMonitor);
+                releaseMonitor.checkAllTrackedShows = async () => {
+                    const newEpisodes = await originalCheckAll();
+                    if (newEpisodes.length > 0) {
+                        autoDownloader.processNewEpisodes(newEpisodes).catch(e =>
+                            console.error('[Startup] Auto-download processing failed:', e)
+                        );
+                    }
+                    return newEpisodes;
+                };
+            } catch (e) {
+                console.error('[Startup] Release monitor / auto-downloader init failed:', e);
+            }
+        }, 5000);
     } catch (e) {
         console.error('[DownloadManager] Startup init failed:', e);
     }

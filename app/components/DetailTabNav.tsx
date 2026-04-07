@@ -22,6 +22,7 @@ import { Search } from 'lucide-react';
 import MobileConnectModal from './MobileConnectModal';
 import DlnaModal from './DlnaModal';
 import DownloadsPanel from './DownloadsPanel';
+import NotificationBell from './NotificationBell';
 
 type TabId = 'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'discover';
 
@@ -247,25 +248,6 @@ export default function DetailTabNav({
 
           <button
             onClick={() => {
-              if (onShowDownloads) {
-                onShowDownloads();
-              } else {
-                setInternalShowDownloads(true);
-              }
-            }}
-            className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center relative"
-            title="Downloads"
-          >
-            <Download className="w-6 h-6" />
-            {activeDownloads > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-amber-500 text-black text-[10px] font-bold rounded-full flex items-center justify-center">
-                {activeDownloads}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => {
               if (onToggleBrowserPlayer) {
                 onToggleBrowserPlayer();
               } else {
@@ -303,6 +285,28 @@ export default function DetailTabNav({
           >
             <Plus className="w-7 h-7" />
           </button>
+
+          <button
+            onClick={() => {
+              if (onShowDownloads) {
+                onShowDownloads();
+              } else {
+                setInternalShowDownloads(true);
+              }
+            }}
+            className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center relative"
+            title="Downloads"
+          >
+            <Download className="w-6 h-6" />
+            {activeDownloads > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-amber-500 text-black text-[10px] font-bold rounded-full flex items-center justify-center">
+                {activeDownloads}
+              </span>
+            )}
+          </button>
+
+          {/* Notification Bell */}
+          <NotificationBell />
 
           <Link href={settingsHref} className="p-2 hover:bg-white/10 rounded-full transition" title="Settings">
             <Settings className="w-5 h-5" />
