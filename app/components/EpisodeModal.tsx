@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud } from 'lucide-react';
+import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 
 type Episode = {
@@ -65,6 +65,9 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     const [showRatingGrid, setShowRatingGrid] = useState(true);
     const [hoveredRating, setHoveredRating] = useState<{ season: number; episode: number; rating: number | null; x: number; y: number } | null>(null);
     const [isDownloadingMissing, setIsDownloadingMissing] = useState(false);
+    
+    const [isDownloadingNext, setIsDownloadingNext] = useState(false);
+    const [downloadNextQuery, setDownloadNextQuery] = useState<string | null>(null);
 
     // Reset active season when seasons change (new show opened)
     useEffect(() => {
@@ -108,6 +111,24 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
         
         // Brief timeout so button doesn't flash immediately on quick resolves
         setTimeout(() => setIsDownloadingMissing(false), 1000);
+    };
+
+    const handleDownloadNext = async () => {
+        if (!show.id) return;
+        setIsDownloadingNext(true);
+        try {
+            const res = await fetch(`/api/episodes/next?showId=${show.id}&autoDownload=true`);
+            const data = await res.json();
+            if (res.ok && data.queued) {
+                // Success: autoDownloader will handle it and add it to downloads tab
+                console.log('Download queued automatically');
+            } else {
+                console.error('Failed to queue next episode download', data.error);
+            }
+        } catch(e) {
+            console.error('Network error queueing next episode', e);
+        }
+        setIsDownloadingNext(false);
     };
 
     return (
@@ -444,15 +465,26 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                     </span>
                                 </h3>
                                 {show.tmdbId && (
-                                    <button
-                                        onClick={handleDownloadMissing}
-                                        disabled={isDownloadingMissing}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs font-semibold text-neutral-300 rounded-lg transition border border-neutral-700"
-                                        title={`Download missing episodes in Season ${activeSeason}`}
-                                    >
-                                        <DownloadCloud className={`w-3.5 h-3.5 ${isDownloadingMissing ? 'animate-pulse text-blue-400' : ''}`} />
-                                        {isDownloadingMissing ? 'Checking...' : 'Fetch Missing'}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={handleDownloadNext}
+                                            disabled={isDownloadingNext}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs font-semibold text-neutral-300 rounded-lg transition border border-neutral-700"
+                                            title={`Download next episode globally across all seasons`}
+                                        >
+                                            <Download className={`w-3.5 h-3.5 ${isDownloadingNext ? 'animate-bounce text-blue-400' : ''}`} />
+                                            {isDownloadingNext ? 'Resolving...' : 'Download Next Episode'}
+                                        </button>
+                                        <button
+                                            onClick={handleDownloadMissing}
+                                            disabled={isDownloadingMissing}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs font-semibold text-neutral-300 rounded-lg transition border border-neutral-700"
+                                            title={`Download missing episodes in Season ${activeSeason}`}
+                                        >
+                                            <DownloadCloud className={`w-3.5 h-3.5 ${isDownloadingMissing ? 'animate-pulse text-blue-400' : ''}`} />
+                                            {isDownloadingMissing ? 'Checking...' : 'Fetch Missing'}
+                                        </button>
+                                    </div>
                                 )}
                             </div>
 

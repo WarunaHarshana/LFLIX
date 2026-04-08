@@ -103,16 +103,41 @@ function buildEpisodeQuery(showTitle: string, season: number, episode: number): 
 }
 
 /**
- * Filter torrent results to only include those matching the specific episode.
+ * Filter torrent results to only include those matching the specific episode and exact show name.
  */
-function filterForEpisode(results: TorrentResult[], season: number, episode: number): TorrentResult[] {
-  const sXXeXX = `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`.toLowerCase();
+function filterForEpisode(results: TorrentResult[], showTitle: string, season: number, episode: number): TorrentResult[] {
+  const sXXeXX = `s${String(season).padStart(2, '0')}e${String(episode).padStart(2, '0')}`;
   const altPattern = new RegExp(`${season}x${String(episode).padStart(2, '0')}`, 'i');
+  
+  const showWords = showTitle.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim().split(/\s+/);
 
   return results.filter(r => {
-    const titleLower = r.title.toLowerCase().replace(/[._]/g, ' ');
+    let titleLower = r.title.toLowerCase();
+    
+    // Remove leading [group] tags
+    titleLower = titleLower.replace(/^\[.*?\]\s*/, '');
+    
+    let matchIdx = titleLower.indexOf(sXXeXX);
+    if (matchIdx === -1) {
+      const altMatch = titleLower.match(altPattern);
+      if (altMatch) matchIdx = altMatch.index!;
+    }
+    
     // Must match the specific episode identifier
-    return titleLower.includes(sXXeXX) || altPattern.test(r.title);
+    if (matchIdx === -1) return false;
+    
+    // Validate we haven't picked up a spin-off (like Narcos Mexico instead of Narcos)
+    const prefix = titleLower.substring(0, matchIdx).replace(/[^a-z0-9]/g, ' ').trim().split(/\s+/);
+    const extraWords = prefix.filter(w => 
+        w.length > 0 && 
+        !showWords.includes(w) && 
+        !/^(19|20)\d{2}$/.test(w) &&
+        !['the', 'a', 'an', 'tv'].includes(w)
+    );
+    
+    if (extraWords.length > 0) return false;
+    
+    return true;
   });
 }
 
@@ -162,8 +187,8 @@ class AutoDownloader {
         return false;
       }
 
-      // Filter for the specific episode
-      const episodeResults = filterForEpisode(results, ep.seasonNumber, ep.episodeNumber);
+      // Filter for the specific episode and exact show name
+      const episodeResults = filterForEpisode(results, ep.showTitle, ep.seasonNumber, ep.episodeNumber);
 
       if (episodeResults.length === 0) {
         console.log(`[AutoDownloader] No episode-specific results for "${query}" (${results.length} general results)`);
