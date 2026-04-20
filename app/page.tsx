@@ -535,7 +535,7 @@ export default function Home() {
       )}
 
       {/* Global Search Modal */}
-      {(iptv.showIPTVManager || showMobileConnect || showDlna || showSearchModal) && (
+      {(showMobileConnect || showDlna || showSearchModal) && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]" />
       )}
       <GlobalSearchModal
