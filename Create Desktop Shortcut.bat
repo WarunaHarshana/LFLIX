@@ -15,9 +15,22 @@ set "DESKTOP=%USERPROFILE%\Desktop"
 set "SHORTCUT_NAME=LFLIX.lnk"
 set "TARGET_BAT=%SOURCE_DIR%\Start LFLIX.bat"
 
+:: Resolve Desktop path for systems that redirect Desktop to OneDrive
+if not exist "%DESKTOP%" (
+    for /f "usebackq delims=" %%D in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "DESKTOP=%%D"
+)
+
 echo Source: %SOURCE_DIR%
 echo Desktop: %DESKTOP%
 echo.
+
+if not exist "%DESKTOP%" (
+    echo ERROR: Desktop folder not found!
+    echo Detected path: %DESKTOP%
+    echo.
+    pause
+    goto :eof
+)
 
 :: Check if Start LFLIX.bat exists
 if not exist "%TARGET_BAT%" (
@@ -29,9 +42,6 @@ if not exist "%TARGET_BAT%" (
 )
 
 echo [OK] Start LFLIX.bat found
-
-:: Check for custom icon
-set "ICON_PATH="
 
 :: Check for custom icon
 set "ICON_PATH="
@@ -93,7 +103,7 @@ if exist "%DESKTOP%\%SHORTCUT_NAME%" (
     )
     echo.
     echo Manual workaround:
-    echo 1. Right-click on Desktop -> New -> Shortcut
+    echo 1. Right-click on Desktop -^> New -^> Shortcut
     echo 2. Location: %TARGET_BAT%
     echo 3. Name it: LFLIX
 )
