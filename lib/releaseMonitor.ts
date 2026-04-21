@@ -150,6 +150,8 @@ class ReleaseMonitor {
     const apiKey = getTmdbApiKey();
     const moviedb = new MovieDb(apiKey);
     const newEpisodes: NewEpisodeInfo[] = [];
+    const isInitialSync = !show.lastCheckedAt;
+    let baselineMarked = 0;
 
     // Fetch show info to get number of seasons
     const showInfo = await rateLimitedTmdbCall(() =>
@@ -219,6 +221,15 @@ class ReleaseMonitor {
             VALUES (?, ?, ?, ?, ?)
           `).run(show.tmdbId, seasonNum, ep.episode_number, ep.name || null, airDate);
 
+          if (isInitialSync) {
+            // First-time tracking should establish a baseline, not notify old aired episodes.
+            db.prepare(
+              'UPDATE episode_releases SET notified = 1 WHERE tmdbId = ? AND seasonNumber = ? AND episodeNumber = ?'
+            ).run(show.tmdbId, seasonNum, ep.episode_number);
+            baselineMarked++;
+            continue;
+          }
+
           // Create notification
           const notifMessage = `${show.title} — S${String(seasonNum).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}: ${ep.name || 'New Episode'}`;
 
@@ -243,6 +254,10 @@ class ReleaseMonitor {
       } catch (e) {
         console.error(`[ReleaseMonitor] Error fetching S${seasonNum} for "${show.title}":`, e);
       }
+    }
+
+    if (isInitialSync && baselineMarked > 0) {
+      console.log(`[ReleaseMonitor] Baseline sync for "${show.title}": marked ${baselineMarked} aired episodes as already seen`);
     }
 
     return newEpisodes;

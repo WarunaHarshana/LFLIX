@@ -103,6 +103,12 @@ type PersonDetails = {
     credits: PersonCredit[];
 };
 
+type AutoTrackEntry = {
+    showId: number;
+    enabled: number;
+    qualityPreference: string;
+};
+
 type CollectionData = {
     id: number;
     name: string;
@@ -176,7 +182,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
             const res = await fetch('/api/auto-track');
             if (!res.ok) return;
             const data = await res.json();
-            const tracked = (data.tracked || []).find((t: any) => t.showId === item.id);
+            const tracked = ((data.tracked || []) as AutoTrackEntry[]).find((t) => t.showId === item.id);
             if (tracked) {
                 setIsTracking(!!tracked.enabled);
                 setQualityPref(tracked.qualityPreference || 'best');
@@ -767,7 +773,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                             {!loadingPerson && personData && (
                                 <>
                                     <div className="flex gap-4 mb-5">
-                                        <div className="w-20 h-20 rounded-xl overflow-hidden bg-neutral-800 shrink-0 flex items-center justify-center">
+                                        <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-neutral-800 shrink-0 flex items-center justify-center">
                                             {personData.profilePath ? (
                                                 <TMDBImage
                                                     src={personData.profilePath}
@@ -803,7 +809,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                                             onClick={() => openOnlineResult(credit)}
                                                             className="w-full text-left bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 rounded-xl overflow-hidden transition"
                                                         >
-                                                            <div className="aspect-[2/3] bg-neutral-800">
+                                                            <div className="relative aspect-[2/3] bg-neutral-800">
                                                                 {credit.posterPath ? (
                                                                     <TMDBImage
                                                                         src={credit.posterPath}

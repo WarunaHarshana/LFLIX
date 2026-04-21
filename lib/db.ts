@@ -319,7 +319,7 @@ function addColumnIfNotExists(table: string, column: string, type: string) {
     try {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
       console.log(`Added column ${column} to ${table}`);
-    } catch (e) {
+    } catch {
       // Column might already exist
     }
   }
@@ -351,6 +351,124 @@ for (const [col, type] of MEDIA_INFO_COLS) {
 
 // Add trackRelease column to watchlist (for movie availability tracking)
 addColumnIfNotExists('watchlist', 'trackRelease', 'INTEGER DEFAULT 1');
+
+type ShowDedupRow = {
+  id: number;
+  title: string;
+  tmdbId: number | null;
+  posterPath: string | null;
+  backdropPath: string | null;
+  overview: string | null;
+  rating: number | null;
+  genres: string | null;
+  firstAirDate: string | null;
+  episodeCount: number;
+};
+
+function normalizeShowTitleForDedup(title: string): string {
+  if (!title) return '';
+
+  const normalized = title
+    .toLowerCase()
+    .replace(/[._]/g, ' ')
+    .replace(/[\(\[\{].*?[\)\]\}]/g, ' ')
+    .replace(/\s+(19|20)\d{2}\s*$/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[^a-z0-9]/g, '');
+
+  return normalized || title.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function dedupeShows(): void {
+  const shows = db.prepare(`
+    SELECT s.id, s.title, s.tmdbId, s.posterPath, s.backdropPath, s.overview, s.rating, s.genres, s.firstAirDate,
+      (SELECT COUNT(*) FROM episodes e WHERE e.showId = s.id) as episodeCount
+    FROM shows s
+    ORDER BY s.addedAt ASC
+  `).all() as ShowDedupRow[];
+
+  if (shows.length < 2) return;
+
+  const groups = new Map<string, ShowDedupRow[]>();
+  for (const show of shows) {
+    const key = normalizeShowTitleForDedup(show.title);
+    if (!key) continue;
+    const arr = groups.get(key) || [];
+    arr.push(show);
+    groups.set(key, arr);
+  }
+
+  let mergedCount = 0;
+
+  const tx = db.transaction(() => {
+    for (const [, group] of groups) {
+      if (group.length < 2) continue;
+
+      const hasTmdb = group.some(s => !!s.tmdbId);
+      const distinctTmdb = Array.from(new Set(group.filter(s => !!s.tmdbId).map(s => s.tmdbId)));
+
+      // Never merge shows that clearly map to different TMDB entries.
+      if (distinctTmdb.length > 1) continue;
+
+      // If none has TMDB, avoid aggressive merging to reduce false positives.
+      if (!hasTmdb) continue;
+
+      const scored = [...group].sort((a, b) => {
+        const scoreA = (a.tmdbId ? 100 : 0) + (a.posterPath ? 20 : 0) + (a.episodeCount || 0);
+        const scoreB = (b.tmdbId ? 100 : 0) + (b.posterPath ? 20 : 0) + (b.episodeCount || 0);
+        return scoreB - scoreA;
+      });
+
+      const canonical = scored[0];
+      const duplicates = scored.slice(1);
+
+      for (const dup of duplicates) {
+        db.prepare(`
+          UPDATE shows
+          SET tmdbId = COALESCE(tmdbId, ?),
+              posterPath = COALESCE(posterPath, ?),
+              backdropPath = COALESCE(backdropPath, ?),
+              overview = COALESCE(overview, ?),
+              rating = COALESCE(rating, ?),
+              genres = COALESCE(genres, ?),
+              firstAirDate = COALESCE(firstAirDate, ?)
+          WHERE id = ?
+        `).run(
+          dup.tmdbId,
+          dup.posterPath,
+          dup.backdropPath,
+          dup.overview,
+          dup.rating,
+          dup.genres,
+          dup.firstAirDate,
+          canonical.id
+        );
+
+        db.prepare('UPDATE episodes SET showId = ? WHERE showId = ?').run(canonical.id, dup.id);
+
+        db.prepare('UPDATE OR IGNORE auto_track SET showId = ? WHERE showId = ?').run(canonical.id, dup.id);
+        db.prepare('DELETE FROM auto_track WHERE showId = ?').run(dup.id);
+
+        db.prepare("UPDATE OR IGNORE watch_history SET contentId = ? WHERE contentType = 'show' AND contentId = ?").run(canonical.id, dup.id);
+        db.prepare("DELETE FROM watch_history WHERE contentType = 'show' AND contentId = ?").run(dup.id);
+
+        db.prepare('UPDATE notifications SET showId = ? WHERE showId = ?').run(canonical.id, dup.id);
+
+        db.prepare('DELETE FROM shows WHERE id = ?').run(dup.id);
+        mergedCount++;
+      }
+    }
+  });
+
+  tx();
+
+  if (mergedCount > 0) {
+    console.log(`[DB] Deduped shows: merged ${mergedCount} duplicate entries`);
+  }
+}
+
+dedupeShows();
 
 // IPTV Helper Functions
 export const iptvDb = {
@@ -430,7 +548,7 @@ export const iptvDb = {
       VALUES (?, ?, ?, ?)
     `);
 
-    const insertMany = db.transaction((channels: any[]) => {
+    const insertMany = db.transaction((channels: { name: string; url: string; logo?: string; category?: string }[]) => {
       for (const ch of channels) {
         insert.run(ch.name, ch.url, ch.logo || null, ch.category || 'General');
       }

@@ -15,21 +15,13 @@ export async function GET(req: Request) {
             return NextResponse.json({ results: [] });
         }
 
-        // Add overall timeout to prevent hanging when downloads are active
-        const timeoutMs = 20000; // 20 seconds max
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('Search timed out')), timeoutMs);
-        });
-
-        const results = await Promise.race([
-            searchTorrents(query, { year, type }),
-            timeoutPromise
-        ]);
+        const results = await searchTorrents(query, { year, type });
 
         return NextResponse.json({ results });
-    } catch (e: any) {
-        console.error('Torrent search error:', e.message);
+    } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : 'Unknown error';
+        console.error('Torrent search error:', message);
         // Return partial/empty results instead of error so UI doesn't break
-        return NextResponse.json({ results: [], error: e.message });
+        return NextResponse.json({ results: [], error: message });
     }
 }

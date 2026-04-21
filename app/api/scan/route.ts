@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import db from '@/lib/db';
-import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata } from '@/lib/metadata';
+import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata, normalizeShowName, normalizeShowNameForMatch } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -125,7 +125,6 @@ export async function POST(req: Request) {
       VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @genres)
     `);
 
-    const findShow = db.prepare('SELECT id FROM shows WHERE title = ? OR tmdbId = ?');
     const insertShow = db.prepare(`
       INSERT OR IGNORE INTO shows (title, tmdbId, posterPath, backdropPath, overview, rating, firstAirDate, genres)
       VALUES (@title, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @firstAirDate, @genres)
@@ -150,9 +149,10 @@ export async function POST(req: Request) {
       if (tvInfo) {
         // --- TV SHOW ---
         const rawShowName = tvInfo.name.replace(/[\(\[].*?[\)\]]/g, "").replace(/-$/, "").trim();
+        const normalizedShowName = normalizeShowName(rawShowName) || rawShowName;
 
         // Use shared library to fetch metadata
-        const showMeta = await fetchShowMetadata(rawShowName);
+        const showMeta = await fetchShowMetadata(normalizedShowName);
 
         // Check if show already exists by title OR tmdbId
         let showId: number | bigint = 0;
@@ -166,6 +166,17 @@ export async function POST(req: Request) {
         // Fallback to title check
         if (!existingShow) {
           existingShow = db.prepare('SELECT id FROM shows WHERE title = ?').get(showMeta.title) as { id: number } | undefined;
+        }
+
+        if (!existingShow) {
+          const targetKey = normalizeShowNameForMatch(showMeta.title || normalizedShowName);
+          if (targetKey) {
+            const candidateShows = db.prepare('SELECT id, title FROM shows').all() as { id: number; title: string }[];
+            const matched = candidateShows.find(s => normalizeShowNameForMatch(s.title) === targetKey);
+            if (matched) {
+              existingShow = { id: matched.id };
+            }
+          }
         }
 
         if (existingShow) {

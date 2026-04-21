@@ -197,7 +197,7 @@ class FolderWatcher {
         this.isRefreshing = true;
 
         try {
-            const { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata } = await import('./metadata');
+            const { fetchMovieMetadata, fetchShowMetadata } = await import('./metadata');
 
             // Find items with missing posters
             const moviesNeedRefresh = db.prepare(
@@ -248,6 +248,18 @@ class FolderWatcher {
                 try {
                     const metadata = await fetchShowMetadata(show.title);
                     if (metadata.tmdbId) {
+                        const existing = db.prepare('SELECT id FROM shows WHERE tmdbId = ? AND id != ?').get(metadata.tmdbId, show.id) as { id: number } | undefined;
+
+                        if (existing) {
+                            db.transaction(() => {
+                                db.prepare('UPDATE episodes SET showId = ? WHERE showId = ?').run(existing.id, show.id);
+                                db.prepare('DELETE FROM shows WHERE id = ?').run(show.id);
+                            })();
+                            refreshed++;
+                            await new Promise(r => setTimeout(r, 200));
+                            continue;
+                        }
+
                         db.prepare(`
                             UPDATE shows SET title = @title, tmdbId = @tmdbId, posterPath = @posterPath,
                             backdropPath = @backdropPath, overview = @overview, rating = @rating,

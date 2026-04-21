@@ -96,6 +96,31 @@ export function extractYear(name: string): number | undefined {
   return match ? parseInt(match[0]) : undefined;
 }
 
+export function normalizeShowName(name: string): string {
+  if (!name) return '';
+
+  let normalized = name
+    .replace(/\.[^/.]+$/, '')
+    .replace(/[._]/g, ' ')
+    .replace(/[\(\[\{].*?[\)\]\}]/g, ' ')
+    .replace(/\bS\d{1,2}\s*E\d{1,2}\b/gi, ' ')
+    .replace(/\b\d{1,2}x\d{1,2}\b/gi, ' ')
+    .replace(/\bseason\s*\d+\b/gi, ' ')
+    .replace(/\bepisode\s*\d+\b/gi, ' ')
+    .replace(/\b(2160p|1080p|720p|480p|WEBRip|WEB-DL|BluRay|BDRip|HDTV|x264|x265|H\.?264|H\.?265|HEVC|AAC|AC3|DTS|HDR|HDR10|DV|PROPER|REPACK|Remux)\b/gi, ' ')
+    .replace(/\s+\((19|20)\d{2}\)\s*$/g, ' ')
+    .trim();
+
+  // Remove trailing year only when there is another token before it.
+  normalized = normalized.replace(/\s+(19|20)\d{2}\s*$/g, '').trim();
+
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
+export function normalizeShowNameForMatch(name: string): string {
+  return normalizeShowName(name).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 // --- Metadata Fetching ---
 
 export interface MediaMetadata {
@@ -181,9 +206,12 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
 export async function fetchShowMetadata(showName: string): Promise<MediaMetadata> {
   const apiKey = getTmdbApiKey();
   const moviedb = new MovieDb(apiKey);
+  const normalizedInput = normalizeShowName(showName) || showName.trim();
+  const strippedYear = normalizedInput.replace(/\s+(19|20)\d{2}\s*$/g, '').trim();
+  const hintedYear = extractYear(showName);
 
   const baseData: MediaMetadata = {
-    title: showName,
+    title: normalizedInput || showName,
     tmdbId: null,
     posterPath: null,
     backdropPath: null,
@@ -194,14 +222,41 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
   };
 
   try {
-    const res = await rateLimitedTmdbCall(() => moviedb.searchTv({ query: showName }));
+    const candidates = Array.from(
+      new Set([showName, normalizedInput, strippedYear].map(s => s.trim()).filter(Boolean))
+    );
 
-    if (res.results && res.results.length > 0) {
-      const hit = res.results[0];
+    const targetKey = normalizeShowNameForMatch(normalizedInput || showName);
+
+    for (const query of candidates) {
+      const res = await rateLimitedTmdbCall(() => moviedb.searchTv({ query }));
+      if (!res.results || res.results.length === 0) continue;
+
+      const scored = [...res.results].sort((a, b) => {
+        const aKey = normalizeShowNameForMatch(a.name || '');
+        const bKey = normalizeShowNameForMatch(b.name || '');
+
+        const aNameScore = aKey === targetKey ? 2 : 0;
+        const bNameScore = bKey === targetKey ? 2 : 0;
+
+        const aYear = a.first_air_date ? parseInt(a.first_air_date.substring(0, 4), 10) : undefined;
+        const bYear = b.first_air_date ? parseInt(b.first_air_date.substring(0, 4), 10) : undefined;
+
+        const aYearScore = hintedYear && aYear === hintedYear ? 1 : 0;
+        const bYearScore = hintedYear && bYear === hintedYear ? 1 : 0;
+
+        const aScore = aNameScore + aYearScore;
+        const bScore = bNameScore + bYearScore;
+
+        if (bScore !== aScore) return bScore - aScore;
+        return (b.popularity || 0) - (a.popularity || 0);
+      });
+
+      const hit = scored[0];
       const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'tv') : '';
 
       return {
-        title: hit.name || showName,
+        title: hit.name || normalizedInput || showName,
         tmdbId: hit.id || null,
         posterPath: hit.poster_path || null,
         backdropPath: hit.backdrop_path || null,
@@ -212,7 +267,7 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
       };
     }
   } catch (e) {
-    console.warn(`TMDB fetch failed for show: ${showName}`, e);
+    console.warn(`TMDB fetch failed for show: ${normalizedInput || showName}`, e);
   }
 
   return baseData;

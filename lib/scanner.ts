@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import db from './db';
-import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata } from './metadata';
+import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata, normalizeShowName, normalizeShowNameForMatch } from './metadata';
 import { probeFile } from './mediainfo';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.wmv', '.flv', '.webm', '.ts'];
@@ -174,9 +174,10 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
     if (tvInfo) {
       // Handle TV show
       const rawShowName = tvInfo.name.replace(/[\(\[].*?[\)\]]/g, '').replace(/-$/, '').trim();
+      const normalizedShowName = normalizeShowName(rawShowName) || rawShowName;
 
       // Fetch metadata from TMDB
-      const showMeta = await fetchShowMetadata(rawShowName);
+      const showMeta = await fetchShowMetadata(normalizedShowName);
 
       // Find or create show - using strict TMDB ID check first
       let showId: number | bigint = 0;
@@ -189,6 +190,18 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
       if (!existingShow) {
         // Fallback to title check
         existingShow = db.prepare('SELECT id FROM shows WHERE title = ?').get(showMeta.title) as { id: number } | undefined;
+      }
+
+      if (!existingShow) {
+        // Final fallback: normalize title variants (e.g. "Invincible 2021" -> "Invincible").
+        const targetKey = normalizeShowNameForMatch(showMeta.title || normalizedShowName);
+        if (targetKey) {
+          const candidateShows = db.prepare('SELECT id, title FROM shows').all() as { id: number; title: string }[];
+          const matched = candidateShows.find(s => normalizeShowNameForMatch(s.title) === targetKey);
+          if (matched) {
+            existingShow = { id: matched.id };
+          }
+        }
       }
 
       if (existingShow) {
@@ -289,8 +302,8 @@ export function removeFile(filePath: string): { removed: boolean } {
     console.log('[Scanner] Attempting to remove file:', filePath);
     // Normalize path to ensure matches DB triggers
     // Try original path first
-    let movieResult = db.prepare('DELETE FROM movies WHERE filePath = ?').run(filePath);
-    let epResult = db.prepare('DELETE FROM episodes WHERE filePath = ?').run(filePath);
+    const movieResult = db.prepare('DELETE FROM movies WHERE filePath = ?').run(filePath);
+    const epResult = db.prepare('DELETE FROM episodes WHERE filePath = ?').run(filePath);
 
     if (movieResult.changes === 0 && epResult.changes === 0) {
       // Try with normalized slashes if Windows

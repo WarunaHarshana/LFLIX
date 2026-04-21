@@ -38,9 +38,13 @@ export async function POST(req: Request) {
     const show = db.prepare('SELECT * FROM auto_track WHERE showId = ?').get(showId) as any;
     if (show) {
       // Run check in background (don't block the response)
-      releaseMonitor.checkShow(show).catch(e =>
-        console.error('[AutoTrack] Initial check failed:', e)
-      );
+      releaseMonitor.checkShow(show)
+        .then(() => {
+          db.prepare('UPDATE auto_track SET lastCheckedAt = CURRENT_TIMESTAMP WHERE id = ?').run(show.id);
+        })
+        .catch(e =>
+          console.error('[AutoTrack] Initial check failed:', e)
+        );
     }
 
     return NextResponse.json({ success: true, id: result.lastInsertRowid });

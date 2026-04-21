@@ -173,6 +173,7 @@ export default function DiscoverDetailPage() {
   const [personModalOpen, setPersonModalOpen] = useState(false);
   const [personData, setPersonData] = useState<PersonDetails | null>(null);
   const [loadingPerson, setLoadingPerson] = useState(false);
+  const [visiblePersonCredits, setVisiblePersonCredits] = useState(8);
 
   const activeDetails = mediaType === 'movie' ? movieDetails : tvDetails;
 
@@ -309,6 +310,7 @@ export default function DiscoverDetailPage() {
     setPersonModalOpen(true);
     setPersonData(null);
     setLoadingPerson(true);
+    setVisiblePersonCredits(8);
 
     try {
       const res = await fetch(`/api/tmdb-person?id=${personId}`);
@@ -322,6 +324,10 @@ export default function DiscoverDetailPage() {
     } finally {
       setLoadingPerson(false);
     }
+  };
+
+  const loadMorePersonCredits = () => {
+    setVisiblePersonCredits((prev) => prev + 12);
   };
 
   const syncWatchlistState = async () => {
@@ -836,41 +842,55 @@ export default function DiscoverDetailPage() {
 
                   <h5 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Movies & TV Shows</h5>
                   {personData.credits.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {personData.credits.slice(0, 8).map((credit, idx) => (
-                        <button
-                          key={`${credit.mediaType}-${credit.tmdbId}-${idx}`}
-                          onClick={() => {
-                            setPersonModalOpen(false);
-                            router.push(`/discover/${credit.mediaType}/${credit.tmdbId}`);
-                          }}
-                          className="w-full text-left bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 rounded-xl overflow-hidden transition"
-                        >
-                          <div className="aspect-[2/3] bg-neutral-800">
-                            {credit.posterPath ? (
-                              <img
-                                src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
-                                alt={credit.title}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                {credit.mediaType === 'movie' ? (
-                                  <Film className="w-8 h-8 text-neutral-700" />
-                                ) : (
-                                  <Tv className="w-8 h-8 text-neutral-700" />
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <div className="p-2">
-                            <div className="text-xs font-medium line-clamp-2">{credit.title}</div>
-                            <div className="text-[10px] text-neutral-500 mt-0.5">{credit.year || 'Unknown year'}</div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {personData.credits.slice(0, visiblePersonCredits).map((credit, idx) => (
+                          <button
+                            key={`${credit.mediaType}-${credit.tmdbId}-${idx}`}
+                            onClick={() => {
+                              setPersonModalOpen(false);
+                              router.push(`/discover/${credit.mediaType}/${credit.tmdbId}`);
+                            }}
+                            className="w-full text-left bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 rounded-xl overflow-hidden transition"
+                          >
+                            <div className="aspect-[2/3] bg-neutral-800">
+                              {credit.posterPath ? (
+                                <img
+                                  src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
+                                  alt={credit.title}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  {credit.mediaType === 'movie' ? (
+                                    <Film className="w-8 h-8 text-neutral-700" />
+                                  ) : (
+                                    <Tv className="w-8 h-8 text-neutral-700" />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="p-2">
+                              <div className="text-xs font-medium line-clamp-2">{credit.title}</div>
+                              <div className="text-[10px] text-neutral-500 mt-0.5">{credit.year || 'Unknown year'}</div>
+                              {credit.character && <div className="text-[10px] text-neutral-400 line-clamp-1 mt-1">as {credit.character}</div>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+
+                      {personData.credits.length > visiblePersonCredits && (
+                        <div className="flex justify-center mt-4">
+                          <button
+                            onClick={loadMorePersonCredits}
+                            className="px-4 py-2 text-sm font-semibold rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 transition"
+                          >
+                            See All ({personData.credits.length - visiblePersonCredits} more)
+                          </button>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p className="text-sm text-neutral-500">No credits available.</p>
                   )}
