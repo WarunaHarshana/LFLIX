@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Plus, Check, X, Trash2, Star, Film, Tv, Loader2, Bookmark, Clock, Download, Play, Globe } from 'lucide-react';
+import { Search, Plus, Check, X, Trash2, Star, Film, Tv, Loader2, Bookmark, Clock, Download, Play, Globe, Sparkles } from 'lucide-react';
 import DownloadModal from './DownloadModal';
 import TrailerModal from './TrailerModal';
 
@@ -37,6 +37,13 @@ type Props = {
     onOpenOnline?: (item: TMDBResult) => void;
 };
 
+// Movie availability info from the tracking API
+type MovieAvailability = {
+    tmdbId: number;
+    isAvailable: number | null;
+    bestResult: string | null;
+};
+
 export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Props) {
     const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -49,10 +56,12 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
     const searchInputRef = useRef<HTMLInputElement>(null);
     const [downloadItem, setDownloadItem] = useState<WatchlistItem | null>(null);
     const [trailerItem, setTrailerItem] = useState<{ tmdbId: number; mediaType: 'movie' | 'tv'; title: string } | null>(null);
+    const [availability, setAvailability] = useState<Map<number, MovieAvailability>>(new Map());
 
     // Fetch watchlist on mount
     useEffect(() => {
         fetchWatchlist();
+        fetchAvailability();
     }, []);
 
     const fetchWatchlist = async () => {
@@ -65,6 +74,27 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
         } finally {
             setLoading(false);
         }
+    };
+
+    // Fetch movie availability data
+    const fetchAvailability = async () => {
+        try {
+            const res = await fetch('/api/watchlist/track');
+            const data = await res.json();
+            const map = new Map<number, MovieAvailability>();
+            for (const item of (data.items || [])) {
+                map.set(item.tmdbId, item);
+            }
+            setAvailability(map);
+        } catch (e) {
+            console.error('Failed to load availability', e);
+        }
+    };
+
+    // Check if a movie is available for download
+    const isMovieAvailable = (tmdbId: number) => {
+        const info = availability.get(tmdbId);
+        return info?.isAvailable === 1;
     };
 
     // Debounced TMDB search
@@ -353,11 +383,16 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
                     {watchlist.map((item) => {
                         const inLibrary = isInLibrary(item.tmdbId);
+                        const available = item.mediaType === 'movie' && isMovieAvailable(item.tmdbId);
                         return (
                             <div
                                 key={item.id}
                                 onClick={() => openWatchlistItemOnline(item)}
-                                className="group relative bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 hover:border-neutral-600 transition-all hover:scale-[1.02] hover:shadow-2xl"
+                                className={`group relative bg-neutral-900 rounded-xl overflow-hidden border transition-all hover:scale-[1.02] hover:shadow-2xl ${
+                                    available && !inLibrary
+                                        ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/10 hover:border-emerald-400/70'
+                                        : 'border-neutral-800 hover:border-neutral-600'
+                                }`}
                             >
                                 {/* Poster */}
                                 <div className="aspect-[2/3] bg-neutral-800 relative">
@@ -411,6 +446,12 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                                         {inLibrary && (
                                             <span className="px-1.5 py-0.5 bg-green-500/80 backdrop-blur rounded text-[10px] text-black font-bold">
                                                 IN LIBRARY
+                                            </span>
+                                        )}
+                                        {available && !inLibrary && (
+                                            <span className="px-1.5 py-0.5 bg-emerald-500/90 backdrop-blur rounded text-[10px] text-black font-bold flex items-center gap-0.5 animate-pulse">
+                                                <Sparkles className="w-2.5 h-2.5" />
+                                                AVAILABLE
                                             </span>
                                         )}
                                     </div>

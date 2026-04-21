@@ -224,6 +224,21 @@ db.exec(`
     lastAttemptAt DATETIME,
     UNIQUE(tmdbId, seasonNumber, episodeNumber)
   );
+
+  -- Movie release tracking (watchlist movies availability)
+  CREATE TABLE IF NOT EXISTS movie_releases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tmdbId INTEGER NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    mediaType TEXT NOT NULL DEFAULT 'movie',
+    posterPath TEXT,
+    isAvailable INTEGER DEFAULT 0,
+    notified INTEGER DEFAULT 0,
+    lastCheckedAt DATETIME,
+    availableAt DATETIME,
+    bestResult TEXT,
+    addedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Create indexes for frequently queried columns
@@ -267,17 +282,21 @@ db.exec(`
 
   -- Episode releases: lookup by tmdbId
   CREATE INDEX IF NOT EXISTS idx_episode_releases_tmdbId ON episode_releases(tmdbId);
+
+  -- Movie releases: lookup by tmdbId
+  CREATE INDEX IF NOT EXISTS idx_movie_releases_tmdbId ON movie_releases(tmdbId);
 `);
 
 // Run migrations for existing databases (add columns if they don't exist)
 // WHITELIST of valid tables and columns to prevent SQL injection
-const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads', 'auto_track', 'notifications', 'episode_releases'];
+const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads', 'auto_track', 'notifications', 'episode_releases', 'movie_releases'];
 const VALID_COLUMNS: Record<string, string[]> = {
   movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   shows: ['genres', 'backdropPath', 'overview', 'rating'],
   episodes: ['stillPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
+  watchlist: ['trackRelease'],
   settings: []
 };
 
@@ -329,6 +348,9 @@ for (const [col, type] of MEDIA_INFO_COLS) {
   addColumnIfNotExists('movies', col, type);
   addColumnIfNotExists('episodes', col, type);
 }
+
+// Add trackRelease column to watchlist (for movie availability tracking)
+addColumnIfNotExists('watchlist', 'trackRelease', 'INTEGER DEFAULT 1');
 
 // IPTV Helper Functions
 export const iptvDb = {

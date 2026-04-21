@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Bell, Check, CheckCheck, Trash2, X, Download, Tv, AlertCircle } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2, X, Download, Tv, Film, AlertCircle } from 'lucide-react';
 import { useNotifications, Notification } from '../hooks/useNotifications';
 
 function timeAgo(dateStr: string): string {
@@ -32,6 +32,8 @@ function NotificationIcon({ type }: { type: string }) {
       return <Download size={16} className="text-amber-400" />;
     case 'download_complete':
       return <Check size={16} className="text-emerald-400" />;
+    case 'movie_available':
+      return <Film size={16} className="text-emerald-400" />;
     default:
       return <AlertCircle size={16} className="text-gray-400" />;
   }

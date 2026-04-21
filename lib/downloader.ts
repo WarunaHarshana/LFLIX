@@ -689,6 +689,11 @@ setImmediate(async () => {
                     }
                     return newEpisodes;
                 };
+
+                // Start Movie Release Monitor (checks watchlist movies for availability, notify only)
+                const { default: movieReleaseMonitor } = await import('./movieReleaseMonitor');
+                movieReleaseMonitor.start(60 * 60 * 1000); // Every 60 minutes
+                console.log('[Startup] Movie release monitor started');
             } catch (e) {
                 console.error('[Startup] Release monitor / auto-downloader init failed:', e);
             }
