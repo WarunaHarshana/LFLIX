@@ -468,7 +468,68 @@ function dedupeShows(): void {
   }
 }
 
+function removeEpisodeReleasesIfUntracked(tmdbIds: number[]): number {
+  let removed = 0;
+
+  for (const tmdbId of tmdbIds) {
+    const stillTracked = db
+      .prepare('SELECT 1 FROM auto_track WHERE tmdbId = ? LIMIT 1')
+      .get(tmdbId);
+
+    if (!stillTracked) {
+      removed += db
+        .prepare('DELETE FROM episode_releases WHERE tmdbId = ?')
+        .run(tmdbId).changes;
+    }
+  }
+
+  return removed;
+}
+
+export function removeAutoTrackingForShow(showId: number): { trackingRemoved: number; releasesRemoved: number } {
+  const trackedRows = db
+    .prepare('SELECT DISTINCT tmdbId FROM auto_track WHERE showId = ?')
+    .all(showId) as { tmdbId: number }[];
+
+  const trackingRemoved = db
+    .prepare('DELETE FROM auto_track WHERE showId = ?')
+    .run(showId).changes;
+
+  const releasesRemoved = removeEpisodeReleasesIfUntracked(trackedRows.map(row => row.tmdbId));
+
+  return { trackingRemoved, releasesRemoved };
+}
+
+export function cleanupOrphanedAutoTracks(): { trackingRemoved: number; releasesRemoved: number } {
+  const orphanedRows = db
+    .prepare(`
+      SELECT DISTINCT at.tmdbId
+      FROM auto_track at
+      LEFT JOIN shows s ON s.id = at.showId
+      WHERE s.id IS NULL
+        OR NOT EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
+    `)
+    .all() as { tmdbId: number }[];
+
+  const trackingRemoved = db
+    .prepare(`
+      DELETE FROM auto_track
+      WHERE showId NOT IN (SELECT id FROM shows)
+        OR NOT EXISTS (SELECT 1 FROM episodes e WHERE e.showId = auto_track.showId)
+    `)
+    .run().changes;
+
+  const releasesRemoved = removeEpisodeReleasesIfUntracked(orphanedRows.map(row => row.tmdbId));
+
+  if (trackingRemoved > 0 || releasesRemoved > 0) {
+    console.log(`[DB] Cleaned orphan auto-track rows: ${trackingRemoved} tracking row(s), ${releasesRemoved} release row(s)`);
+  }
+
+  return { trackingRemoved, releasesRemoved };
+}
+
 dedupeShows();
+cleanupOrphanedAutoTracks();
 
 // IPTV Helper Functions
 export const iptvDb = {

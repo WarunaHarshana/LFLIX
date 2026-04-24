@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import db from './db';
+import db, { cleanupOrphanedAutoTracks } from './db';
 import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata, normalizeShowName, normalizeShowNameForMatch } from './metadata';
 import { probeFile } from './mediainfo';
 
@@ -14,9 +14,30 @@ const TV_PATTERNS = [
   /(.+?)[ .\[\(]?(?:ep?(\d+))/i,
 ];
 
-function isVideoFile(filePath: string): boolean {
+export function isVideoFile(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   return VIDEO_EXTENSIONS.includes(ext);
+}
+
+export function getVideoFiles(dir: string, fileList: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return fileList;
+
+  const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const filePath = path.join(dir, file);
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) {
+        getVideoFiles(filePath, fileList);
+      } else if (isVideoFile(filePath)) {
+        fileList.push(filePath);
+      }
+    } catch {
+      // ignore access errors
+    }
+  }
+
+  return fileList;
 }
 
 function detectTvShow(fileName: string): { name: string; season: number; episode: number } | null {
@@ -269,31 +290,20 @@ export async function scanFolder(folderPath: string): Promise<{ added: number; e
   const errors: string[] = [];
   let added = 0;
 
-  function scanDir(dir: string) {
-    if (!fs.existsSync(dir)) return;
-
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-      const filePath = path.join(dir, file);
-      try {
-        const stat = fs.statSync(filePath);
-        if (stat.isDirectory()) {
-          scanDir(filePath);
-        } else if (isVideoFile(filePath)) {
-          const result = db.prepare('SELECT id FROM movies WHERE filePath = ?').get(filePath) ||
-            db.prepare('SELECT id FROM episodes WHERE filePath = ?').get(filePath);
-          if (!result) {
-            // Will be added by watcher or manual scan
-            added++;
-          }
-        }
-      } catch {
-        // ignore
+  const videoFiles = getVideoFiles(folderPath);
+  for (const filePath of videoFiles) {
+    try {
+      const result = await scanFile(filePath);
+      if (result.added) {
+        added++;
       }
+      if (result.error) {
+        errors.push(`${filePath}: ${result.error}`);
+      }
+    } catch (e: any) {
+      errors.push(`${filePath}: ${e.message}`);
     }
   }
-
-  scanDir(folderPath);
   return { added, errors };
 }
 
@@ -324,6 +334,11 @@ export function removeFile(filePath: string): { removed: boolean } {
         movieResult.changes += m.changes;
         epResult.changes += e.changes;
       }
+    }
+
+    if (epResult.changes > 0) {
+      db.prepare('DELETE FROM shows WHERE id NOT IN (SELECT DISTINCT showId FROM episodes)').run();
+      cleanupOrphanedAutoTracks();
     }
 
     console.log('[Scanner] Removal result:', { movieChanges: movieResult.changes, epChanges: epResult.changes });

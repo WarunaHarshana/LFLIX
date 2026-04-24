@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import db from '@/lib/db';
+import db, { cleanupOrphanedAutoTracks } from '@/lib/db';
 import { scanFile } from '@/lib/scanner';
 
 // Mark as dynamic for static export compatibility
@@ -83,6 +83,7 @@ export async function POST() {
           DELETE FROM shows
           WHERE id NOT IN (SELECT DISTINCT showId FROM episodes)
         `).run();
+        cleanupOrphanedAutoTracks();
       } catch (e: any) {
         errors.push(`Cleanup error in ${folderPath}: ${e.message}`);
       }

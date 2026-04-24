@@ -78,6 +78,8 @@ export async function POST(req: Request) {
                         db.transaction(() => {
                             // Move episodes
                             db.prepare('UPDATE episodes SET showId = ? WHERE showId = ?').run(existing.id, show.id);
+                            db.prepare('UPDATE OR IGNORE auto_track SET showId = ? WHERE showId = ?').run(existing.id, show.id);
+                            db.prepare('DELETE FROM auto_track WHERE showId = ?').run(show.id);
                             // Delete duplicate show
                             db.prepare('DELETE FROM shows WHERE id = ?').run(show.id);
                         })();
@@ -194,6 +196,8 @@ async function refreshSingle(id: number, type: 'movie' | 'show') {
                 if (existing) {
                     db.transaction(() => {
                         db.prepare('UPDATE episodes SET showId = ? WHERE showId = ?').run(existing.id, id);
+                        db.prepare('UPDATE OR IGNORE auto_track SET showId = ? WHERE showId = ?').run(existing.id, id);
+                        db.prepare('DELETE FROM auto_track WHERE showId = ?').run(id);
                         db.prepare('DELETE FROM shows WHERE id = ?').run(id);
                     })();
                     return NextResponse.json({ success: true, title: metadata.title, merged: true });

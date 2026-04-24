@@ -19,8 +19,16 @@ export async function POST(req: Request) {
         const qualityPref = trackResult?.qualityPreference || 'best';
 
         // Get show info for notifications
-        const showStmt = db.prepare('SELECT title, posterPath FROM shows WHERE id = ?');
+        const showStmt = db.prepare(`
+            SELECT title, posterPath
+            FROM shows
+            WHERE id = ?
+              AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = shows.id)
+        `);
         const showData = showStmt.get(showId) as { title: string, posterPath: string } | undefined;
+        if (!showData) {
+            return NextResponse.json({ error: 'Show not found in library' }, { status: 404 });
+        }
 
         // Get local episodes for that season
         const localEpsStmt = db.prepare('SELECT episodeNumber FROM episodes WHERE showId = ? AND seasonNumber = ?');

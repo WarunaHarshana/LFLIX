@@ -253,6 +253,8 @@ class FolderWatcher {
                         if (existing) {
                             db.transaction(() => {
                                 db.prepare('UPDATE episodes SET showId = ? WHERE showId = ?').run(existing.id, show.id);
+                                db.prepare('UPDATE OR IGNORE auto_track SET showId = ? WHERE showId = ?').run(existing.id, show.id);
+                                db.prepare('DELETE FROM auto_track WHERE showId = ?').run(show.id);
                                 db.prepare('DELETE FROM shows WHERE id = ?').run(show.id);
                             })();
                             refreshed++;

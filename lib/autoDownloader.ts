@@ -144,6 +144,21 @@ function filterForEpisode(results: TorrentResult[], showTitle: string, season: n
 class AutoDownloader {
   private processing = false;
 
+  private isEpisodeStillEligible(ep: NewEpisodeInfo): boolean {
+    const row = db.prepare(`
+      SELECT 1
+      FROM auto_track at
+      JOIN shows s ON s.id = at.showId
+      WHERE at.showId = ?
+        AND at.tmdbId = ?
+        AND at.enabled = 1
+        AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
+      LIMIT 1
+    `).get(ep.showId, ep.tmdbId);
+
+    return !!row;
+  }
+
   /**
    * Process a list of new episodes from the release monitor.
    * Finds and downloads the best available torrent for each.
@@ -159,6 +174,11 @@ class AutoDownloader {
     try {
       for (const ep of episodes) {
         try {
+          if (!this.isEpisodeStillEligible(ep)) {
+            console.log(`[AutoDownloader] Skipping ${ep.showTitle} S${ep.seasonNumber}E${ep.episodeNumber}: show is no longer tracked`);
+            continue;
+          }
+
           await this.findAndDownload(ep);
           // Small delay between searches to avoid rate limiting
           await new Promise(r => setTimeout(r, 2000));
@@ -175,6 +195,11 @@ class AutoDownloader {
    * Find the best torrent and start downloading for a single episode.
    */
   async findAndDownload(ep: NewEpisodeInfo): Promise<boolean> {
+    if (!this.isEpisodeStillEligible(ep)) {
+      console.log(`[AutoDownloader] Skipping ${ep.showTitle} S${ep.seasonNumber}E${ep.episodeNumber}: show is no longer tracked`);
+      return false;
+    }
+
     const query = buildEpisodeQuery(ep.showTitle, ep.seasonNumber, ep.episodeNumber);
     console.log(`[AutoDownloader] Searching for: "${query}"`);
 
@@ -271,9 +296,11 @@ class AutoDownloader {
              (SELECT posterPath FROM shows WHERE id = at.showId) as posterPath
       FROM episode_releases er
       JOIN auto_track at ON er.tmdbId = at.tmdbId AND at.enabled = 1
+      JOIN shows s ON s.id = at.showId
       LEFT JOIN downloads d ON er.downloadId = d.id
       WHERE er.airDate >= ?
         AND er.airDate <= date('now')
+        AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
         AND (er.downloadAttempted = 0 OR d.status IN ('error') OR er.downloadId IS NULL)
         AND (er.lastAttemptAt IS NULL OR er.lastAttemptAt < datetime('now', '-30 minutes'))
     `).all(cutoff) as any[];
@@ -308,15 +335,19 @@ class AutoDownloader {
     const pending = db.prepare(`
       SELECT COUNT(*) as count FROM episode_releases er
       JOIN auto_track at ON er.tmdbId = at.tmdbId AND at.enabled = 1
+      JOIN shows s ON s.id = at.showId
       WHERE er.downloadAttempted = 0 AND er.airDate >= ? AND er.airDate <= date('now')
+        AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
     `).get(cutoff) as { count: number };
 
     const retrying = db.prepare(`
       SELECT COUNT(*) as count FROM episode_releases er
       JOIN auto_track at ON er.tmdbId = at.tmdbId AND at.enabled = 1
+      JOIN shows s ON s.id = at.showId
       LEFT JOIN downloads d ON er.downloadId = d.id
       WHERE er.downloadAttempted = 1 AND (d.status = 'error' OR er.downloadId IS NULL)
         AND er.airDate >= ?
+        AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
     `).get(cutoff) as { count: number };
 
     const completed = db.prepare(`
@@ -327,7 +358,10 @@ class AutoDownloader {
 
     const failed = db.prepare(`
       SELECT COUNT(*) as count FROM episode_releases er
+      JOIN auto_track at ON er.tmdbId = at.tmdbId AND at.enabled = 1
+      JOIN shows s ON s.id = at.showId
       WHERE er.airDate < ? AND er.downloadAttempted = 0
+        AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
     `).get(cutoff) as { count: number };
 
     return {

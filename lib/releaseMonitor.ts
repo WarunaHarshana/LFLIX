@@ -110,7 +110,13 @@ class ReleaseMonitor {
 
     try {
       const trackedShows = db.prepare(
-        'SELECT * FROM auto_track WHERE enabled = 1'
+        `
+          SELECT at.*
+          FROM auto_track at
+          JOIN shows s ON s.id = at.showId
+          WHERE at.enabled = 1
+            AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
+        `
       ).all() as TrackedShow[];
 
       if (trackedShows.length === 0) {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import db from '@/lib/db';
+import db, { removeAutoTrackingForShow } from '@/lib/db';
 import releaseMonitor from '@/lib/releaseMonitor';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,13 @@ export const dynamic = 'force-dynamic';
 // GET — list all tracked shows
 export async function GET() {
   try {
-    const tracked = db.prepare('SELECT * FROM auto_track ORDER BY addedAt DESC').all();
+    const tracked = db.prepare(`
+      SELECT at.*
+      FROM auto_track at
+      JOIN shows s ON s.id = at.showId
+      WHERE EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
+      ORDER BY at.addedAt DESC
+    `).all();
     return NextResponse.json({ tracked });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
@@ -21,6 +27,16 @@ export async function POST(req: Request) {
 
     if (!showId || !tmdbId || !title) {
       return NextResponse.json({ error: 'Missing required fields: showId, tmdbId, title' }, { status: 400 });
+    }
+
+    const libraryShow = db.prepare(`
+      SELECT id
+      FROM shows
+      WHERE id = ?
+        AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = shows.id)
+    `).get(showId);
+    if (!libraryShow) {
+      return NextResponse.json({ error: 'Show is not in the library' }, { status: 404 });
     }
 
     const stmt = db.prepare(`
@@ -92,9 +108,10 @@ export async function DELETE(req: Request) {
     }
 
     if (id) {
-      db.prepare('DELETE FROM auto_track WHERE id = ?').run(parseInt(id));
+      const track = db.prepare('SELECT showId FROM auto_track WHERE id = ?').get(parseInt(id)) as { showId: number } | undefined;
+      if (track) removeAutoTrackingForShow(track.showId);
     } else if (showId) {
-      db.prepare('DELETE FROM auto_track WHERE showId = ?').run(parseInt(showId));
+      removeAutoTrackingForShow(parseInt(showId));
     }
 
     return NextResponse.json({ success: true });
