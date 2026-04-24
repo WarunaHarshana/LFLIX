@@ -2,42 +2,10 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import db from '@/lib/db';
+import { getSafeErrorMessage, validateExistingDirectory } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
-
-// SECURITY: Validate folder path to prevent directory traversal
-function validateFolderPath(folderPath: string): { valid: boolean; error?: string } {
-  // Check for null bytes (path injection)
-  if (folderPath.includes('\0')) {
-    return { valid: false, error: 'Invalid path' };
-  }
-
-  // Normalize the path
-  const normalizedPath = path.normalize(folderPath);
-
-  // Check for path traversal attempts (..)
-  if (normalizedPath.includes('..')) {
-    return { valid: false, error: 'Path traversal not allowed' };
-  }
-
-  // Must be an absolute path
-  if (!path.isAbsolute(normalizedPath)) {
-    return { valid: false, error: 'Path must be absolute' };
-  }
-
-  // Must exist and be a directory
-  if (!fs.existsSync(normalizedPath)) {
-    return { valid: false, error: 'Path does not exist' };
-  }
-
-  const stat = fs.statSync(normalizedPath);
-  if (!stat.isDirectory()) {
-    return { valid: false, error: 'Path is not a directory' };
-  }
-
-  return { valid: true };
-}
 
 // Check if setup is complete
 export async function GET() {
@@ -47,8 +15,8 @@ export async function GET() {
     const isSetup = setting?.value === 'true';
 
     return NextResponse.json({ setupComplete: isSetup });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
   }
 }
 
@@ -92,19 +60,19 @@ export async function POST(req: Request) {
     // Save folders to database with validation
     for (const folderPath of folders) {
       // SECURITY: Validate each folder path
-      const validation = validateFolderPath(folderPath);
-      if (!validation.valid) {
+      const validation = validateExistingDirectory(folderPath);
+      if (validation.error !== null) {
         console.error('Invalid folder path:', folderPath, validation.error);
         continue;
       }
 
-      const folderName = path.basename(folderPath) || 'Media Folder';
+      const folderName = path.basename(validation.path) || 'Media Folder';
       try {
         db.prepare(`
           INSERT INTO scanned_folders (folderPath, folderName, contentType)
           VALUES (?, ?, 'mixed')
           ON CONFLICT(folderPath) DO NOTHING
-        `).run(folderPath, folderName);
+        `).run(validation.path, folderName);
       } catch (e) {
         console.error('Failed to add folder:', folderPath, e);
       }
@@ -117,7 +85,7 @@ export async function POST(req: Request) {
     `).run();
 
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
   }
 }

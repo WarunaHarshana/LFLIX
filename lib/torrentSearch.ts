@@ -211,18 +211,24 @@ async function searchTPB(query: string, category: string = '200'): Promise<Torre
             return data
                 .filter((item) => item.seeders && parseInt(item.seeders, 10) > 0)
                 .slice(0, 30)
-                .map((item) => ({
-                    title: item.name || 'Unknown',
-                    magnet: buildMagnet(item.info_hash || '', item.name || 'Unknown'),
-                    size: formatBytes(parseInt(item.size, 10) || 0),
-                    sizeBytes: parseInt(item.size, 10) || 0,
-                    seeds: parseInt(item.seeders, 10) || 0,
-                    leeches: parseInt(item.leechers, 10) || 0,
-                    quality: extractQuality(item.name || ''),
-                    source: 'TPB',
-                    uploadDate: item.added ? new Date(parseInt(item.added, 10) * 1000).toISOString().split('T')[0] : undefined,
-                    uploadTimestamp: item.added ? parseInt(item.added, 10) * 1000 : undefined,
-                }));
+                .map((item) => {
+                    const title = item.name || 'Unknown';
+                    const sizeBytes = parseInt(item.size || '0', 10) || 0;
+                    const uploadTimestamp = item.added ? parseInt(item.added, 10) * 1000 : undefined;
+
+                    return {
+                        title,
+                        magnet: buildMagnet(item.info_hash || '', title),
+                        size: formatBytes(sizeBytes),
+                        sizeBytes,
+                        seeds: parseInt(item.seeders || '0', 10) || 0,
+                        leeches: parseInt(item.leechers || '0', 10) || 0,
+                        quality: extractQuality(title),
+                        source: 'TPB',
+                        uploadDate: uploadTimestamp ? new Date(uploadTimestamp).toISOString().split('T')[0] : undefined,
+                        uploadTimestamp,
+                    };
+                });
         } catch {
             // Try next mirror.
         }

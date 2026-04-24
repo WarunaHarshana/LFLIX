@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import fs from 'fs';
+import { getSafeErrorMessage, validateExistingDirectory } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -45,8 +46,8 @@ export async function GET() {
         }
 
         return NextResponse.json(settingsObj);
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
     }
 }
 
@@ -70,6 +71,14 @@ export async function POST(req: Request) {
             }
         }
 
+        if (settings.downloadPath) {
+            const validation = validateExistingDirectory(settings.downloadPath);
+            if (validation.error) {
+                return NextResponse.json({ error: validation.error }, { status: 400 });
+            }
+            settings.downloadPath = validation.path;
+        }
+
         const updateSetting = db.prepare(`
       INSERT INTO settings (key, value) VALUES (?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -82,7 +91,7 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ success: true });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
     }
 }

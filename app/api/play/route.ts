@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import db from '@/lib/db';
+import { getSafeErrorMessage, parsePositiveInt } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -90,14 +91,27 @@ function getFilePathById(contentType: 'movie' | 'episode', id: number): string |
   }
 }
 
-// Validate ID is a positive integer
-function validateId(id: any): id is number {
-  return Number.isInteger(id) && id > 0;
+function resolveExistingMediaPath(filePath: string): string | null {
+  const candidates = [
+    filePath,
+    filePath.replace(/\//g, '\\'),
+    filePath.replace(/\\/g, '/'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 export async function POST(req: Request) {
   try {
     const { contentType, contentId, episodeId, startTime } = await req.json();
+    const parsedContentId = parsePositiveInt(contentId);
+    const parsedEpisodeId = episodeId !== undefined ? parsePositiveInt(episodeId) : undefined;
 
     // SECURITY: Must provide contentType and ID, not filePath
     if (!contentType || !contentId) {
@@ -110,17 +124,17 @@ export async function POST(req: Request) {
     }
 
     // Validate IDs are positive integers
-    if (!validateId(contentId)) {
+    if (!parsedContentId) {
       return NextResponse.json({ error: 'Invalid contentId. Must be a positive integer' }, { status: 400 });
     }
-    if (episodeId !== undefined && !validateId(episodeId)) {
+    if (episodeId !== undefined && !parsedEpisodeId) {
       return NextResponse.json({ error: 'Invalid episodeId. Must be a positive integer' }, { status: 400 });
     }
 
     // Look up the actual file path from database
-    const filePath = episodeId
-      ? getFilePathById('episode', episodeId)
-      : getFilePathById(contentType === 'movie' ? 'movie' : 'episode', contentId);
+    const filePath = parsedEpisodeId
+      ? getFilePathById('episode', parsedEpisodeId)
+      : getFilePathById(contentType === 'movie' ? 'movie' : 'episode', parsedContentId);
 
     if (!filePath) {
       return NextResponse.json({
@@ -129,10 +143,8 @@ export async function POST(req: Request) {
       }, { status: 404 });
     }
 
-    // Normalize the path for Windows
-    const normalizedPath = filePath.replace(/\//g, '\\');
-
-    if (!fs.existsSync(normalizedPath)) {
+    const mediaPath = resolveExistingMediaPath(filePath);
+    if (!mediaPath) {
       return NextResponse.json({
         error: 'File not found on disk',
         hint: 'The file may have been moved, renamed, or the drive is not connected.'
@@ -149,7 +161,10 @@ export async function POST(req: Request) {
 
     // Detect player type and build appropriate arguments
     const playerType = detectPlayerType(playerPath);
-    const playerArgs = buildPlayerArgs(playerType, normalizedPath, startTime);
+    const safeStartTime = typeof startTime === 'number' && Number.isFinite(startTime) && startTime > 0
+      ? startTime
+      : undefined;
+    const playerArgs = buildPlayerArgs(playerType, mediaPath, safeStartTime);
 
     // Spawn player detached so it doesn't block the server
     const child = spawn(playerPath, playerArgs, {
@@ -167,7 +182,7 @@ export async function POST(req: Request) {
     };
 
     return NextResponse.json({ success: true, message: `${playerNames[playerType]} Launched` });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
   }
 }

@@ -8,6 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
+import { isPathInsideAny } from './security';
 
 // Download record type
 export interface DownloadRecord {
@@ -457,9 +458,23 @@ class DownloadManager {
             candidates.push(path.join(process.cwd(), 'downloads', record.name));
         }
 
+        const allowedRoots = [path.join(process.cwd(), 'downloads')];
+        try {
+            const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('downloadPath') as { value: string } | undefined;
+            if (setting?.value) allowedRoots.push(setting.value);
+        } catch { /* ignore */ }
+        try {
+            const folders = db.prepare('SELECT folderPath FROM scanned_folders').all() as { folderPath: string }[];
+            allowedRoots.push(...folders.map((folder) => folder.folderPath));
+        } catch { /* ignore */ }
+
         for (const candidate of candidates) {
             try {
                 if (fs.existsSync(candidate)) {
+                    if (!isPathInsideAny(candidate, allowedRoots)) {
+                        console.warn('[Download] Refusing to delete outside configured download/library folders:', candidate);
+                        continue;
+                    }
                     console.log('[Download] Deleting:', candidate);
                     fs.rmSync(candidate, { recursive: true, force: true });
                     console.log('[Download] Deleted successfully:', candidate);

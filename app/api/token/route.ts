@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import db from '@/lib/db';
+import { getSafeErrorMessage, parsePositiveInt } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -21,9 +21,14 @@ setInterval(() => {
 export async function POST(req: Request) {
   try {
     const { contentType, contentId, episodeId } = await req.json();
+    const parsedContentId = parsePositiveInt(contentId);
+    const parsedEpisodeId = episodeId ? parsePositiveInt(episodeId) ?? undefined : undefined;
 
-    if (!contentType || !contentId) {
+    if ((contentType !== 'movie' && contentType !== 'show') || !parsedContentId) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+    }
+    if (episodeId && !parsedEpisodeId) {
+      return NextResponse.json({ error: 'Invalid episodeId' }, { status: 400 });
     }
 
     // Generate a random token
@@ -33,14 +38,14 @@ export async function POST(req: Request) {
     // This is safe for home network use
     tokens.set(token, {
       contentType,
-      contentId,
-      episodeId,
+      contentId: parsedContentId,
+      episodeId: parsedEpisodeId,
       expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
     });
 
     return NextResponse.json({ token });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
   }
 }
 

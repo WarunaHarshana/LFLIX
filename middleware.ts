@@ -1,22 +1,64 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+const ALLOWED_CUSTOM_PROTOCOL_ORIGINS = new Set([
+  'capacitor://localhost',
+  'ionic://localhost',
+]);
+
+function isLocalHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+  );
+}
+
+function getAllowedOrigin(request: NextRequest): string | null {
+  const origin = request.headers.get('origin');
+  if (!origin) return null;
+
+  if (ALLOWED_CUSTOM_PROTOCOL_ORIGINS.has(origin)) {
+    return origin;
+  }
+
+  try {
+    const originUrl = new URL(origin);
+    const requestHost = request.nextUrl.hostname;
+
+    if (originUrl.hostname === requestHost || isLocalHostname(originUrl.hostname)) {
+      return origin;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export function middleware(request: NextRequest) {
-  // Get the origin for CORS
-  const origin = request.headers.get('origin') || '*';
+  const allowedOrigin = getAllowedOrigin(request);
 
   // Create base response
   const response = NextResponse.next();
 
-  // Set CORS headers for all requests
-  response.headers.set('Access-Control-Allow-Credentials', 'true');
-  response.headers.set('Access-Control-Allow-Origin', origin);
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, x-app-pin');
+  if (allowedOrigin) {
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+    response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+    response.headers.set('Vary', 'Origin');
+  }
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
 
   // Handle preflight
   if (request.method === 'OPTIONS') {
-    return response;
+    if (request.headers.get('origin') && !allowedOrigin) {
+      return new NextResponse(null, { status: 403 });
+    }
+    return new NextResponse(null, { status: 204, headers: response.headers });
   }
 
   // Skip auth for these paths
@@ -42,11 +84,6 @@ export function middleware(request: NextRequest) {
     const pin = request.cookies.get('app-pin')?.value;
     const expectedPin = process.env.APP_PIN || '1234';
 
-    // Skip auth if PIN is default (setup mode)
-    if (expectedPin === '1234') {
-      return response;
-    }
-
     // Skip auth if token is provided for stream/m3u8
     if (request.nextUrl.pathname.startsWith('/api/stream') && request.nextUrl.searchParams.has('token')) {
       return response;
@@ -54,20 +91,17 @@ export function middleware(request: NextRequest) {
 
     // Validate PIN
     if (!pin || pin !== expectedPin) {
-      console.log('Auth failed:', { hasPin: !!pin, expectedPin });
       return NextResponse.json(
         { error: 'Unauthorized. Please provide valid PIN.' },
         {
           status: 401,
           headers: {
             'Access-Control-Allow-Credentials': 'true',
-            'Access-Control-Allow-Origin': origin
+            ...(allowedOrigin ? { 'Access-Control-Allow-Origin': allowedOrigin, Vary: 'Origin' } : {})
           }
         }
       );
     }
-
-    console.log('Auth success');
   }
 
   return response;

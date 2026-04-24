@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import db from '@/lib/db';
 import { verifyToken } from '../token/route';
+import { getSafeErrorMessage } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,50 @@ function getMimeType(filePath: string): string {
     '.wmv': 'video/x-ms-wmv'
   };
   return mimeTypes[ext] || 'video/mp4';
+}
+
+function resolveExistingMediaPath(filePath: string): string | null {
+  const candidates = [
+    filePath,
+    filePath.replace(/\//g, '\\'),
+    filePath.replace(/\\/g, '/'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function parseRangeHeader(range: string | null, fileSize: number): { start: number; end: number } | null {
+  if (!range) return null;
+
+  const match = range.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match) return null;
+
+  const [, startText, endText] = match;
+  if (!startText && !endText) return null;
+
+  let start: number;
+  let end: number;
+
+  if (!startText) {
+    const suffixLength = Number.parseInt(endText, 10);
+    if (!Number.isInteger(suffixLength) || suffixLength <= 0) return null;
+    start = Math.max(fileSize - suffixLength, 0);
+    end = fileSize - 1;
+  } else {
+    start = Number.parseInt(startText, 10);
+    end = endText ? Number.parseInt(endText, 10) : fileSize - 1;
+  }
+
+  if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
+  if (start < 0 || end < start || start >= fileSize) return null;
+
+  return { start, end: Math.min(end, fileSize - 1) };
 }
 
 export async function GET(req: Request) {
@@ -95,27 +140,34 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Content not found' }, { status: 404 });
     }
 
-    // Normalize path
-    const normalizedPath = filePath.replace(/\//g, '\\');
-
-    if (!fs.existsSync(normalizedPath)) {
+    const mediaPath = resolveExistingMediaPath(filePath);
+    if (!mediaPath) {
       return NextResponse.json({ error: 'File not found on disk' }, { status: 404 });
     }
 
-    const stat = fs.statSync(normalizedPath);
+    const stat = fs.statSync(mediaPath);
     const fileSize = stat.size;
-    const mimeType = getMimeType(normalizedPath);
+    const mimeType = getMimeType(mediaPath);
 
     // Handle range requests (for seeking)
     const range = req.headers.get('range');
 
     if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const parsedRange = parseRangeHeader(range, fileSize);
+      if (!parsedRange) {
+        return new Response(null, {
+          status: 416,
+          headers: {
+            'Content-Range': `bytes */${fileSize}`,
+            'Accept-Ranges': 'bytes',
+          },
+        });
+      }
+
+      const { start, end } = parsedRange;
       const chunksize = end - start + 1;
 
-      const file = fs.createReadStream(normalizedPath, { start, end });
+      const file = fs.createReadStream(mediaPath, { start, end });
       
       return new Response(file as any, {
         status: 206,
@@ -129,7 +181,7 @@ export async function GET(req: Request) {
     }
 
     // Full file stream (no range)
-    const file = fs.createReadStream(normalizedPath);
+    const file = fs.createReadStream(mediaPath);
     
     return new Response(file as any, {
       status: 200,
@@ -141,6 +193,6 @@ export async function GET(req: Request) {
     });
   } catch (e: any) {
     console.error('Stream error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
   }
 }
