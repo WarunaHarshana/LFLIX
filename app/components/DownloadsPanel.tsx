@@ -247,11 +247,11 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                                     <Pause className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
-                                            {dl.status === 'paused' && (
+                                            {(dl.status === 'paused' || dl.status === 'error') && (
                                                 <button
                                                     onClick={() => resumeDownload(dl.id)}
                                                     className="p-1.5 hover:bg-green-600/20 text-neutral-500 hover:text-green-400 rounded-lg transition"
-                                                    title="Resume"
+                                                    title={dl.status === 'error' ? 'Retry' : 'Resume'}
                                                 >
                                                     <Play className="w-3.5 h-3.5" />
                                                 </button>

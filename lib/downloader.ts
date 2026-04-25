@@ -32,6 +32,7 @@ class DownloadManager {
     private client: any = null;
     private progressTimers: Map<number, NodeJS.Timeout> = new Map();
     private httpAbortControllers: Map<number, AbortController> = new Map();
+    private readonly maxHttpRetries = 3;
 
     public async getClient(): Promise<any> {
         if (this.client) return this.client;
@@ -197,114 +198,202 @@ class DownloadManager {
         this.httpAbortControllers.set(downloadId, abortController);
 
         try {
-            const httpModule = url.startsWith('https') ? https : http;
-            const fileStream = fs.createWriteStream(filePath);
+            let activeUrl = url;
             let downloadedBytes = 0;
             let totalBytes = 0;
             let lastTime = Date.now();
             let lastBytes = 0;
+            let retryTimer: NodeJS.Timeout | null = null;
+            let activeRequest: http.ClientRequest | null = null;
+            let activeFileStream: fs.WriteStream | null = null;
+            let startRequest: (attempt?: number, resumeExisting?: boolean) => void = () => { };
 
-            const request = httpModule.get(url, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-            }, (response) => {
-                // Handle redirects
-                if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-                    request.destroy();
-                    fileStream.close();
-                    // Follow redirect
-                    const redirectUrl = response.headers.location.startsWith('http')
-                        ? response.headers.location
-                        : new URL(response.headers.location, url).href;
-                    this.httpAbortControllers.delete(downloadId);
-                    db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
-                    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-                    this.addHttpDownload(redirectUrl, filename, watchlistId, customPath);
-                    return;
-                }
+            const updateProgress = (speed = 0) => {
+                const progress = totalBytes > 0 ? Math.min(Math.round((downloadedBytes / totalBytes) * 10000) / 100, 99.99) : 0;
+                db.prepare(`
+                    UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?, totalSize = ?
+                    WHERE id = ? AND status = 'downloading'
+                `).run(progress, speed, downloadedBytes, totalBytes, downloadId);
+            };
 
-                if (response.statusCode !== 200) {
-                    fileStream.close();
-                    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-                    db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ? WHERE id = ?`)
-                        .run(`HTTP error ${response.statusCode}`, downloadId);
-                    return;
-                }
-
-                totalBytes = parseInt(response.headers['content-length'] || '0', 10);
-                if (totalBytes > 0) {
-                    db.prepare('UPDATE downloads SET totalSize = ? WHERE id = ?').run(totalBytes, downloadId);
-                }
-
-                // Progress timer
-                const timer = setInterval(() => {
-                    try {
-                        const record = this.getDownload(downloadId);
-                        if (!record || record.status !== 'downloading') {
-                            clearInterval(timer);
-                            this.progressTimers.delete(downloadId);
-                            return;
-                        }
-                        const now = Date.now();
-                        const elapsed = (now - lastTime) / 1000;
-                        const speed = elapsed > 0 ? Math.round((downloadedBytes - lastBytes) / elapsed) : 0;
-                        lastTime = now;
-                        lastBytes = downloadedBytes;
-
-                        const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 10000) / 100 : 0;
-                        db.prepare(`
-                            UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?, totalSize = ?
-                            WHERE id = ? AND status = 'downloading'
-                        `).run(progress, speed, downloadedBytes, totalBytes, downloadId);
-                    } catch { /* ignore */ }
-                }, 2000);
-                this.progressTimers.set(downloadId, timer);
-
-                response.on('data', (chunk: Buffer) => {
-                    downloadedBytes += chunk.length;
-                });
-
-                response.pipe(fileStream);
-
-                fileStream.on('finish', () => {
-                    this.clearTimer(downloadId);
-                    this.httpAbortControllers.delete(downloadId);
-                    try {
-                        db.prepare(`
-                            UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
-                            downloadedSize = ?, totalSize = ?, completedAt = CURRENT_TIMESTAMP
-                            WHERE id = ?
-                        `).run(downloadedBytes, totalBytes || downloadedBytes, downloadId);
-                    } catch { /* ignore */ }
-                    this.triggerRescan();
-                });
-
-                response.on('error', (err: Error) => {
-                    this.clearTimer(downloadId);
-                    this.httpAbortControllers.delete(downloadId);
-                    fileStream.close();
-                    try {
-                        db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0 WHERE id = ?`)
-                            .run(err.message, downloadId);
-                    } catch { /* ignore */ }
-                });
-            });
-
-            request.on('error', (err: Error) => {
+            const markHttpError = (message: string) => {
                 this.clearTimer(downloadId);
                 this.httpAbortControllers.delete(downloadId);
-                fileStream.close();
+                if (retryTimer) clearTimeout(retryTimer);
                 try {
-                    db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0 WHERE id = ?`)
-                        .run(err.message, downloadId);
+                    db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0,
+                        downloadedSize = ?, totalSize = ?
+                        WHERE id = ? AND status = 'downloading'`)
+                        .run(message, downloadedBytes, totalBytes, downloadId);
                 } catch { /* ignore */ }
-            });
+            };
 
-            // Handle abort
+            const scheduleRetry = (attempt: number, reason: string) => {
+                if (abortController.signal.aborted) return;
+                if (retryTimer) return;
+                if (attempt >= this.maxHttpRetries) {
+                    const sizeText = totalBytes > 0 ? `${downloadedBytes} of ${totalBytes} bytes` : `${downloadedBytes} bytes`;
+                    markHttpError(`${reason}. Download incomplete (${sizeText}).`);
+                    return;
+                }
+
+                try { updateProgress(0); } catch { /* ignore */ }
+                const delayMs = 1500 * (attempt + 1);
+                retryTimer = setTimeout(() => {
+                    retryTimer = null;
+                    if (!abortController.signal.aborted) {
+                        startRequest(attempt + 1, true);
+                    }
+                }, delayMs);
+            };
+
+            const parseTotalSize = (response: http.IncomingMessage, startByte: number): number => {
+                const contentRange = response.headers['content-range'];
+                if (typeof contentRange === 'string') {
+                    const match = contentRange.match(/\/(\d+)$/);
+                    if (match) return parseInt(match[1], 10);
+                }
+
+                const contentLength = parseInt(response.headers['content-length'] || '0', 10);
+                if (contentLength > 0) {
+                    return startByte > 0 && response.statusCode === 206 ? startByte + contentLength : contentLength;
+                }
+
+                return totalBytes;
+            };
+
+            const timer = setInterval(() => {
+                try {
+                    const record = this.getDownload(downloadId);
+                    if (!record || record.status !== 'downloading') {
+                        clearInterval(timer);
+                        this.progressTimers.delete(downloadId);
+                        return;
+                    }
+                    const now = Date.now();
+                    const elapsed = (now - lastTime) / 1000;
+                    const speed = elapsed > 0 ? Math.round((downloadedBytes - lastBytes) / elapsed) : 0;
+                    lastTime = now;
+                    lastBytes = downloadedBytes;
+                    updateProgress(speed);
+                } catch { /* ignore */ }
+            }, 2000);
+            this.progressTimers.set(downloadId, timer);
+
+            startRequest = (attempt = 0, resumeExisting = false) => {
+                if (abortController.signal.aborted) return;
+
+                const existingBytes = resumeExisting && fs.existsSync(filePath)
+                    ? fs.statSync(filePath).size
+                    : 0;
+                const requestUrl = activeUrl;
+                const headers: Record<string, string> = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                };
+                if (existingBytes > 0) {
+                    headers.Range = `bytes=${existingBytes}-`;
+                }
+
+                const httpModule = requestUrl.startsWith('https') ? https : http;
+                activeRequest = httpModule.get(requestUrl, { headers }, (response) => {
+                    if (abortController.signal.aborted) {
+                        response.resume();
+                        return;
+                    }
+
+                    // Handle redirects without creating a second DB row.
+                    if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                        response.resume();
+                        activeUrl = response.headers.location.startsWith('http')
+                            ? response.headers.location
+                            : new URL(response.headers.location, requestUrl).href;
+                        startRequest(attempt, resumeExisting);
+                        return;
+                    }
+
+                    if (response.statusCode !== 200 && response.statusCode !== 206) {
+                        response.resume();
+                        markHttpError(`HTTP error ${response.statusCode}`);
+                        return;
+                    }
+
+                    const canAppend = existingBytes > 0 && response.statusCode === 206;
+                    downloadedBytes = canAppend ? existingBytes : 0;
+                    totalBytes = parseTotalSize(response, downloadedBytes);
+                    if (totalBytes > 0) {
+                        db.prepare('UPDATE downloads SET totalSize = ?, downloadedSize = ? WHERE id = ?')
+                            .run(totalBytes, downloadedBytes, downloadId);
+                    }
+
+                    let settled = false;
+                    activeFileStream = fs.createWriteStream(filePath, { flags: canAppend ? 'a' : 'w' });
+
+                    const retryFromPartial = (reason: string) => {
+                        if (settled) return;
+                        settled = true;
+                        activeFileStream?.destroy();
+                        activeFileStream = null;
+                        scheduleRetry(attempt, reason);
+                    };
+
+                    response.on('data', (chunk: Buffer) => {
+                        downloadedBytes += chunk.length;
+                    });
+
+                    response.on('aborted', () => {
+                        retryFromPartial('Connection was interrupted');
+                    });
+
+                    response.on('error', (err: Error) => {
+                        retryFromPartial(err.message || 'Connection failed');
+                    });
+
+                    activeFileStream.on('error', (err: Error) => {
+                        if (settled) return;
+                        settled = true;
+                        activeFileStream = null;
+                        markHttpError(err.message || 'File write failed');
+                    });
+
+                    activeFileStream.on('finish', () => {
+                        if (settled) return;
+                        settled = true;
+                        activeFileStream = null;
+
+                        if (totalBytes > 0 && downloadedBytes < totalBytes) {
+                            scheduleRetry(attempt, 'Connection closed before all bytes were received');
+                            return;
+                        }
+
+                        this.clearTimer(downloadId);
+                        this.httpAbortControllers.delete(downloadId);
+                        try {
+                            db.prepare(`
+                                UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
+                                downloadedSize = ?, totalSize = ?, completedAt = CURRENT_TIMESTAMP
+                                WHERE id = ? AND status = 'downloading'
+                            `).run(downloadedBytes, totalBytes || downloadedBytes, downloadId);
+                        } catch { /* ignore */ }
+                        this.triggerRescan();
+                    });
+
+                    response.pipe(activeFileStream);
+                });
+
+                activeRequest.on('error', (err: Error) => {
+                    if (abortController.signal.aborted) return;
+                    scheduleRetry(attempt, err.message || 'Request failed');
+                });
+            };
+
             abortController.signal.addEventListener('abort', () => {
-                request.destroy();
-                fileStream.close();
+                if (retryTimer) clearTimeout(retryTimer);
+                activeRequest?.destroy();
+                activeFileStream?.destroy();
                 this.clearTimer(downloadId);
             });
+
+            startRequest();
 
         } catch (err: any) {
             this.httpAbortControllers.delete(downloadId);
@@ -563,6 +652,7 @@ class DownloadManager {
     // Get all downloads
     getAll(): DownloadRecord[] {
         try {
+            this.repairIncompleteHttpCompletions();
             return db.prepare('SELECT * FROM downloads ORDER BY startedAt DESC').all() as DownloadRecord[];
         } catch {
             return [];
@@ -572,6 +662,7 @@ class DownloadManager {
     // Get single download
     getDownload(id: number): DownloadRecord | null {
         try {
+            this.repairIncompleteHttpCompletions();
             return (db.prepare('SELECT * FROM downloads WHERE id = ?').get(id) as DownloadRecord) || null;
         } catch {
             return null;
@@ -651,6 +742,24 @@ class DownloadManager {
             clearInterval(timer);
             this.progressTimers.delete(downloadId);
         }
+    }
+
+    private repairIncompleteHttpCompletions(): void {
+        try {
+            db.prepare(`
+                UPDATE downloads
+                SET status = 'error',
+                    progress = ROUND((downloadedSize * 100.0) / totalSize, 2),
+                    downloadSpeed = 0,
+                    errorMessage = 'Download incomplete. Retry to download the full file.',
+                    completedAt = NULL
+                WHERE status = 'completed'
+                    AND magnetUri LIKE 'http-direct:%'
+                    AND totalSize > 0
+                    AND downloadedSize >= 0
+                    AND downloadedSize < totalSize
+            `).run();
+        } catch { /* ignore */ }
     }
 
     // Trigger library rescan
