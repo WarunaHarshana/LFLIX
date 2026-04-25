@@ -5,7 +5,7 @@
  */
 
 import db from './db';
-import { searchTorrents, TorrentResult } from './torrentSearch';
+import { isCamQualityResult, isGoodMovieReleaseQuality, searchTorrents, TorrentResult } from './torrentSearch';
 import releaseMonitor from './releaseMonitor';
 
 // Re-use the same quality scoring from autoDownloader
@@ -22,7 +22,7 @@ const QUALITY_SCORES: Record<string, number> = {
 };
 
 /** Minimum score to consider a movie "available" */
-const MIN_AVAILABLE_SCORE = 30;
+const MIN_AVAILABLE_SCORE = 70;
 
 /** Don't re-check a movie more often than this */
 const RE_CHECK_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -58,6 +58,10 @@ export interface MovieReleaseRow {
  * Score a torrent result for a movie (simplified from autoDownloader).
  */
 function scoreMovieTorrent(result: TorrentResult): number {
+  if (!isGoodMovieReleaseQuality(result)) {
+    return 0;
+  }
+
   let score = 0;
 
   const quality = result.quality || 'Unknown';
@@ -90,12 +94,16 @@ function scoreMovieTorrent(result: TorrentResult): number {
     if (titleLower.includes(tag)) score += bonus;
   }
 
-  // Penalty for CAM/TS quality
-  if (/\b(cam|ts|telesync|telecine|hdcam)\b/i.test(result.title)) {
-    score -= 40;
-  }
-
   return Math.max(0, score);
+}
+
+function parseBestResult(bestResult: string | null): Partial<TorrentResult> | null {
+  if (!bestResult) return null;
+  try {
+    return JSON.parse(bestResult) as Partial<TorrentResult>;
+  } catch {
+    return null;
+  }
 }
 
 class MovieReleaseMonitor {
@@ -206,27 +214,44 @@ class MovieReleaseMonitor {
    * Returns true if the movie is newly available (first time detected).
    */
   async checkMovie(movie: WatchlistMovie): Promise<boolean> {
-    // Check cooldown — don't re-check if recently checked
     const existing = db.prepare(
       'SELECT * FROM movie_releases WHERE tmdbId = ?'
     ).get(movie.tmdbId) as MovieReleaseRow | undefined;
+    let resetBadAvailability = false;
 
-    if (existing?.lastCheckedAt) {
+    if (existing?.isAvailable && existing?.notified) {
+      const previousBest = parseBestResult(existing.bestResult);
+      if (
+        previousBest &&
+        isGoodMovieReleaseQuality({
+          title: previousBest.title || '',
+          quality: previousBest.quality || 'Unknown',
+          source: previousBest.source || '',
+        })
+      ) {
+        return false;
+      }
+
+      // Older checks could mark CAM/TS as available. Reset those rows so this
+      // movie can notify again only when a proper release appears.
+      db.prepare(`
+        UPDATE movie_releases
+        SET isAvailable = 0, notified = 0, bestResult = NULL, availableAt = NULL
+        WHERE tmdbId = ?
+      `).run(movie.tmdbId);
+      resetBadAvailability = true;
+    }
+
+    // Check cooldown after stale availability cleanup.
+    if (!resetBadAvailability && existing?.lastCheckedAt) {
       const lastCheck = new Date(existing.lastCheckedAt.replace(' ', 'T') + 'Z').getTime();
       if (Date.now() - lastCheck < RE_CHECK_COOLDOWN_MS) {
         return false; // Too soon to re-check
       }
     }
 
-    // Already available and notified — skip
-    if (existing?.isAvailable && existing?.notified) {
-      return false;
-    }
-
     // Build search query
-    const searchTitle = movie.year
-      ? `${movie.title} ${movie.year}`
-      : movie.title;
+    const searchTitle = movie.title;
 
     console.log(`[MovieReleaseMonitor] Searching: "${searchTitle}"`);
 
@@ -248,8 +273,16 @@ class MovieReleaseMonitor {
       return false;
     }
 
-    // Score and find the best result
-    const scored = results
+    const releaseQualityResults = results.filter(isGoodMovieReleaseQuality);
+
+    if (releaseQualityResults.length === 0) {
+      const camCount = results.filter(isCamQualityResult).length;
+      console.log(`[MovieReleaseMonitor] No good-quality releases for "${movie.title}" (${camCount} CAM/TS result(s) ignored)`);
+      return false;
+    }
+
+    // Score and find the best good-quality result
+    const scored = releaseQualityResults
       .map(r => ({ ...r, _score: scoreMovieTorrent(r) }))
       .sort((a, b) => b._score - a._score);
 
@@ -320,7 +353,7 @@ class MovieReleaseMonitor {
       'UPDATE movie_releases SET lastCheckedAt = NULL WHERE tmdbId = ?'
     ).run(tmdbId);
 
-    const available = await this.checkMovie(movie);
+    await this.checkMovie(movie);
 
     const release = db.prepare(
       'SELECT * FROM movie_releases WHERE tmdbId = ?'

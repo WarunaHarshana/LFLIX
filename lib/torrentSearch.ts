@@ -93,8 +93,29 @@ function parseSizeToBytes(sizeStr: string): number {
 }
 
 function extractQuality(title: string): string {
-    const match = title.match(/(2160p|4K|UHD|1080p|720p|480p|HDRip|BDRip|BluRay|WEBRip|WEB-DL|HDTV|CAM|TS)/i);
+    const match = title.match(/(2160p|4K|UHD|1080p|720p|480p|HDRip|BDRip|BluRay|WEBRip|WEB-DL|HDTV|HDCAM|CAM|TS|TC|TeleSync|Telecine)/i);
     return match ? match[1] : 'Unknown';
+}
+
+export function isCamQualityResult(result: Pick<TorrentResult, 'title' | 'quality'>): boolean {
+    const haystack = `${result.title} ${result.quality}`.toLowerCase();
+    return /\b(?:cam|hdcam|ts|telesync|telecine|tc|xbet|hd-?cam|camrip)\b/i.test(haystack);
+}
+
+export function isGoodMovieReleaseQuality(result: Pick<TorrentResult, 'title' | 'quality' | 'source'>): boolean {
+    if (isCamQualityResult(result)) return false;
+
+    const haystack = `${result.title} ${result.quality} ${result.source}`.toLowerCase();
+    if (/\b(?:web[\s.-]?dl|web[\s.-]?rip|bluray|blu[\s.-]?ray|bdrip|br[-\s]?rip|remux|hdrip|dvdrip)\b/i.test(haystack)) {
+        return true;
+    }
+
+    // YTS only publishes finished movie encodes, so a resolution-tagged YTS result is acceptable.
+    if (result.source === 'YTS' && /\b(?:720p|1080p|2160p|4k|uhd)\b/i.test(haystack)) {
+        return true;
+    }
+
+    return false;
 }
 
 function extractYears(title: string): number[] {
@@ -139,6 +160,47 @@ function relevanceScore(title: string, query: string): number {
     return Math.max(0, Math.min(100, score));
 }
 
+function getSignificantQueryWords(query: string): string[] {
+    return normalizeTitle(query)
+        .split(' ')
+        .filter(w => w.length > 1 && !/^(19|20)\d{2}$/.test(w));
+}
+
+function titleContainsQueryWord(normTitle: string, word: string): boolean {
+    const titleWords = normTitle.split(' ');
+    if (titleWords.includes(word) || normTitle.includes(word)) return true;
+
+    const romanAlternates: Record<string, string[]> = {
+        ii: ['2', 'two'],
+        iii: ['3', 'three'],
+        iv: ['4', 'four'],
+        v: ['5', 'five'],
+        vi: ['6', 'six'],
+        vii: ['7', 'seven'],
+        viii: ['8', 'eight'],
+        ix: ['9', 'nine'],
+        x: ['10', 'ten'],
+    };
+
+    return (romanAlternates[word] || []).some(alt => titleWords.includes(alt));
+}
+
+function matchesMovieTitleStrictly(title: string, query: string): boolean {
+    const normTitle = normalizeTitle(title);
+    const words = getSignificantQueryWords(query);
+    if (words.length === 0) return true;
+
+    const matchedWords = words.filter(word => titleContainsQueryWord(normTitle, word));
+
+    // Sequels and short movie titles need a stricter match. This prevents
+    // "Mortal Kombat" from satisfying "Mortal Kombat II".
+    if (words.length <= 3) {
+        return matchedWords.length === words.length;
+    }
+
+    return matchedWords.length / words.length >= 0.75;
+}
+
 /** Filter and sort results by relevance */
 function filterByRelevance(
     results: TorrentResult[],
@@ -150,6 +212,7 @@ function filterByRelevance(
     const useYearFilter = options?.type === 'movie' && Number.isFinite(targetYear);
 
     return results
+        .filter(r => options?.type !== 'movie' || matchesMovieTitleStrictly(r.title, query))
         .map(r => {
             const baseScore = relevanceScore(r.title, query);
             if (!useYearFilter) {

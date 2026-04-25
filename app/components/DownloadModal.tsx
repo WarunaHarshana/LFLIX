@@ -91,6 +91,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             const params = new URLSearchParams({ q: title });
             if (year) params.set('year', year);
             if (mediaType) params.set('type', mediaType);
+            if (mediaType === 'movie') params.set('goodOnly', '1');
             const res = await fetch(`/api/torrent-search?${params}`);
             const data = await res.json();
             if (data.error) setError(data.error);
