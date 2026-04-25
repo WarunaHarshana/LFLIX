@@ -63,7 +63,11 @@ export default function HeroSection({
           <span className="px-2 py-0.5 bg-neutral-800 rounded border border-neutral-600 uppercase tracking-wide text-neutral-300">
             {featured.type}
           </span>
-          {featured.rating && <span className="text-green-400">Match {Math.round(featured.rating * 10)}%</span>}
+          {featured.rating != null && featured.rating > 0 && (
+            <span className="bg-[#F5C518] px-2.5 py-1 rounded-md shadow-sm">
+              <span className="text-sm font-bold text-black">IMDb {featured.rating.toFixed(1)}</span>
+            </span>
+          )}
           <span className="text-neutral-300">{featured.year || (featured.firstAirDate ? featured.firstAirDate.substring(0, 4) : '')}</span>
           {featured.isHDR && (
             <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 text-xs rounded font-bold tracking-wide border border-yellow-500/40">

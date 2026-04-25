@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { X, Play, Star, Clock, Film, Tv, Loader2, PlayCircle, Globe, User, BellRing, BellOff } from 'lucide-react';
+import { X, Play, Clock, Film, Tv, Loader2, PlayCircle, Globe, User, BellRing, BellOff } from 'lucide-react';
 import TrailerModal from './TrailerModal';
 import StreamServerModal from './StreamServerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from './ContentCard';
@@ -398,10 +398,9 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
 
                             {/* Metadata Row */}
                             <div className="flex items-center gap-3 mt-3 flex-wrap text-sm">
-                                {item.rating && item.rating > 0 && (
-                                    <span className="flex items-center gap-1 text-green-400 font-semibold">
-                                        <Star className="w-3.5 h-3.5 fill-green-400" />
-                                        {item.rating.toFixed(1)}
+                                {item.rating != null && item.rating > 0 && (
+                                    <span className="bg-[#F5C518] px-2.5 py-1 rounded-md shadow-sm">
+                                        <span className="text-sm font-bold text-black">IMDb {item.rating.toFixed(1)}</span>
                                     </span>
                                 )}
                                 {year && (

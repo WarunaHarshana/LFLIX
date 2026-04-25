@@ -217,9 +217,9 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                         ) : (
                             <>
                                 <h2 className="text-3xl font-bold">{show.title}</h2>
-                                {show.rating && (
-                                    <span className="inline-block mt-2 px-2 py-0.5 bg-green-600 text-white text-sm rounded">
-                                        {Math.round(show.rating * 10)}% Match
+                                {show.rating != null && show.rating > 0 && (
+                                    <span className="inline-flex mt-2 bg-[#F5C518] px-2.5 py-1 rounded-md shadow-sm">
+                                        <span className="text-sm font-bold text-black">IMDb {show.rating.toFixed(1)}</span>
                                     </span>
                                 )}
                                 <p className="text-neutral-400 mt-2 line-clamp-2">{show.overview}</p>

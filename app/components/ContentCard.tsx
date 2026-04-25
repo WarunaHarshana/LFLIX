@@ -85,9 +85,6 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
                     <div className="flex gap-2 text-xs text-[var(--text-secondary)]">
                         {item.type === 'show' ? <Tv className="w-3 h-3" /> : <Film className="w-3 h-3" />}
                         <span>{year}</span>
-                        {showRating && item.rating && item.rating > 0 && (
-                            <span className="text-emerald-300 font-semibold">★ {item.rating.toFixed(1)}</span>
-                        )}
                     </div>
                     <div className="p-1.5 bg-white rounded-full">
                         <Play className="w-3 h-3 fill-black text-black" />
@@ -97,7 +94,7 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
 
             {/* Watched badge */}
             {item.watchProgress?.completed === 1 && (
-                <div className="absolute top-2 right-2 px-2 py-0.5 bg-emerald-600 text-white text-xs rounded-full font-medium">
+                <div className="absolute top-2 right-2 px-2 py-0.5 bg-emerald-600 text-white text-xs rounded-full font-medium z-10">
                     ✓ Watched
                 </div>
             )}

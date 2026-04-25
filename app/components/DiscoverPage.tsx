@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, X, Star, Film, Tv, Loader2, Globe, TrendingUp, ChevronDown, Filter, Magnet } from 'lucide-react';
+import { Search, X, Film, Tv, Loader2, Globe, TrendingUp, ChevronDown, Filter, Magnet } from 'lucide-react';
 
 const MOVIE_GENRES = [
     { id: '28', name: 'Action' },
@@ -477,9 +477,8 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 </div>
                                 {/* Rating badge */}
                                 {item.rating != null && item.rating > 0 && (
-                                    <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
-                                        <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500" />
-                                        <span className="text-[10px] font-bold text-white">{item.rating.toFixed(1)}</span>
+                                    <div className="absolute top-1.5 right-1.5 bg-[#F5C518] px-1.5 py-0.5 rounded-md shadow-sm">
+                                        <span className="text-[10px] font-bold text-black">IMDb {item.rating.toFixed(1)}</span>
                                     </div>
                                 )}
                                 {/* Type badge */}
