@@ -19,6 +19,15 @@ export function isVideoFile(filePath: string): boolean {
   return VIDEO_EXTENSIONS.includes(ext);
 }
 
+function isSampleClip(filePath: string): boolean {
+  const parts = filePath.split(/[\\/]+/).map(part => part.toLowerCase());
+  const parentDirs = parts.slice(0, -1);
+  if (parentDirs.some(part => part === 'sample' || part === 'samples')) return true;
+
+  const baseName = path.basename(filePath, path.extname(filePath)).toLowerCase();
+  return /(^|[._ -])sample([._ -]|$)/.test(baseName);
+}
+
 export function getVideoFiles(dir: string, fileList: string[] = []): string[] {
   if (!fs.existsSync(dir)) return fileList;
 
@@ -29,7 +38,7 @@ export function getVideoFiles(dir: string, fileList: string[] = []): string[] {
       const stat = fs.statSync(filePath);
       if (stat.isDirectory()) {
         getVideoFiles(filePath, fileList);
-      } else if (isVideoFile(filePath)) {
+      } else if (isVideoFile(filePath) && !isSampleClip(filePath)) {
         fileList.push(filePath);
       }
     } catch {
@@ -105,6 +114,10 @@ function detectAudioCodec(fileName: string): { codec: string | null; channels: s
 export async function scanFile(filePath: string): Promise<{ added: boolean; error?: string }> {
   try {
     if (!isVideoFile(filePath)) {
+      return { added: false };
+    }
+
+    if (isSampleClip(filePath)) {
       return { added: false };
     }
 

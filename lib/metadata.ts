@@ -67,8 +67,8 @@ export function cleanFilename(name: string): string {
   // Remove A.K.A and everything after
   clean = clean.replace(/\bA\.?K\.?A\.?\b.*/i, "");
 
-  // Remove common scene tags & languages
-  clean = clean.replace(/\b(1080p|720p|480p|2160p|4k|BluRay|Blu-Ray|BDRip|WEBRip|WEB-DL|DVDRip|HDTV|x264|x265|H\.?264|H\.?265|AAC|AC3|DTS|HDR|HDR10|HDR10Plus|DV|Dolby|Atmos|HEVC|HQ|HDRip|TRUE|PROPER|REMASTERED|EXTENDED|UNCUT|DIRECTORS|CUT|DUAL|MULTI|Telugu|Tamil|Hindi|Malayalam|Kannada|English|EngSub|ESub|AMZN|NF|DSNP|HMAX|IMAX|REPACK|Remux|10bit|6CH|8CH|PSA|YTS|YIFY|RARBG)\b.*/i, "");
+  // Remove common scene tags, release-quality labels & languages
+  clean = clean.replace(/\b(HC|HDCAM|CAMRip|CAM|HDTS|TS|TELESYNC|TC|TELECINE|DVDSCR|SCR|PREHD|1080p|720p|480p|2160p|4k|BluRay|Blu-Ray|BDRip|WEBRip|WEB-DL|DVDRip|HDTV|x264|x265|H\.?264|H\.?265|AAC|AC3|EAC3|DDP|DTS|HDR|HDR10|HDR10Plus|DV|Dolby|Atmos|HEVC|HQ|HDRip|TRUE|PROPER|REMASTERED|EXTENDED|UNCUT|DIRECTORS|CUT|DUAL|MULTI|HIN\d*x?|Hindi|Telugu|Tamil|TAM|TEL|Malayalam|Kannada|English|EngSub|ESub|AMZN|NF|DSNP|HMAX|IMAX|REPACK|Remux|10bit|6CH|8CH|PSA|YTS|YIFY|RARBG)\b.*/i, "");
 
   // Replace dots/underscores with space
   clean = clean.replace(/[._]/g, " ");
