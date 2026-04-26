@@ -130,6 +130,16 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
       `https://vidsrc.me/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
   },
   {
+    id: 'vidsrcme-ru',
+    name: 'VIDSRCME',
+    color: '#22d3ee',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidsrc-embed.ru/embed/movie/${tmdbId}`
+        : `https://vidsrc-embed.ru/embed/tv/${tmdbId}/${season || 1}-${episode || 1}`,
+  },
+  {
     id: '2embed',
     name: '2EMBED',
     color: '#f59e0b',
