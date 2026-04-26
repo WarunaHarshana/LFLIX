@@ -117,4 +117,4 @@ MIT — use and modify freely.
 
 ---
 
-**Made with ❤️ for movie enthusiasts who prefer local media** · **⭐ Star if useful!**
+Made for movie enthusiasts who prefer local media.

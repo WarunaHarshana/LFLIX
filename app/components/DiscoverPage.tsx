@@ -475,12 +475,6 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                         </div>
                                     </div>
                                 </div>
-                                {/* Rating badge */}
-                                {item.rating != null && item.rating > 0 && (
-                                    <div className="absolute top-1.5 right-1.5 bg-[#F5C518] px-1.5 py-0.5 rounded-md shadow-sm">
-                                        <span className="text-[10px] font-bold text-black">IMDb {item.rating.toFixed(1)}</span>
-                                    </div>
-                                )}
                                 {/* Type badge */}
                                 <div className="absolute top-1.5 left-1.5">
                                     <span className="px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] uppercase tracking-wide text-neutral-300 font-medium">
