@@ -113,6 +113,20 @@ type PersonDetails = {
   credits: PersonCredit[];
 };
 
+type PersonCreditFilter = 'all' | 'movie' | 'tv';
+type PersonCreditSort = 'date' | 'rating' | 'popular';
+
+const personCreditFilters: { value: PersonCreditFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'movie', label: 'Movies' },
+  { value: 'tv', label: 'TV Shows' },
+];
+
+function getCreditYearValue(credit: PersonCredit): number {
+  const year = parseInt(credit.year || '0', 10);
+  return Number.isFinite(year) ? year : 0;
+}
+
 type TrailerData = {
   key: string;
   name: string;
@@ -174,8 +188,38 @@ export default function DiscoverDetailPage() {
   const [personData, setPersonData] = useState<PersonDetails | null>(null);
   const [loadingPerson, setLoadingPerson] = useState(false);
   const [visiblePersonCredits, setVisiblePersonCredits] = useState(8);
+  const [personCreditFilter, setPersonCreditFilter] = useState<PersonCreditFilter>('all');
+  const [personCreditSort, setPersonCreditSort] = useState<PersonCreditSort>('date');
 
   const activeDetails = mediaType === 'movie' ? movieDetails : tvDetails;
+
+  const filteredPersonCredits = useMemo(() => {
+    const credits = personData?.credits || [];
+    const filtered = personCreditFilter === 'all'
+      ? credits
+      : credits.filter((credit) => credit.mediaType === personCreditFilter);
+
+    return [...filtered].sort((a, b) => {
+      if (personCreditSort === 'rating') {
+        const ratingDiff = (b.rating || 0) - (a.rating || 0);
+        if (ratingDiff !== 0) return ratingDiff;
+      } else if (personCreditSort === 'popular') {
+        const popularityDiff = (b.popularity || 0) - (a.popularity || 0);
+        if (popularityDiff !== 0) return popularityDiff;
+      } else {
+        const yearDiff = getCreditYearValue(b) - getCreditYearValue(a);
+        if (yearDiff !== 0) return yearDiff;
+      }
+
+      const fallbackYearDiff = getCreditYearValue(b) - getCreditYearValue(a);
+      if (fallbackYearDiff !== 0) return fallbackYearDiff;
+      return (b.popularity || 0) - (a.popularity || 0);
+    });
+  }, [personCreditFilter, personCreditSort, personData]);
+
+  useEffect(() => {
+    setVisiblePersonCredits(8);
+  }, [personCreditFilter, personCreditSort]);
 
   useEffect(() => {
     if (!Number.isFinite(tmdbId) || tmdbId <= 0) {
@@ -311,6 +355,8 @@ export default function DiscoverDetailPage() {
     setPersonData(null);
     setLoadingPerson(true);
     setVisiblePersonCredits(8);
+    setPersonCreditFilter('all');
+    setPersonCreditSort('date');
 
     try {
       const res = await fetch(`/api/tmdb-person?id=${personId}`);
@@ -840,11 +886,54 @@ export default function DiscoverDetailPage() {
                     </div>
                   </div>
 
-                  <h5 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Movies & TV Shows</h5>
+                  <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h5 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Movies & TV Shows</h5>
+                      <p className="mt-1 text-[11px] text-neutral-500">{filteredPersonCredits.length} credits</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex rounded-lg border border-neutral-800 bg-neutral-950/50 p-1">
+                        {personCreditFilters.map((filter) => {
+                          const count = filter.value === 'all'
+                            ? personData.credits.length
+                            : personData.credits.filter((credit) => credit.mediaType === filter.value).length;
+
+                          return (
+                            <button
+                              key={filter.value}
+                              type="button"
+                              onClick={() => setPersonCreditFilter(filter.value)}
+                              className={`min-h-8 px-3 text-xs font-semibold rounded-md transition whitespace-nowrap ${
+                                personCreditFilter === filter.value
+                                  ? 'bg-white text-black'
+                                  : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                              }`}
+                              aria-pressed={personCreditFilter === filter.value}
+                            >
+                              {filter.label} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <select
+                        value={personCreditSort}
+                        onChange={(event) => setPersonCreditSort(event.target.value as PersonCreditSort)}
+                        className="min-h-10 bg-neutral-950/50 text-neutral-200 text-xs font-semibold rounded-lg px-3 border border-neutral-800 focus:outline-none focus:border-neutral-500"
+                        aria-label="Sort cast credits"
+                      >
+                        <option value="date">Sort: Date</option>
+                        <option value="rating">Sort: Rating</option>
+                        <option value="popular">Sort: Popular</option>
+                      </select>
+                    </div>
+                  </div>
                   {personData.credits.length > 0 ? (
+                    filteredPersonCredits.length > 0 ? (
                     <>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {personData.credits.slice(0, visiblePersonCredits).map((credit, idx) => (
+                        {filteredPersonCredits.slice(0, visiblePersonCredits).map((credit, idx) => (
                           <button
                             key={`${credit.mediaType}-${credit.tmdbId}-${idx}`}
                             onClick={() => {
@@ -880,17 +969,20 @@ export default function DiscoverDetailPage() {
                         ))}
                       </div>
 
-                      {personData.credits.length > visiblePersonCredits && (
+                      {filteredPersonCredits.length > visiblePersonCredits && (
                         <div className="flex justify-center mt-4">
                           <button
                             onClick={loadMorePersonCredits}
                             className="px-4 py-2 text-sm font-semibold rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 transition"
                           >
-                            See All ({personData.credits.length - visiblePersonCredits} more)
+                            See All ({filteredPersonCredits.length - visiblePersonCredits} more)
                           </button>
                         </div>
                       )}
                     </>
+                    ) : (
+                      <p className="text-sm text-neutral-500">No credits match this filter.</p>
+                    )
                   ) : (
                     <p className="text-sm text-neutral-500">No credits available.</p>
                   )}
