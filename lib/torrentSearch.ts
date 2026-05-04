@@ -1,5 +1,5 @@
 /**
- * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS + a.111477.xyz open directory
+ * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS + PSA/Bitsearch + a.111477.xyz open directory
  */
 
 export interface TorrentResult {
@@ -68,6 +68,8 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Pr
 
 function decodeHtmlEntities(input: string): string {
     return input
+        .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
         .replace(/&amp;/g, '&')
         .replace(/&#39;/g, "'")
         .replace(/&quot;/g, '"')
@@ -84,10 +86,10 @@ function formatBytes(bytes: number): string {
 
 /** Parse a human-readable size string (e.g. "1.5 GB", "850 MB") back to bytes */
 function parseSizeToBytes(sizeStr: string): number {
-    const match = sizeStr.match(/([\d.]+)\s*(B|KB|MB|GB|TB)/i);
+    const match = sizeStr.match(/([\d.]+)\s*(B|KB|KiB|MB|MiB|GB|GiB|TB|TiB)/i);
     if (!match) return 0;
     const value = parseFloat(match[1]);
-    const unit = match[2].toUpperCase();
+    const unit = match[2].toUpperCase().replace('IB', 'B');
     const multipliers: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
     return Math.round(value * (multipliers[unit] || 0));
 }
@@ -649,6 +651,82 @@ async function searchNyaa(query: string): Promise<TorrentResult[]> {
     }
 }
 
+// --- PSA releases via Bitsearch (PSARips-style x265/HEVC release group results) ---
+
+function withPsaToken(query: string): string {
+    return /\bpsa\b/i.test(query) ? query : `${query} PSA`;
+}
+
+function parseBitsearchDate(dateText: string): Pick<TorrentResult, 'uploadDate' | 'uploadTimestamp'> {
+    const value = dateText.trim();
+    if (!value) return {};
+
+    const now = new Date();
+    const lower = value.toLowerCase();
+    if (lower === 'today') {
+        const timestamp = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+        return { uploadDate: new Date(timestamp).toISOString().split('T')[0], uploadTimestamp: timestamp };
+    }
+    if (lower === 'yesterday') {
+        const timestamp = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1);
+        return { uploadDate: new Date(timestamp).toISOString().split('T')[0], uploadTimestamp: timestamp };
+    }
+
+    const slashDate = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashDate) {
+        const [, month, day, year] = slashDate;
+        const timestamp = Date.UTC(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+        return { uploadDate: new Date(timestamp).toISOString().split('T')[0], uploadTimestamp: timestamp };
+    }
+
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) return { uploadDate: value };
+    return { uploadDate: new Date(parsed).toISOString().split('T')[0], uploadTimestamp: parsed };
+}
+
+async function searchBitsearchPsa(query: string): Promise<TorrentResult[]> {
+    try {
+        const url = `https://bitsearch.to/search?q=${encodeURIComponent(withPsaToken(query))}`;
+        const res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!res.ok) return [];
+
+        const html = await res.text();
+        const results: TorrentResult[] = [];
+        const resultRegex = /<a href="\/torrent\/[^"]+"[^>]*>\s*([\s\S]*?)\s*<\/a>[\s\S]*?<i class="fas fa-download"><\/i>\s*<span>([^<]+)<\/span>[\s\S]*?<i class="fas fa-calendar"><\/i>\s*<span>([^<]+)<\/span>[\s\S]*?<span class="font-medium">(\d+)<\/span>\s*<span>seeders<\/span>[\s\S]*?<span class="font-medium">(\d+)<\/span>\s*<span>leechers<\/span>[\s\S]*?<a href="(magnet:[^"]+)"/gi;
+        let match;
+
+        while ((match = resultRegex.exec(html)) !== null) {
+            const title = decodeHtmlEntities(match[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+            if (!/\bpsa\b/i.test(title)) continue;
+
+            const size = decodeHtmlEntities(match[2].trim());
+            const dateInfo = parseBitsearchDate(decodeHtmlEntities(match[3]));
+
+            results.push({
+                title,
+                magnet: decodeHtmlEntities(match[6]),
+                size,
+                sizeBytes: parseSizeToBytes(size),
+                seeds: parseInt(match[4], 10) || 0,
+                leeches: parseInt(match[5], 10) || 0,
+                quality: extractQuality(title),
+                source: 'PSA',
+                ...dateInfo,
+            });
+        }
+
+        return results
+            .sort((a, b) => b.seeds - a.seeds)
+            .slice(0, 20);
+    } catch (e) {
+        console.error('PSA search error:', e);
+        return [];
+    }
+}
+
 // --- Combined search ---
 
 export async function searchTorrents(
@@ -661,9 +739,10 @@ export async function searchTorrents(
     // Always use 200 (All Video) for TPB to ensure we don't filter out HD categories (207, 208)
     const tpbCategory = '200';
 
-    const [tpbOut, ytsOut, knabenOut, nyaaOut, ddlOut] = await Promise.allSettled([
+    const [tpbOut, ytsOut, psaOut, knabenOut, nyaaOut, ddlOut] = await Promise.allSettled([
         withTimeout(searchTPB(query, tpbCategory), 12000, [] as TorrentResult[]),
         withTimeout(options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([] as TorrentResult[]), 12000, [] as TorrentResult[]),
+        withTimeout(searchBitsearchPsa(query), 10000, [] as TorrentResult[]),
         withTimeout(searchKnaben(query), 9000, [] as TorrentResult[]),
         withTimeout(searchNyaa(query), 10000, [] as TorrentResult[]),
         withTimeout(searchOpenDirectory(title, options?.type), 9000, [] as TorrentResult[]),
@@ -671,11 +750,13 @@ export async function searchTorrents(
 
     const tpbResults = tpbOut.status === 'fulfilled' ? tpbOut.value : [];
     const ytsResults = ytsOut.status === 'fulfilled' ? ytsOut.value : [];
+    const psaResults = psaOut.status === 'fulfilled' ? psaOut.value : [];
     const knabenResults = knabenOut.status === 'fulfilled' ? knabenOut.value : [];
     const nyaaResults = nyaaOut.status === 'fulfilled' ? nyaaOut.value : [];
     const ddlResults = ddlOut.status === 'fulfilled' ? ddlOut.value : [];
 
     const torrentResults: TorrentResult[] = [
+        ...psaResults,
         ...tpbResults,
         ...ytsResults,
         ...knabenResults,
@@ -686,6 +767,7 @@ export async function searchTorrents(
     const sourceStatus = [
         `TPB=${tpbResults.length}`,
         `YTS=${ytsResults.length}`,
+        `PSA=${psaResults.length}`,
         `Knaben=${knabenResults.length}`,
         `Nyaa=${nyaaResults.length}`,
         `DDL=${ddlResults.length}`,
