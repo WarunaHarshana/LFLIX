@@ -168,6 +168,53 @@ function getSignificantQueryWords(query: string): string[] {
         .filter(w => w.length > 1 && !/^(19|20)\d{2}$/.test(w));
 }
 
+function getSignificantTvQueryWords(query: string): string[] {
+    return normalizeTitle(query)
+        .split(' ')
+        .filter(w =>
+            w.length > 1 &&
+            !/^(19|20)\d{2}$/.test(w) &&
+            !/^s\d{1,2}e\d{1,3}$/.test(w) &&
+            !/^\d{1,2}x\d{1,3}$/.test(w) &&
+            !/^s\d{1,2}$/.test(w) &&
+            !/^\d{3,4}p$/.test(w) &&
+            !/^(4k|uhd|hdr|hevc|x264|x265|web|webdl|web-dl|webrip|bluray|hdtv)$/.test(w)
+        );
+}
+
+function extractEpisodeQuery(query: string): { season: number; episode: number } | null {
+    const sxxexx = query.match(/\bs(\d{1,2})\s*[\W_]*\s*e(\d{1,3})\b/i);
+    if (sxxexx) {
+        return { season: parseInt(sxxexx[1], 10), episode: parseInt(sxxexx[2], 10) };
+    }
+
+    const xFormat = query.match(/\b(\d{1,2})x(\d{1,3})\b/i);
+    if (xFormat) {
+        return { season: parseInt(xFormat[1], 10), episode: parseInt(xFormat[2], 10) };
+    }
+
+    return null;
+}
+
+function titleMatchesEpisode(title: string, episodeQuery: { season: number; episode: number }): boolean {
+    const compact = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const season = String(episodeQuery.season);
+    const episode = String(episodeQuery.episode);
+    const seasonPadded = season.padStart(2, '0');
+    const episodePadded = episode.padStart(2, '0');
+
+    const tokens = [
+        `s${season}e${episode}`,
+        `s${season}e${episodePadded}`,
+        `s${seasonPadded}e${episode}`,
+        `s${seasonPadded}e${episodePadded}`,
+        `${season}x${episode}`,
+        `${season}x${episodePadded}`,
+    ];
+
+    return tokens.some(token => compact.includes(token));
+}
+
 function titleContainsQueryWord(normTitle: string, word: string): boolean {
     const titleWords = normTitle.split(' ');
     if (titleWords.includes(word) || normTitle.includes(word)) return true;
@@ -203,6 +250,26 @@ function matchesMovieTitleStrictly(title: string, query: string): boolean {
     return matchedWords.length / words.length >= 0.75;
 }
 
+function matchesTvTitleStrictly(title: string, query: string): boolean {
+    const episodeQuery = extractEpisodeQuery(query);
+    if (episodeQuery && !titleMatchesEpisode(title, episodeQuery)) {
+        return false;
+    }
+
+    const normTitle = normalizeTitle(title);
+    const words = getSignificantTvQueryWords(query);
+    if (words.length === 0) return true;
+
+    const matchedWords = words.filter(word => titleContainsQueryWord(normTitle, word));
+
+    if (words.length <= 2) {
+        const titleWords = normTitle.split(' ');
+        return words.every((word, index) => titleWords[index] === word);
+    }
+
+    return matchedWords.length / words.length >= 0.75;
+}
+
 /** Filter and sort results by relevance */
 function filterByRelevance(
     results: TorrentResult[],
@@ -211,10 +278,11 @@ function filterByRelevance(
     options?: { year?: string; type?: 'movie' | 'tv' }
 ): TorrentResult[] {
     const targetYear = options?.year ? parseInt(options.year, 10) : NaN;
-    const useYearFilter = options?.type === 'movie' && Number.isFinite(targetYear);
+    const useYearFilter = (options?.type === 'movie' || options?.type === 'tv') && Number.isFinite(targetYear);
 
     return results
         .filter(r => options?.type !== 'movie' || matchesMovieTitleStrictly(r.title, query))
+        .filter(r => options?.type !== 'tv' || matchesTvTitleStrictly(r.title, query))
         .map(r => {
             const baseScore = relevanceScore(r.title, query);
             if (!useYearFilter) {
@@ -356,8 +424,8 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
 const OPEN_DIR_BASE = 'https://a.111477.xyz';
 const OPEN_DIR_CATEGORIES: Record<string, string[]> = {
     movie: ['/movies/'],
-    tv: ['/tvs/'],
-    all: ['/movies/', '/tvs/'],
+    tv: ['/kdrama/', '/asiandrama/', '/tvs/'],
+    all: ['/movies/', '/kdrama/', '/asiandrama/', '/tvs/'],
 };
 
 // In-memory cache for directory listings (avoids re-fetching the 7800+ entry index)
@@ -405,7 +473,7 @@ async function fetchDirectoryListing(url: string, timeoutMs: number): Promise<{ 
 function normalizeTitle(t: string): string {
     return t
         .toLowerCase()
-        .replace(/[\(\)\[\]\{\}'"!@#$%^&*,.:;]/g, '')
+        .replace(/[\(\)\[\]\{\}'"!@#$%^&*,.:;]/g, ' ')
         .replace(/[-_]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -452,14 +520,16 @@ function parseDirectoryListing(html: string): { name: string; href: string; size
     return entries;
 }
 
-/** Check if folder name matches search query (fuzzy). Ignores season/episode numbers and resolutions for folder matching. */
-function titleMatches(folderName: string, query: string): boolean {
+/** Check if folder name matches search query. Ignores episode/resolution tokens for folder matching. */
+function titleMatches(folderName: string, query: string, type?: 'movie' | 'tv'): boolean {
     const normalFolder = normalizeTitle(folderName);
-    const normalQuery = normalizeTitle(query);
+    const queryWords = type === 'tv' ? getSignificantTvQueryWords(query) : getSignificantQueryWords(query);
+    if (queryWords.length === 0) return true;
 
-    // Filter out typical season/episode patterns (e.g. s01e01, 1080p) from query words when matching root folders
-    const ignoreRegex = /^(s\d+e\d+|s\d+|\d{3,4}p|4k|uhd)$/;
-    const queryWords = normalQuery.split(' ').filter(w => w.length > 1 && !ignoreRegex.test(w));
+    if (type === 'tv' && queryWords.length <= 2) {
+        const folderWords = normalFolder.split(' ');
+        return queryWords.every((word, index) => folderWords[index] === word);
+    }
 
     // All significant non-episode query words must appear in the folder name
     return queryWords.every(word => normalFolder.includes(word));
@@ -482,7 +552,7 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
                 if (folders.length === 0) continue;
 
                 // Find matching title folders
-                const matchingFolders = folders.filter(f => titleMatches(f.name, query)).slice(0, 5);
+                const matchingFolders = folders.filter(f => titleMatches(f.name, query, type)).slice(0, 5);
 
                 // Fetch file listings from matching folders in parallel
                 const fileListings = await Promise.allSettled(
@@ -538,6 +608,10 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
                     if (listing.status === 'fulfilled') {
                         results.push(...listing.value);
                     }
+                }
+
+                if (type && results.length > 0) {
+                    return results.slice(0, 50);
                 }
             } catch (e) {
                 console.error(`Open directory search error for ${category}:`, e);
@@ -719,6 +793,7 @@ async function searchBitsearchPsa(query: string): Promise<TorrentResult[]> {
         }
 
         return results
+            .filter(r => r.seeds > 0)
             .sort((a, b) => b.seeds - a.seeds)
             .slice(0, 20);
     } catch (e) {
