@@ -531,7 +531,7 @@ export default function DiscoverDetailPage() {
           ) : (
             <div className="w-full max-w-5xl rounded-2xl bg-black/16 backdrop-blur-[4px] p-4 sm:p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
               <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 mb-3 text-xs sm:text-sm md:text-base font-semibold">
-                <span className="px-2.5 py-1 rounded-md bg-[#F5C518] text-black font-bold shadow-sm">IMDb {activeDetails?.rating?.toFixed(1) || 'N/A'}</span>
+                <span className="px-2.5 py-1 rounded-md bg-[#F5C518] text-black font-bold shadow-sm">TMDB {activeDetails?.rating?.toFixed(1) || 'N/A'}</span>
                 {activeDetails?.year && <span className="text-neutral-200">{activeDetails.year}</span>}
                 {mediaType === 'movie' && movieDetails?.runtime && <span className="text-neutral-200">{Math.floor(movieDetails.runtime / 60)}h {movieDetails.runtime % 60}m</span>}
                 {mediaType === 'tv' && tvDetails?.status && <span className="text-neutral-200">{tvDetails.status}</span>}
@@ -730,7 +730,7 @@ export default function DiscoverDetailPage() {
                         <p className="text-sm font-semibold">E{ep.episodeNumber} · {ep.title}</p>
                         {ep.rating != null && ep.rating > 0 && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-semibold">
-                            IMDb {ep.rating.toFixed(1)}
+                            TMDB {ep.rating.toFixed(1)}
                           </span>
                         )}
                       </div>

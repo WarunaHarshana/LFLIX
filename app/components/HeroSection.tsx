@@ -66,9 +66,9 @@ export default function HeroSection({
           {featured.rating != null && featured.rating > 0 && (
             <span
               className="inline-flex items-center overflow-hidden rounded-md border border-[#F5C518]/70 bg-black/60 shadow-sm"
-              aria-label={`IMDb rating ${featured.rating.toFixed(1)}`}
+              aria-label={`TMDB rating ${featured.rating.toFixed(1)}`}
             >
-              <span className="bg-[#F5C518] px-2 py-1 text-xs font-black tracking-wide text-black">IMDb</span>
+              <span className="bg-[#F5C518] px-2 py-1 text-xs font-black tracking-wide text-black">TMDB</span>
               <span className="px-2 py-1 text-xs font-bold text-white">{featured.rating.toFixed(1)}</span>
             </span>
           )}

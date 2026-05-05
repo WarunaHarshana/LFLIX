@@ -446,7 +446,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                             <div className="flex items-center gap-3 mt-3 flex-wrap text-sm">
                                 {item.rating != null && item.rating > 0 && (
                                     <span className="bg-[#F5C518] px-2.5 py-1 rounded-md shadow-sm">
-                                        <span className="text-sm font-bold text-black">IMDb {item.rating.toFixed(1)}</span>
+                                        <span className="text-sm font-bold text-black">TMDB {item.rating.toFixed(1)}</span>
                                     </span>
                                 )}
                                 {year && (
