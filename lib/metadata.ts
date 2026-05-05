@@ -17,6 +17,16 @@ export function getTmdbApiKey(): string {
   return process.env.TMDB_API_KEY || '3d8c8476371d0730fb5bd7ae67241879';
 }
 
+export function getOmdbApiKey(): string {
+  try {
+    const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('omdbApiKey') as { value: string } | undefined;
+    if (setting?.value) return setting.value;
+  } catch {
+    // ignore
+  }
+  return process.env.OMDB_API_KEY || '';
+}
+
 // Global rate limiter state
 let lastTmdbCall = 0;
 const TMDB_DELAY_MS = 200; // Conservative 200ms
@@ -130,9 +140,66 @@ export interface MediaMetadata {
   backdropPath: string | null;
   overview: string | null;
   rating: number | null;
+  imdbRating: number | null;
   genres: string | null;
   year?: number | null; // For movies
   firstAirDate?: string | null; // For shows
+}
+
+type OmdbRatingResponse = {
+  Response?: string;
+  imdbRating?: string;
+  Error?: string;
+};
+
+export async function fetchImdbRatingById(imdbId?: string | null): Promise<number | null> {
+  const apiKey = getOmdbApiKey();
+  if (!apiKey || !imdbId) return null;
+
+  const cacheKey = `omdb-rating-${imdbId}`;
+  const cached = tmdbCache.get(cacheKey) as number | null;
+  if (cached !== null) return cached;
+
+  try {
+    const url = `https://www.omdbapi.com/?i=${encodeURIComponent(imdbId)}&apikey=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'LFLIX/0.3' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json() as OmdbRatingResponse;
+    if (data.Response === 'False' || !data.imdbRating || data.imdbRating === 'N/A') return null;
+
+    const rating = parseFloat(data.imdbRating);
+    if (!Number.isFinite(rating) || rating <= 0) return null;
+
+    tmdbCache.set(cacheKey, rating, 24 * 60 * 60 * 1000);
+    return rating;
+  } catch (e) {
+    console.warn(`OMDb rating fetch failed for ${imdbId}:`, e);
+    return null;
+  }
+}
+
+async function fetchMovieImdbRating(moviedb: MovieDb, tmdbId?: number | null): Promise<number | null> {
+  if (!tmdbId) return null;
+  try {
+    const externalIds = await rateLimitedTmdbCall(() => moviedb.movieExternalIds({ id: tmdbId }));
+    return fetchImdbRatingById(externalIds.imdb_id || null);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchShowImdbRating(moviedb: MovieDb, tmdbId?: number | null): Promise<number | null> {
+  if (!tmdbId) return null;
+  try {
+    const externalIds = await rateLimitedTmdbCall(() => moviedb.tvExternalIds({ id: tmdbId }));
+    return fetchImdbRatingById(externalIds.imdb_id || null);
+  } catch {
+    return null;
+  }
 }
 
 async function fetchGenres(moviedb: MovieDb, genreIds: number[], type: 'movie' | 'tv'): Promise<string> {
@@ -165,6 +232,7 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
     backdropPath: null,
     overview: null,
     rating: null,
+    imdbRating: null,
     genres: null
   };
 
@@ -184,6 +252,7 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
     if (res.results && res.results.length > 0) {
       const hit = res.results[0];
       const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'movie') : '';
+      const imdbRating = await fetchMovieImdbRating(moviedb, hit.id || null);
 
       return {
         title: hit.title || rawName,
@@ -193,6 +262,7 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
         backdropPath: hit.backdrop_path || null,
         overview: hit.overview || null,
         rating: hit.vote_average || null,
+        imdbRating,
         genres
       };
     }
@@ -217,6 +287,7 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
     backdropPath: null,
     overview: null,
     rating: null,
+    imdbRating: null,
     genres: null,
     firstAirDate: null
   };
@@ -254,6 +325,7 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
 
       const hit = scored[0];
       const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'tv') : '';
+      const imdbRating = await fetchShowImdbRating(moviedb, hit.id || null);
 
       return {
         title: hit.name || normalizedInput || showName,
@@ -262,6 +334,7 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
         backdropPath: hit.backdrop_path || null,
         overview: hit.overview || null,
         rating: hit.vote_average || null,
+        imdbRating,
         genres,
         firstAirDate: hit.first_air_date || null
       };

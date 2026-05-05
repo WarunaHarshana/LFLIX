@@ -7,7 +7,7 @@ import { getSafeErrorMessage, validateExistingDirectory } from '@/lib/security';
 export const dynamic = 'force-dynamic';
 
 // Valid setting keys to prevent injection
-const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey', 'downloadPath'];
+const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey', 'omdbApiKey', 'downloadPath'];
 
 // Validate VLC path exists
 function validateVlcPath(path: string): { valid: boolean; error?: string } {

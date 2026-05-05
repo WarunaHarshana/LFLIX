@@ -11,6 +11,7 @@ export type ContentItem = {
   year?: number;
   firstAirDate?: string | null;
   rating: number | null;
+  imdbRating?: number | null;
   filePath?: string;
   isHDR?: boolean;
   resolution?: string | null;
@@ -87,6 +88,7 @@ export type DiscoverOnlineItem = {
   backdropPath: string | null;
   overview: string | null;
   rating: number | null;
+  imdbRating?: number | null;
   year: string | null;
   popularity: number;
 };

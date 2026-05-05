@@ -20,6 +20,7 @@ export type ContentItem = {
     year?: number;
     firstAirDate?: string | null;
     rating: number | null;
+    imdbRating?: number | null;
     filePath?: string;
     isHDR?: boolean;
     resolution?: string | null;

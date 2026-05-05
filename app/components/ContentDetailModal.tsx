@@ -19,6 +19,7 @@ type ContentItem = {
     year?: number;
     firstAirDate?: string | null;
     rating: number | null;
+    imdbRating?: number | null;
     isHDR?: boolean;
     resolution?: string | null;
     videoCodec?: string | null;
@@ -45,6 +46,7 @@ type Props = {
         backdropPath: string | null;
         overview: string | null;
         rating: number | null;
+        imdbRating?: number | null;
         year: string | null;
         popularity: number;
     }) => void;
@@ -87,6 +89,7 @@ type TmdbResult = {
     backdropPath: string | null;
     overview: string | null;
     rating: number | null;
+    imdbRating?: number | null;
     year: string | null;
     popularity: number;
 };
@@ -157,6 +160,7 @@ function toDiscoverContentCardItem(item: TmdbResult): DiscoverContentCardItem {
         backdropPath: item.backdropPath,
         overview: item.overview,
         rating: item.rating,
+        imdbRating: item.imdbRating,
         year: item.year ? parseInt(item.year, 10) : undefined,
     };
 }
@@ -181,6 +185,8 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
     const [personCreditSort, setPersonCreditSort] = useState<PersonCreditSort>('date');
 
     const year = item.year || (item.firstAirDate ? item.firstAirDate.substring(0, 4) : '');
+    const displayRating = item.imdbRating ?? item.rating;
+    const displayRatingSource = item.imdbRating != null ? 'IMDb' : 'TMDB';
     const progressPercent = item.watchProgress && item.watchProgress.duration > 0
         ? (item.watchProgress.progress / item.watchProgress.duration) * 100
         : 0;
@@ -444,9 +450,9 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
 
                             {/* Metadata Row */}
                             <div className="flex items-center gap-3 mt-3 flex-wrap text-sm">
-                                {item.rating != null && item.rating > 0 && (
+                                {displayRating != null && displayRating > 0 && (
                                     <span className="bg-[#F5C518] px-2.5 py-1 rounded-md shadow-sm">
-                                        <span className="text-sm font-bold text-black">TMDB {item.rating.toFixed(1)}</span>
+                                        <span className="text-sm font-bold text-black">{displayRatingSource} {displayRating.toFixed(1)}</span>
                                     </span>
                                 )}
                                 {year && (

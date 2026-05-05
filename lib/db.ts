@@ -41,6 +41,7 @@ db.exec(`
     backdropPath TEXT,
     overview TEXT,
     rating REAL,
+    imdbRating REAL,
     genres TEXT,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -53,6 +54,7 @@ db.exec(`
     backdropPath TEXT,
     overview TEXT,
     rating REAL,
+    imdbRating REAL,
     genres TEXT,
     firstAirDate TEXT,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -140,6 +142,7 @@ db.exec(`
     backdropPath TEXT,
     overview TEXT,
     rating REAL,
+    imdbRating REAL,
     year TEXT,
     genres TEXT,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -291,12 +294,12 @@ db.exec(`
 // WHITELIST of valid tables and columns to prevent SQL injection
 const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads', 'auto_track', 'notifications', 'episode_releases', 'movie_releases'];
 const VALID_COLUMNS: Record<string, string[]> = {
-  movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
-  shows: ['genres', 'backdropPath', 'overview', 'rating'],
+  movies: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
+  shows: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating'],
   episodes: ['stillPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
-  watchlist: ['trackRelease'],
+  watchlist: ['trackRelease', 'imdbRating'],
   settings: []
 };
 
@@ -328,6 +331,8 @@ function addColumnIfNotExists(table: string, column: string, type: string) {
 // Add genres column to movies and shows if missing (for existing databases)
 addColumnIfNotExists('movies', 'genres', 'TEXT');
 addColumnIfNotExists('shows', 'genres', 'TEXT');
+addColumnIfNotExists('movies', 'imdbRating', 'REAL');
+addColumnIfNotExists('shows', 'imdbRating', 'REAL');
 addColumnIfNotExists('episodes', 'rating', 'REAL');
 
 // Add HDR detection column
@@ -351,6 +356,7 @@ for (const [col, type] of MEDIA_INFO_COLS) {
 
 // Add trackRelease column to watchlist (for movie availability tracking)
 addColumnIfNotExists('watchlist', 'trackRelease', 'INTEGER DEFAULT 1');
+addColumnIfNotExists('watchlist', 'imdbRating', 'REAL');
 
 type ShowDedupRow = {
   id: number;
@@ -360,6 +366,7 @@ type ShowDedupRow = {
   backdropPath: string | null;
   overview: string | null;
   rating: number | null;
+  imdbRating: number | null;
   genres: string | null;
   firstAirDate: string | null;
   episodeCount: number;
@@ -382,7 +389,7 @@ function normalizeShowTitleForDedup(title: string): string {
 
 function dedupeShows(): void {
   const shows = db.prepare(`
-    SELECT s.id, s.title, s.tmdbId, s.posterPath, s.backdropPath, s.overview, s.rating, s.genres, s.firstAirDate,
+    SELECT s.id, s.title, s.tmdbId, s.posterPath, s.backdropPath, s.overview, s.rating, s.imdbRating, s.genres, s.firstAirDate,
       (SELECT COUNT(*) FROM episodes e WHERE e.showId = s.id) as episodeCount
     FROM shows s
     ORDER BY s.addedAt ASC
@@ -431,6 +438,7 @@ function dedupeShows(): void {
               backdropPath = COALESCE(backdropPath, ?),
               overview = COALESCE(overview, ?),
               rating = COALESCE(rating, ?),
+              imdbRating = COALESCE(imdbRating, ?),
               genres = COALESCE(genres, ?),
               firstAirDate = COALESCE(firstAirDate, ?)
           WHERE id = ?
@@ -440,6 +448,7 @@ function dedupeShows(): void {
           dup.backdropPath,
           dup.overview,
           dup.rating,
+          dup.imdbRating,
           dup.genres,
           dup.firstAirDate,
           canonical.id

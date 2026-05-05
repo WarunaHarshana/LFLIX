@@ -9,7 +9,7 @@ export async function GET() {
     // SECURITY: Don't expose filePath - select only safe columns
     const movies = db.prepare(`
       SELECT id, title, year, tmdbId, posterPath, backdropPath, 
-             overview, rating, genres, addedAt
+             overview, rating, imdbRating, genres, addedAt
       FROM movies 
       ORDER BY addedAt DESC
     `).all();

@@ -19,9 +19,9 @@ export async function POST(req: Request) {
             return await refreshSingle(id, type);
         }
 
-        // Otherwise refresh all items missing posters
-        const moviesWithoutPoster = db.prepare('SELECT id, title, year, fileName FROM movies WHERE posterPath IS NULL').all() as any[];
-        const showsWithoutPoster = db.prepare('SELECT id, title FROM shows WHERE posterPath IS NULL').all() as any[];
+        // Otherwise refresh items missing posters or IMDb ratings.
+        const moviesWithoutPoster = db.prepare('SELECT id, title, year, fileName FROM movies WHERE posterPath IS NULL OR imdbRating IS NULL').all() as any[];
+        const showsWithoutPoster = db.prepare('SELECT id, title FROM shows WHERE posterPath IS NULL OR imdbRating IS NULL').all() as any[];
 
         let refreshed = 0;
         const errors: string[] = [];
@@ -42,6 +42,7 @@ export async function POST(req: Request) {
                           backdropPath = @backdropPath,
                           overview = @overview,
                           rating = @rating,
+                          imdbRating = @imdbRating,
                           genres = @genres,
                           year = COALESCE(@year, year)
                         WHERE id = @id
@@ -97,6 +98,7 @@ export async function POST(req: Request) {
                           backdropPath = @backdropPath,
                           overview = @overview,
                           rating = @rating,
+                          imdbRating = @imdbRating,
                           genres = @genres
                         WHERE id = @id
                     `).run({
@@ -175,6 +177,7 @@ async function refreshSingle(id: number, type: 'movie' | 'show') {
                       backdropPath = @backdropPath,
                       overview = @overview,
                       rating = @rating,
+                      imdbRating = @imdbRating,
                       genres = @genres,
                       year = COALESCE(@year, year)
                     WHERE id = @id
@@ -211,6 +214,7 @@ async function refreshSingle(id: number, type: 'movie' | 'show') {
                       backdropPath = @backdropPath,
                       overview = @overview,
                       rating = @rating,
+                      imdbRating = @imdbRating,
                       genres = @genres
                     WHERE id = @id
                 `).run({ ...metadata, id });

@@ -242,8 +242,8 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
         showId = existingShow.id;
       } else {
         const result = db.prepare(`
-            INSERT INTO shows (title, tmdbId, posterPath, backdropPath, overview, rating, firstAirDate, genres) 
-            VALUES (@title, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @firstAirDate, @genres)
+            INSERT INTO shows (title, tmdbId, posterPath, backdropPath, overview, rating, imdbRating, firstAirDate, genres) 
+            VALUES (@title, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @imdbRating, @firstAirDate, @genres)
         `).run(showMeta);
         showId = result.lastInsertRowid;
       }
@@ -275,8 +275,8 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
       const movieMeta = await fetchMovieMetadata(fileName);
 
       db.prepare(`
-        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, genres, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
-        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @genres, @isHDR, @resolution, @videoCodec, @audioCodec, @audioChannels, @bitrate, @duration, @fileSize)
+        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, imdbRating, genres, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
+        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @imdbRating, @genres, @isHDR, @resolution, @videoCodec, @audioCodec, @audioChannels, @bitrate, @duration, @fileSize)
       `).run({
         filePath,
         fileName,

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, cachedTmdbCall } from '@/lib/metadata';
+import { getTmdbApiKey, cachedTmdbCall, fetchImdbRatingById } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +52,10 @@ export async function GET(req: Request) {
                 posterPath: collectionRaw.poster_path || null,
                 backdropPath: collectionRaw.backdrop_path || null,
             } : null;
+            const externalIds = await cachedTmdbCall(`movie-external-ids-${tmdbId}`, () =>
+                moviedb.movieExternalIds({ id: tmdbId })
+            );
+            const imdbRating = await fetchImdbRatingById((externalIds as any).imdb_id || null);
 
             return NextResponse.json({
                 id: movie.id,
@@ -60,6 +64,7 @@ export async function GET(req: Request) {
                 posterPath: movie.poster_path || null,
                 backdropPath: movie.backdrop_path || null,
                 rating: movie.vote_average || null,
+                imdbRating,
                 year: movie.release_date?.substring(0, 4) || null,
                 runtime: movie.runtime || null,
                 tagline: movie.tagline || null,
@@ -100,6 +105,10 @@ export async function GET(req: Request) {
             );
 
             const logoPath = pickBestLogoPath((show as any).images?.logos);
+            const externalIds = await cachedTmdbCall(`tv-external-ids-${tmdbId}`, () =>
+                moviedb.tvExternalIds({ id: tmdbId })
+            );
+            const imdbRating = await fetchImdbRatingById((externalIds as any).imdb_id || null);
 
             return NextResponse.json({
                 id: show.id,
@@ -108,6 +117,7 @@ export async function GET(req: Request) {
                 posterPath: show.poster_path || null,
                 backdropPath: show.backdrop_path || null,
                 rating: show.vote_average || null,
+                imdbRating,
                 year: show.first_air_date?.substring(0, 4) || null,
                 status: show.status || null,
                 tagline: show.tagline || null,

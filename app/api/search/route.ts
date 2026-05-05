@@ -16,23 +16,23 @@ export async function GET(req: Request) {
         const searchTerm = `%${query.trim()}%`;
 
         const movies = db.prepare(`
-      SELECT id, 'movie' as type, title, posterPath, year, rating, filePath
+      SELECT id, 'movie' as type, title, posterPath, year, rating, imdbRating, filePath
       FROM movies 
       WHERE title LIKE ?
-      ORDER BY rating DESC
+      ORDER BY COALESCE(imdbRating, rating) DESC
       LIMIT 10
     `).all(searchTerm);
 
         const shows = db.prepare(`
-      SELECT id, 'show' as type, title, posterPath, firstAirDate, rating
+      SELECT id, 'show' as type, title, posterPath, firstAirDate, rating, imdbRating
       FROM shows 
       WHERE title LIKE ?
-      ORDER BY rating DESC
+      ORDER BY COALESCE(imdbRating, rating) DESC
       LIMIT 10
     `).all(searchTerm);
 
         const results = [...movies, ...shows]
-            .sort((a: any, b: any) => (b.rating || 0) - (a.rating || 0))
+            .sort((a: any, b: any) => ((b.imdbRating ?? b.rating) || 0) - ((a.imdbRating ?? a.rating) || 0))
             .slice(0, 15);
 
         return NextResponse.json(results);

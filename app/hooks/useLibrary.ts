@@ -70,7 +70,7 @@ export function useLibrary(showToast: (message: string, type: 'success' | 'error
         case 'year-old':
           return (a.year || 0) - (b.year || 0);
         case 'rating':
-          return (b.rating || 0) - (a.rating || 0);
+          return ((b.imdbRating ?? b.rating) || 0) - ((a.imdbRating ?? a.rating) || 0);
         case 'added':
         default:
           return new Date(b.addedAt || 0).getTime() - new Date(a.addedAt || 0).getTime();

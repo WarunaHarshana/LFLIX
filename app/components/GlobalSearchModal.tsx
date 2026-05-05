@@ -13,6 +13,7 @@ type LocalResult = {
   year?: number;
   firstAirDate?: string;
   rating: number | null;
+  imdbRating?: number | null;
   filePath?: string;
 };
 
