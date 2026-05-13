@@ -41,11 +41,11 @@ class DownloadManager {
         return this.client;
     }
 
-    // Public recovery method — only resets downloads stuck for >30 seconds
+    // Public recovery method — re-attaches in-progress torrents after a server restart
     async recoverAll(): Promise<void> {
         try {
-            // Only reset downloads that have been stuck for more than 30 seconds
-            // (fresh downloads that are still initializing shouldn't be touched)
+            // Only recover downloads that have been stale for more than 30 seconds
+            // (fresh downloads that are still initializing shouldn't be touched).
             const staleDownloads = db.prepare(
                 `SELECT id, magnetUri, status, infoHash, name, downloadPath, startedAt 
                  FROM downloads 
@@ -65,14 +65,16 @@ class DownloadManager {
             for (const dl of staleDownloads) {
                 const torrent = this.findTorrent(dl.infoHash || dl.magnetUri);
                 if (!torrent) {
-                    db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0 WHERE id = ?").run(dl.id);
-                    console.log(`[DownloadManager] Recovery: #${dl.id} "${dl.name || 'unknown'}" → paused`);
-                    recovered++;
+                    const resumed = await this.resumeDownload(dl.id);
+                    if (resumed) {
+                        console.log(`[DownloadManager] Recovery: #${dl.id} "${dl.name || 'unknown'}" re-attached`);
+                        recovered++;
+                    }
                 }
             }
 
             if (recovered > 0) {
-                console.log(`[DownloadManager] Recovery: ${recovered} downloads ready to resume`);
+                console.log(`[DownloadManager] Recovery: ${recovered} downloads re-attached`);
             }
         } catch (e) {
             console.error('[DownloadManager] Recovery error:', e);

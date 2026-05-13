@@ -59,6 +59,14 @@ type PsaRelease = {
 // Standard trackers for magnet links
 const TRACKERS = [
     'udp://tracker.opentrackr.org:1337/announce',
+    'udp://tracker.torrent.eu.org:451/announce',
+    'udp://open.stealth.si:80/announce',
+    'udp://exodus.desync.com:6969/announce',
+    'udp://tracker-udp.gbitt.info:80/announce',
+    'udp://tracker.birkenwald.de:6969/announce',
+    'udp://tracker.moeking.me:6969/announce',
+    'udp://tracker.dler.org:6969/announce',
+    'udp://explodie.org:6969/announce',
     'udp://open.demonii.com:1337/announce',
     'udp://tracker.openbittorrent.com:80',
     'udp://tracker.coppersurfer.tk:6969',
@@ -926,6 +934,18 @@ function isProbablySameRelease(candidateTitle: string, releaseTitle: string): bo
 }
 
 async function resolvePsaReleaseViaIndexers(release: PsaRelease): Promise<TorrentResult | null> {
+    const bitsearchExact = await searchBitsearchForPsaRelease(release.title);
+    if (bitsearchExact) {
+        return {
+            ...bitsearchExact,
+            title: release.title,
+            size: release.size || bitsearchExact.size,
+            sizeBytes: release.sizeBytes || bitsearchExact.sizeBytes,
+            quality: extractQuality(release.title),
+            source: 'PSA',
+        };
+    }
+
     const tpbExact = await searchTPBForPsaRelease(release.title);
     if (tpbExact) {
         return {
@@ -950,6 +970,68 @@ async function resolvePsaReleaseViaIndexers(release: PsaRelease): Promise<Torren
         quality: extractQuality(release.title),
         source: 'PSA',
     };
+}
+
+async function searchBitsearchForPsaRelease(releaseTitle: string): Promise<TorrentResult | null> {
+    try {
+        const url = `https://bitsearch.to/search?q=${encodeURIComponent(releaseTitle)}`;
+        const res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            signal: AbortSignal.timeout(9000),
+        });
+        if (!res.ok) return null;
+
+        const html = await res.text();
+        const magnetMatches = Array.from(html.matchAll(/href="(magnet:[^"]+)"/gi));
+
+        for (const match of magnetMatches) {
+            const magnet = decodeHtmlEntities(match[1]);
+            const cardStart = html.lastIndexOf('bg-white rounded-lg', match.index || 0);
+            const cardEnd = html.indexOf('bg-white rounded-lg', (match.index || 0) + match[0].length);
+            const card = html.slice(
+                cardStart >= 0 ? cardStart : Math.max(0, (match.index || 0) - 3500),
+                cardEnd > 0 ? cardEnd : Math.min(html.length, (match.index || 0) + 2500)
+            );
+
+            const title = decodeHtmlEntities(
+                card.match(/<a[^>]+href="\/torrent\/[^"]+"[^>]*>\s*([\s\S]*?)\s*<\/a>/i)?.[1]
+                    ?.replace(/<[^>]+>/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                || releaseTitle
+            );
+
+            if (!isProbablySameRelease(title, releaseTitle)) continue;
+
+            const size = decodeHtmlEntities(
+                card.match(/<i class="fas fa-download"><\/i>\s*<span>\s*([^<]+)\s*<\/span>/i)?.[1]?.trim()
+                || ''
+            );
+            const uploadDateText = decodeHtmlEntities(
+                card.match(/<i class="fas fa-calendar"><\/i>\s*<span>\s*([^<]+)\s*<\/span>/i)?.[1]?.trim()
+                || ''
+            );
+            const seeds = parseInt(card.match(/text-green-600[\s\S]*?<span class="font-medium">\s*(\d+)\s*<\/span>/i)?.[1] || '0', 10) || 0;
+            const leeches = parseInt(card.match(/text-red-600[\s\S]*?<span class="font-medium">\s*(\d+)\s*<\/span>/i)?.[1] || '0', 10) || 0;
+            const uploadInfo = uploadDateText ? parseFeedDate(uploadDateText) : {};
+
+            return {
+                title,
+                magnet,
+                size: size || 'Unknown',
+                sizeBytes: size ? parseSizeToBytes(size) : 0,
+                seeds,
+                leeches,
+                quality: extractQuality(title),
+                source: 'PSA',
+                ...uploadInfo,
+            };
+        }
+    } catch {
+        // Fall through to the other exact-match indexers.
+    }
+
+    return null;
 }
 
 async function searchTPBForPsaRelease(releaseTitle: string): Promise<TorrentResult | null> {

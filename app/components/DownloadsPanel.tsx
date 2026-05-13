@@ -131,6 +131,13 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
         return `${formatBytes(bps)}/s`;
     };
 
+    const downloadStatusText = (dl: DownloadItem) => {
+        if (dl.status !== 'downloading') return null;
+        if (dl.totalSize === 0 && dl.progress === 0) return 'Finding metadata/peers';
+        if (dl.downloadSpeed === 0) return 'Waiting for peers';
+        return formatSpeed(dl.downloadSpeed);
+    };
+
     const statusIcon = (status: string) => {
         switch (status) {
             case 'downloading': return <ArrowDown className="w-4 h-4 text-blue-400 animate-bounce" />;
@@ -218,7 +225,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                             <p className="text-sm font-medium truncate">{dl.name || 'Loading metadata...'}</p>
                                             <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
                                                 {dl.status === 'downloading' && (
-                                                    <span className="text-blue-400">{formatSpeed(dl.downloadSpeed)}</span>
+                                                    <span className="text-blue-400">{downloadStatusText(dl)}</span>
                                                 )}
                                                 {dl.totalSize > 0 && (
                                                     <span>{formatBytes(dl.downloadedSize)} / {formatBytes(dl.totalSize)}</span>
