@@ -216,6 +216,20 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
 
     const isDDL = (result: TorrentResult) => result.source === 'DDL';
 
+    const sourceBadge = (result: TorrentResult): { label: string; className: string } => {
+        const source = result.source.toUpperCase();
+        if (source === 'DDL') {
+            return { label: '⬇ DDL', className: 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold' };
+        }
+        if (source === 'PSA') {
+            return { label: 'PSA', className: 'bg-pink-500/20 text-pink-300 border border-pink-500/40 font-bold' };
+        }
+        if (source === 'YTS') {
+            return { label: 'YTS', className: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' };
+        }
+        return { label: result.source, className: 'bg-neutral-800 text-neutral-500' };
+    };
+
     /** Extract format tags (HDR, IMAX, Remux, Atmos, etc.) from a title */
     const extractTags = (title: string): { label: string; className: string }[] => {
         const tags: { label: string; className: string }[] = [];
@@ -382,6 +396,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                     </div>
                     {sortedResults.map((result, i) => {
                         const isStarted = downloadStarted.has(result.magnet);
+                        const source = sourceBadge(result);
                         return (
                             <div
                                 key={i}
@@ -399,10 +414,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                         <span className="text-neutral-400">{result.size}</span>
                                         {!isDDL(result) && <span className="text-green-500 font-medium">↑ {result.seeds}</span>}
                                         {!isDDL(result) && <span className="text-red-400">↓ {result.leeches}</span>}
-                                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDDL(result)
-                                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold'
-                                            : 'bg-neutral-800 text-neutral-500'
-                                            }`}>{isDDL(result) ? '⬇ DDL' : result.source}</span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
                                         {result.uploadDate && <span className="text-neutral-600">{result.uploadDate}</span>}
                                     </div>
                                 </div>
