@@ -1,5 +1,5 @@
 /**
- * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS + PSA/Bitsearch + a.111477.xyz open directory
+ * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS + PSArips + a.111477.xyz open directory
  */
 
 export interface TorrentResult {
@@ -40,6 +40,20 @@ type KnabenHit = {
 
 type KnabenResponse = {
     hits?: KnabenHit[];
+};
+
+type PsaFeedItem = {
+    title: string;
+    link: string;
+    pubDate?: string;
+    timestamp?: number;
+};
+
+type PsaRelease = {
+    title: string;
+    torrentUrl?: string;
+    size?: string;
+    sizeBytes: number;
 };
 
 // Standard trackers for magnet links
@@ -194,6 +208,12 @@ function extractEpisodeQuery(query: string): { season: number; episode: number }
     }
 
     return null;
+}
+
+function extractEpisodeKey(title: string): string | null {
+    const episode = extractEpisodeQuery(title);
+    if (!episode) return null;
+    return `s${String(episode.season).padStart(2, '0')}e${String(episode.episode).padStart(2, '0')}`;
 }
 
 function titleMatchesEpisode(title: string, episodeQuery: { season: number; episode: number }): boolean {
@@ -725,13 +745,13 @@ async function searchNyaa(query: string): Promise<TorrentResult[]> {
     }
 }
 
-// --- PSA releases via Bitsearch (PSARips-style x265/HEVC release group results) ---
+// --- PSArips official feed/pages ---
 
-function withPsaToken(query: string): string {
-    return /\bpsa\b/i.test(query) ? query : `${query} PSA`;
-}
+const PSA_BASES = ['https://psa.wf', 'https://psarips.com'];
+const PSA_FEED_CACHE_TTL = 5 * 60 * 1000;
+let psaFeedCache: { ts: number; data: PsaFeedItem[] } | null = null;
 
-function parseBitsearchDate(dateText: string): Pick<TorrentResult, 'uploadDate' | 'uploadTimestamp'> {
+function parseFeedDate(dateText: string): Pick<TorrentResult, 'uploadDate' | 'uploadTimestamp'> {
     const value = dateText.trim();
     if (!value) return {};
 
@@ -758,44 +778,257 @@ function parseBitsearchDate(dateText: string): Pick<TorrentResult, 'uploadDate' 
     return { uploadDate: new Date(parsed).toISOString().split('T')[0], uploadTimestamp: parsed };
 }
 
-async function searchBitsearchPsa(query: string): Promise<TorrentResult[]> {
+async function fetchPsaFeed(): Promise<PsaFeedItem[]> {
+    if (psaFeedCache && Date.now() - psaFeedCache.ts < PSA_FEED_CACHE_TTL) {
+        return psaFeedCache.data;
+    }
+
+    for (const base of PSA_BASES) {
+        try {
+            const res = await fetch(`${base}/feed/`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                signal: AbortSignal.timeout(10000),
+            });
+            if (!res.ok) continue;
+
+            const xml = await res.text();
+            const items: PsaFeedItem[] = [];
+            const itemRegex = /<item\b[\s\S]*?<\/item>/gi;
+            let itemMatch;
+
+            while ((itemMatch = itemRegex.exec(xml)) !== null) {
+                const itemXml = itemMatch[0];
+                const title = decodeHtmlEntities((itemXml.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/i)?.[1]
+                    || itemXml.match(/<title>([\s\S]*?)<\/title>/i)?.[1]
+                    || '').replace(/<[^>]+>/g, '').trim());
+                const link = decodeHtmlEntities((itemXml.match(/<link>([\s\S]*?)<\/link>/i)?.[1] || '').trim());
+                const pubDate = decodeHtmlEntities((itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] || '').trim());
+                if (!title || !link) continue;
+
+                const parsed = Date.parse(pubDate);
+                items.push({
+                    title,
+                    link: link.replace(/^https?:\/\/psa\.re/i, base),
+                    pubDate,
+                    timestamp: Number.isNaN(parsed) ? undefined : parsed,
+                });
+            }
+
+            if (items.length > 0) {
+                psaFeedCache = { ts: Date.now(), data: items };
+                return items;
+            }
+        } catch {
+            // Try the next active mirror.
+        }
+    }
+
+    return [];
+}
+
+async function searchPsaPosts(query: string, type?: 'movie' | 'tv'): Promise<PsaFeedItem[]> {
+    for (const base of PSA_BASES) {
+        try {
+            const url = `${base}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&subtype=post&per_page=20`;
+            const res = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                },
+                signal: AbortSignal.timeout(10000),
+            });
+            if (!res.ok) continue;
+
+            const data = await res.json() as Array<{ title?: string; url?: string }>;
+            if (!Array.isArray(data)) continue;
+
+            return data
+                .map((item) => ({
+                    title: decodeHtmlEntities(String(item.title || '').replace(/<[^>]+>/g, '').trim()),
+                    link: String(item.url || '').replace(/\\\//g, '/'),
+                }))
+                .filter((item) => item.title && item.link)
+                .filter((item) => !type || (type === 'tv' ? item.link.includes('/tv-show/') : item.link.includes('/movie/')))
+                .filter((item) => type === 'tv' ? titleMatches(item.title, query, 'tv') : matchesMovieTitleStrictly(item.title, query));
+        } catch {
+            // Try the next mirror.
+        }
+    }
+
+    return [];
+}
+
+function psaItemMatchesQuery(item: PsaFeedItem, query: string, type?: 'movie' | 'tv'): boolean {
+    if (type === 'tv' && !item.link.includes('/tv-show/')) return false;
+    if (type === 'movie' && !item.link.includes('/movie/')) return false;
+    return type === 'tv' ? titleMatches(item.title, query, 'tv') : matchesMovieTitleStrictly(item.title, query);
+}
+
+async function fetchPsaPageHtml(url: string): Promise<string | null> {
     try {
-        const url = `https://bitsearch.to/search?q=${encodeURIComponent(withPsaToken(query))}`;
         const res = await fetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(12000),
         });
-        if (!res.ok) return [];
+        if (!res.ok) return null;
+        return res.text();
+    } catch {
+        return null;
+    }
+}
 
-        const html = await res.text();
-        const results: TorrentResult[] = [];
-        const resultRegex = /<a href="\/torrent\/[^"]+"[^>]*>\s*([\s\S]*?)\s*<\/a>[\s\S]*?<i class="fas fa-download"><\/i>\s*<span>([^<]+)<\/span>[\s\S]*?<i class="fas fa-calendar"><\/i>\s*<span>([^<]+)<\/span>[\s\S]*?<span class="font-medium">(\d+)<\/span>\s*<span>seeders<\/span>[\s\S]*?<span class="font-medium">(\d+)<\/span>\s*<span>leechers<\/span>[\s\S]*?<a href="(magnet:[^"]+)"/gi;
-        let match;
+function parsePsaReleases(html: string, query: string, type?: 'movie' | 'tv'): PsaRelease[] {
+    const releases: PsaRelease[] = [];
+    const headMatches = Array.from(html.matchAll(/<div class="sp-head"[^>]*>\s*([\s\S]*?)\s*<\/div>/gi));
 
-        while ((match = resultRegex.exec(html)) !== null) {
-            const title = decodeHtmlEntities(match[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
-            if (!/\bpsa\b/i.test(title)) continue;
+    for (let i = 0; i < headMatches.length; i++) {
+        const match = headMatches[i];
+        const title = decodeHtmlEntities(match[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+        if (!/-PSA\b/i.test(title)) continue;
 
-            const size = decodeHtmlEntities(match[2].trim());
-            const dateInfo = parseBitsearchDate(decodeHtmlEntities(match[3]));
+        const bodyStart = (match.index || 0) + match[0].length;
+        const bodyEnd = i + 1 < headMatches.length ? headMatches[i + 1].index || bodyStart + 5000 : bodyStart + 5000;
+        const body = html.slice(bodyStart, Math.min(bodyEnd, html.length));
+        const torrentHref = Array.from(body.matchAll(/<a[^>]+href="([^"]+)"[^>]*>\s*TORRENT\s*<\/a>/gi))[0]?.[1];
+        const sizeText = decodeHtmlEntities(
+            body.match(/Size<\/span>\s*:\s*<\/strong>\s*([^<]+)/i)?.[1]?.trim()
+            || body.match(/Size<\/span>\s*:\s*([^<]+)/i)?.[1]?.trim()
+            || ''
+        );
 
-            results.push({
-                title,
-                magnet: decodeHtmlEntities(match[6]),
-                size,
-                sizeBytes: parseSizeToBytes(size),
-                seeds: parseInt(match[4], 10) || 0,
-                leeches: parseInt(match[5], 10) || 0,
-                quality: extractQuality(title),
-                source: 'PSA',
-                ...dateInfo,
+        releases.push({
+            title,
+            torrentUrl: torrentHref ? decodeHtmlEntities(torrentHref) : undefined,
+            size: sizeText || undefined,
+            sizeBytes: sizeText ? parseSizeToBytes(sizeText) : 0,
+        });
+    }
+
+    const episodeQuery = type === 'tv' ? extractEpisodeQuery(query) : null;
+    let filtered = releases;
+
+    if (episodeQuery) {
+        filtered = filtered.filter((release) => titleMatchesEpisode(release.title, episodeQuery));
+    } else if (type === 'tv') {
+        const latestEpisode = releases.map((release) => extractEpisodeKey(release.title)).find(Boolean);
+        if (latestEpisode) {
+            filtered = releases.filter((release) => extractEpisodeKey(release.title) === latestEpisode);
+        }
+    }
+
+    return filtered.slice(0, 6);
+}
+
+function isProbablySameRelease(candidateTitle: string, releaseTitle: string): boolean {
+    const candidate = candidateTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const release = releaseTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return candidate === release || candidate.startsWith(release) || candidate.includes(release);
+}
+
+async function resolvePsaReleaseViaIndexers(release: PsaRelease): Promise<TorrentResult | null> {
+    const tpbExact = await searchTPBForPsaRelease(release.title);
+    if (tpbExact) {
+        return {
+            ...tpbExact,
+            title: release.title,
+            size: release.size || tpbExact.size,
+            sizeBytes: release.sizeBytes || tpbExact.sizeBytes,
+            quality: extractQuality(release.title),
+            source: 'PSA',
+        };
+    }
+
+    const candidates = await searchKnaben(release.title);
+    const exact = candidates.find((candidate) => isProbablySameRelease(candidate.title, release.title));
+    if (!exact) return null;
+
+    return {
+        ...exact,
+        title: release.title,
+        size: release.size || exact.size,
+        sizeBytes: release.sizeBytes || exact.sizeBytes,
+        quality: extractQuality(release.title),
+        source: 'PSA',
+    };
+}
+
+async function searchTPBForPsaRelease(releaseTitle: string): Promise<TorrentResult | null> {
+    for (const base of ['https://apibay.org', 'https://apibay.isohunt.to']) {
+        try {
+            const url = `${base}/q.php?q=${encodeURIComponent(releaseTitle)}&cat=200`;
+            const res = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                signal: AbortSignal.timeout(8000),
             });
+            if (!res.ok) continue;
+
+            const data = await res.json() as TPBItem[];
+            if (!Array.isArray(data) || data.length === 0 || data[0]?.id === '0') continue;
+
+            const exact = data.find((item) => item.name && item.info_hash && isProbablySameRelease(item.name, releaseTitle));
+            if (!exact) continue;
+
+            const title = exact.name || releaseTitle;
+            const sizeBytes = parseInt(exact.size || '0', 10) || 0;
+            const uploadTimestamp = exact.added ? parseInt(exact.added, 10) * 1000 : undefined;
+            return {
+                title,
+                magnet: buildMagnet(exact.info_hash || '', releaseTitle),
+                size: formatBytes(sizeBytes),
+                sizeBytes,
+                seeds: parseInt(exact.seeders || '0', 10) || 0,
+                leeches: parseInt(exact.leechers || '0', 10) || 0,
+                quality: extractQuality(releaseTitle),
+                source: 'PSA',
+                uploadDate: uploadTimestamp ? new Date(uploadTimestamp).toISOString().split('T')[0] : undefined,
+                uploadTimestamp,
+            };
+        } catch {
+            // Try next API mirror.
+        }
+    }
+
+    return null;
+}
+
+async function searchOriginalPsa(query: string, options?: { year?: string; type?: 'movie' | 'tv' }): Promise<TorrentResult[]> {
+    try {
+        const feed = await fetchPsaFeed();
+        let pages = feed.filter((item) => psaItemMatchesQuery(item, query, options?.type));
+
+        if (pages.length === 0) {
+            pages = await searchPsaPosts(query, options?.type);
         }
 
-        return results
-            .filter(r => r.seeds > 0)
-            .sort((a, b) => b.seeds - a.seeds)
-            .slice(0, 20);
+        const page = pages
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+        if (!page) return [];
+
+        const html = await fetchPsaPageHtml(page.link);
+        if (!html) return [];
+
+        const releases = parsePsaReleases(html, query, options?.type);
+        if (releases.length === 0) return [];
+
+        const resolved = await Promise.allSettled(
+            releases.map((release) => withTimeout(resolvePsaReleaseViaIndexers(release), 8000, null))
+        );
+        const dateInfo = page.pubDate ? parseFeedDate(page.pubDate) : {};
+
+        return resolved
+            .filter((result): result is PromiseFulfilledResult<TorrentResult> => result.status === 'fulfilled' && result.value !== null)
+            .map((result) => ({
+                ...result.value,
+                source: 'PSA',
+                uploadDate: result.value.uploadDate || dateInfo.uploadDate,
+                uploadTimestamp: result.value.uploadTimestamp || dateInfo.uploadTimestamp,
+            }))
+            .sort((a, b) => {
+                if ((b.uploadTimestamp || 0) !== (a.uploadTimestamp || 0)) {
+                    return (b.uploadTimestamp || 0) - (a.uploadTimestamp || 0);
+                }
+                return b.seeds - a.seeds;
+            });
     } catch (e) {
         console.error('PSA search error:', e);
         return [];
@@ -817,7 +1050,7 @@ export async function searchTorrents(
     const [tpbOut, ytsOut, psaOut, knabenOut, nyaaOut, ddlOut] = await Promise.allSettled([
         withTimeout(searchTPB(query, tpbCategory), 12000, [] as TorrentResult[]),
         withTimeout(options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([] as TorrentResult[]), 12000, [] as TorrentResult[]),
-        withTimeout(searchBitsearchPsa(query), 10000, [] as TorrentResult[]),
+        withTimeout(searchOriginalPsa(query, options), 14000, [] as TorrentResult[]),
         withTimeout(searchKnaben(query), 9000, [] as TorrentResult[]),
         withTimeout(searchNyaa(query), 10000, [] as TorrentResult[]),
         withTimeout(searchOpenDirectory(title, options?.type), 9000, [] as TorrentResult[]),
