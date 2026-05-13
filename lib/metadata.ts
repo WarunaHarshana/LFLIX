@@ -106,6 +106,10 @@ export function extractYear(name: string): number | undefined {
   return match ? parseInt(match[0]) : undefined;
 }
 
+function extractImdbId(name: string): string | null {
+  return name.match(/\btt\d{7,9}\b/i)?.[0].toLowerCase() || null;
+}
+
 export function normalizeShowName(name: string): string {
   if (!name) return '';
 
@@ -152,6 +156,29 @@ type OmdbRatingResponse = {
   Error?: string;
 };
 
+type OmdbMovieResponse = OmdbRatingResponse & {
+  Title?: string;
+  Year?: string;
+  Plot?: string;
+  Poster?: string;
+  Genre?: string;
+};
+
+type ImdbSuggestionItem = {
+  id?: string;
+  l?: string;
+  q?: string;
+  qid?: string;
+  y?: number;
+  i?: {
+    imageUrl?: string;
+  };
+};
+
+type ImdbSuggestionResponse = {
+  d?: ImdbSuggestionItem[];
+};
+
 export async function fetchImdbRatingById(imdbId?: string | null): Promise<number | null> {
   const apiKey = getOmdbApiKey();
   if (!apiKey || !imdbId) return null;
@@ -178,6 +205,107 @@ export async function fetchImdbRatingById(imdbId?: string | null): Promise<numbe
     return rating;
   } catch (e) {
     console.warn(`OMDb rating fetch failed for ${imdbId}:`, e);
+    return null;
+  }
+}
+
+async function fetchOmdbMovieMetadata(imdbId: string): Promise<Partial<MediaMetadata> | null> {
+  const apiKey = getOmdbApiKey();
+  if (!apiKey) return null;
+
+  const cacheKey = `omdb-movie-${imdbId}`;
+  const cached = tmdbCache.get(cacheKey) as Partial<MediaMetadata> | null;
+  if (cached) return cached;
+
+  try {
+    const url = `https://www.omdbapi.com/?i=${encodeURIComponent(imdbId)}&apikey=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'LFLIX/0.3' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json() as OmdbMovieResponse;
+    if (data.Response === 'False') return null;
+
+    const year = data.Year?.match(/\b(19|20)\d{2}\b/)?.[0];
+    const imdbRating = data.imdbRating && data.imdbRating !== 'N/A' ? parseFloat(data.imdbRating) : null;
+    const metadata: Partial<MediaMetadata> = {
+      title: data.Title || undefined,
+      year: year ? parseInt(year, 10) : undefined,
+      posterPath: data.Poster && data.Poster !== 'N/A' ? data.Poster : undefined,
+      overview: data.Plot && data.Plot !== 'N/A' ? data.Plot : undefined,
+      imdbRating: imdbRating && Number.isFinite(imdbRating) ? imdbRating : null,
+      genres: data.Genre && data.Genre !== 'N/A' ? data.Genre : undefined,
+    };
+
+    tmdbCache.set(cacheKey, metadata, 24 * 60 * 60 * 1000);
+    return metadata;
+  } catch (e) {
+    console.warn(`OMDb movie metadata fetch failed for ${imdbId}:`, e);
+    return null;
+  }
+}
+
+function imdbSuggestionKey(query: string): string {
+  return query
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80);
+}
+
+async function fetchImdbSuggestionMovie(fileName: string, title: string, year?: number): Promise<MediaMetadata | null> {
+  const imdbIdFromName = extractImdbId(fileName);
+  const suggestionQuery = imdbIdFromName || imdbSuggestionKey(title);
+  if (!suggestionQuery) return null;
+
+  const cacheKey = `imdb-suggest-movie-${suggestionQuery}-${year || 'any'}`;
+  const cached = tmdbCache.get(cacheKey) as MediaMetadata | null;
+  if (cached) return cached;
+
+  try {
+    const bucket = suggestionQuery[0].toLowerCase();
+    const url = `https://v3.sg.media-imdb.com/suggestion/${encodeURIComponent(bucket)}/${encodeURIComponent(suggestionQuery)}.json`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'LFLIX/0.3' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json() as ImdbSuggestionResponse;
+    const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const matches = (data.d || []).filter(item => item.id?.startsWith('tt') && (item.qid === 'movie' || item.q === 'feature'));
+    const hit = matches.find(item => item.id?.toLowerCase() === imdbIdFromName)
+      || matches.find(item => {
+        const itemTitle = (item.l || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const yearMatches = !year || !item.y || item.y === year;
+        return itemTitle === normalizedTitle && yearMatches;
+      })
+      || matches.find(item => {
+        const itemTitle = (item.l || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return itemTitle === normalizedTitle;
+      });
+
+    if (!hit?.l) return null;
+
+    const omdbMeta = hit.id ? await fetchOmdbMovieMetadata(hit.id) : null;
+    const metadata: MediaMetadata = {
+      title: omdbMeta?.title || hit.l || title,
+      year: omdbMeta?.year ?? hit.y ?? year ?? null,
+      tmdbId: null,
+      posterPath: omdbMeta?.posterPath || hit.i?.imageUrl || null,
+      backdropPath: null,
+      overview: omdbMeta?.overview || null,
+      rating: null,
+      imdbRating: omdbMeta?.imdbRating ?? null,
+      genres: omdbMeta?.genres || null,
+    };
+
+    tmdbCache.set(cacheKey, metadata, 24 * 60 * 60 * 1000);
+    return metadata;
+  } catch (e) {
+    console.warn(`IMDb suggestion metadata fetch failed for ${title}:`, e);
     return null;
   }
 }
@@ -268,6 +396,11 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
     }
   } catch (e) {
     console.warn(`TMDB fetch failed for movie: ${rawName}`, e);
+  }
+
+  const imdbFallback = await fetchImdbSuggestionMovie(fileName, rawName, year);
+  if (imdbFallback) {
+    return imdbFallback;
   }
 
   return baseData;
