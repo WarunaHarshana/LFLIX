@@ -67,21 +67,34 @@ export async function cachedTmdbCall<T>(cacheKey: string, fn: () => Promise<T>, 
 
 // --- Filename Cleaning ---
 
+function stripReleaseSitePrefix(name: string): string {
+  let clean = name.trim();
+
+  // Handles release-site prefixes like:
+  // "www.UIndex.org - Movie", "www 1TamilMV.center - Movie", "1TamilMV.center - Movie"
+  clean = clean.replace(/^(?:www[\s.]*)?(?:\d+)?[a-z0-9][a-z0-9-]*(?:[\s.]+[a-z0-9][a-z0-9-]*)*\s*\.(?:com|org|net|in|io|to|tv|cc|me|co|center|xyz|site|info|link)[\s._-]*[-–—:]+[\s._-]*/i, "");
+  clean = clean.replace(/^www\s+[a-z0-9][a-z0-9-]*(?:\s+[a-z0-9][a-z0-9-]*)*\s*\.(?:com|org|net|in|io|to|tv|cc|me|co|center|xyz|site|info|link)[\s._-]*[-–—:]+[\s._-]*/i, "");
+
+  return clean;
+}
+
 export function cleanFilename(name: string): string {
   let clean = name.replace(/\.[^/.]+$/, ""); // Remove ext
 
   // Remove Website Prefixes
+  clean = stripReleaseSitePrefix(clean);
   clean = clean.replace(/^www\.[a-zA-Z0-9-]+\.[a-z]{2,4}\s*[-_]\s*/i, "");
   clean = clean.replace(/^\[.*?\]\s*/i, ""); // Remove [group] tags
+
+  // Normalize release separators before token stripping. Underscores are word
+  // characters, so tokens like "_TRUE_WEB-DL" otherwise do not match cleanly.
+  clean = clean.replace(/[._]+/g, " ");
 
   // Remove A.K.A and everything after
   clean = clean.replace(/\bA\.?K\.?A\.?\b.*/i, "");
 
   // Remove common scene tags, release-quality labels & languages
   clean = clean.replace(/\b(HC|HDCAM|CAMRip|CAM|HDTS|TS|TELESYNC|TC|TELECINE|DVDSCR|SCR|PREHD|1080p|720p|480p|2160p|4k|UHD|BluRay|Blu-Ray|BDRip|WEBRip|WEB-DL|DVDRip|HDTV|x264|x265|H\.?264|H\.?265|AAC|AC3|EAC3|DDP|DTS|HDR|HDR10|HDR10Plus|DV|Dolby|Atmos|HEVC|HQ|HDRip|TRUE|PROPER|REMASTERED|EXTENDED|UNCUT|DIRECTORS|CUT|DUAL|MULTI|HIN\d*x?|Hindi|Telugu|Tamil|TAM|TEL|Malayalam|Kannada|English|EngSub|ESub|AMZN|NF|DSNP|HMAX|IMAX|REPACK|Remux|10bit|6CH|8CH|PSA|YTS|YIFY|RARBG)\b.*/i, "");
-
-  // Replace dots/underscores with space
-  clean = clean.replace(/[._]/g, " ");
 
   // Remove year in brackets/parentheses
   clean = clean.replace(/[\(\[\{]\s*(19|20)\d{2}\s*[\)\]\}]/g, "");
@@ -113,7 +126,7 @@ function extractImdbId(name: string): string | null {
 export function normalizeShowName(name: string): string {
   if (!name) return '';
 
-  let normalized = name
+  let normalized = stripReleaseSitePrefix(name)
     .replace(/\.[^/.]+$/, '')
     .replace(/[._]/g, ' ')
     .replace(/[\(\[\{].*?[\)\]\}]/g, ' ')
