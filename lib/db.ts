@@ -28,6 +28,17 @@ const dbPath = fs.existsSync(newDbPath) ? newDbPath :
     fs.existsSync(oldRootDbPath2) ? oldRootDbPath2 : newDbPath;
 const db = new Database(dbPath);
 
+try {
+  db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
+  db.pragma('foreign_keys = ON');
+  db.pragma('busy_timeout = 5000');
+  db.pragma('temp_store = MEMORY');
+  db.pragma('cache_size = -20000');
+} catch (error) {
+  console.warn('[DB] Failed to apply SQLite performance pragmas:', error);
+}
+
 // Initialize DB schema
 db.exec(`
   CREATE TABLE IF NOT EXISTS movies (
@@ -263,7 +274,9 @@ db.exec(`
 
   -- Watch History: queried by contentType+contentId on every detail modal, sorted by lastWatched for continue watching
   CREATE INDEX IF NOT EXISTS idx_watch_history_content ON watch_history(contentType, contentId);
+  CREATE INDEX IF NOT EXISTS idx_watch_history_episode ON watch_history(episodeId);
   CREATE INDEX IF NOT EXISTS idx_watch_history_lastWatched ON watch_history(lastWatched DESC);
+  CREATE INDEX IF NOT EXISTS idx_watch_history_continue ON watch_history(completed, lastWatched DESC) WHERE progress > 0;
 
   -- Watchlist: checked by tmdbId+mediaType for duplicates
   CREATE INDEX IF NOT EXISTS idx_watchlist_tmdbId ON watchlist(tmdbId, mediaType);
@@ -271,24 +284,101 @@ db.exec(`
 
   -- IPTV Channels: filtered by category
   CREATE INDEX IF NOT EXISTS idx_iptv_channels_category ON iptv_channels(category);
+  CREATE INDEX IF NOT EXISTS idx_iptv_categories_orderIndex ON iptv_categories(orderIndex);
 
   -- Downloads: filtered by status
   CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
+  CREATE INDEX IF NOT EXISTS idx_downloads_infoHash ON downloads(infoHash);
+  CREATE INDEX IF NOT EXISTS idx_downloads_startedAt ON downloads(startedAt DESC);
 
   -- Auto-track: lookup by showId and tmdbId
   CREATE INDEX IF NOT EXISTS idx_auto_track_showId ON auto_track(showId);
   CREATE INDEX IF NOT EXISTS idx_auto_track_tmdbId ON auto_track(tmdbId);
+  CREATE INDEX IF NOT EXISTS idx_auto_track_enabled_check ON auto_track(enabled, lastCheckedAt);
 
   -- Notifications: filtered by read status, sorted by creation
   CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
   CREATE INDEX IF NOT EXISTS idx_notifications_createdAt ON notifications(createdAt DESC);
+  CREATE INDEX IF NOT EXISTS idx_notifications_show_episode ON notifications(showId, seasonNumber, episodeNumber);
 
   -- Episode releases: lookup by tmdbId
   CREATE INDEX IF NOT EXISTS idx_episode_releases_tmdbId ON episode_releases(tmdbId);
+  CREATE INDEX IF NOT EXISTS idx_episode_releases_download ON episode_releases(downloadAttempted, lastAttemptAt);
 
   -- Movie releases: lookup by tmdbId
   CREATE INDEX IF NOT EXISTS idx_movie_releases_tmdbId ON movie_releases(tmdbId);
+  CREATE INDEX IF NOT EXISTS idx_movie_releases_available ON movie_releases(isAvailable, lastCheckedAt);
+  CREATE INDEX IF NOT EXISTS idx_stream_quality_checkedAt ON stream_server_quality_cache(checkedAt);
 `);
+
+function initializeFullTextSearch(): void {
+  const ftsSchemaVersion = '1';
+
+  try {
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS movie_search_fts
+      USING fts5(title, fileName, content='movies', content_rowid='id');
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS show_search_fts
+      USING fts5(title, content='shows', content_rowid='id');
+
+      CREATE TRIGGER IF NOT EXISTS movies_search_ai AFTER INSERT ON movies BEGIN
+        INSERT INTO movie_search_fts(rowid, title, fileName)
+        VALUES (new.id, new.title, new.fileName);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS movies_search_ad AFTER DELETE ON movies BEGIN
+        INSERT INTO movie_search_fts(movie_search_fts, rowid, title, fileName)
+        VALUES ('delete', old.id, old.title, old.fileName);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS movies_search_au AFTER UPDATE OF title, fileName ON movies BEGIN
+        INSERT INTO movie_search_fts(movie_search_fts, rowid, title, fileName)
+        VALUES ('delete', old.id, old.title, old.fileName);
+        INSERT INTO movie_search_fts(rowid, title, fileName)
+        VALUES (new.id, new.title, new.fileName);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS shows_search_ai AFTER INSERT ON shows BEGIN
+        INSERT INTO show_search_fts(rowid, title)
+        VALUES (new.id, new.title);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS shows_search_ad AFTER DELETE ON shows BEGIN
+        INSERT INTO show_search_fts(show_search_fts, rowid, title)
+        VALUES ('delete', old.id, old.title);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS shows_search_au AFTER UPDATE OF title ON shows BEGIN
+        INSERT INTO show_search_fts(show_search_fts, rowid, title)
+        VALUES ('delete', old.id, old.title);
+        INSERT INTO show_search_fts(rowid, title)
+        VALUES (new.id, new.title);
+      END;
+    `);
+
+    const current = db
+      .prepare("SELECT value FROM settings WHERE key = 'ftsSchemaVersion'")
+      .get() as { value: string } | undefined;
+
+    if (current?.value !== ftsSchemaVersion) {
+      db.exec(`
+        INSERT INTO movie_search_fts(movie_search_fts) VALUES ('rebuild');
+        INSERT INTO show_search_fts(show_search_fts) VALUES ('rebuild');
+      `);
+
+      db.prepare(`
+        INSERT INTO settings (key, value)
+        VALUES ('ftsSchemaVersion', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(ftsSchemaVersion);
+    }
+  } catch (error) {
+    console.warn('[DB] Full-text search indexes unavailable, local search will use LIKE fallback:', error);
+  }
+}
+
+initializeFullTextSearch();
 
 // Run migrations for existing databases (add columns if they don't exist)
 // WHITELIST of valid tables and columns to prevent SQL injection

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, cachedTmdbCall, fetchImdbRatingById } from '@/lib/metadata';
+import { cachedTmdbCall, fetchImdbRatingById, getTmdbClient } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,8 +33,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Missing id or type' }, { status: 400 });
         }
 
-        const apiKey = getTmdbApiKey();
-        const moviedb = new MovieDb(apiKey);
+        const moviedb = getTmdbClient();
         const tmdbId = parseInt(id, 10);
 
         if (type === 'movie') {

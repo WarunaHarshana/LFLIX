@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -9,20 +8,21 @@ export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
         const query = searchParams.get('q');
-        const type = searchParams.get('type') || 'multi'; // movie, tv, multi
+        const typeParam = searchParams.get('type') || 'multi'; // movie, tv, multi
+        const type = ['movie', 'tv', 'multi'].includes(typeParam) ? typeParam : 'multi';
 
         if (!query || query.trim().length < 2) {
             return NextResponse.json({ results: [] });
         }
 
-        const apiKey = getTmdbApiKey();
-        const moviedb = new MovieDb(apiKey);
+        const moviedb = getTmdbClient();
         const searchQuery = query.trim();
+        const cacheKey = `tmdb-search-${type}-${searchQuery.toLowerCase()}`;
 
         let results: any[] = [];
 
         if (type === 'movie') {
-            const res = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: searchQuery }));
+            const res = await cachedTmdbCall(cacheKey, () => moviedb.searchMovie({ query: searchQuery }), 10);
             results = (res.results || []).map((m: any) => ({
                 tmdbId: m.id,
                 mediaType: 'movie',
@@ -35,7 +35,7 @@ export async function GET(req: Request) {
                 popularity: m.popularity || 0
             }));
         } else if (type === 'tv') {
-            const res = await rateLimitedTmdbCall(() => moviedb.searchTv({ query: searchQuery }));
+            const res = await cachedTmdbCall(cacheKey, () => moviedb.searchTv({ query: searchQuery }), 10);
             results = (res.results || []).map((s: any) => ({
                 tmdbId: s.id,
                 mediaType: 'tv',
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
             }));
         } else {
             // Multi search (movies + tv)
-            const res = await rateLimitedTmdbCall(() => moviedb.searchMulti({ query: searchQuery }));
+            const res = await cachedTmdbCall(cacheKey, () => moviedb.searchMulti({ query: searchQuery }), 10);
             results = (res.results || [])
                 .filter((r: any) => r.media_type === 'movie' || r.media_type === 'tv')
                 .map((r: any) => ({

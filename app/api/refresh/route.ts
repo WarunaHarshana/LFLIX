@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall, cleanFilename, MediaMetadata, fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata } from '@/lib/metadata';
+import { fetchEpisodeMetadata, fetchMovieMetadata, fetchShowMetadata } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-    const TMDB_API_KEY = getTmdbApiKey();
-    const moviedb = new MovieDb(TMDB_API_KEY);
-
     try {
         const body = await req.json().catch(() => ({}));
         const { id, type } = body;

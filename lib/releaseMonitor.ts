@@ -4,8 +4,7 @@
  */
 
 import db from './db';
-import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall } from './metadata';
+import { cachedTmdbCall, getTmdbClient } from './metadata';
 
 // Types
 export interface TrackedShow {
@@ -153,15 +152,15 @@ class ReleaseMonitor {
    * Check a single show for new episodes using TMDB.
    */
   async checkShow(show: TrackedShow): Promise<NewEpisodeInfo[]> {
-    const apiKey = getTmdbApiKey();
-    const moviedb = new MovieDb(apiKey);
+    const moviedb = getTmdbClient();
     const newEpisodes: NewEpisodeInfo[] = [];
     const isInitialSync = !show.lastCheckedAt;
     let baselineMarked = 0;
 
     // Fetch show info to get number of seasons
-    const showInfo = await rateLimitedTmdbCall(() =>
-      moviedb.tvInfo({ id: show.tmdbId })
+    const showInfo = await cachedTmdbCall(`tv-info-basic-${show.tmdbId}`, () =>
+      moviedb.tvInfo({ id: show.tmdbId }),
+      6 * 60
     ) as any;
 
     if (!showInfo || !showInfo.number_of_seasons) return [];
@@ -193,8 +192,9 @@ class ReleaseMonitor {
 
     for (let seasonNum = startSeason; seasonNum <= showInfo.number_of_seasons; seasonNum++) {
       try {
-        const seasonData = await rateLimitedTmdbCall(() =>
-          moviedb.seasonInfo({ id: show.tmdbId, season_number: seasonNum })
+        const seasonData = await cachedTmdbCall(`tmdb-season-${show.tmdbId}-${seasonNum}`, () =>
+          moviedb.seasonInfo({ id: show.tmdbId, season_number: seasonNum }),
+          6 * 60
         ) as any;
 
         if (!seasonData?.episodes) continue;

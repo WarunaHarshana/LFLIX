@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,12 +41,12 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
         }
 
-        const apiKey = getTmdbApiKey();
-        const moviedb = new MovieDb(apiKey);
+        const moviedb = getTmdbClient();
+        const cacheKey = `tmdb-similar-${type}-${tmdbId}-${page}`;
 
         const res = type === 'movie'
-            ? await rateLimitedTmdbCall(() => moviedb.movieRecommendations({ id: `${tmdbId}`, page: `${page}` }))
-            : await rateLimitedTmdbCall(() => moviedb.tvRecommendations({ id: tmdbId, page }));
+            ? await cachedTmdbCall(cacheKey, () => moviedb.movieRecommendations({ id: `${tmdbId}`, page: `${page}` }), 60)
+            : await cachedTmdbCall(cacheKey, () => moviedb.tvRecommendations({ id: tmdbId, page }), 60);
 
         const normalized = res as SimilarResponse;
         const results = (normalized.results || []).map((item) => ({

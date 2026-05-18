@@ -29,25 +29,49 @@ export function getOmdbApiKey(): string {
 
 // Global rate limiter state
 let lastTmdbCall = 0;
+let tmdbQueue: Promise<void> = Promise.resolve();
+let cachedTmdbClient: { apiKey: string; client: MovieDb } | null = null;
 const TMDB_DELAY_MS = 200; // Conservative 200ms
 
-export async function rateLimitedTmdbCall<T>(fn: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const timeSinceLastCall = now - lastTmdbCall;
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-  if (timeSinceLastCall < TMDB_DELAY_MS) {
-    await new Promise(resolve => setTimeout(resolve, TMDB_DELAY_MS - timeSinceLastCall));
+function isRateLimitError(error: unknown): boolean {
+  const maybeError = error as { response?: { status?: number }; status?: number };
+  return maybeError?.response?.status === 429 || maybeError?.status === 429;
+}
+
+async function waitForTmdbSlot(): Promise<void> {
+  const scheduled = tmdbQueue.then(async () => {
+    const now = Date.now();
+    const waitMs = Math.max(0, TMDB_DELAY_MS - (now - lastTmdbCall));
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
+    lastTmdbCall = Date.now();
+  });
+
+  tmdbQueue = scheduled.catch(() => undefined);
+  return scheduled;
+}
+
+export function getTmdbClient(): MovieDb {
+  const apiKey = getTmdbApiKey();
+  if (!cachedTmdbClient || cachedTmdbClient.apiKey !== apiKey) {
+    cachedTmdbClient = { apiKey, client: new MovieDb(apiKey) };
   }
+  return cachedTmdbClient.client;
+}
 
-  lastTmdbCall = Date.now();
+export async function rateLimitedTmdbCall<T>(fn: () => Promise<T>): Promise<T> {
+  await waitForTmdbSlot();
 
   try {
     return await fn();
-  } catch (error: any) {
-    if (error.response?.status === 429) {
+  } catch (error: unknown) {
+    if (isRateLimitError(error)) {
       console.warn('TMDB rate limit hit, waiting 2s...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      lastTmdbCall = Date.now();
+      await sleep(2000);
+      await waitForTmdbSlot();
       return await fn();
     }
     throw error;
@@ -55,14 +79,11 @@ export async function rateLimitedTmdbCall<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function cachedTmdbCall<T>(cacheKey: string, fn: () => Promise<T>, ttlMins = 30): Promise<T> {
-  const cached = tmdbCache.get(cacheKey) as T | null;
-  if (cached) return cached;
-  
-  const result = await rateLimitedTmdbCall(fn);
-  if (result !== undefined && result !== null) {
-    tmdbCache.set(cacheKey, result, ttlMins * 60 * 1000);
-  }
-  return result;
+  return tmdbCache.getOrSet(
+    cacheKey,
+    () => rateLimitedTmdbCall(fn),
+    ttlMins * 60 * 1000
+  ) as Promise<T>;
 }
 
 // --- Filename Cleaning ---
@@ -326,7 +347,10 @@ async function fetchImdbSuggestionMovie(fileName: string, title: string, year?: 
 async function fetchMovieImdbRating(moviedb: MovieDb, tmdbId?: number | null): Promise<number | null> {
   if (!tmdbId) return null;
   try {
-    const externalIds = await rateLimitedTmdbCall(() => moviedb.movieExternalIds({ id: tmdbId }));
+    const externalIds = await cachedTmdbCall(`movie-external-ids-${tmdbId}`, () =>
+      moviedb.movieExternalIds({ id: tmdbId }),
+      24 * 60
+    );
     return fetchImdbRatingById(externalIds.imdb_id || null);
   } catch {
     return null;
@@ -336,7 +360,10 @@ async function fetchMovieImdbRating(moviedb: MovieDb, tmdbId?: number | null): P
 async function fetchShowImdbRating(moviedb: MovieDb, tmdbId?: number | null): Promise<number | null> {
   if (!tmdbId) return null;
   try {
-    const externalIds = await rateLimitedTmdbCall(() => moviedb.tvExternalIds({ id: tmdbId }));
+    const externalIds = await cachedTmdbCall(`tv-external-ids-${tmdbId}`, () =>
+      moviedb.tvExternalIds({ id: tmdbId }),
+      24 * 60
+    );
     return fetchImdbRatingById(externalIds.imdb_id || null);
   } catch {
     return null;
@@ -345,10 +372,11 @@ async function fetchShowImdbRating(moviedb: MovieDb, tmdbId?: number | null): Pr
 
 async function fetchGenres(moviedb: MovieDb, genreIds: number[], type: 'movie' | 'tv'): Promise<string> {
   try {
-    const genreList = await rateLimitedTmdbCall(() =>
+    const genreList = await cachedTmdbCall(`tmdb-genres-${type}`, () =>
       type === 'movie'
         ? moviedb.genreMovieList({})
-        : moviedb.genreTvList({})
+        : moviedb.genreTvList({}),
+      24 * 60
     );
 
     const genreMap = new Map(genreList.genres?.map(g => [g.id, g.name]) || []);
@@ -359,8 +387,7 @@ async function fetchGenres(moviedb: MovieDb, genreIds: number[], type: 'movie' |
 }
 
 export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadata> {
-  const apiKey = getTmdbApiKey();
-  const moviedb = new MovieDb(apiKey);
+  const moviedb = getTmdbClient();
 
   const rawName = cleanFilename(fileName);
   const year = extractYear(fileName);
@@ -378,16 +405,26 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
   };
 
   try {
-    let res = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: rawName, year: year }));
+    let res = await cachedTmdbCall(`tmdb-movie-search-${rawName.toLowerCase()}-${year || ''}`, () =>
+      moviedb.searchMovie({ query: rawName, year: year }),
+      24 * 60
+    );
 
     // Fallback 1: Year might actually be part of the title (e.g., Blade Runner 2049, 2001 A Space Odyssey)
     if ((!res.results || res.results.length === 0) && year) {
-      res = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: `${rawName} ${year}`.trim() }));
+      const fallbackQuery = `${rawName} ${year}`.trim();
+      res = await cachedTmdbCall(`tmdb-movie-search-${fallbackQuery.toLowerCase()}`, () =>
+        moviedb.searchMovie({ query: fallbackQuery }),
+        24 * 60
+      );
     }
 
     // Fallback 2: The extracted year might be incorrect or missing from TMDB, try without it
     if ((!res.results || res.results.length === 0) && year) {
-      res = await rateLimitedTmdbCall(() => moviedb.searchMovie({ query: rawName }));
+      res = await cachedTmdbCall(`tmdb-movie-search-${rawName.toLowerCase()}`, () =>
+        moviedb.searchMovie({ query: rawName }),
+        24 * 60
+      );
     }
 
     if (res.results && res.results.length > 0) {
@@ -420,8 +457,7 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
 }
 
 export async function fetchShowMetadata(showName: string): Promise<MediaMetadata> {
-  const apiKey = getTmdbApiKey();
-  const moviedb = new MovieDb(apiKey);
+  const moviedb = getTmdbClient();
   const normalizedInput = normalizeShowName(showName) || showName.trim();
   const strippedYear = normalizedInput.replace(/\s+(19|20)\d{2}\s*$/g, '').trim();
   const hintedYear = extractYear(showName);
@@ -446,7 +482,10 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
     const targetKey = normalizeShowNameForMatch(normalizedInput || showName);
 
     for (const query of candidates) {
-      const res = await rateLimitedTmdbCall(() => moviedb.searchTv({ query }));
+      const res = await cachedTmdbCall(`tmdb-tv-search-${query.toLowerCase()}`, () =>
+        moviedb.searchTv({ query }),
+        24 * 60
+      );
       if (!res.results || res.results.length === 0) continue;
 
       const scored = [...res.results].sort((a, b) => {
@@ -523,11 +562,11 @@ export async function fetchEpisodeMetadata(
   try {
     // Check cache first
     if (!seasonCache.has(cacheKey)) {
-      const apiKey = getTmdbApiKey();
-      const moviedb = new MovieDb(apiKey);
+      const moviedb = getTmdbClient();
 
-      const seasonData = await rateLimitedTmdbCall(() =>
-        moviedb.seasonInfo({ id: tmdbShowId, season_number: seasonNumber })
+      const seasonData = await cachedTmdbCall(`tmdb-season-${tmdbShowId}-${seasonNumber}`, () =>
+        moviedb.seasonInfo({ id: tmdbShowId, season_number: seasonNumber }),
+        24 * 60
       );
 
       if (seasonData.episodes) {
