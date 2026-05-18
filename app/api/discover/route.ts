@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { MovieDb, DiscoverMovieRequest, DiscoverTvRequest } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
+import { DiscoverMovieRequest, DiscoverTvRequest } from 'moviedb-promise';
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -16,8 +16,7 @@ export async function GET(req: Request) {
         const sort_by = searchParams.get('sort_by');
         const with_companies = searchParams.get('with_companies');
 
-        const apiKey = getTmdbApiKey();
-        const moviedb = new MovieDb(apiKey);
+        const moviedb = getTmdbClient();
 
         const queryParams: any = { page };
         if (with_genres) queryParams.with_genres = with_genres;
@@ -33,12 +32,13 @@ export async function GET(req: Request) {
 
         // Ensure we fetch enough data if we filter out adult content
         queryParams.include_adult = false;
+        const cacheKey = `tmdb-discover-${type}-${JSON.stringify(queryParams)}`;
 
         let res: any;
         let results: any[] = [];
         
         if (type === 'movie') {
-            res = await rateLimitedTmdbCall(() => moviedb.discoverMovie(queryParams as DiscoverMovieRequest));
+            res = await cachedTmdbCall(cacheKey, () => moviedb.discoverMovie(queryParams as DiscoverMovieRequest), 30);
             results = (res.results || []).map((m: any) => ({
                 tmdbId: m.id,
                 mediaType: 'movie',
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
                 popularity: m.popularity || 0
             }));
         } else {
-            res = await rateLimitedTmdbCall(() => moviedb.discoverTv(queryParams as DiscoverTvRequest));
+            res = await cachedTmdbCall(cacheKey, () => moviedb.discoverTv(queryParams as DiscoverTvRequest), 30);
             results = (res.results || []).map((s: any) => ({
                 tmdbId: s.id,
                 mediaType: 'tv',

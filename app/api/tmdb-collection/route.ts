@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, cachedTmdbCall } from '@/lib/metadata';
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +17,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Invalid collection id' }, { status: 400 });
         }
 
-        const apiKey = getTmdbApiKey();
-        const moviedb = new MovieDb(apiKey);
+        const moviedb = getTmdbClient();
 
         const collection = await cachedTmdbCall(`collection-${collectionId}`, () =>
             moviedb.collectionInfo({ id: collectionId })

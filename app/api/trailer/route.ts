@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -15,15 +14,14 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Missing tmdbId or mediaType' }, { status: 400 });
         }
 
-        const apiKey = getTmdbApiKey();
-        const moviedb = new MovieDb(apiKey);
+        const moviedb = getTmdbClient();
         const id = parseInt(tmdbId);
 
         let videosRes;
         if (mediaType === 'tv') {
-            videosRes = await rateLimitedTmdbCall(() => moviedb.tvVideos(id));
+            videosRes = await cachedTmdbCall(`tmdb-videos-tv-${id}`, () => moviedb.tvVideos(id), 24 * 60);
         } else {
-            videosRes = await rateLimitedTmdbCall(() => moviedb.movieVideos(id));
+            videosRes = await cachedTmdbCall(`tmdb-videos-movie-${id}`, () => moviedb.movieVideos(id), 24 * 60);
         }
 
         const videos = videosRes.results || [];

@@ -17,7 +17,7 @@ export async function GET() {
 // POST — add item to watchlist
 export async function POST(req: Request) {
     try {
-        const { tmdbId, mediaType, title, posterPath, backdropPath, overview, rating, year, genres, notes } = await req.json();
+        const { tmdbId, mediaType, title, posterPath, backdropPath, overview, rating, imdbRating, year, genres, notes } = await req.json();
 
         if (!tmdbId || !mediaType || !title) {
             return NextResponse.json({ error: 'Missing required fields: tmdbId, mediaType, title' }, { status: 400 });
@@ -28,8 +28,8 @@ export async function POST(req: Request) {
         }
 
         const stmt = db.prepare(`
-      INSERT OR IGNORE INTO watchlist (tmdbId, mediaType, title, posterPath, backdropPath, overview, rating, year, genres, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO watchlist (tmdbId, mediaType, title, posterPath, backdropPath, overview, rating, imdbRating, year, genres, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
         const result = stmt.run(
@@ -40,6 +40,7 @@ export async function POST(req: Request) {
             backdropPath || null,
             overview || null,
             rating || null,
+            imdbRating || null,
             year || null,
             genres || null,
             notes || null

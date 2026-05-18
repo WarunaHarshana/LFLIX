@@ -1,20 +1,18 @@
 import { NextResponse } from 'next/server';
-import { getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
-import { MovieDb } from 'moviedb-promise';
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
-// Server-side cache — populated once on first request after server start
-let trendingCache: { movies: any[]; tv: any[]; fetchedAt: number } | null = null;
+const TRENDING_CACHE_KEY = 'tmdb-trending-day';
+const TRENDING_TTL_MINUTES = 30;
 
 async function fetchTrendingData() {
-    const apiKey = getTmdbApiKey();
-    const moviedb = new MovieDb(apiKey);
+    const moviedb = getTmdbClient();
 
     const [moviesRes, tvRes] = await Promise.allSettled([
-        rateLimitedTmdbCall(() => moviedb.trending({ media_type: 'movie', time_window: 'day' })),
-        rateLimitedTmdbCall(() => moviedb.trending({ media_type: 'tv', time_window: 'day' })),
+        cachedTmdbCall('tmdb-trending-movie-day', () => moviedb.trending({ media_type: 'movie', time_window: 'day' }), TRENDING_TTL_MINUTES),
+        cachedTmdbCall('tmdb-trending-tv-day', () => moviedb.trending({ media_type: 'tv', time_window: 'day' }), TRENDING_TTL_MINUTES),
     ]);
 
     const mapItem = (item: any, mediaType: string) => ({
@@ -42,15 +40,12 @@ async function fetchTrendingData() {
 
 export async function GET() {
     try {
-        // Only fetch once per server lifecycle (or if cache is somehow null)
-        if (!trendingCache) {
-            trendingCache = await fetchTrendingData();
-        }
+        const trendingData = await cachedTmdbCall(TRENDING_CACHE_KEY, fetchTrendingData, TRENDING_TTL_MINUTES);
 
         return NextResponse.json({
-            movies: trendingCache.movies,
-            tv: trendingCache.tv,
-            fetchedAt: trendingCache.fetchedAt,
+            movies: trendingData.movies,
+            tv: trendingData.tv,
+            fetchedAt: trendingData.fetchedAt,
         });
     } catch (e: any) {
         console.error('Trending fetch error:', e);

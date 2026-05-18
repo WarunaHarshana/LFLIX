@@ -25,6 +25,9 @@ export default function HeroSection({
   onMoreInfo,
   onViewEpisodes,
 }: HeroSectionProps) {
+  const displayRating = featured.imdbRating ?? featured.rating;
+  const displayRatingSource = featured.imdbRating != null ? 'IMDb' : 'TMDB';
+
   return (
     <div className="relative h-[80vh] w-full overflow-hidden">
       <div className="absolute inset-0" key={`hero-${heroIndex}`}>
@@ -63,13 +66,13 @@ export default function HeroSection({
           <span className="px-2 py-0.5 bg-neutral-800 rounded border border-neutral-600 uppercase tracking-wide text-neutral-300">
             {featured.type}
           </span>
-          {featured.rating != null && featured.rating > 0 && (
+          {displayRating != null && displayRating > 0 && (
             <span
               className="inline-flex items-center overflow-hidden rounded-md border border-[#F5C518]/70 bg-black/60 shadow-sm"
-              aria-label={`IMDb rating ${featured.rating.toFixed(1)}`}
+              aria-label={`${displayRatingSource} rating ${displayRating.toFixed(1)}`}
             >
-              <span className="bg-[#F5C518] px-2 py-1 text-xs font-black tracking-wide text-black">IMDb</span>
-              <span className="px-2 py-1 text-xs font-bold text-white">{featured.rating.toFixed(1)}</span>
+              <span className="bg-[#F5C518] px-2 py-1 text-xs font-black tracking-wide text-black">{displayRatingSource}</span>
+              <span className="px-2 py-1 text-xs font-bold text-white">{displayRating.toFixed(1)}</span>
             </span>
           )}
           <span className="text-neutral-300">{featured.year || (featured.firstAirDate ? featured.firstAirDate.substring(0, 4) : '')}</span>

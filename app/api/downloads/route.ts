@@ -3,10 +3,13 @@ import downloadManager from '@/lib/downloader';
 import db from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
+import { apiErrorResponse, readJsonObject, rateLimit } from '@/lib/apiSecurity';
 import {
     getSafeErrorMessage,
     parsePositiveInt,
     sanitizeFilename,
+    isPathInside,
+    validateHttpDownloadUrl,
     validateExistingDirectory,
     validateExistingFile,
 } from '@/lib/security';
@@ -53,13 +56,23 @@ export async function GET() {
 // POST — start a new download (torrent or HTTP direct)
 export async function POST(req: Request) {
     try {
-        const { magnetUri, httpUrl, watchlistId, downloadPath, torrentBase64, filename } = await req.json();
+        const limited = rateLimit(req, 'downloads-write', { windowMs: 60 * 1000, max: 30 });
+        if (limited) return limited;
+
+        const { magnetUri, httpUrl, watchlistId, downloadPath, torrentBase64, filename } = await readJsonObject(req, 2 * 1024 * 1024);
         const validatedDownloadPath = getValidatedDownloadPath(downloadPath);
         const parsedWatchlistId = watchlistId ? parsePositiveInt(watchlistId) ?? undefined : undefined;
 
-        let uri = magnetUri || (httpUrl ? `http-direct:${httpUrl}` : null);
+        let uri = typeof magnetUri === 'string' ? magnetUri.trim() : null;
+        if (!uri && typeof httpUrl === 'string') {
+            const validatedHttp = await validateHttpDownloadUrl(httpUrl);
+            if (validatedHttp.error !== null) {
+                return NextResponse.json({ error: validatedHttp.error }, { status: 400 });
+            }
+            uri = `http-direct:${validatedHttp.url}`;
+        }
 
-        if (torrentBase64 && filename) {
+        if (typeof torrentBase64 === 'string' && typeof filename === 'string') {
             const resolvedDownloadPath = validatedDownloadPath || getDefaultDownloadPath();
 
             const torrentsDir = path.join(resolvedDownloadPath, '.torrents');
@@ -71,6 +84,9 @@ export async function POST(req: Request) {
             const torrentFilePath = path.join(torrentsDir, uniqueFilename);
             
             const base64Data = torrentBase64.includes(',') ? torrentBase64.split(',')[1] : torrentBase64;
+            if (!/^[a-z0-9+/=\s]+$/i.test(base64Data)) {
+                return NextResponse.json({ error: 'Invalid torrent file payload' }, { status: 400 });
+            }
             const buffer = Buffer.from(base64Data, 'base64');
             fs.writeFileSync(torrentFilePath, buffer);
             
@@ -81,15 +97,16 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing magnetUri, httpUrl, or torrent file' }, { status: 400 });
         }
 
-        if (httpUrl) {
-            try {
-                const url = new URL(httpUrl);
-                if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-                    return NextResponse.json({ error: 'HTTP downloads must use http or https URLs' }, { status: 400 });
-                }
-            } catch {
-                return NextResponse.json({ error: 'Invalid HTTP URL' }, { status: 400 });
+        if (uri.length > 20000) {
+            return NextResponse.json({ error: 'Download URI is too long' }, { status: 400 });
+        }
+
+        if (uri.startsWith('http-direct:')) {
+            const validatedHttp = await validateHttpDownloadUrl(uri.replace(/^http-direct:/, ''));
+            if (validatedHttp.error !== null) {
+                return NextResponse.json({ error: validatedHttp.error }, { status: 400 });
             }
+            uri = `http-direct:${validatedHttp.url}`;
         }
 
         if (!uri.startsWith('magnet:') && !uri.startsWith('http-direct:') && !uri.endsWith('.torrent')) {
@@ -101,6 +118,11 @@ export async function POST(req: Request) {
             if (file.error !== null) {
                 return NextResponse.json({ error: file.error }, { status: 400 });
             }
+            const resolvedDownloadPath = validatedDownloadPath || getDefaultDownloadPath();
+            const torrentsDir = path.join(resolvedDownloadPath, '.torrents');
+            if (!isPathInside(file.path, torrentsDir)) {
+                return NextResponse.json({ error: 'Torrent file path is outside the managed torrent folder' }, { status: 400 });
+            }
             uri = file.path;
         }
 
@@ -108,14 +130,17 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, download });
     } catch (e) {
         console.error('Download error:', e);
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+        return apiErrorResponse(e, getSafeErrorMessage(e));
     }
 }
 
 // PATCH — pause or resume a download
 export async function PATCH(req: Request) {
     try {
-        const { id, action } = await req.json();
+        const limited = rateLimit(req, 'downloads-write', { windowMs: 60 * 1000, max: 60 });
+        if (limited) return limited;
+
+        const { id, action } = await readJsonObject(req, 4096);
         const downloadId = parsePositiveInt(id);
 
         if (!downloadId || !action) {
@@ -133,13 +158,16 @@ export async function PATCH(req: Request) {
 
         return NextResponse.json({ success });
     } catch (e) {
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+        return apiErrorResponse(e, getSafeErrorMessage(e));
     }
 }
 
 // DELETE — cancel/remove download
 export async function DELETE(req: Request) {
     try {
+        const limited = rateLimit(req, 'downloads-write', { windowMs: 60 * 1000, max: 60 });
+        if (limited) return limited;
+
         const { searchParams } = new URL(req.url);
         const id = parsePositiveInt(searchParams.get('id'));
         const deleteFiles = searchParams.get('deleteFiles') === '1';

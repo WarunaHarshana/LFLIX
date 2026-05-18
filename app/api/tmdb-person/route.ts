@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,11 +63,11 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Invalid id parameter' }, { status: 400 });
         }
 
-        const apiKey = getTmdbApiKey();
-        const moviedb = new MovieDb(apiKey);
+        const moviedb = getTmdbClient();
 
-        const person = await rateLimitedTmdbCall(() =>
-            moviedb.personInfo({ id: personId, append_to_response: 'combined_credits' })
+        const person = await cachedTmdbCall(`tmdb-person-${personId}`, () =>
+            moviedb.personInfo({ id: personId, append_to_response: 'combined_credits' }),
+            60
         ) as PersonInfoResponse;
 
         const creditsMap = new Map<string, PersonCredit>();

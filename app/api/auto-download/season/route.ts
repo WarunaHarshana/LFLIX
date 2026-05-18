@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { MovieDb } from 'moviedb-promise';
 import autoDownloader from '@/lib/autoDownloader';
 import { NewEpisodeInfo } from '@/lib/releaseMonitor';
-
-const moviedb = new MovieDb(process.env.TMDB_API_KEY!);
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 export async function POST(req: Request) {
     try {
@@ -36,7 +34,11 @@ export async function POST(req: Request) {
         const localEpsSet = new Set(localEps.map(e => e.episodeNumber));
 
         // Get TMDB episode metadata
-        const seasonInfo = await moviedb.seasonInfo({ id: tmdbId, season_number: seasonNumber });
+        const moviedb = getTmdbClient();
+        const seasonInfo = await cachedTmdbCall(`tmdb-season-${tmdbId}-${seasonNumber}`, () =>
+            moviedb.seasonInfo({ id: tmdbId, season_number: seasonNumber }),
+            24 * 60
+        );
         const tmdbEpisodes = seasonInfo.episodes || [];
 
         // Find missing that have already aired

@@ -12,7 +12,9 @@ export function useDownloads() {
 
       const data = await res.json();
       const downloads = Array.isArray(data.downloads) ? data.downloads : [];
-      const count = downloads.filter((d: any) => d.status === 'downloading' || d.status === 'paused').length;
+      const count = downloads.filter((d: any) =>
+        d.status === 'metadata' || d.status === 'downloading' || d.status === 'stalled' || d.status === 'paused'
+      ).length;
       setActiveDownloads(count);
     } catch {
       // Keep existing badge value on transient API failures.

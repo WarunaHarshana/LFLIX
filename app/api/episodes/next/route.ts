@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { getTmdbApiKey, rateLimitedTmdbCall } from '@/lib/metadata';
-import { MovieDb } from 'moviedb-promise';
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 import autoDownloader from '@/lib/autoDownloader';
 
 export const dynamic = 'force-dynamic';
@@ -37,13 +36,15 @@ export async function GET(request: Request) {
              return NextResponse.json({ error: 'Cannot download next episode without TMDB ID' }, { status: 400 });
         }
 
-        const apiKey = getTmdbApiKey();
-        const moviedb = new MovieDb(apiKey);
+        const moviedb = getTmdbClient();
 
         // Check if next episode exists in current season
         let seasonData;
         try {
-            seasonData = await rateLimitedTmdbCall(() => moviedb.seasonInfo({ id: show.tmdbId, season_number: nextSeason }));
+            seasonData = await cachedTmdbCall(`tmdb-season-${show.tmdbId}-${nextSeason}`, () =>
+                moviedb.seasonInfo({ id: show.tmdbId, season_number: nextSeason }),
+                24 * 60
+            );
         } catch(e) {
             console.error('Error fetching season data:', e);
         }
@@ -61,7 +62,11 @@ export async function GET(request: Request) {
         if (!found) {
             // Check next season, episode 1
             try {
-                const nextSeasonData = await rateLimitedTmdbCall(() => moviedb.seasonInfo({ id: show.tmdbId, season_number: nextSeason + 1 }));
+                const lookupSeason = nextSeason + 1;
+                const nextSeasonData = await cachedTmdbCall(`tmdb-season-${show.tmdbId}-${lookupSeason}`, () =>
+                    moviedb.seasonInfo({ id: show.tmdbId, season_number: lookupSeason }),
+                    24 * 60
+                );
                 if (nextSeasonData?.episodes && nextSeasonData.episodes.length > 0) {
                     nextSeason += 1;
                     nextEpisode = 1;

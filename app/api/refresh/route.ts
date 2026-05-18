@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { MovieDb } from 'moviedb-promise';
-import { getTmdbApiKey, rateLimitedTmdbCall, cleanFilename, MediaMetadata, fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata } from '@/lib/metadata';
+import { fetchEpisodeMetadata, fetchMovieMetadata, fetchShowMetadata } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-    const TMDB_API_KEY = getTmdbApiKey();
-    const moviedb = new MovieDb(TMDB_API_KEY);
-
     try {
         const body = await req.json().catch(() => ({}));
         const { id, type } = body;
@@ -19,9 +15,9 @@ export async function POST(req: Request) {
             return await refreshSingle(id, type);
         }
 
-        // Otherwise refresh all items missing posters
-        const moviesWithoutPoster = db.prepare('SELECT id, title, year, fileName FROM movies WHERE posterPath IS NULL').all() as any[];
-        const showsWithoutPoster = db.prepare('SELECT id, title FROM shows WHERE posterPath IS NULL').all() as any[];
+        // Otherwise refresh items missing posters or IMDb ratings.
+        const moviesWithoutPoster = db.prepare('SELECT id, title, year, fileName FROM movies WHERE posterPath IS NULL OR imdbRating IS NULL').all() as any[];
+        const showsWithoutPoster = db.prepare('SELECT id, title FROM shows WHERE posterPath IS NULL OR imdbRating IS NULL').all() as any[];
 
         let refreshed = 0;
         const errors: string[] = [];
@@ -33,7 +29,7 @@ export async function POST(req: Request) {
                 const source = movie.fileName || movie.title;
                 const metadata = await fetchMovieMetadata(source);
 
-                if (metadata.tmdbId) {
+                if (metadata.tmdbId || metadata.posterPath || metadata.overview) {
                     db.prepare(`
                         UPDATE movies SET 
                           title = @title,
@@ -42,6 +38,7 @@ export async function POST(req: Request) {
                           backdropPath = @backdropPath,
                           overview = @overview,
                           rating = @rating,
+                          imdbRating = @imdbRating,
                           genres = @genres,
                           year = COALESCE(@year, year)
                         WHERE id = @id
@@ -51,7 +48,7 @@ export async function POST(req: Request) {
                     });
                     refreshed++;
                 } else {
-                    errors.push(`Movie not found: ${movie.title}`);
+                    errors.push(`Movie metadata not found: ${movie.title}`);
                 }
             } catch (e: any) {
                 console.error(`Error refreshing movie ${movie.title}:`, e);
@@ -97,6 +94,7 @@ export async function POST(req: Request) {
                           backdropPath = @backdropPath,
                           overview = @overview,
                           rating = @rating,
+                          imdbRating = @imdbRating,
                           genres = @genres
                         WHERE id = @id
                     `).run({
@@ -166,7 +164,7 @@ async function refreshSingle(id: number, type: 'movie' | 'show') {
             const source = movie.fileName || movie.title;
             const metadata = await fetchMovieMetadata(source);
 
-            if (metadata.tmdbId) {
+            if (metadata.tmdbId || metadata.posterPath || metadata.overview) {
                 db.prepare(`
                     UPDATE movies SET 
                       title = @title,
@@ -175,13 +173,14 @@ async function refreshSingle(id: number, type: 'movie' | 'show') {
                       backdropPath = @backdropPath,
                       overview = @overview,
                       rating = @rating,
+                      imdbRating = @imdbRating,
                       genres = @genres,
                       year = COALESCE(@year, year)
                     WHERE id = @id
                 `).run({ ...metadata, id });
                 return NextResponse.json({ success: true, title: metadata.title });
             }
-            return NextResponse.json({ error: 'No TMDB match found' }, { status: 404 });
+            return NextResponse.json({ error: 'No movie metadata match found' }, { status: 404 });
 
         } else {
             const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(id) as any;
@@ -211,6 +210,7 @@ async function refreshSingle(id: number, type: 'movie' | 'show') {
                       backdropPath = @backdropPath,
                       overview = @overview,
                       rating = @rating,
+                      imdbRating = @imdbRating,
                       genres = @genres
                     WHERE id = @id
                 `).run({ ...metadata, id });

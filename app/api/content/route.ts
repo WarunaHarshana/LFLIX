@@ -15,6 +15,7 @@ type Movie = {
   backdropPath: string | null;
   overview: string | null;
   rating: number | null;
+  imdbRating: number | null;
   genres: string | null;
   isHDR: number;
   resolution: string | null;
@@ -32,6 +33,7 @@ type Show = {
   backdropPath: string | null;
   overview: string | null;
   rating: number | null;
+  imdbRating: number | null;
   genres: string | null;
   firstAirDate: string | null;
   addedAt: string;
@@ -79,6 +81,7 @@ export async function GET() {
         backdropPath: m.backdropPath,
         overview: m.overview,
         rating: m.rating,
+        imdbRating: m.imdbRating,
         genres: m.genres,
         isHDR: !!m.isHDR,
         resolution: m.resolution,
@@ -97,6 +100,7 @@ export async function GET() {
         backdropPath: s.backdropPath,
         overview: s.overview,
         rating: s.rating,
+        imdbRating: s.imdbRating,
         genres: s.genres,
         firstAirDate: s.firstAirDate,
         addedAt: s.addedAt,

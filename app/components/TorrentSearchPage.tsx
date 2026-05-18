@@ -30,6 +30,15 @@ type TorrentResult = {
     uploadTimestamp?: number;
 };
 
+type TorrentSourceStatus = {
+    name: string;
+    status: 'ok' | 'timeout' | 'error';
+    results: number;
+    durationMs: number;
+    error?: string;
+    cached?: boolean;
+};
+
 type TMDBResult = {
     tmdbId: number;
     mediaType: 'movie' | 'tv';
@@ -51,6 +60,7 @@ type Props = {
 export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, initialQuery }: Props) {
     const [searchQuery, setSearchQuery] = useState('');
     const [results, setResults] = useState<TorrentResult[]>([]);
+    const [sourceStatuses, setSourceStatuses] = useState<TorrentSourceStatus[]>([]);
     const [searching, setSearching] = useState(false);
     const [searched, setSearched] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -78,6 +88,8 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
             default: return sorted.sort((a, b) => b.seeds - a.seeds);
         }
     }, [results, sortBy]);
+
+    const sourceIssues = sourceStatuses.filter(source => source.status !== 'ok');
 
     useEffect(() => {
         fetchFolders();
@@ -120,12 +132,15 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
         setSearching(true);
         setError(null);
         setSearched(false);
+        setResults([]);
+        setSourceStatuses([]);
 
         try {
             const res = await fetch(`/api/torrent-search?q=${encodeURIComponent(query.trim())}`, {
                 signal: controller.signal,
             });
             const data = await res.json();
+            setSourceStatuses(data.sources || []);
             if (data.error) {
                 setError(data.error);
             } else {
@@ -215,6 +230,20 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
     };
 
     const isDDL = (result: TorrentResult) => result.source === 'DDL';
+
+    const sourceBadge = (result: TorrentResult): { label: string; className: string } => {
+        const source = result.source.toUpperCase();
+        if (source === 'DDL') {
+            return { label: '⬇ DDL', className: 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold' };
+        }
+        if (source === 'PSA') {
+            return { label: 'PSA', className: 'bg-pink-500/20 text-pink-300 border border-pink-500/40 font-bold' };
+        }
+        if (source === 'YTS') {
+            return { label: 'YTS', className: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' };
+        }
+        return { label: result.source, className: 'bg-neutral-800 text-neutral-500' };
+    };
 
     /** Extract format tags (HDR, IMAX, Remux, Atmos, etc.) from a title */
     const extractTags = (title: string): { label: string; className: string }[] => {
@@ -351,6 +380,31 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                 </div>
             )}
 
+            {/* Source status */}
+            {!searching && searched && sourceStatuses.length > 0 && (
+                <div className={`flex flex-wrap items-center gap-2 p-3 border rounded-xl text-xs mb-4 ${sourceIssues.length > 0
+                    ? 'bg-yellow-600/10 border-yellow-500/30 text-yellow-300'
+                    : 'bg-neutral-900 border-neutral-800 text-neutral-400'
+                    }`}>
+                    {sourceIssues.length > 0 && <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
+                    {sourceStatuses.map(source => (
+                        <span
+                            key={source.name}
+                            title={source.error || `${source.durationMs}ms`}
+                            className={`px-2 py-1 rounded-lg border ${source.status === 'ok'
+                                ? 'bg-neutral-800 border-neutral-700 text-neutral-300'
+                                : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300'
+                                }`}
+                        >
+                            {source.name} {source.status === 'ok' ? source.results : source.status}
+                        </span>
+                    ))}
+                    {sourceStatuses.some(source => source.cached) && (
+                        <span className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300">cached</span>
+                    )}
+                </div>
+            )}
+
             {/* Searching */}
             {searching && (
                 <div className="flex flex-col items-center justify-center py-16">
@@ -382,6 +436,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                     </div>
                     {sortedResults.map((result, i) => {
                         const isStarted = downloadStarted.has(result.magnet);
+                        const source = sourceBadge(result);
                         return (
                             <div
                                 key={i}
@@ -399,10 +454,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                         <span className="text-neutral-400">{result.size}</span>
                                         {!isDDL(result) && <span className="text-green-500 font-medium">↑ {result.seeds}</span>}
                                         {!isDDL(result) && <span className="text-red-400">↓ {result.leeches}</span>}
-                                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDDL(result)
-                                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold'
-                                            : 'bg-neutral-800 text-neutral-500'
-                                            }`}>{isDDL(result) ? '⬇ DDL' : result.source}</span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
                                         {result.uploadDate && <span className="text-neutral-600">{result.uploadDate}</span>}
                                     </div>
                                 </div>

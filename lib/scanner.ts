@@ -128,17 +128,42 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
     const fileName = path.basename(filePath);
 
     // Check if already indexed
-    const movieExists = db.prepare('SELECT id, resolution FROM movies WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null } | undefined;
+    const movieExists = db.prepare('SELECT id, title, tmdbId, posterPath, resolution FROM movies WHERE filePath = ?').get(filePath) as { id: number; title: string | null; tmdbId: number | null; posterPath: string | null; resolution: string | null } | undefined;
     const epExists = db.prepare('SELECT id, resolution, title, stillPath, rating, showId, seasonNumber, episodeNumber FROM episodes WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null; title: string | null; stillPath: string | null; rating: number | null; showId: number; seasonNumber: number; episodeNumber: number } | undefined;
 
     if (movieExists || epExists) {
       // Check if media info or episode metadata needs updating
       const needsMediaUpdate = (movieExists && !movieExists.resolution) || (epExists && !epExists.resolution);
+      const needsMovieMetadata = movieExists && (!movieExists.tmdbId || !movieExists.posterPath || /^(?:www[\s.]|\[)/i.test(movieExists.title || fileName));
       // Episode needs metadata refresh if title is fallback pattern (e.g., "S1 E1") or stillPath is null
       const needsEpMetadata = epExists && (!epExists.stillPath || epExists.rating === null || /^S\d+ E\d+$/.test(epExists.title || ''));
 
-      if (!needsMediaUpdate && !needsEpMetadata) {
+      if (!needsMediaUpdate && !needsMovieMetadata && !needsEpMetadata) {
         return { added: false };
+      }
+
+      if (needsMovieMetadata && movieExists) {
+        try {
+          const movieMeta = await fetchMovieMetadata(fileName);
+          if (movieMeta.tmdbId || movieMeta.posterPath || movieMeta.overview) {
+            db.prepare(`
+              UPDATE movies SET
+                title = @title,
+                year = @year,
+                tmdbId = @tmdbId,
+                posterPath = @posterPath,
+                backdropPath = @backdropPath,
+                overview = @overview,
+                rating = @rating,
+                imdbRating = @imdbRating,
+                genres = @genres
+              WHERE id = @id
+            `).run({ ...movieMeta, id: movieExists.id });
+            console.log(`[Scanner] Updated movie metadata for ${fileName}: "${movieMeta.title}"`);
+          }
+        } catch (e) {
+          console.warn(`[Scanner] Failed to refresh movie metadata for ${fileName}:`, e);
+        }
       }
 
       // Re-fetch episode TMDB metadata if needed (titles, thumbnails, overviews)
@@ -242,8 +267,8 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
         showId = existingShow.id;
       } else {
         const result = db.prepare(`
-            INSERT INTO shows (title, tmdbId, posterPath, backdropPath, overview, rating, firstAirDate, genres) 
-            VALUES (@title, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @firstAirDate, @genres)
+            INSERT INTO shows (title, tmdbId, posterPath, backdropPath, overview, rating, imdbRating, firstAirDate, genres) 
+            VALUES (@title, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @imdbRating, @firstAirDate, @genres)
         `).run(showMeta);
         showId = result.lastInsertRowid;
       }
@@ -275,8 +300,8 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
       const movieMeta = await fetchMovieMetadata(fileName);
 
       db.prepare(`
-        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, genres, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
-        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @genres, @isHDR, @resolution, @videoCodec, @audioCodec, @audioChannels, @bitrate, @duration, @fileSize)
+        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, imdbRating, genres, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
+        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @imdbRating, @genres, @isHDR, @resolution, @videoCodec, @audioCodec, @audioChannels, @bitrate, @duration, @fileSize)
       `).run({
         filePath,
         fileName,

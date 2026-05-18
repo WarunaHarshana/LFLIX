@@ -38,6 +38,7 @@ type Show = {
     posterPath: string | null;
     backdropPath: string | null;
     rating: number | null;
+    imdbRating?: number | null;
 };
 
 type Props = {
@@ -76,6 +77,8 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     }, [seasons]);
 
     const currentSeason = seasons.find(s => s.season === activeSeason);
+    const displayRating = show.imdbRating ?? show.rating;
+    const displayRatingSource = show.imdbRating != null ? 'IMDb' : 'TMDB';
 
     const handleContextMenu = (e: React.MouseEvent, episode: Episode) => {
         e.preventDefault();
@@ -217,9 +220,9 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                         ) : (
                             <>
                                 <h2 className="text-3xl font-bold">{show.title}</h2>
-                                {show.rating != null && show.rating > 0 && (
+                                {displayRating != null && displayRating > 0 && (
                                     <span className="inline-flex mt-2 bg-[#F5C518] px-2.5 py-1 rounded-md shadow-sm">
-                                        <span className="text-sm font-bold text-black">IMDb {show.rating.toFixed(1)}</span>
+                                        <span className="text-sm font-bold text-black">{displayRatingSource} {displayRating.toFixed(1)}</span>
                                     </span>
                                 )}
                                 <p className="text-neutral-400 mt-2 line-clamp-2">{show.overview}</p>

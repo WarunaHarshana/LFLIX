@@ -39,11 +39,25 @@ function getAllowedOrigin(request: NextRequest): string | null {
   return null;
 }
 
+function applySecurityHeaders(response: NextResponse, request: NextRequest): NextResponse {
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+
+  if (request.nextUrl.protocol === 'https:') {
+    response.headers.set('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
+
+  return response;
+}
+
 export function middleware(request: NextRequest) {
   const allowedOrigin = getAllowedOrigin(request);
 
   // Create base response
-  const response = NextResponse.next();
+  const response = applySecurityHeaders(NextResponse.next(), request);
 
   if (allowedOrigin) {
     response.headers.set('Access-Control-Allow-Credentials', 'true');
@@ -56,9 +70,9 @@ export function middleware(request: NextRequest) {
   // Handle preflight
   if (request.method === 'OPTIONS') {
     if (request.headers.get('origin') && !allowedOrigin) {
-      return new NextResponse(null, { status: 403 });
+      return applySecurityHeaders(new NextResponse(null, { status: 403 }), request);
     }
-    return new NextResponse(null, { status: 204, headers: response.headers });
+    return applySecurityHeaders(new NextResponse(null, { status: 204, headers: response.headers }), request);
   }
 
   // Skip auth for these paths
@@ -91,7 +105,7 @@ export function middleware(request: NextRequest) {
 
     // Validate PIN
     if (!pin || pin !== expectedPin) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: 'Unauthorized. Please provide valid PIN.' },
         {
           status: 401,
@@ -100,7 +114,7 @@ export function middleware(request: NextRequest) {
             ...(allowedOrigin ? { 'Access-Control-Allow-Origin': allowedOrigin, Vary: 'Origin' } : {})
           }
         }
-      );
+      ), request);
     }
   }
 

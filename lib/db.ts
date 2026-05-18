@@ -28,6 +28,17 @@ const dbPath = fs.existsSync(newDbPath) ? newDbPath :
     fs.existsSync(oldRootDbPath2) ? oldRootDbPath2 : newDbPath;
 const db = new Database(dbPath);
 
+try {
+  db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
+  db.pragma('foreign_keys = ON');
+  db.pragma('busy_timeout = 5000');
+  db.pragma('temp_store = MEMORY');
+  db.pragma('cache_size = -20000');
+} catch (error) {
+  console.warn('[DB] Failed to apply SQLite performance pragmas:', error);
+}
+
 // Initialize DB schema
 db.exec(`
   CREATE TABLE IF NOT EXISTS movies (
@@ -41,6 +52,7 @@ db.exec(`
     backdropPath TEXT,
     overview TEXT,
     rating REAL,
+    imdbRating REAL,
     genres TEXT,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -53,6 +65,7 @@ db.exec(`
     backdropPath TEXT,
     overview TEXT,
     rating REAL,
+    imdbRating REAL,
     genres TEXT,
     firstAirDate TEXT,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -140,6 +153,7 @@ db.exec(`
     backdropPath TEXT,
     overview TEXT,
     rating REAL,
+    imdbRating REAL,
     year TEXT,
     genres TEXT,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -161,6 +175,9 @@ db.exec(`
     downloadedSize INTEGER DEFAULT 0,
     downloadPath TEXT,
     errorMessage TEXT,
+    retryCount INTEGER DEFAULT 0,
+    lastProgressAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    stateUpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     startedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     completedAt DATETIME,
     FOREIGN KEY(watchlistId) REFERENCES watchlist(id) ON DELETE SET NULL
@@ -260,7 +277,9 @@ db.exec(`
 
   -- Watch History: queried by contentType+contentId on every detail modal, sorted by lastWatched for continue watching
   CREATE INDEX IF NOT EXISTS idx_watch_history_content ON watch_history(contentType, contentId);
+  CREATE INDEX IF NOT EXISTS idx_watch_history_episode ON watch_history(episodeId);
   CREATE INDEX IF NOT EXISTS idx_watch_history_lastWatched ON watch_history(lastWatched DESC);
+  CREATE INDEX IF NOT EXISTS idx_watch_history_continue ON watch_history(completed, lastWatched DESC) WHERE progress > 0;
 
   -- Watchlist: checked by tmdbId+mediaType for duplicates
   CREATE INDEX IF NOT EXISTS idx_watchlist_tmdbId ON watchlist(tmdbId, mediaType);
@@ -268,35 +287,113 @@ db.exec(`
 
   -- IPTV Channels: filtered by category
   CREATE INDEX IF NOT EXISTS idx_iptv_channels_category ON iptv_channels(category);
+  CREATE INDEX IF NOT EXISTS idx_iptv_categories_orderIndex ON iptv_categories(orderIndex);
 
   -- Downloads: filtered by status
   CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
+  CREATE INDEX IF NOT EXISTS idx_downloads_infoHash ON downloads(infoHash);
+  CREATE INDEX IF NOT EXISTS idx_downloads_startedAt ON downloads(startedAt DESC);
 
   -- Auto-track: lookup by showId and tmdbId
   CREATE INDEX IF NOT EXISTS idx_auto_track_showId ON auto_track(showId);
   CREATE INDEX IF NOT EXISTS idx_auto_track_tmdbId ON auto_track(tmdbId);
+  CREATE INDEX IF NOT EXISTS idx_auto_track_enabled_check ON auto_track(enabled, lastCheckedAt);
 
   -- Notifications: filtered by read status, sorted by creation
   CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
   CREATE INDEX IF NOT EXISTS idx_notifications_createdAt ON notifications(createdAt DESC);
+  CREATE INDEX IF NOT EXISTS idx_notifications_show_episode ON notifications(showId, seasonNumber, episodeNumber);
 
   -- Episode releases: lookup by tmdbId
   CREATE INDEX IF NOT EXISTS idx_episode_releases_tmdbId ON episode_releases(tmdbId);
+  CREATE INDEX IF NOT EXISTS idx_episode_releases_download ON episode_releases(downloadAttempted, lastAttemptAt);
 
   -- Movie releases: lookup by tmdbId
   CREATE INDEX IF NOT EXISTS idx_movie_releases_tmdbId ON movie_releases(tmdbId);
+  CREATE INDEX IF NOT EXISTS idx_movie_releases_available ON movie_releases(isAvailable, lastCheckedAt);
+  CREATE INDEX IF NOT EXISTS idx_stream_quality_checkedAt ON stream_server_quality_cache(checkedAt);
 `);
+
+function initializeFullTextSearch(): void {
+  const ftsSchemaVersion = '1';
+
+  try {
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS movie_search_fts
+      USING fts5(title, fileName, content='movies', content_rowid='id');
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS show_search_fts
+      USING fts5(title, content='shows', content_rowid='id');
+
+      CREATE TRIGGER IF NOT EXISTS movies_search_ai AFTER INSERT ON movies BEGIN
+        INSERT INTO movie_search_fts(rowid, title, fileName)
+        VALUES (new.id, new.title, new.fileName);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS movies_search_ad AFTER DELETE ON movies BEGIN
+        INSERT INTO movie_search_fts(movie_search_fts, rowid, title, fileName)
+        VALUES ('delete', old.id, old.title, old.fileName);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS movies_search_au AFTER UPDATE OF title, fileName ON movies BEGIN
+        INSERT INTO movie_search_fts(movie_search_fts, rowid, title, fileName)
+        VALUES ('delete', old.id, old.title, old.fileName);
+        INSERT INTO movie_search_fts(rowid, title, fileName)
+        VALUES (new.id, new.title, new.fileName);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS shows_search_ai AFTER INSERT ON shows BEGIN
+        INSERT INTO show_search_fts(rowid, title)
+        VALUES (new.id, new.title);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS shows_search_ad AFTER DELETE ON shows BEGIN
+        INSERT INTO show_search_fts(show_search_fts, rowid, title)
+        VALUES ('delete', old.id, old.title);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS shows_search_au AFTER UPDATE OF title ON shows BEGIN
+        INSERT INTO show_search_fts(show_search_fts, rowid, title)
+        VALUES ('delete', old.id, old.title);
+        INSERT INTO show_search_fts(rowid, title)
+        VALUES (new.id, new.title);
+      END;
+    `);
+
+    const current = db
+      .prepare("SELECT value FROM settings WHERE key = 'ftsSchemaVersion'")
+      .get() as { value: string } | undefined;
+
+    if (current?.value !== ftsSchemaVersion) {
+      db.exec(`
+        INSERT INTO movie_search_fts(movie_search_fts) VALUES ('rebuild');
+        INSERT INTO show_search_fts(show_search_fts) VALUES ('rebuild');
+      `);
+
+      db.prepare(`
+        INSERT INTO settings (key, value)
+        VALUES ('ftsSchemaVersion', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(ftsSchemaVersion);
+    }
+  } catch (error) {
+    console.warn('[DB] Full-text search indexes unavailable, local search will use LIKE fallback:', error);
+  }
+}
+
+initializeFullTextSearch();
 
 // Run migrations for existing databases (add columns if they don't exist)
 // WHITELIST of valid tables and columns to prevent SQL injection
 const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads', 'auto_track', 'notifications', 'episode_releases', 'movie_releases'];
 const VALID_COLUMNS: Record<string, string[]> = {
-  movies: ['genres', 'backdropPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
-  shows: ['genres', 'backdropPath', 'overview', 'rating'],
+  movies: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
+  shows: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating'],
   episodes: ['stillPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
-  watchlist: ['trackRelease'],
+  watchlist: ['trackRelease', 'imdbRating'],
+  downloads: ['retryCount', 'lastProgressAt', 'stateUpdatedAt'],
   settings: []
 };
 
@@ -328,6 +425,8 @@ function addColumnIfNotExists(table: string, column: string, type: string) {
 // Add genres column to movies and shows if missing (for existing databases)
 addColumnIfNotExists('movies', 'genres', 'TEXT');
 addColumnIfNotExists('shows', 'genres', 'TEXT');
+addColumnIfNotExists('movies', 'imdbRating', 'REAL');
+addColumnIfNotExists('shows', 'imdbRating', 'REAL');
 addColumnIfNotExists('episodes', 'rating', 'REAL');
 
 // Add HDR detection column
@@ -351,6 +450,19 @@ for (const [col, type] of MEDIA_INFO_COLS) {
 
 // Add trackRelease column to watchlist (for movie availability tracking)
 addColumnIfNotExists('watchlist', 'trackRelease', 'INTEGER DEFAULT 1');
+addColumnIfNotExists('watchlist', 'imdbRating', 'REAL');
+addColumnIfNotExists('downloads', 'retryCount', 'INTEGER DEFAULT 0');
+addColumnIfNotExists('downloads', 'lastProgressAt', 'DATETIME');
+addColumnIfNotExists('downloads', 'stateUpdatedAt', 'DATETIME');
+
+try {
+  db.prepare(`
+    UPDATE downloads
+    SET lastProgressAt = COALESCE(lastProgressAt, startedAt, CURRENT_TIMESTAMP),
+        stateUpdatedAt = COALESCE(stateUpdatedAt, startedAt, CURRENT_TIMESTAMP)
+    WHERE lastProgressAt IS NULL OR stateUpdatedAt IS NULL
+  `).run();
+} catch { /* ignore */ }
 
 type ShowDedupRow = {
   id: number;
@@ -360,6 +472,7 @@ type ShowDedupRow = {
   backdropPath: string | null;
   overview: string | null;
   rating: number | null;
+  imdbRating: number | null;
   genres: string | null;
   firstAirDate: string | null;
   episodeCount: number;
@@ -382,7 +495,7 @@ function normalizeShowTitleForDedup(title: string): string {
 
 function dedupeShows(): void {
   const shows = db.prepare(`
-    SELECT s.id, s.title, s.tmdbId, s.posterPath, s.backdropPath, s.overview, s.rating, s.genres, s.firstAirDate,
+    SELECT s.id, s.title, s.tmdbId, s.posterPath, s.backdropPath, s.overview, s.rating, s.imdbRating, s.genres, s.firstAirDate,
       (SELECT COUNT(*) FROM episodes e WHERE e.showId = s.id) as episodeCount
     FROM shows s
     ORDER BY s.addedAt ASC
@@ -431,6 +544,7 @@ function dedupeShows(): void {
               backdropPath = COALESCE(backdropPath, ?),
               overview = COALESCE(overview, ?),
               rating = COALESCE(rating, ?),
+              imdbRating = COALESCE(imdbRating, ?),
               genres = COALESCE(genres, ?),
               firstAirDate = COALESCE(firstAirDate, ?)
           WHERE id = ?
@@ -440,6 +554,7 @@ function dedupeShows(): void {
           dup.backdropPath,
           dup.overview,
           dup.rating,
+          dup.imdbRating,
           dup.genres,
           dup.firstAirDate,
           canonical.id

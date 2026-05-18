@@ -1,5 +1,5 @@
 /**
- * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS + PSA/Bitsearch + a.111477.xyz open directory
+ * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS + PSArips + a.111477.xyz open directory
  */
 
 export interface TorrentResult {
@@ -14,6 +14,24 @@ export interface TorrentResult {
     uploadDate?: string;
     uploadTimestamp?: number;
 }
+
+export type TorrentSourceName = 'PSA' | 'TPB' | 'YTS' | 'Knaben' | 'Nyaa' | 'DDL';
+
+export type TorrentSourceStatus = {
+    name: TorrentSourceName;
+    status: 'ok' | 'timeout' | 'error';
+    results: number;
+    durationMs: number;
+    error?: string;
+    cached?: boolean;
+};
+
+export type TorrentSearchDiagnostics = {
+    results: TorrentResult[];
+    sources: TorrentSourceStatus[];
+    cached: boolean;
+    tookMs: number;
+};
 
 type TPBItem = {
     id?: string;
@@ -42,9 +60,34 @@ type KnabenResponse = {
     hits?: KnabenHit[];
 };
 
+type PsaFeedItem = {
+    title: string;
+    link: string;
+    pubDate?: string;
+    timestamp?: number;
+};
+
+type PsaRelease = {
+    title: string;
+    torrentUrl?: string;
+    size?: string;
+    sizeBytes: number;
+};
+
+type SearchOptions = { year?: string; type?: 'movie' | 'tv' };
+type SearchCacheEntry = { ts: number; data: TorrentSearchDiagnostics };
+
 // Standard trackers for magnet links
 const TRACKERS = [
     'udp://tracker.opentrackr.org:1337/announce',
+    'udp://tracker.torrent.eu.org:451/announce',
+    'udp://open.stealth.si:80/announce',
+    'udp://exodus.desync.com:6969/announce',
+    'udp://tracker-udp.gbitt.info:80/announce',
+    'udp://tracker.birkenwald.de:6969/announce',
+    'udp://tracker.moeking.me:6969/announce',
+    'udp://tracker.dler.org:6969/announce',
+    'udp://explodie.org:6969/announce',
     'udp://open.demonii.com:1337/announce',
     'udp://tracker.openbittorrent.com:80',
     'udp://tracker.coppersurfer.tk:6969',
@@ -64,6 +107,43 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Pr
         promise,
         new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
     ]);
+}
+
+async function runSource(
+    name: TorrentSourceName,
+    timeoutMs: number,
+    search: () => Promise<TorrentResult[]>
+): Promise<{ results: TorrentResult[]; status: TorrentSourceStatus }> {
+    const started = Date.now();
+    try {
+        const results = await Promise.race([
+            search(),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs)),
+        ]);
+
+        return {
+            results,
+            status: {
+                name,
+                status: 'ok',
+                results: results.length,
+                durationMs: Date.now() - started,
+            },
+        };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Source failed';
+        const timedOut = /timed out/i.test(message);
+        return {
+            results: [],
+            status: {
+                name,
+                status: timedOut ? 'timeout' : 'error',
+                results: 0,
+                durationMs: Date.now() - started,
+                error: message,
+            },
+        };
+    }
 }
 
 function decodeHtmlEntities(input: string): string {
@@ -168,6 +248,59 @@ function getSignificantQueryWords(query: string): string[] {
         .filter(w => w.length > 1 && !/^(19|20)\d{2}$/.test(w));
 }
 
+function getSignificantTvQueryWords(query: string): string[] {
+    return normalizeTitle(query)
+        .split(' ')
+        .filter(w =>
+            w.length > 1 &&
+            !/^(19|20)\d{2}$/.test(w) &&
+            !/^s\d{1,2}e\d{1,3}$/.test(w) &&
+            !/^\d{1,2}x\d{1,3}$/.test(w) &&
+            !/^s\d{1,2}$/.test(w) &&
+            !/^\d{3,4}p$/.test(w) &&
+            !/^(4k|uhd|hdr|hevc|x264|x265|web|webdl|web-dl|webrip|bluray|hdtv)$/.test(w)
+        );
+}
+
+function extractEpisodeQuery(query: string): { season: number; episode: number } | null {
+    const sxxexx = query.match(/\bs(\d{1,2})\s*[\W_]*\s*e(\d{1,3})\b/i);
+    if (sxxexx) {
+        return { season: parseInt(sxxexx[1], 10), episode: parseInt(sxxexx[2], 10) };
+    }
+
+    const xFormat = query.match(/\b(\d{1,2})x(\d{1,3})\b/i);
+    if (xFormat) {
+        return { season: parseInt(xFormat[1], 10), episode: parseInt(xFormat[2], 10) };
+    }
+
+    return null;
+}
+
+function extractEpisodeKey(title: string): string | null {
+    const episode = extractEpisodeQuery(title);
+    if (!episode) return null;
+    return `s${String(episode.season).padStart(2, '0')}e${String(episode.episode).padStart(2, '0')}`;
+}
+
+function titleMatchesEpisode(title: string, episodeQuery: { season: number; episode: number }): boolean {
+    const compact = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const season = String(episodeQuery.season);
+    const episode = String(episodeQuery.episode);
+    const seasonPadded = season.padStart(2, '0');
+    const episodePadded = episode.padStart(2, '0');
+
+    const tokens = [
+        `s${season}e${episode}`,
+        `s${season}e${episodePadded}`,
+        `s${seasonPadded}e${episode}`,
+        `s${seasonPadded}e${episodePadded}`,
+        `${season}x${episode}`,
+        `${season}x${episodePadded}`,
+    ];
+
+    return tokens.some(token => compact.includes(token));
+}
+
 function titleContainsQueryWord(normTitle: string, word: string): boolean {
     const titleWords = normTitle.split(' ');
     if (titleWords.includes(word) || normTitle.includes(word)) return true;
@@ -203,6 +336,26 @@ function matchesMovieTitleStrictly(title: string, query: string): boolean {
     return matchedWords.length / words.length >= 0.75;
 }
 
+function matchesTvTitleStrictly(title: string, query: string): boolean {
+    const episodeQuery = extractEpisodeQuery(query);
+    if (episodeQuery && !titleMatchesEpisode(title, episodeQuery)) {
+        return false;
+    }
+
+    const normTitle = normalizeTitle(title);
+    const words = getSignificantTvQueryWords(query);
+    if (words.length === 0) return true;
+
+    const matchedWords = words.filter(word => titleContainsQueryWord(normTitle, word));
+
+    if (words.length <= 2) {
+        const titleWords = normTitle.split(' ');
+        return words.every((word, index) => titleWords[index] === word);
+    }
+
+    return matchedWords.length / words.length >= 0.75;
+}
+
 /** Filter and sort results by relevance */
 function filterByRelevance(
     results: TorrentResult[],
@@ -211,10 +364,11 @@ function filterByRelevance(
     options?: { year?: string; type?: 'movie' | 'tv' }
 ): TorrentResult[] {
     const targetYear = options?.year ? parseInt(options.year, 10) : NaN;
-    const useYearFilter = options?.type === 'movie' && Number.isFinite(targetYear);
+    const useYearFilter = (options?.type === 'movie' || options?.type === 'tv') && Number.isFinite(targetYear);
 
     return results
         .filter(r => options?.type !== 'movie' || matchesMovieTitleStrictly(r.title, query))
+        .filter(r => options?.type !== 'tv' || matchesTvTitleStrictly(r.title, query))
         .map(r => {
             const baseScore = relevanceScore(r.title, query);
             if (!useYearFilter) {
@@ -356,13 +510,56 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
 const OPEN_DIR_BASE = 'https://a.111477.xyz';
 const OPEN_DIR_CATEGORIES: Record<string, string[]> = {
     movie: ['/movies/'],
-    tv: ['/tvs/'],
-    all: ['/movies/', '/tvs/'],
+    tv: ['/kdrama/', '/asiandrama/', '/tvs/'],
+    all: ['/movies/', '/kdrama/', '/asiandrama/', '/tvs/'],
 };
 
 // In-memory cache for directory listings (avoids re-fetching the 7800+ entry index)
 const dirCache = new Map<string, { data: { name: string; href: string; sizeBytes: number }[]; ts: number }>();
 const DIR_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+const searchCache = new Map<string, SearchCacheEntry>();
+const SEARCH_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const SEARCH_CACHE_MAX = 100;
+
+function getSearchCacheKey(title: string, options?: SearchOptions): string {
+    return JSON.stringify({
+        title: normalizeTitle(title),
+        year: options?.year || '',
+        type: options?.type || '',
+    });
+}
+
+function getCachedSearch(key: string): TorrentSearchDiagnostics | null {
+    const cached = searchCache.get(key);
+    if (!cached) return null;
+    if (Date.now() - cached.ts > SEARCH_CACHE_TTL) {
+        searchCache.delete(key);
+        return null;
+    }
+
+    return {
+        ...cached.data,
+        cached: true,
+        sources: cached.data.sources.map((source) => ({ ...source, cached: true })),
+    };
+}
+
+function setCachedSearch(key: string, data: TorrentSearchDiagnostics): void {
+    if (searchCache.size >= SEARCH_CACHE_MAX) {
+        const oldest = searchCache.keys().next().value as string | undefined;
+        if (oldest) searchCache.delete(oldest);
+    }
+
+    searchCache.set(key, {
+        ts: Date.now(),
+        data: {
+            ...data,
+            cached: false,
+            sources: data.sources.map((source) => ({ ...source, cached: false })),
+        },
+    });
+}
 
 /** Fetch with retry — retries once after a delay on 429 or network error */
 async function fetchWithRetry(url: string, timeoutMs: number): Promise<Response | null> {
@@ -405,7 +602,7 @@ async function fetchDirectoryListing(url: string, timeoutMs: number): Promise<{ 
 function normalizeTitle(t: string): string {
     return t
         .toLowerCase()
-        .replace(/[\(\)\[\]\{\}'"!@#$%^&*,.:;]/g, '')
+        .replace(/[\(\)\[\]\{\}'"!@#$%^&*,.:;]/g, ' ')
         .replace(/[-_]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -452,14 +649,16 @@ function parseDirectoryListing(html: string): { name: string; href: string; size
     return entries;
 }
 
-/** Check if folder name matches search query (fuzzy). Ignores season/episode numbers and resolutions for folder matching. */
-function titleMatches(folderName: string, query: string): boolean {
+/** Check if folder name matches search query. Ignores episode/resolution tokens for folder matching. */
+function titleMatches(folderName: string, query: string, type?: 'movie' | 'tv'): boolean {
     const normalFolder = normalizeTitle(folderName);
-    const normalQuery = normalizeTitle(query);
+    const queryWords = type === 'tv' ? getSignificantTvQueryWords(query) : getSignificantQueryWords(query);
+    if (queryWords.length === 0) return true;
 
-    // Filter out typical season/episode patterns (e.g. s01e01, 1080p) from query words when matching root folders
-    const ignoreRegex = /^(s\d+e\d+|s\d+|\d{3,4}p|4k|uhd)$/;
-    const queryWords = normalQuery.split(' ').filter(w => w.length > 1 && !ignoreRegex.test(w));
+    if (type === 'tv' && queryWords.length <= 2) {
+        const folderWords = normalFolder.split(' ');
+        return queryWords.every((word, index) => folderWords[index] === word);
+    }
 
     // All significant non-episode query words must appear in the folder name
     return queryWords.every(word => normalFolder.includes(word));
@@ -482,7 +681,7 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
                 if (folders.length === 0) continue;
 
                 // Find matching title folders
-                const matchingFolders = folders.filter(f => titleMatches(f.name, query)).slice(0, 5);
+                const matchingFolders = folders.filter(f => titleMatches(f.name, query, type)).slice(0, 5);
 
                 // Fetch file listings from matching folders in parallel
                 const fileListings = await Promise.allSettled(
@@ -538,6 +737,10 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
                     if (listing.status === 'fulfilled') {
                         results.push(...listing.value);
                     }
+                }
+
+                if (type && results.length > 0) {
+                    return results.slice(0, 50);
                 }
             } catch (e) {
                 console.error(`Open directory search error for ${category}:`, e);
@@ -651,13 +854,13 @@ async function searchNyaa(query: string): Promise<TorrentResult[]> {
     }
 }
 
-// --- PSA releases via Bitsearch (PSARips-style x265/HEVC release group results) ---
+// --- PSArips official feed/pages ---
 
-function withPsaToken(query: string): string {
-    return /\bpsa\b/i.test(query) ? query : `${query} PSA`;
-}
+const PSA_BASES = ['https://psa.wf', 'https://psarips.com'];
+const PSA_FEED_CACHE_TTL = 5 * 60 * 1000;
+let psaFeedCache: { ts: number; data: PsaFeedItem[] } | null = null;
 
-function parseBitsearchDate(dateText: string): Pick<TorrentResult, 'uploadDate' | 'uploadTimestamp'> {
+function parseFeedDate(dateText: string): Pick<TorrentResult, 'uploadDate' | 'uploadTimestamp'> {
     const value = dateText.trim();
     if (!value) return {};
 
@@ -684,43 +887,331 @@ function parseBitsearchDate(dateText: string): Pick<TorrentResult, 'uploadDate' 
     return { uploadDate: new Date(parsed).toISOString().split('T')[0], uploadTimestamp: parsed };
 }
 
-async function searchBitsearchPsa(query: string): Promise<TorrentResult[]> {
+async function fetchPsaFeed(): Promise<PsaFeedItem[]> {
+    if (psaFeedCache && Date.now() - psaFeedCache.ts < PSA_FEED_CACHE_TTL) {
+        return psaFeedCache.data;
+    }
+
+    for (const base of PSA_BASES) {
+        try {
+            const res = await fetch(`${base}/feed/`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                signal: AbortSignal.timeout(10000),
+            });
+            if (!res.ok) continue;
+
+            const xml = await res.text();
+            const items: PsaFeedItem[] = [];
+            const itemRegex = /<item\b[\s\S]*?<\/item>/gi;
+            let itemMatch;
+
+            while ((itemMatch = itemRegex.exec(xml)) !== null) {
+                const itemXml = itemMatch[0];
+                const title = decodeHtmlEntities((itemXml.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/i)?.[1]
+                    || itemXml.match(/<title>([\s\S]*?)<\/title>/i)?.[1]
+                    || '').replace(/<[^>]+>/g, '').trim());
+                const link = decodeHtmlEntities((itemXml.match(/<link>([\s\S]*?)<\/link>/i)?.[1] || '').trim());
+                const pubDate = decodeHtmlEntities((itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] || '').trim());
+                if (!title || !link) continue;
+
+                const parsed = Date.parse(pubDate);
+                items.push({
+                    title,
+                    link: link.replace(/^https?:\/\/psa\.re/i, base),
+                    pubDate,
+                    timestamp: Number.isNaN(parsed) ? undefined : parsed,
+                });
+            }
+
+            if (items.length > 0) {
+                psaFeedCache = { ts: Date.now(), data: items };
+                return items;
+            }
+        } catch {
+            // Try the next active mirror.
+        }
+    }
+
+    return [];
+}
+
+async function searchPsaPosts(query: string, type?: 'movie' | 'tv'): Promise<PsaFeedItem[]> {
+    for (const base of PSA_BASES) {
+        try {
+            const url = `${base}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&subtype=post&per_page=20`;
+            const res = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                },
+                signal: AbortSignal.timeout(10000),
+            });
+            if (!res.ok) continue;
+
+            const data = await res.json() as Array<{ title?: string; url?: string }>;
+            if (!Array.isArray(data)) continue;
+
+            return data
+                .map((item) => ({
+                    title: decodeHtmlEntities(String(item.title || '').replace(/<[^>]+>/g, '').trim()),
+                    link: String(item.url || '').replace(/\\\//g, '/'),
+                }))
+                .filter((item) => item.title && item.link)
+                .filter((item) => !type || (type === 'tv' ? item.link.includes('/tv-show/') : item.link.includes('/movie/')))
+                .filter((item) => type === 'tv' ? titleMatches(item.title, query, 'tv') : matchesMovieTitleStrictly(item.title, query));
+        } catch {
+            // Try the next mirror.
+        }
+    }
+
+    return [];
+}
+
+function psaItemMatchesQuery(item: PsaFeedItem, query: string, type?: 'movie' | 'tv'): boolean {
+    if (type === 'tv' && !item.link.includes('/tv-show/')) return false;
+    if (type === 'movie' && !item.link.includes('/movie/')) return false;
+    return type === 'tv' ? titleMatches(item.title, query, 'tv') : matchesMovieTitleStrictly(item.title, query);
+}
+
+async function fetchPsaPageHtml(url: string): Promise<string | null> {
     try {
-        const url = `https://bitsearch.to/search?q=${encodeURIComponent(withPsaToken(query))}`;
         const res = await fetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(12000),
         });
-        if (!res.ok) return [];
+        if (!res.ok) return null;
+        return res.text();
+    } catch {
+        return null;
+    }
+}
+
+function parsePsaReleases(html: string, query: string, type?: 'movie' | 'tv'): PsaRelease[] {
+    const releases: PsaRelease[] = [];
+    const headMatches = Array.from(html.matchAll(/<div class="sp-head"[^>]*>\s*([\s\S]*?)\s*<\/div>/gi));
+
+    for (let i = 0; i < headMatches.length; i++) {
+        const match = headMatches[i];
+        const title = decodeHtmlEntities(match[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+        if (!/-PSA\b/i.test(title)) continue;
+
+        const bodyStart = (match.index || 0) + match[0].length;
+        const bodyEnd = i + 1 < headMatches.length ? headMatches[i + 1].index || bodyStart + 5000 : bodyStart + 5000;
+        const body = html.slice(bodyStart, Math.min(bodyEnd, html.length));
+        const torrentHref = Array.from(body.matchAll(/<a[^>]+href="([^"]+)"[^>]*>\s*TORRENT\s*<\/a>/gi))[0]?.[1];
+        const sizeText = decodeHtmlEntities(
+            body.match(/Size<\/span>\s*:\s*<\/strong>\s*([^<]+)/i)?.[1]?.trim()
+            || body.match(/Size<\/span>\s*:\s*([^<]+)/i)?.[1]?.trim()
+            || ''
+        );
+
+        releases.push({
+            title,
+            torrentUrl: torrentHref ? decodeHtmlEntities(torrentHref) : undefined,
+            size: sizeText || undefined,
+            sizeBytes: sizeText ? parseSizeToBytes(sizeText) : 0,
+        });
+    }
+
+    const episodeQuery = type === 'tv' ? extractEpisodeQuery(query) : null;
+    let filtered = releases;
+
+    if (episodeQuery) {
+        filtered = filtered.filter((release) => titleMatchesEpisode(release.title, episodeQuery));
+    } else if (type === 'tv') {
+        const latestEpisode = releases.map((release) => extractEpisodeKey(release.title)).find(Boolean);
+        if (latestEpisode) {
+            filtered = releases.filter((release) => extractEpisodeKey(release.title) === latestEpisode);
+        }
+    }
+
+    return filtered.slice(0, 6);
+}
+
+function isProbablySameRelease(candidateTitle: string, releaseTitle: string): boolean {
+    const candidate = candidateTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const release = releaseTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return candidate === release || candidate.startsWith(release) || candidate.includes(release);
+}
+
+async function resolvePsaReleaseViaIndexers(release: PsaRelease): Promise<TorrentResult | null> {
+    const bitsearchExact = await searchBitsearchForPsaRelease(release.title);
+    if (bitsearchExact) {
+        return {
+            ...bitsearchExact,
+            title: release.title,
+            size: release.size || bitsearchExact.size,
+            sizeBytes: release.sizeBytes || bitsearchExact.sizeBytes,
+            quality: extractQuality(release.title),
+            source: 'PSA',
+        };
+    }
+
+    const tpbExact = await searchTPBForPsaRelease(release.title);
+    if (tpbExact) {
+        return {
+            ...tpbExact,
+            title: release.title,
+            size: release.size || tpbExact.size,
+            sizeBytes: release.sizeBytes || tpbExact.sizeBytes,
+            quality: extractQuality(release.title),
+            source: 'PSA',
+        };
+    }
+
+    const candidates = await searchKnaben(release.title);
+    const exact = candidates.find((candidate) => isProbablySameRelease(candidate.title, release.title));
+    if (!exact) return null;
+
+    return {
+        ...exact,
+        title: release.title,
+        size: release.size || exact.size,
+        sizeBytes: release.sizeBytes || exact.sizeBytes,
+        quality: extractQuality(release.title),
+        source: 'PSA',
+    };
+}
+
+async function searchBitsearchForPsaRelease(releaseTitle: string): Promise<TorrentResult | null> {
+    try {
+        const url = `https://bitsearch.to/search?q=${encodeURIComponent(releaseTitle)}`;
+        const res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            signal: AbortSignal.timeout(9000),
+        });
+        if (!res.ok) return null;
 
         const html = await res.text();
-        const results: TorrentResult[] = [];
-        const resultRegex = /<a href="\/torrent\/[^"]+"[^>]*>\s*([\s\S]*?)\s*<\/a>[\s\S]*?<i class="fas fa-download"><\/i>\s*<span>([^<]+)<\/span>[\s\S]*?<i class="fas fa-calendar"><\/i>\s*<span>([^<]+)<\/span>[\s\S]*?<span class="font-medium">(\d+)<\/span>\s*<span>seeders<\/span>[\s\S]*?<span class="font-medium">(\d+)<\/span>\s*<span>leechers<\/span>[\s\S]*?<a href="(magnet:[^"]+)"/gi;
-        let match;
+        const magnetMatches = Array.from(html.matchAll(/href="(magnet:[^"]+)"/gi));
 
-        while ((match = resultRegex.exec(html)) !== null) {
-            const title = decodeHtmlEntities(match[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
-            if (!/\bpsa\b/i.test(title)) continue;
+        for (const match of magnetMatches) {
+            const magnet = decodeHtmlEntities(match[1]);
+            const cardStart = html.lastIndexOf('bg-white rounded-lg', match.index || 0);
+            const cardEnd = html.indexOf('bg-white rounded-lg', (match.index || 0) + match[0].length);
+            const card = html.slice(
+                cardStart >= 0 ? cardStart : Math.max(0, (match.index || 0) - 3500),
+                cardEnd > 0 ? cardEnd : Math.min(html.length, (match.index || 0) + 2500)
+            );
 
-            const size = decodeHtmlEntities(match[2].trim());
-            const dateInfo = parseBitsearchDate(decodeHtmlEntities(match[3]));
+            const title = decodeHtmlEntities(
+                card.match(/<a[^>]+href="\/torrent\/[^"]+"[^>]*>\s*([\s\S]*?)\s*<\/a>/i)?.[1]
+                    ?.replace(/<[^>]+>/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                || releaseTitle
+            );
 
-            results.push({
+            if (!isProbablySameRelease(title, releaseTitle)) continue;
+
+            const size = decodeHtmlEntities(
+                card.match(/<i class="fas fa-download"><\/i>\s*<span>\s*([^<]+)\s*<\/span>/i)?.[1]?.trim()
+                || ''
+            );
+            const uploadDateText = decodeHtmlEntities(
+                card.match(/<i class="fas fa-calendar"><\/i>\s*<span>\s*([^<]+)\s*<\/span>/i)?.[1]?.trim()
+                || ''
+            );
+            const seeds = parseInt(card.match(/text-green-600[\s\S]*?<span class="font-medium">\s*(\d+)\s*<\/span>/i)?.[1] || '0', 10) || 0;
+            const leeches = parseInt(card.match(/text-red-600[\s\S]*?<span class="font-medium">\s*(\d+)\s*<\/span>/i)?.[1] || '0', 10) || 0;
+            const uploadInfo = uploadDateText ? parseFeedDate(uploadDateText) : {};
+
+            return {
                 title,
-                magnet: decodeHtmlEntities(match[6]),
-                size,
-                sizeBytes: parseSizeToBytes(size),
-                seeds: parseInt(match[4], 10) || 0,
-                leeches: parseInt(match[5], 10) || 0,
+                magnet,
+                size: size || 'Unknown',
+                sizeBytes: size ? parseSizeToBytes(size) : 0,
+                seeds,
+                leeches,
                 quality: extractQuality(title),
                 source: 'PSA',
-                ...dateInfo,
+                ...uploadInfo,
+            };
+        }
+    } catch {
+        // Fall through to the other exact-match indexers.
+    }
+
+    return null;
+}
+
+async function searchTPBForPsaRelease(releaseTitle: string): Promise<TorrentResult | null> {
+    for (const base of ['https://apibay.org', 'https://apibay.isohunt.to']) {
+        try {
+            const url = `${base}/q.php?q=${encodeURIComponent(releaseTitle)}&cat=200`;
+            const res = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                signal: AbortSignal.timeout(8000),
             });
+            if (!res.ok) continue;
+
+            const data = await res.json() as TPBItem[];
+            if (!Array.isArray(data) || data.length === 0 || data[0]?.id === '0') continue;
+
+            const exact = data.find((item) => item.name && item.info_hash && isProbablySameRelease(item.name, releaseTitle));
+            if (!exact) continue;
+
+            const title = exact.name || releaseTitle;
+            const sizeBytes = parseInt(exact.size || '0', 10) || 0;
+            const uploadTimestamp = exact.added ? parseInt(exact.added, 10) * 1000 : undefined;
+            return {
+                title,
+                magnet: buildMagnet(exact.info_hash || '', releaseTitle),
+                size: formatBytes(sizeBytes),
+                sizeBytes,
+                seeds: parseInt(exact.seeders || '0', 10) || 0,
+                leeches: parseInt(exact.leechers || '0', 10) || 0,
+                quality: extractQuality(releaseTitle),
+                source: 'PSA',
+                uploadDate: uploadTimestamp ? new Date(uploadTimestamp).toISOString().split('T')[0] : undefined,
+                uploadTimestamp,
+            };
+        } catch {
+            // Try next API mirror.
+        }
+    }
+
+    return null;
+}
+
+async function searchOriginalPsa(query: string, options?: { year?: string; type?: 'movie' | 'tv' }): Promise<TorrentResult[]> {
+    try {
+        const feed = await fetchPsaFeed();
+        let pages = feed.filter((item) => psaItemMatchesQuery(item, query, options?.type));
+
+        if (pages.length === 0) {
+            pages = await searchPsaPosts(query, options?.type);
         }
 
-        return results
-            .sort((a, b) => b.seeds - a.seeds)
-            .slice(0, 20);
+        const page = pages
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+        if (!page) return [];
+
+        const html = await fetchPsaPageHtml(page.link);
+        if (!html) return [];
+
+        const releases = parsePsaReleases(html, query, options?.type);
+        if (releases.length === 0) return [];
+
+        const resolved = await Promise.allSettled(
+            releases.map((release) => withTimeout(resolvePsaReleaseViaIndexers(release), 8000, null))
+        );
+        const dateInfo = page.pubDate ? parseFeedDate(page.pubDate) : {};
+
+        return resolved
+            .filter((result): result is PromiseFulfilledResult<TorrentResult> => result.status === 'fulfilled' && result.value !== null)
+            .map((result) => ({
+                ...result.value,
+                source: 'PSA',
+                uploadDate: result.value.uploadDate || dateInfo.uploadDate,
+                uploadTimestamp: result.value.uploadTimestamp || dateInfo.uploadTimestamp,
+            }))
+            .sort((a, b) => {
+                if ((b.uploadTimestamp || 0) !== (a.uploadTimestamp || 0)) {
+                    return (b.uploadTimestamp || 0) - (a.uploadTimestamp || 0);
+                }
+                return b.seeds - a.seeds;
+            });
     } catch (e) {
         console.error('PSA search error:', e);
         return [];
@@ -729,31 +1220,40 @@ async function searchBitsearchPsa(query: string): Promise<TorrentResult[]> {
 
 // --- Combined search ---
 
-export async function searchTorrents(
+export async function searchTorrentsWithDiagnostics(
     title: string,
-    options?: { year?: string; type?: 'movie' | 'tv' }
-): Promise<TorrentResult[]> {
+    options?: SearchOptions
+): Promise<TorrentSearchDiagnostics> {
+    const started = Date.now();
+    const cacheKey = getSearchCacheKey(title, options);
+    const cached = getCachedSearch(cacheKey);
+    if (cached) {
+        console.log(`[TorrentSearch] cache hit for "${title}" — ${cached.results.length} results`);
+        return { ...cached, tookMs: Date.now() - started };
+    }
+
     // Use title without appending year directly, as appending year drops many valid tracker results
     const query = title;
 
     // Always use 200 (All Video) for TPB to ensure we don't filter out HD categories (207, 208)
     const tpbCategory = '200';
 
-    const [tpbOut, ytsOut, psaOut, knabenOut, nyaaOut, ddlOut] = await Promise.allSettled([
-        withTimeout(searchTPB(query, tpbCategory), 12000, [] as TorrentResult[]),
-        withTimeout(options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([] as TorrentResult[]), 12000, [] as TorrentResult[]),
-        withTimeout(searchBitsearchPsa(query), 10000, [] as TorrentResult[]),
-        withTimeout(searchKnaben(query), 9000, [] as TorrentResult[]),
-        withTimeout(searchNyaa(query), 10000, [] as TorrentResult[]),
-        withTimeout(searchOpenDirectory(title, options?.type), 9000, [] as TorrentResult[]),
+    const [psaSource, tpbSource, ytsSource, knabenSource, nyaaSource, ddlSource] = await Promise.all([
+        runSource('PSA', 14000, () => searchOriginalPsa(query, options)),
+        runSource('TPB', 12000, () => searchTPB(query, tpbCategory)),
+        runSource('YTS', 12000, () => options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([])),
+        runSource('Knaben', 9000, () => searchKnaben(query)),
+        runSource('Nyaa', 10000, () => searchNyaa(query)),
+        runSource('DDL', 9000, () => searchOpenDirectory(title, options?.type)),
     ]);
 
-    const tpbResults = tpbOut.status === 'fulfilled' ? tpbOut.value : [];
-    const ytsResults = ytsOut.status === 'fulfilled' ? ytsOut.value : [];
-    const psaResults = psaOut.status === 'fulfilled' ? psaOut.value : [];
-    const knabenResults = knabenOut.status === 'fulfilled' ? knabenOut.value : [];
-    const nyaaResults = nyaaOut.status === 'fulfilled' ? nyaaOut.value : [];
-    const ddlResults = ddlOut.status === 'fulfilled' ? ddlOut.value : [];
+    const psaResults = psaSource.results;
+    const tpbResults = tpbSource.results;
+    const ytsResults = ytsSource.results;
+    const knabenResults = knabenSource.results;
+    const nyaaResults = nyaaSource.results;
+    const ddlResults = ddlSource.results;
+    const sources = [psaSource, tpbSource, ytsSource, knabenSource, nyaaSource, ddlSource].map(source => source.status);
 
     const torrentResults: TorrentResult[] = [
         ...psaResults,
@@ -763,15 +1263,10 @@ export async function searchTorrents(
         ...nyaaResults,
     ];
 
-    // Log source status for debugging
-    const sourceStatus = [
-        `TPB=${tpbResults.length}`,
-        `YTS=${ytsResults.length}`,
-        `PSA=${psaResults.length}`,
-        `Knaben=${knabenResults.length}`,
-        `Nyaa=${nyaaResults.length}`,
-        `DDL=${ddlResults.length}`,
-    ];
+    const sourceStatus = sources.map(source => {
+        const suffix = source.status === 'ok' ? '' : ` ${source.status}`;
+        return `${source.name}=${source.results}${suffix}/${source.durationMs}ms`;
+    });
     console.log(`[TorrentSearch] ${sourceStatus.join(', ')} — ${torrentResults.length} torrent results total`);
 
     // Deduplicate by normalized title
@@ -799,5 +1294,21 @@ export async function searchTorrents(
         return true;
     });
 
-    return finalResults;
+    const diagnostics: TorrentSearchDiagnostics = {
+        results: finalResults,
+        sources,
+        cached: false,
+        tookMs: Date.now() - started,
+    };
+
+    setCachedSearch(cacheKey, diagnostics);
+    return diagnostics;
+}
+
+export async function searchTorrents(
+    title: string,
+    options?: SearchOptions
+): Promise<TorrentResult[]> {
+    const diagnostics = await searchTorrentsWithDiagnostics(title, options);
+    return diagnostics.results;
 }

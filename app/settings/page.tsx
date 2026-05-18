@@ -8,6 +8,7 @@ import { useTheme } from '../components/ThemeProvider';
 type Settings = {
     vlcPath: string;
     tmdbApiKey: string;
+    omdbApiKey: string;
     downloadPath: string;
 };
 
@@ -91,6 +92,7 @@ export default function SettingsPage() {
     const [settings, setSettings] = useState<Settings>({
         vlcPath: 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe',
         tmdbApiKey: '',
+        omdbApiKey: '',
         downloadPath: ''
     });
     const [loading, setLoading] = useState(true);
@@ -124,6 +126,7 @@ export default function SettingsPage() {
             setSettings({
                 vlcPath: data.vlcPath || 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe',
                 tmdbApiKey: data.tmdbApiKey || '',
+                omdbApiKey: data.omdbApiKey || '',
                 downloadPath: data.downloadPath || ''
             });
         } catch (e) {
@@ -236,6 +239,30 @@ export default function SettingsPage() {
                             Used to fetch movie/show metadata, posters, and ratings. Get a free key at{' '}
                             <a href="https://www.themoviedb.org/settings/api" target="_blank" className="text-white hover:underline">
                                 themoviedb.org
+                            </a>
+                        </p>
+                    </div>
+                </section>
+
+                {/* OMDb API Key */}
+                <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
+                    <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
+                        <Key className="w-5 h-5 text-yellow-500" />
+                        <h2 className="text-lg font-semibold">OMDb Integration</h2>
+                    </div>
+                    <div className="p-6">
+                        <label className="block text-sm text-neutral-400 mb-2">API Key</label>
+                        <input
+                            type="password"
+                            value={settings.omdbApiKey}
+                            onChange={(e) => setSettings(prev => ({ ...prev, omdbApiKey: e.target.value }))}
+                            className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-white/70 transition font-mono text-sm"
+                            placeholder="Enter your OMDb API key"
+                        />
+                        <p className="text-xs text-neutral-500 mt-2">
+                            Used to fetch real IMDb ratings by IMDb ID. Get a key at{' '}
+                            <a href="https://www.omdbapi.com/apikey.aspx" target="_blank" className="text-white hover:underline">
+                                omdbapi.com
                             </a>
                         </p>
                     </div>
@@ -407,8 +434,8 @@ export default function SettingsPage() {
                     <div className="p-6">
                         <p className="text-neutral-400 text-sm mb-4">
                             If some movies or shows are missing posters, ratings, or descriptions, you can refresh
-                            their metadata from TMDB. This will attempt to re-fetch information for all items
-                            that are currently missing poster images.
+                            their metadata from TMDB and IMDb ratings from OMDb. This will attempt to re-fetch information for items
+                            that are currently missing poster images or IMDb ratings.
                         </p>
                         <RefreshMetadataButton />
                     </div>

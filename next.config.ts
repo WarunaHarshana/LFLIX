@@ -19,6 +19,11 @@ const nextConfig: NextConfig = {
         hostname: 'image.tmdb.org',
         pathname: '/t/p/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'm.media-amazon.com',
+        pathname: '/images/**',
+      },
     ],
   },
   // Prevent Turbopack from bundling native Node modules

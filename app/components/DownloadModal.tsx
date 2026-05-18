@@ -139,6 +139,20 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
 
     const isDDL = (result: TorrentResult) => result.source === 'DDL';
 
+    const sourceBadge = (result: TorrentResult): { label: string; className: string } => {
+        const source = result.source.toUpperCase();
+        if (source === 'DDL') {
+            return { label: '⬇ DDL', className: 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold' };
+        }
+        if (source === 'PSA') {
+            return { label: 'PSA', className: 'bg-pink-500/20 text-pink-300 border border-pink-500/40 font-bold' };
+        }
+        if (source === 'YTS') {
+            return { label: 'YTS', className: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' };
+        }
+        return { label: result.source, className: 'bg-neutral-700/50 text-neutral-500' };
+    };
+
     /** Extract format tags (HDR, IMAX, Remux, Atmos, etc.) from a title */
     const extractTags = (title: string): { label: string; className: string }[] => {
         const t = title.toUpperCase();
@@ -267,34 +281,34 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                {sortedResults.map((result, i) => (
-                                    <div key={i} className="flex items-center gap-3 p-3 bg-neutral-800/60 hover:bg-neutral-800 rounded-xl transition">
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate mb-1" title={result.title}>{result.title}</p>
-                                            <div className="flex flex-wrap items-center gap-2 text-xs">
-                                                <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>{result.quality}</span>
-                                                {extractTags(result.title).map((tag, ti) => (
-                                                    <span key={ti} className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${tag.className}`}>{tag.label}</span>
-                                                ))}
-                                                <span className="text-neutral-400">{result.size}</span>
-                                                {!isDDL(result) && <span className="text-green-500">↑{result.seeds}</span>}
-                                                {!isDDL(result) && <span className="text-red-400">↓{result.leeches}</span>}
-                                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDDL(result)
-                                                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold'
-                                                    : 'bg-neutral-700/50 text-neutral-500'
-                                                    }`}>{isDDL(result) ? '⬇ DDL' : result.source}</span>
+                                {sortedResults.map((result, i) => {
+                                    const source = sourceBadge(result);
+                                    return (
+                                        <div key={i} className="flex items-center gap-3 p-3 bg-neutral-800/60 hover:bg-neutral-800 rounded-xl transition">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium truncate mb-1" title={result.title}>{result.title}</p>
+                                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                    <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>{result.quality}</span>
+                                                    {extractTags(result.title).map((tag, ti) => (
+                                                        <span key={ti} className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${tag.className}`}>{tag.label}</span>
+                                                    ))}
+                                                    <span className="text-neutral-400">{result.size}</span>
+                                                    {!isDDL(result) && <span className="text-green-500">↑{result.seeds}</span>}
+                                                    {!isDDL(result) && <span className="text-red-400">↓{result.leeches}</span>}
+                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
+                                                </div>
                                             </div>
+                                            <button
+                                                onClick={() => startDownload(result.magnet)}
+                                                disabled={downloading !== null}
+                                                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
+                                            >
+                                                {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                                Download
+                                            </button>
                                         </div>
-                                        <button
-                                            onClick={() => startDownload(result.magnet)}
-                                            disabled={downloading !== null}
-                                            className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
-                                        >
-                                            {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                                            Download
-                                        </button>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </>
                     )}

@@ -210,11 +210,11 @@ class FolderWatcher {
 
             // Find items with missing ratings
             const moviesNoRating = db.prepare(
-                'SELECT id, title, year, fileName FROM movies WHERE rating IS NULL AND posterPath IS NOT NULL'
+                'SELECT id, title, year, fileName FROM movies WHERE (rating IS NULL OR imdbRating IS NULL) AND posterPath IS NOT NULL'
             ).all() as { id: number; title: string; year: number; fileName: string }[];
 
             const showsNoRating = db.prepare(
-                'SELECT id, title FROM shows WHERE rating IS NULL AND posterPath IS NOT NULL'
+                'SELECT id, title FROM shows WHERE (rating IS NULL OR imdbRating IS NULL) AND posterPath IS NOT NULL'
             ).all() as { id: number; title: string }[];
 
             const totalItems = moviesNeedRefresh.length + showsNeedRefresh.length + moviesNoRating.length + showsNoRating.length;
@@ -235,7 +235,7 @@ class FolderWatcher {
                         db.prepare(`
                             UPDATE movies SET title = @title, tmdbId = @tmdbId, posterPath = @posterPath,
                             backdropPath = @backdropPath, overview = @overview, rating = @rating,
-                            genres = @genres, year = COALESCE(@year, year) WHERE id = @id
+                            imdbRating = @imdbRating, genres = @genres, year = COALESCE(@year, year) WHERE id = @id
                         `).run({ ...metadata, id: movie.id });
                         refreshed++;
                     }
@@ -265,7 +265,7 @@ class FolderWatcher {
                         db.prepare(`
                             UPDATE shows SET title = @title, tmdbId = @tmdbId, posterPath = @posterPath,
                             backdropPath = @backdropPath, overview = @overview, rating = @rating,
-                            genres = @genres WHERE id = @id
+                            imdbRating = @imdbRating, genres = @genres WHERE id = @id
                         `).run({ ...metadata, id: show.id });
                         refreshed++;
                     }
@@ -278,9 +278,9 @@ class FolderWatcher {
                 try {
                     const source = movie.fileName || movie.title;
                     const metadata = await fetchMovieMetadata(source);
-                    if (metadata.tmdbId && metadata.rating) {
-                        db.prepare('UPDATE movies SET rating = ?, overview = COALESCE(overview, ?) WHERE id = ?')
-                            .run(metadata.rating, metadata.overview, movie.id);
+                    if (metadata.tmdbId && (metadata.rating || metadata.imdbRating)) {
+                        db.prepare('UPDATE movies SET rating = ?, imdbRating = ?, overview = COALESCE(overview, ?) WHERE id = ?')
+                            .run(metadata.rating, metadata.imdbRating, metadata.overview, movie.id);
                         refreshed++;
                     }
                 } catch { /* skip */ }
@@ -291,9 +291,9 @@ class FolderWatcher {
             for (const show of showsNoRating) {
                 try {
                     const metadata = await fetchShowMetadata(show.title);
-                    if (metadata.tmdbId && metadata.rating) {
-                        db.prepare('UPDATE shows SET rating = ?, overview = COALESCE(overview, ?) WHERE id = ?')
-                            .run(metadata.rating, metadata.overview, show.id);
+                    if (metadata.tmdbId && (metadata.rating || metadata.imdbRating)) {
+                        db.prepare('UPDATE shows SET rating = ?, imdbRating = ?, overview = COALESCE(overview, ?) WHERE id = ?')
+                            .run(metadata.rating, metadata.imdbRating, metadata.overview, show.id);
                         refreshed++;
                     }
                 } catch { /* skip */ }

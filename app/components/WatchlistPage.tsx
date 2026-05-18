@@ -14,6 +14,7 @@ type WatchlistItem = {
     backdropPath: string | null;
     overview: string | null;
     rating: number | null;
+    imdbRating?: number | null;
     year: string | null;
     genres: string | null;
     addedAt: string;
@@ -28,6 +29,7 @@ type TMDBResult = {
     backdropPath: string | null;
     overview: string | null;
     rating: number | null;
+    imdbRating?: number | null;
     year: string | null;
     popularity: number;
 };
@@ -183,6 +185,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
             backdropPath: item.backdropPath,
             overview: item.overview,
             rating: item.rating,
+            imdbRating: item.imdbRating,
             year: item.year,
             popularity: 0,
         });
@@ -384,6 +387,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                     {watchlist.map((item) => {
                         const inLibrary = isInLibrary(item.tmdbId);
                         const available = item.mediaType === 'movie' && isMovieAvailable(item.tmdbId);
+                        const displayRating = item.imdbRating ?? item.rating;
                         return (
                             <div
                                 key={item.id}
@@ -457,10 +461,10 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                                     </div>
 
                                     {/* Rating badge */}
-                                    {item.rating != null && item.rating > 0 && (
+                                    {displayRating != null && displayRating > 0 && (
                                         <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/70 backdrop-blur rounded text-[10px] text-amber-400 font-bold flex items-center gap-0.5">
                                             <Star className="w-2.5 h-2.5 fill-amber-400" />
-                                            {item.rating.toFixed(1)}
+                                            {displayRating.toFixed(1)}
                                         </div>
                                     )}
                                 </div>
