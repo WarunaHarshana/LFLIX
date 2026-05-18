@@ -175,6 +175,9 @@ db.exec(`
     downloadedSize INTEGER DEFAULT 0,
     downloadPath TEXT,
     errorMessage TEXT,
+    retryCount INTEGER DEFAULT 0,
+    lastProgressAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    stateUpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     startedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     completedAt DATETIME,
     FOREIGN KEY(watchlistId) REFERENCES watchlist(id) ON DELETE SET NULL
@@ -390,6 +393,7 @@ const VALID_COLUMNS: Record<string, string[]> = {
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
   watchlist: ['trackRelease', 'imdbRating'],
+  downloads: ['retryCount', 'lastProgressAt', 'stateUpdatedAt'],
   settings: []
 };
 
@@ -447,6 +451,18 @@ for (const [col, type] of MEDIA_INFO_COLS) {
 // Add trackRelease column to watchlist (for movie availability tracking)
 addColumnIfNotExists('watchlist', 'trackRelease', 'INTEGER DEFAULT 1');
 addColumnIfNotExists('watchlist', 'imdbRating', 'REAL');
+addColumnIfNotExists('downloads', 'retryCount', 'INTEGER DEFAULT 0');
+addColumnIfNotExists('downloads', 'lastProgressAt', 'DATETIME');
+addColumnIfNotExists('downloads', 'stateUpdatedAt', 'DATETIME');
+
+try {
+  db.prepare(`
+    UPDATE downloads
+    SET lastProgressAt = COALESCE(lastProgressAt, startedAt, CURRENT_TIMESTAMP),
+        stateUpdatedAt = COALESCE(stateUpdatedAt, startedAt, CURRENT_TIMESTAMP)
+    WHERE lastProgressAt IS NULL OR stateUpdatedAt IS NULL
+  `).run();
+} catch { /* ignore */ }
 
 type ShowDedupRow = {
   id: number;

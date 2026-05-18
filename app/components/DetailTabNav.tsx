@@ -119,7 +119,9 @@ export default function DetailTabNav({
         if (!res.ok) return;
         const data = await res.json();
         const downloads = Array.isArray(data.downloads) ? data.downloads : [];
-        const count = downloads.filter((d: any) => d.status === 'downloading' || d.status === 'paused').length;
+        const count = downloads.filter((d: any) =>
+          d.status === 'metadata' || d.status === 'downloading' || d.status === 'stalled' || d.status === 'paused'
+        ).length;
         if (!cancelled) {
           setInternalActiveDownloads(count);
         }

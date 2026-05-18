@@ -10,6 +10,8 @@ import http from 'http';
 import https from 'https';
 import { isPathInsideAny } from './security';
 
+type DownloadStatus = 'metadata' | 'downloading' | 'stalled' | 'completed' | 'error' | 'paused';
+
 // Download record type
 export interface DownloadRecord {
     id: number;
@@ -17,13 +19,16 @@ export interface DownloadRecord {
     infoHash: string | null;
     name: string | null;
     watchlistId: number | null;
-    status: 'downloading' | 'completed' | 'error' | 'paused';
+    status: DownloadStatus;
     progress: number;
     downloadSpeed: number;
     totalSize: number;
     downloadedSize: number;
     downloadPath: string | null;
     errorMessage: string | null;
+    retryCount: number;
+    lastProgressAt: string | null;
+    stateUpdatedAt: string | null;
     startedAt: string;
     completedAt: string | null;
 }
@@ -31,14 +36,43 @@ export interface DownloadRecord {
 class DownloadManager {
     private client: any = null;
     private progressTimers: Map<number, NodeJS.Timeout> = new Map();
+    private metadataTimers: Map<number, NodeJS.Timeout> = new Map();
     private httpAbortControllers: Map<number, AbortController> = new Map();
     private readonly maxHttpRetries = 3;
+    private readonly maxTorrentMetadataRetries = 3;
+    private readonly metadataTimeoutMs = 45 * 1000;
+    private readonly stalledTimeoutMs = 2 * 60 * 1000;
 
     public async getClient(): Promise<any> {
         if (this.client) return this.client;
         const WebTorrent = (await import('webtorrent')).default;
         this.client = new (WebTorrent as any)();
         return this.client;
+    }
+
+    private isTorrentActiveStatus(status: DownloadStatus): boolean {
+        return status === 'metadata' || status === 'downloading' || status === 'stalled';
+    }
+
+    private hasTorrentMetadata(torrent: any): boolean {
+        return Boolean(torrent?.name || torrent?.length || (Array.isArray(torrent?.files) && torrent.files.length > 0));
+    }
+
+    private getMagnetInfoHash(input: string): string | null {
+        if (!input.startsWith('magnet:')) return null;
+        const match = input.match(/[?&]xt=urn:btih:([^&]+)/i);
+        if (!match) return null;
+
+        try {
+            return decodeURIComponent(match[1]).toLowerCase();
+        } catch {
+            return match[1].toLowerCase();
+        }
+    }
+
+    private normalizeTorrentIdentifier(input?: string | null): string {
+        if (!input) return '';
+        return input.toLowerCase().replace(/^urn:btih:/, '').replace(/[^a-z0-9]/g, '');
     }
 
     // Public recovery method — re-attaches in-progress torrents after a server restart
@@ -49,9 +83,9 @@ class DownloadManager {
             const staleDownloads = db.prepare(
                 `SELECT id, magnetUri, status, infoHash, name, downloadPath, startedAt 
                  FROM downloads 
-                 WHERE status IN ('downloading') 
+                 WHERE status IN ('metadata', 'downloading', 'stalled') 
                  AND magnetUri NOT LIKE 'http-direct:%'
-                 AND datetime(startedAt) < datetime('now', '-30 seconds')`
+                 AND datetime(COALESCE(stateUpdatedAt, startedAt)) < datetime('now', '-15 seconds')`
             ).all() as any[];
 
             if (staleDownloads.length === 0) {
@@ -92,12 +126,11 @@ class DownloadManager {
         } catch { /* ignore */ }
 
         // Strategy 2: If it's a magnet URI, extract infoHash and try again
+        const magnetInfoHash = this.getMagnetInfoHash(identifier);
         if (identifier.startsWith('magnet:')) {
             try {
-                const xtMatch = identifier.match(/xt=urn:btih:([a-fA-F0-9]+)/);
-                if (xtMatch) {
-                    const infoHash = xtMatch[1].toLowerCase();
-                    const torrent = this.client.get(infoHash);
+                if (magnetInfoHash) {
+                    const torrent = this.client.get(magnetInfoHash);
                     if (torrent && typeof torrent.on === 'function') return torrent;
                 }
             } catch { /* ignore */ }
@@ -105,14 +138,14 @@ class DownloadManager {
 
         // Strategy 3: Linear search through all torrents in client
         try {
-            const searchHash = identifier.toLowerCase().replace(/[^a-f0-9]/g, '');
+            const searchHash = this.normalizeTorrentIdentifier(magnetInfoHash || identifier);
             for (const t of this.client.torrents) {
                 if (!t || typeof t.on !== 'function') continue;
-                if (t.infoHash && t.infoHash.toLowerCase() === searchHash) return t;
+                if (t.infoHash && this.normalizeTorrentIdentifier(t.infoHash) === searchHash) return t;
                 // Also try partial match on magnet URI
                 if (identifier.startsWith('magnet:') && t.magnetURI) {
-                    const tXtMatch = t.magnetURI.match(/xt=urn:btih:([a-fA-F0-9]+)/);
-                    if (tXtMatch && tXtMatch[1].toLowerCase() === searchHash) return t;
+                    const torrentMagnetHash = this.getMagnetInfoHash(t.magnetURI);
+                    if (torrentMagnetHash && this.normalizeTorrentIdentifier(torrentMagnetHash) === searchHash) return t;
                 }
             }
         } catch { /* ignore */ }
@@ -136,6 +169,161 @@ class DownloadManager {
         return defaultPath;
     }
 
+    private async destroyTorrent(torrent: any): Promise<void> {
+        await new Promise<void>((resolve) => {
+            try {
+                torrent.destroy({}, () => resolve());
+            } catch {
+                resolve();
+            }
+        });
+    }
+
+    private markTorrentHasMetadata(downloadId: number, torrent: any): void {
+        try {
+            this.clearMetadataTimer(downloadId);
+            db.prepare(`
+                UPDATE downloads
+                SET name = COALESCE(?, name),
+                    infoHash = COALESCE(?, infoHash),
+                    totalSize = ?,
+                    status = CASE WHEN status IN ('metadata', 'stalled') THEN 'downloading' ELSE status END,
+                    errorMessage = NULL,
+                    stateUpdatedAt = CURRENT_TIMESTAMP,
+                    lastProgressAt = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND status IN ('metadata', 'downloading', 'stalled')
+            `).run(torrent.name || null, torrent.infoHash || null, torrent.length || 0, downloadId);
+        } catch { /* ignore */ }
+    }
+
+    private async startTorrentDownload(
+        downloadId: number,
+        magnetUri: string,
+        downloadPath: string,
+        preserveRetryCount = false
+    ): Promise<boolean> {
+        const client = await this.getClient();
+        this.clearTimer(downloadId);
+
+        try {
+            db.prepare(`
+                UPDATE downloads
+                SET status = 'metadata',
+                    errorMessage = NULL,
+                    downloadSpeed = 0,
+                    stateUpdatedAt = CURRENT_TIMESTAMP,
+                    lastProgressAt = COALESCE(lastProgressAt, CURRENT_TIMESTAMP)
+                    ${preserveRetryCount ? '' : ', retryCount = 0'}
+                WHERE id = ?
+            `).run(downloadId);
+        } catch { /* ignore */ }
+
+        try {
+            let torrent = this.findTorrent(magnetUri);
+            if (torrent) {
+                console.log(`[DownloadManager] Reusing torrent in client: ${torrent.infoHash || 'metadata pending'}`);
+                try { torrent.resume(); } catch { /* ignore */ }
+            } else {
+                console.log(`[DownloadManager] Adding torrent to client: ${magnetUri.substring(0, 30)}...`);
+                torrent = client.add(magnetUri, { path: downloadPath });
+            }
+
+            if (torrent.infoHash) {
+                try {
+                    db.prepare('UPDATE downloads SET infoHash = COALESCE(?, infoHash) WHERE id = ?')
+                        .run(torrent.infoHash, downloadId);
+                } catch { /* ignore */ }
+            }
+
+            this.setupTorrentEvents(downloadId, torrent);
+            this.scheduleMetadataRetry(downloadId, magnetUri, downloadPath);
+
+            if (this.hasTorrentMetadata(torrent)) {
+                this.markTorrentHasMetadata(downloadId, torrent);
+            }
+
+            return true;
+        } catch (err: any) {
+            console.error(`[DownloadManager] Failed to start torrent:`, err?.message);
+            try {
+                db.prepare(`
+                    UPDATE downloads
+                    SET status = 'error',
+                        errorMessage = ?,
+                        downloadSpeed = 0,
+                        stateUpdatedAt = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                `).run(err?.message || 'Failed to start torrent', downloadId);
+            } catch { /* ignore */ }
+            return false;
+        }
+    }
+
+    private scheduleMetadataRetry(downloadId: number, magnetUri: string, downloadPath: string): void {
+        this.clearMetadataTimer(downloadId);
+
+        const timer = setTimeout(() => {
+            void this.retryTorrentMetadata(downloadId, magnetUri, downloadPath);
+        }, this.metadataTimeoutMs);
+
+        this.metadataTimers.set(downloadId, timer);
+    }
+
+    private async retryTorrentMetadata(downloadId: number, magnetUri: string, downloadPath: string): Promise<void> {
+        const record = this.getDownload(downloadId);
+        if (!record || !this.isTorrentActiveStatus(record.status)) return;
+        if (record.name || record.totalSize > 0) return;
+
+        const nextRetry = (record.retryCount || 0) + 1;
+        if (nextRetry > this.maxTorrentMetadataRetries) {
+            const existing = this.findTorrent(record.infoHash || magnetUri);
+            if (existing) {
+                await this.destroyTorrent(existing);
+            }
+            try {
+                db.prepare(`
+                    UPDATE downloads
+                    SET status = 'error',
+                        errorMessage = 'Metadata timed out after multiple retries. Try a different torrent or retry later.',
+                        downloadSpeed = 0,
+                        stateUpdatedAt = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                      AND status IN ('metadata', 'downloading', 'stalled')
+                `).run(downloadId);
+            } catch { /* ignore */ }
+            this.clearTimer(downloadId);
+            return;
+        }
+
+        const delayMs = Math.min(30000, 3000 * nextRetry);
+        console.warn(`[DownloadManager] Metadata timeout for #${downloadId}; retry ${nextRetry}/${this.maxTorrentMetadataRetries} in ${delayMs}ms`);
+
+        try {
+            db.prepare(`
+                UPDATE downloads
+                SET status = 'metadata',
+                    retryCount = ?,
+                    errorMessage = ?,
+                    downloadSpeed = 0,
+                    stateUpdatedAt = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND status IN ('metadata', 'downloading', 'stalled')
+            `).run(nextRetry, `Metadata timed out. Retrying ${nextRetry}/${this.maxTorrentMetadataRetries}...`, downloadId);
+        } catch { /* ignore */ }
+
+        const existing = this.findTorrent(record.infoHash || magnetUri);
+        if (existing) {
+            await this.destroyTorrent(existing);
+        }
+
+        setTimeout(() => {
+            const latest = this.getDownload(downloadId);
+            if (!latest || !this.isTorrentActiveStatus(latest.status)) return;
+            void this.startTorrentDownload(downloadId, latest.magnetUri, latest.downloadPath || downloadPath, true);
+        }, delayMs);
+    }
+
     // Start a new download (auto-detects torrent vs HTTP)
     async addDownload(magnetUri: string, watchlistId?: number, customPath?: string): Promise<DownloadRecord> {
         console.log(`[DownloadManager] addDownload called for: ${magnetUri.substring(0, 30)}...`);
@@ -147,33 +335,16 @@ class DownloadManager {
         }
 
         const downloadPath = customPath || this.getDownloadPath();
-        const client = await this.getClient();
 
         // Insert DB record
         const stmt = db.prepare(`
-      INSERT INTO downloads (magnetUri, watchlistId, status, downloadPath)
-      VALUES (?, ?, 'downloading', ?)
+      INSERT INTO downloads (magnetUri, watchlistId, status, downloadPath, retryCount, lastProgressAt, stateUpdatedAt)
+      VALUES (?, ?, 'metadata', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
         const result = stmt.run(magnetUri, watchlistId || null, downloadPath);
         const downloadId = Number(result.lastInsertRowid);
 
-        try {
-            console.log(`[DownloadManager] Adding torrent to client: ${magnetUri.substring(0, 30)}...`);
-            let torrent = this.findTorrent(magnetUri);
-            if (torrent) {
-                console.log(`[DownloadManager] Torrent already in client: ${torrent.infoHash}`);
-                // Re-setup events for this download
-                this.setupTorrentEvents(downloadId, torrent);
-            } else {
-                torrent = client.add(magnetUri, { path: downloadPath });
-                this.setupTorrentEvents(downloadId, torrent);
-            }
-        } catch (err: any) {
-            try {
-                db.prepare('UPDATE downloads SET status = ?, errorMessage = ? WHERE id = ?')
-                    .run('error', err.message || 'Unknown error', downloadId);
-            } catch { /* ignore */ }
-        }
+        await this.startTorrentDownload(downloadId, magnetUri, downloadPath);
 
         return this.getDownload(downloadId)!;
     }
@@ -190,8 +361,8 @@ class DownloadManager {
 
         // Insert DB record
         const stmt = db.prepare(`
-      INSERT INTO downloads (magnetUri, name, watchlistId, status, downloadPath)
-      VALUES (?, ?, ?, 'downloading', ?)
+      INSERT INTO downloads (magnetUri, name, watchlistId, status, downloadPath, retryCount, lastProgressAt, stateUpdatedAt)
+      VALUES (?, ?, ?, 'downloading', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
         const result = stmt.run(magnetUriStored, filename, watchlistId || null, downloadPath);
         const downloadId = Number(result.lastInsertRowid);
@@ -213,9 +384,14 @@ class DownloadManager {
             const updateProgress = (speed = 0) => {
                 const progress = totalBytes > 0 ? Math.min(Math.round((downloadedBytes / totalBytes) * 10000) / 100, 99.99) : 0;
                 db.prepare(`
-                    UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?, totalSize = ?
+                    UPDATE downloads
+                    SET progress = ?,
+                        downloadSpeed = ?,
+                        downloadedSize = ?,
+                        totalSize = ?,
+                        lastProgressAt = CASE WHEN ? > 0 THEN CURRENT_TIMESTAMP ELSE lastProgressAt END
                     WHERE id = ? AND status = 'downloading'
-                `).run(progress, speed, downloadedBytes, totalBytes, downloadId);
+                `).run(progress, speed, downloadedBytes, totalBytes, speed, downloadId);
             };
 
             const markHttpError = (message: string) => {
@@ -224,7 +400,8 @@ class DownloadManager {
                 if (retryTimer) clearTimeout(retryTimer);
                 try {
                     db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0,
-                        downloadedSize = ?, totalSize = ?
+                        downloadedSize = ?, totalSize = ?,
+                        stateUpdatedAt = CURRENT_TIMESTAMP
                         WHERE id = ? AND status = 'downloading'`)
                         .run(message, downloadedBytes, totalBytes, downloadId);
                 } catch { /* ignore */ }
@@ -372,7 +549,8 @@ class DownloadManager {
                         try {
                             db.prepare(`
                                 UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
-                                downloadedSize = ?, totalSize = ?, completedAt = CURRENT_TIMESTAMP
+                                downloadedSize = ?, totalSize = ?, completedAt = CURRENT_TIMESTAMP,
+                                stateUpdatedAt = CURRENT_TIMESTAMP
                                 WHERE id = ? AND status = 'downloading'
                             `).run(downloadedBytes, totalBytes || downloadedBytes, downloadId);
                         } catch { /* ignore */ }
@@ -400,7 +578,7 @@ class DownloadManager {
         } catch (err: any) {
             this.httpAbortControllers.delete(downloadId);
             try {
-                db.prepare('UPDATE downloads SET status = ?, errorMessage = ? WHERE id = ?')
+                db.prepare('UPDATE downloads SET status = ?, errorMessage = ?, stateUpdatedAt = CURRENT_TIMESTAMP WHERE id = ?')
                     .run('error', err.message || 'Unknown error', downloadId);
             } catch { /* ignore */ }
         }
@@ -411,7 +589,7 @@ class DownloadManager {
     // Pause a download
     async pauseDownload(downloadId: number): Promise<boolean> {
         const record = this.getDownload(downloadId);
-        if (!record || record.status !== 'downloading') return false;
+        if (!record || (!this.isTorrentActiveStatus(record.status) && record.status !== 'downloading')) return false;
 
         this.clearTimer(downloadId);
 
@@ -422,7 +600,7 @@ class DownloadManager {
                 controller.abort();
                 this.httpAbortControllers.delete(downloadId);
             }
-            db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0 WHERE id = ?").run(downloadId);
+            db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP WHERE id = ?").run(downloadId);
             return true;
         }
 
@@ -441,14 +619,14 @@ class DownloadManager {
             }
         }
 
-        db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0 WHERE id = ?").run(downloadId);
+        db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP WHERE id = ?").run(downloadId);
         return true;
     }
 
     // Resume a download
     async resumeDownload(downloadId: number): Promise<boolean> {
         const record = this.getDownload(downloadId);
-        if (!record || (record.status !== 'paused' && record.status !== 'downloading' && record.status !== 'error')) {
+        if (!record || (record.status !== 'paused' && record.status !== 'downloading' && record.status !== 'metadata' && record.status !== 'stalled' && record.status !== 'error')) {
             console.log(`[DownloadManager] Cannot resume #${downloadId}: status is ${record?.status}`);
             return false;
         }
@@ -466,21 +644,43 @@ class DownloadManager {
             return true;
         }
 
-        const client = await this.getClient();
         const downloadPath = record.downloadPath || this.getDownloadPath();
 
         console.log(`[DownloadManager] Resume #${downloadId}: path=${downloadPath}, infoHash=${record.infoHash || 'null'}, name=${record.name || 'null'}`);
+        if (record.status === 'error') {
+            try {
+                db.prepare(`
+                    UPDATE downloads
+                    SET retryCount = 0,
+                        errorMessage = NULL,
+                        stateUpdatedAt = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                `).run(downloadId);
+            } catch { /* ignore */ }
+        }
 
         // Try to find existing torrent in client
-        let torrent = this.findTorrent(record.infoHash || record.magnetUri);
+        const torrent = this.findTorrent(record.infoHash || record.magnetUri);
 
         if (torrent) {
             // Found existing torrent — just resume it
             try {
                 torrent.resume();
                 console.log(`[DownloadManager] Resumed existing torrent: ${torrent.infoHash}`);
-                this.setupTorrentProgressTimer(downloadId, torrent);
-                db.prepare("UPDATE downloads SET status = 'downloading' WHERE id = ?").run(downloadId);
+                this.setupTorrentEvents(downloadId, torrent);
+                if (this.hasTorrentMetadata(torrent)) {
+                    this.markTorrentHasMetadata(downloadId, torrent);
+                } else {
+                    db.prepare(`
+                        UPDATE downloads
+                        SET status = 'metadata',
+                            errorMessage = NULL,
+                            downloadSpeed = 0,
+                            stateUpdatedAt = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    `).run(downloadId);
+                    this.scheduleMetadataRetry(downloadId, record.magnetUri, downloadPath);
+                }
                 return true;
             } catch (err: any) {
                 console.error(`[DownloadManager] Error resuming torrent:`, err?.message);
@@ -501,26 +701,10 @@ class DownloadManager {
             }
 
             console.log(`[DownloadManager] Re-adding torrent with path: ${downloadPath}`);
-            const newTorrent = client.add(record.magnetUri, { 
-                path: downloadPath,
-            });
-
-            // Log when metadata arrives so we can see if file detection works
-            newTorrent.on('metadata', () => {
-                console.log(`[DownloadManager] Metadata received: ${newTorrent.name}, ${newTorrent.files?.length} files, path: ${newTorrent.path}`);
-            });
-
-            newTorrent.on('ready', () => {
-                console.log(`[DownloadManager] Torrent ready: ${newTorrent.name}, downloaded: ${newTorrent.downloaded}, length: ${newTorrent.length}`);
-            });
-
-            this.setupTorrentEvents(downloadId, newTorrent);
-            db.prepare("UPDATE downloads SET status = 'downloading', infoHash = ? WHERE id = ?")
-                .run(newTorrent.infoHash || record.infoHash, downloadId);
-            return true;
+            return await this.startTorrentDownload(downloadId, record.magnetUri, downloadPath, record.status !== 'error');
         } catch (err: any) {
             console.error(`[DownloadManager] Failed to re-add torrent:`, err?.message);
-            db.prepare("UPDATE downloads SET status = ?, errorMessage = ? WHERE id = ?")
+            db.prepare("UPDATE downloads SET status = ?, errorMessage = ?, stateUpdatedAt = CURRENT_TIMESTAMP WHERE id = ?")
                 .run('error', err?.message || 'Failed to resume', downloadId);
             return false;
         }
@@ -614,9 +798,7 @@ class DownloadManager {
         // Remove from WebTorrent if active
         if (this.client) {
             try {
-                const torrent = record.infoHash
-                    ? this.client.get(record.infoHash)
-                    : this.client.get(record.magnetUri);
+                const torrent = this.findTorrent(record.infoHash || record.magnetUri);
 
                 if (torrent) {
                     await new Promise<void>((resolve) => {
@@ -674,7 +856,7 @@ class DownloadManager {
     // Get active download count
     getActiveCount(): number {
         try {
-            const result = db.prepare("SELECT COUNT(*) as count FROM downloads WHERE status = 'downloading'").get() as { count: number };
+            const result = db.prepare("SELECT COUNT(*) as count FROM downloads WHERE status IN ('metadata', 'downloading', 'stalled')").get() as { count: number };
             return result?.count || 0;
         } catch {
             return 0;
@@ -686,19 +868,51 @@ class DownloadManager {
         const timer = setInterval(() => {
             try {
                 const record = this.getDownload(downloadId);
-                if (!record || record.status !== 'downloading') {
+                if (!record || !this.isTorrentActiveStatus(record.status)) {
                     clearInterval(timer);
                     this.progressTimers.delete(downloadId);
                     return;
                 }
+
+                const hasMetadata = this.hasTorrentMetadata(torrent);
+                const progress = hasMetadata ? Math.round((torrent.progress || 0) * 10000) / 100 : 0;
+                const downloadSpeed = Math.round(torrent.downloadSpeed || 0);
+                const downloadedSize = torrent.downloaded || 0;
+                const totalSize = torrent.length || record.totalSize || 0;
+                const madeProgress = downloadedSize > (record.downloadedSize || 0) || downloadSpeed > 0;
+                const lastProgressAt = record.lastProgressAt ? new Date(record.lastProgressAt).getTime() : Date.now();
+                const stalled = hasMetadata
+                    && progress < 100
+                    && !madeProgress
+                    && Date.now() - lastProgressAt > this.stalledTimeoutMs;
+                const nextStatus: DownloadStatus = !hasMetadata ? 'metadata' : stalled ? 'stalled' : 'downloading';
+
                 db.prepare(`
-            UPDATE downloads SET progress = ?, downloadSpeed = ?, downloadedSize = ?, totalSize = ?
-            WHERE id = ? AND status = 'downloading'
+            UPDATE downloads
+            SET progress = ?,
+                downloadSpeed = ?,
+                downloadedSize = ?,
+                totalSize = ?,
+                status = ?,
+                errorMessage = CASE
+                    WHEN ? = 'stalled' THEN 'No download progress recently. Waiting for peers or retry manually.'
+                    WHEN status = 'stalled' AND ? = 'downloading' THEN NULL
+                    ELSE errorMessage
+                END,
+                lastProgressAt = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE lastProgressAt END,
+                stateUpdatedAt = CASE WHEN status != ? THEN CURRENT_TIMESTAMP ELSE stateUpdatedAt END
+            WHERE id = ?
+              AND status IN ('metadata', 'downloading', 'stalled')
           `).run(
-                    Math.round(torrent.progress * 10000) / 100,
-                    Math.round(torrent.downloadSpeed || 0),
-                    torrent.downloaded || 0,
-                    torrent.length || 0,
+                    progress,
+                    downloadSpeed,
+                    downloadedSize,
+                    totalSize,
+                    nextStatus,
+                    nextStatus,
+                    nextStatus,
+                    madeProgress ? 1 : 0,
+                    nextStatus,
                     downloadId
                 );
             } catch { /* ignore */ }
@@ -707,21 +921,39 @@ class DownloadManager {
     }
 
     private setupTorrentEvents(downloadId: number, torrent: any) {
-        torrent.on('metadata', () => {
-            try {
-                db.prepare('UPDATE downloads SET name = ?, infoHash = ?, totalSize = ? WHERE id = ?')
-                    .run(torrent.name, torrent.infoHash, torrent.length || 0, downloadId);
-            } catch { /* ignore */ }
-        });
+        if (!torrent.__lflixDownloadEventIds) {
+            torrent.__lflixDownloadEventIds = new Set<number>();
+        }
+        const alreadyBound = torrent.__lflixDownloadEventIds.has(downloadId);
+
+        if (!alreadyBound) {
+            torrent.__lflixDownloadEventIds.add(downloadId);
+
+            torrent.on('metadata', () => {
+                console.log(`[DownloadManager] Metadata received: ${torrent.name}, ${torrent.files?.length || 0} files, path: ${torrent.path}`);
+                this.markTorrentHasMetadata(downloadId, torrent);
+            });
+
+            torrent.on('ready', () => {
+                console.log(`[DownloadManager] Torrent ready: ${torrent.name}, downloaded: ${torrent.downloaded}, length: ${torrent.length}`);
+                this.markTorrentHasMetadata(downloadId, torrent);
+            });
+        }
+
+        if (!alreadyBound && this.hasTorrentMetadata(torrent)) {
+            setImmediate(() => this.markTorrentHasMetadata(downloadId, torrent));
+        }
 
         this.setupTorrentProgressTimer(downloadId, torrent);
+
+        if (alreadyBound) return;
 
         torrent.on('done', () => {
             this.clearTimer(downloadId);
             try {
                 db.prepare(`
             UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
-            downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP
+            downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
             WHERE id = ?
           `).run(downloadId);
             } catch { /* ignore */ }
@@ -731,7 +963,7 @@ class DownloadManager {
         torrent.on('error', (err: Error) => {
             this.clearTimer(downloadId);
             try {
-                db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0 WHERE id = ?`)
+                db.prepare(`UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP WHERE id = ?`)
                     .run(err.message, downloadId);
             } catch { /* ignore */ }
         });
@@ -744,6 +976,15 @@ class DownloadManager {
             clearInterval(timer);
             this.progressTimers.delete(downloadId);
         }
+        this.clearMetadataTimer(downloadId);
+    }
+
+    private clearMetadataTimer(downloadId: number) {
+        const timer = this.metadataTimers.get(downloadId);
+        if (timer) {
+            clearTimeout(timer);
+            this.metadataTimers.delete(downloadId);
+        }
     }
 
     private repairIncompleteHttpCompletions(): void {
@@ -754,6 +995,7 @@ class DownloadManager {
                     progress = ROUND((downloadedSize * 100.0) / totalSize, 2),
                     downloadSpeed = 0,
                     errorMessage = 'Download incomplete. Retry to download the full file.',
+                    stateUpdatedAt = CURRENT_TIMESTAMP,
                     completedAt = NULL
                 WHERE status = 'completed'
                     AND magnetUri LIKE 'http-direct:%'

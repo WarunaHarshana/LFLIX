@@ -9,13 +9,16 @@ type DownloadItem = {
     infoHash: string | null;
     name: string | null;
     watchlistId: number | null;
-    status: 'downloading' | 'completed' | 'error' | 'paused';
+    status: 'metadata' | 'downloading' | 'stalled' | 'completed' | 'error' | 'paused';
     progress: number;
     downloadSpeed: number;
     totalSize: number;
     downloadedSize: number;
     downloadPath: string | null;
     errorMessage: string | null;
+    retryCount?: number;
+    lastProgressAt?: string | null;
+    stateUpdatedAt?: string | null;
     startedAt: string;
     completedAt: string | null;
 };
@@ -132,6 +135,12 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
     };
 
     const downloadStatusText = (dl: DownloadItem) => {
+        if (dl.status === 'metadata') {
+            return dl.retryCount && dl.retryCount > 0
+                ? `Loading metadata · retry ${dl.retryCount}/3`
+                : 'Loading metadata';
+        }
+        if (dl.status === 'stalled') return 'Stalled · waiting for peers';
         if (dl.status !== 'downloading') return null;
         if (dl.totalSize === 0 && dl.progress === 0) return 'Finding metadata/peers';
         if (dl.downloadSpeed === 0) return 'Waiting for peers';
@@ -140,7 +149,9 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
 
     const statusIcon = (status: string) => {
         switch (status) {
+            case 'metadata': return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
             case 'downloading': return <ArrowDown className="w-4 h-4 text-blue-400 animate-bounce" />;
+            case 'stalled': return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
             case 'completed': return <CheckCircle className="w-4 h-4 text-green-400" />;
             case 'error': return <AlertCircle className="w-4 h-4 text-red-400" />;
             case 'paused': return <Pause className="w-4 h-4 text-yellow-400" />;
@@ -150,7 +161,9 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
 
     const progressColor = (status: string) => {
         switch (status) {
+            case 'metadata': return 'bg-blue-400';
             case 'downloading': return 'bg-blue-500';
+            case 'stalled': return 'bg-yellow-500';
             case 'completed': return 'bg-green-500';
             case 'error': return 'bg-red-500';
             case 'paused': return 'bg-yellow-500';
@@ -171,9 +184,9 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                         <div className="flex items-center gap-2">
                             <Download className="w-5 h-5 text-amber-500" />
                             <h2 className="text-lg font-bold">Downloads</h2>
-                            {downloads.filter(d => d.status === 'downloading').length > 0 && (
+                            {downloads.filter(d => d.status === 'metadata' || d.status === 'downloading' || d.status === 'stalled').length > 0 && (
                                 <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs font-bold rounded-full">
-                                    {downloads.filter(d => d.status === 'downloading').length} active
+                                    {downloads.filter(d => d.status === 'metadata' || d.status === 'downloading' || d.status === 'stalled').length} active
                                 </span>
                             )}
                         </div>
@@ -224,8 +237,8 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium truncate">{dl.name || 'Loading metadata...'}</p>
                                             <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
-                                                {dl.status === 'downloading' && (
-                                                    <span className="text-blue-400">{downloadStatusText(dl)}</span>
+                                                {(dl.status === 'metadata' || dl.status === 'downloading' || dl.status === 'stalled') && (
+                                                    <span className={dl.status === 'stalled' ? 'text-yellow-400' : 'text-blue-400'}>{downloadStatusText(dl)}</span>
                                                 )}
                                                 {dl.totalSize > 0 && (
                                                     <span>{formatBytes(dl.downloadedSize)} / {formatBytes(dl.totalSize)}</span>
@@ -245,7 +258,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                         {/* Action buttons */}
                                         <div className="flex items-center gap-1 flex-shrink-0">
                                             {/* Pause / Resume */}
-                                            {dl.status === 'downloading' && (
+                                            {(dl.status === 'metadata' || dl.status === 'downloading') && (
                                                 <button
                                                     onClick={() => pauseDownload(dl.id)}
                                                     className="p-1.5 hover:bg-yellow-600/20 text-neutral-500 hover:text-yellow-400 rounded-lg transition"
@@ -254,11 +267,11 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                                     <Pause className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
-                                            {(dl.status === 'paused' || dl.status === 'error') && (
+                                            {(dl.status === 'paused' || dl.status === 'error' || dl.status === 'stalled') && (
                                                 <button
                                                     onClick={() => resumeDownload(dl.id)}
                                                     className="p-1.5 hover:bg-green-600/20 text-neutral-500 hover:text-green-400 rounded-lg transition"
-                                                    title={dl.status === 'error' ? 'Retry' : 'Resume'}
+                                                    title={dl.status === 'error' || dl.status === 'stalled' ? 'Retry' : 'Resume'}
                                                 >
                                                     <Play className="w-3.5 h-3.5" />
                                                 </button>
@@ -289,7 +302,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                             />
                                         </div>
                                     )}
-                                    {(dl.status === 'downloading' || dl.status === 'paused') && (
+                                    {(dl.status === 'metadata' || dl.status === 'downloading' || dl.status === 'stalled' || dl.status === 'paused') && (
                                         <p className="text-[11px] text-neutral-500 mt-1 text-right">{dl.progress.toFixed(1)}%</p>
                                     )}
                                 </div>
@@ -316,7 +329,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                         <p className="text-white text-sm font-medium mb-4 truncate">
                             {confirmDelete.name || 'Unknown'}
                         </p>
-                        {confirmDelete.status === 'downloading' && (
+                        {(confirmDelete.status === 'metadata' || confirmDelete.status === 'downloading' || confirmDelete.status === 'stalled') && (
                             <p className="text-yellow-400 text-xs mb-4 flex items-center gap-1">
                                 <AlertTriangle className="w-3 h-3" />
                                 This download is still in progress!
