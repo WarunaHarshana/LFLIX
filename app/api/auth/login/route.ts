@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiErrorResponse, readJsonObject, rateLimit } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -6,10 +7,13 @@ export const dynamic = 'force-dynamic';
 // Simple PIN-based login
 export async function POST(req: Request) {
   try {
-    const { pin } = await req.json();
+    const limited = rateLimit(req, 'auth-login', { windowMs: 5 * 60 * 1000, max: 10 });
+    if (limited) return limited;
+
+    const { pin } = await readJsonObject(req, 1024);
     const expectedPin = process.env.APP_PIN || '1234';
 
-    if (pin === expectedPin) {
+    if (typeof pin === 'string' && pin.length <= 64 && pin === expectedPin) {
       // Set cookie for session
       const response = NextResponse.json({ success: true });
       const isHttps = new URL(req.url).protocol === 'https:';
@@ -24,9 +28,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 });
-  } catch (e: any) {
+  } catch (e) {
     console.error('Login error:', e);
-    return NextResponse.json({ error: 'Login failed' }, { status: 500 });
+    return apiErrorResponse(e, 'Login failed');
   }
 }
 
