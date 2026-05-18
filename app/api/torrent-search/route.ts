@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/apiSecurity';
-import { isGoodMovieReleaseQuality, searchTorrents } from '@/lib/torrentSearch';
+import { isGoodMovieReleaseQuality, searchTorrentsWithDiagnostics } from '@/lib/torrentSearch';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -32,12 +32,17 @@ export async function GET(req: Request) {
         }
 
         const type = typeParam as 'movie' | 'tv' | undefined;
-        const results = await searchTorrents(query, { year: yearParam, type });
+        const diagnostics = await searchTorrentsWithDiagnostics(query, { year: yearParam, type });
         const filteredResults = goodOnly && type === 'movie'
-            ? results.filter(isGoodMovieReleaseQuality)
-            : results;
+            ? diagnostics.results.filter(isGoodMovieReleaseQuality)
+            : diagnostics.results;
 
-        return NextResponse.json({ results: filteredResults });
+        return NextResponse.json({
+            results: filteredResults,
+            sources: diagnostics.sources,
+            cached: diagnostics.cached,
+            tookMs: diagnostics.tookMs,
+        });
     } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Unknown error';
         console.error('Torrent search error:', message);

@@ -15,6 +15,24 @@ export interface TorrentResult {
     uploadTimestamp?: number;
 }
 
+export type TorrentSourceName = 'PSA' | 'TPB' | 'YTS' | 'Knaben' | 'Nyaa' | 'DDL';
+
+export type TorrentSourceStatus = {
+    name: TorrentSourceName;
+    status: 'ok' | 'timeout' | 'error';
+    results: number;
+    durationMs: number;
+    error?: string;
+    cached?: boolean;
+};
+
+export type TorrentSearchDiagnostics = {
+    results: TorrentResult[];
+    sources: TorrentSourceStatus[];
+    cached: boolean;
+    tookMs: number;
+};
+
 type TPBItem = {
     id?: string;
     name?: string;
@@ -56,6 +74,9 @@ type PsaRelease = {
     sizeBytes: number;
 };
 
+type SearchOptions = { year?: string; type?: 'movie' | 'tv' };
+type SearchCacheEntry = { ts: number; data: TorrentSearchDiagnostics };
+
 // Standard trackers for magnet links
 const TRACKERS = [
     'udp://tracker.opentrackr.org:1337/announce',
@@ -86,6 +107,43 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Pr
         promise,
         new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
     ]);
+}
+
+async function runSource(
+    name: TorrentSourceName,
+    timeoutMs: number,
+    search: () => Promise<TorrentResult[]>
+): Promise<{ results: TorrentResult[]; status: TorrentSourceStatus }> {
+    const started = Date.now();
+    try {
+        const results = await Promise.race([
+            search(),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs)),
+        ]);
+
+        return {
+            results,
+            status: {
+                name,
+                status: 'ok',
+                results: results.length,
+                durationMs: Date.now() - started,
+            },
+        };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Source failed';
+        const timedOut = /timed out/i.test(message);
+        return {
+            results: [],
+            status: {
+                name,
+                status: timedOut ? 'timeout' : 'error',
+                results: 0,
+                durationMs: Date.now() - started,
+                error: message,
+            },
+        };
+    }
 }
 
 function decodeHtmlEntities(input: string): string {
@@ -459,6 +517,49 @@ const OPEN_DIR_CATEGORIES: Record<string, string[]> = {
 // In-memory cache for directory listings (avoids re-fetching the 7800+ entry index)
 const dirCache = new Map<string, { data: { name: string; href: string; sizeBytes: number }[]; ts: number }>();
 const DIR_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+const searchCache = new Map<string, SearchCacheEntry>();
+const SEARCH_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const SEARCH_CACHE_MAX = 100;
+
+function getSearchCacheKey(title: string, options?: SearchOptions): string {
+    return JSON.stringify({
+        title: normalizeTitle(title),
+        year: options?.year || '',
+        type: options?.type || '',
+    });
+}
+
+function getCachedSearch(key: string): TorrentSearchDiagnostics | null {
+    const cached = searchCache.get(key);
+    if (!cached) return null;
+    if (Date.now() - cached.ts > SEARCH_CACHE_TTL) {
+        searchCache.delete(key);
+        return null;
+    }
+
+    return {
+        ...cached.data,
+        cached: true,
+        sources: cached.data.sources.map((source) => ({ ...source, cached: true })),
+    };
+}
+
+function setCachedSearch(key: string, data: TorrentSearchDiagnostics): void {
+    if (searchCache.size >= SEARCH_CACHE_MAX) {
+        const oldest = searchCache.keys().next().value as string | undefined;
+        if (oldest) searchCache.delete(oldest);
+    }
+
+    searchCache.set(key, {
+        ts: Date.now(),
+        data: {
+            ...data,
+            cached: false,
+            sources: data.sources.map((source) => ({ ...source, cached: false })),
+        },
+    });
+}
 
 /** Fetch with retry — retries once after a delay on 429 or network error */
 async function fetchWithRetry(url: string, timeoutMs: number): Promise<Response | null> {
@@ -1119,31 +1220,40 @@ async function searchOriginalPsa(query: string, options?: { year?: string; type?
 
 // --- Combined search ---
 
-export async function searchTorrents(
+export async function searchTorrentsWithDiagnostics(
     title: string,
-    options?: { year?: string; type?: 'movie' | 'tv' }
-): Promise<TorrentResult[]> {
+    options?: SearchOptions
+): Promise<TorrentSearchDiagnostics> {
+    const started = Date.now();
+    const cacheKey = getSearchCacheKey(title, options);
+    const cached = getCachedSearch(cacheKey);
+    if (cached) {
+        console.log(`[TorrentSearch] cache hit for "${title}" — ${cached.results.length} results`);
+        return { ...cached, tookMs: Date.now() - started };
+    }
+
     // Use title without appending year directly, as appending year drops many valid tracker results
     const query = title;
 
     // Always use 200 (All Video) for TPB to ensure we don't filter out HD categories (207, 208)
     const tpbCategory = '200';
 
-    const [tpbOut, ytsOut, psaOut, knabenOut, nyaaOut, ddlOut] = await Promise.allSettled([
-        withTimeout(searchTPB(query, tpbCategory), 12000, [] as TorrentResult[]),
-        withTimeout(options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([] as TorrentResult[]), 12000, [] as TorrentResult[]),
-        withTimeout(searchOriginalPsa(query, options), 14000, [] as TorrentResult[]),
-        withTimeout(searchKnaben(query), 9000, [] as TorrentResult[]),
-        withTimeout(searchNyaa(query), 10000, [] as TorrentResult[]),
-        withTimeout(searchOpenDirectory(title, options?.type), 9000, [] as TorrentResult[]),
+    const [psaSource, tpbSource, ytsSource, knabenSource, nyaaSource, ddlSource] = await Promise.all([
+        runSource('PSA', 14000, () => searchOriginalPsa(query, options)),
+        runSource('TPB', 12000, () => searchTPB(query, tpbCategory)),
+        runSource('YTS', 12000, () => options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([])),
+        runSource('Knaben', 9000, () => searchKnaben(query)),
+        runSource('Nyaa', 10000, () => searchNyaa(query)),
+        runSource('DDL', 9000, () => searchOpenDirectory(title, options?.type)),
     ]);
 
-    const tpbResults = tpbOut.status === 'fulfilled' ? tpbOut.value : [];
-    const ytsResults = ytsOut.status === 'fulfilled' ? ytsOut.value : [];
-    const psaResults = psaOut.status === 'fulfilled' ? psaOut.value : [];
-    const knabenResults = knabenOut.status === 'fulfilled' ? knabenOut.value : [];
-    const nyaaResults = nyaaOut.status === 'fulfilled' ? nyaaOut.value : [];
-    const ddlResults = ddlOut.status === 'fulfilled' ? ddlOut.value : [];
+    const psaResults = psaSource.results;
+    const tpbResults = tpbSource.results;
+    const ytsResults = ytsSource.results;
+    const knabenResults = knabenSource.results;
+    const nyaaResults = nyaaSource.results;
+    const ddlResults = ddlSource.results;
+    const sources = [psaSource, tpbSource, ytsSource, knabenSource, nyaaSource, ddlSource].map(source => source.status);
 
     const torrentResults: TorrentResult[] = [
         ...psaResults,
@@ -1153,15 +1263,10 @@ export async function searchTorrents(
         ...nyaaResults,
     ];
 
-    // Log source status for debugging
-    const sourceStatus = [
-        `TPB=${tpbResults.length}`,
-        `YTS=${ytsResults.length}`,
-        `PSA=${psaResults.length}`,
-        `Knaben=${knabenResults.length}`,
-        `Nyaa=${nyaaResults.length}`,
-        `DDL=${ddlResults.length}`,
-    ];
+    const sourceStatus = sources.map(source => {
+        const suffix = source.status === 'ok' ? '' : ` ${source.status}`;
+        return `${source.name}=${source.results}${suffix}/${source.durationMs}ms`;
+    });
     console.log(`[TorrentSearch] ${sourceStatus.join(', ')} — ${torrentResults.length} torrent results total`);
 
     // Deduplicate by normalized title
@@ -1189,5 +1294,21 @@ export async function searchTorrents(
         return true;
     });
 
-    return finalResults;
+    const diagnostics: TorrentSearchDiagnostics = {
+        results: finalResults,
+        sources,
+        cached: false,
+        tookMs: Date.now() - started,
+    };
+
+    setCachedSearch(cacheKey, diagnostics);
+    return diagnostics;
+}
+
+export async function searchTorrents(
+    title: string,
+    options?: SearchOptions
+): Promise<TorrentResult[]> {
+    const diagnostics = await searchTorrentsWithDiagnostics(title, options);
+    return diagnostics.results;
 }

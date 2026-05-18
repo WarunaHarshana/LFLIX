@@ -30,6 +30,15 @@ type TorrentResult = {
     uploadTimestamp?: number;
 };
 
+type TorrentSourceStatus = {
+    name: string;
+    status: 'ok' | 'timeout' | 'error';
+    results: number;
+    durationMs: number;
+    error?: string;
+    cached?: boolean;
+};
+
 type TMDBResult = {
     tmdbId: number;
     mediaType: 'movie' | 'tv';
@@ -51,6 +60,7 @@ type Props = {
 export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, initialQuery }: Props) {
     const [searchQuery, setSearchQuery] = useState('');
     const [results, setResults] = useState<TorrentResult[]>([]);
+    const [sourceStatuses, setSourceStatuses] = useState<TorrentSourceStatus[]>([]);
     const [searching, setSearching] = useState(false);
     const [searched, setSearched] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -78,6 +88,8 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
             default: return sorted.sort((a, b) => b.seeds - a.seeds);
         }
     }, [results, sortBy]);
+
+    const sourceIssues = sourceStatuses.filter(source => source.status !== 'ok');
 
     useEffect(() => {
         fetchFolders();
@@ -120,12 +132,15 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
         setSearching(true);
         setError(null);
         setSearched(false);
+        setResults([]);
+        setSourceStatuses([]);
 
         try {
             const res = await fetch(`/api/torrent-search?q=${encodeURIComponent(query.trim())}`, {
                 signal: controller.signal,
             });
             const data = await res.json();
+            setSourceStatuses(data.sources || []);
             if (data.error) {
                 setError(data.error);
             } else {
@@ -362,6 +377,31 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                 <div className="flex items-center gap-2 p-3 bg-green-600/10 border border-green-500/30 rounded-xl text-green-400 text-sm mb-4">
                     <Download className="w-4 h-4" />
                     {downloadStarted.size} download{downloadStarted.size > 1 ? 's' : ''} started! Check the Downloads panel (⬇ icon in navbar).
+                </div>
+            )}
+
+            {/* Source status */}
+            {!searching && searched && sourceStatuses.length > 0 && (
+                <div className={`flex flex-wrap items-center gap-2 p-3 border rounded-xl text-xs mb-4 ${sourceIssues.length > 0
+                    ? 'bg-yellow-600/10 border-yellow-500/30 text-yellow-300'
+                    : 'bg-neutral-900 border-neutral-800 text-neutral-400'
+                    }`}>
+                    {sourceIssues.length > 0 && <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
+                    {sourceStatuses.map(source => (
+                        <span
+                            key={source.name}
+                            title={source.error || `${source.durationMs}ms`}
+                            className={`px-2 py-1 rounded-lg border ${source.status === 'ok'
+                                ? 'bg-neutral-800 border-neutral-700 text-neutral-300'
+                                : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300'
+                                }`}
+                        >
+                            {source.name} {source.status === 'ok' ? source.results : source.status}
+                        </span>
+                    ))}
+                    {sourceStatuses.some(source => source.cached) && (
+                        <span className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300">cached</span>
+                    )}
                 </div>
             )}
 
