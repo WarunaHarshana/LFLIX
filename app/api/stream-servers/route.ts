@@ -28,7 +28,10 @@ type StreamServerResponse = StreamServer & {
 
 const BASE_SERVER_CHECK_TIMEOUT_MS = 4500;
 const MAX_SERVER_CHECK_TIMEOUT_MS = 10000;
+const VPN_SERVER_CHECK_TIMEOUT_MS = 9000;
+const MAX_VPN_SERVER_CHECK_TIMEOUT_MS = 18000;
 const SERVER_CHECK_CACHE_TTL_MS = 90_000;
+const VPN_SERVER_CHECK_CACHE_TTL_MS = 15_000;
 const OBSERVATION_STALE_MS = 6 * 60 * 60 * 1000;
 
 type ProbeCacheEntry = {
@@ -332,19 +335,26 @@ function getQualityRank(value: StreamQualityValue): number {
   return QUALITY_RANK[value] ?? 0;
 }
 
-async function isServerWorking(server: StreamServer): Promise<ProbeCacheEntry> {
+async function isServerWorking(
+  server: StreamServer,
+  options: { vpnMode?: boolean; refresh?: boolean } = {}
+): Promise<ProbeCacheEntry> {
   const now = Date.now();
-  const cached = probeCache.get(server.url);
-  if (cached && cached.expiresAt > now) {
+  const cacheKey = `${options.vpnMode ? 'vpn' : 'standard'}:${server.url}`;
+  const cached = probeCache.get(cacheKey);
+  if (!options.refresh && cached && cached.expiresAt > now) {
     return cached;
   }
 
+  const baseTimeoutMs = options.vpnMode ? VPN_SERVER_CHECK_TIMEOUT_MS : BASE_SERVER_CHECK_TIMEOUT_MS;
+  const maxTimeoutMs = options.vpnMode ? MAX_VPN_SERVER_CHECK_TIMEOUT_MS : MAX_SERVER_CHECK_TIMEOUT_MS;
+  const cacheTtlMs = options.vpnMode ? VPN_SERVER_CHECK_CACHE_TTL_MS : SERVER_CHECK_CACHE_TTL_MS;
   const adaptiveTimeoutMs = cached
     ? Math.min(
-        MAX_SERVER_CHECK_TIMEOUT_MS,
-        Math.max(BASE_SERVER_CHECK_TIMEOUT_MS, Math.round(cached.latencyMs * 2.2))
+        maxTimeoutMs,
+        Math.max(baseTimeoutMs, Math.round(cached.latencyMs * (options.vpnMode ? 3 : 2.2)))
       )
-    : BASE_SERVER_CHECK_TIMEOUT_MS;
+    : baseTimeoutMs;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), adaptiveTimeoutMs);
@@ -358,6 +368,7 @@ async function isServerWorking(server: StreamServer): Promise<ProbeCacheEntry> {
       signal: controller.signal,
       headers: {
         Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.8',
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
       },
@@ -371,9 +382,9 @@ async function isServerWorking(server: StreamServer): Promise<ProbeCacheEntry> {
         checkedAt: now,
         latencyMs: Date.now() - startedAt,
         probeError: `http_${response.status}`,
-        expiresAt: now + SERVER_CHECK_CACHE_TTL_MS,
+        expiresAt: now + cacheTtlMs,
       };
-      probeCache.set(server.url, entry);
+      probeCache.set(cacheKey, entry);
       return entry;
     }
 
@@ -387,9 +398,9 @@ async function isServerWorking(server: StreamServer): Promise<ProbeCacheEntry> {
       checkedAt: now,
       latencyMs: Date.now() - startedAt,
       probeError: blocked ? 'blocked_page' : null,
-      expiresAt: now + SERVER_CHECK_CACHE_TTL_MS,
+      expiresAt: now + cacheTtlMs,
     };
-    probeCache.set(server.url, entry);
+    probeCache.set(cacheKey, entry);
     return entry;
   } catch {
     const entry = {
@@ -399,9 +410,9 @@ async function isServerWorking(server: StreamServer): Promise<ProbeCacheEntry> {
       checkedAt: now,
       latencyMs: adaptiveTimeoutMs,
       probeError: 'network_error',
-      expiresAt: now + SERVER_CHECK_CACHE_TTL_MS,
+      expiresAt: now + cacheTtlMs,
     };
-    probeCache.set(server.url, entry);
+    probeCache.set(cacheKey, entry);
     return entry;
   } finally {
     clearTimeout(timeout);
@@ -463,6 +474,8 @@ export async function GET(req: Request) {
     const type = searchParams.get('type') as 'movie' | 'tv' | null;
     const season = searchParams.get('season');
     const episode = searchParams.get('episode');
+    const vpnMode = searchParams.get('vpn') === '1' || searchParams.get('networkMode') === 'vpn';
+    const refreshProbe = searchParams.get('refresh') === '1' || vpnMode;
 
     if (!tmdbId || !type) {
       return NextResponse.json({ error: 'Missing tmdbId or type' }, { status: 400 });
@@ -487,7 +500,7 @@ export async function GET(req: Request) {
     const checks = await Promise.all(
       servers.map(async (server) => ({
         server,
-        probe: await isServerWorking(server),
+        probe: await isServerWorking(server, { vpnMode, refresh: refreshProbe }),
       }))
     );
 
@@ -587,7 +600,7 @@ export async function GET(req: Request) {
     const bestServerIndex = responseServers.length > 0 ? 0 : -1;
 
     console.info(
-      `[stream-servers] tmdbId=${parsedTmdbId} type=${type} reachable=${workingCount}/${servers.length}`
+      `[stream-servers] tmdbId=${parsedTmdbId} type=${type} network=${vpnMode ? 'vpn' : 'standard'} reachable=${workingCount}/${servers.length}`
     );
 
     return NextResponse.json({
@@ -596,7 +609,9 @@ export async function GET(req: Request) {
       workingCount,
       bestServerIndex,
       qualityMode: 'hybrid',
-      filterMode: 'all',
+      filterMode: vpnMode ? 'vpn-friendly' : 'all',
+      networkMode: vpnMode ? 'vpn' : 'standard',
+      probeCacheTtlMs: vpnMode ? VPN_SERVER_CHECK_CACHE_TTL_MS : SERVER_CHECK_CACHE_TTL_MS,
     });
   } catch (e: any) {
     console.error('Stream servers error:', e);

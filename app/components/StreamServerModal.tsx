@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward, ShieldCheck } from 'lucide-react';
 
 type StreamServer = {
   id: string;
@@ -21,8 +21,10 @@ type StreamServer = {
 };
 
 const AUTO_FAILOVER_TIMEOUT_MS = 15000;
+const VPN_AUTO_FAILOVER_TIMEOUT_MS = 35000;
 const IFRAME_BOOTSTRAP_MS = 2500;
 const PLAYBACK_GRACE_MS = 18000;
+const VPN_PLAYBACK_GRACE_MS = 55000;
 const QUALITY_RANK: Record<StreamServer['qualityHint'], number> = {
   unknown: 0,
   '720p': 1,
@@ -68,14 +70,22 @@ function getAvailabilityBadge(server: StreamServer): {
     return { text: 'Reachable', className: 'text-emerald-300 bg-emerald-500/15' };
   }
   if (server.availabilityState === 'blocked') {
-    return { text: 'Probe Blocked (VPN)', className: 'text-amber-300 bg-amber-500/15' };
+    return { text: 'Probe Blocked', className: 'text-amber-300 bg-amber-500/15' };
   }
   return { text: 'Unreachable', className: 'text-rose-300 bg-rose-500/15' };
 }
 
-function formatProbeStatus(server: StreamServer | undefined, autoSwitching: boolean): string {
+function formatProbeStatus(server: StreamServer | undefined, autoSwitching: boolean, vpnMode: boolean): string {
   if (!server) {
     return 'Searching for best stream...';
+  }
+
+  if (vpnMode && !autoSwitching) {
+    return 'VPN mode: giving this server extra time...';
+  }
+
+  if (vpnMode && autoSwitching) {
+    return 'VPN route is slow, trying another source...';
   }
 
   if (!autoSwitching) {
@@ -131,48 +141,56 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
   const [showSources, setShowSources] = useState(false);
   const [iframeBootstrapped, setIframeBootstrapped] = useState(false);
   const [playbackReady, setPlaybackReady] = useState(false);
+  const [vpnMode, setVpnMode] = useState(false);
   const attemptedServersRef = useRef<number[]>([0]);
 
   useEffect(() => {
     attemptedServersRef.current = attemptedServers;
   }, [attemptedServers]);
 
-  useEffect(() => {
-    const fetchServers = async () => {
-      try {
-        const params = new URLSearchParams({
-          tmdbId: tmdbId.toString(),
-          type,
-          ...(season && { season: season.toString() }),
-          ...(episode && { episode: episode.toString() }),
-        });
-        const res = await fetch(`/api/stream-servers?${params}`);
-        const data = await res.json();
-        if (data.servers) {
-          const rankedServers = rankServersByQuality(data.servers as StreamServer[]);
-          const bestServerIndex = typeof data.bestServerIndex === 'number' ? data.bestServerIndex : 0;
-          const firstIndex = rankedServers.length > 0 ? Math.max(0, Math.min(bestServerIndex, rankedServers.length - 1)) : -1;
+  const fetchServers = useCallback(async (options: { refresh?: boolean; showLoading?: boolean } = {}) => {
+    if (options.showLoading !== false) {
+      setLoading(true);
+    }
 
-          setServers(rankedServers);
-          setActiveServer(Math.max(firstIndex, 0));
-          const initialAttempted = firstIndex >= 0 ? [firstIndex] : [];
-          setAttemptedServers(initialAttempted);
-          attemptedServersRef.current = initialAttempted;
-          setIframeError(false);
-          setIframeLoading(rankedServers.length > 0);
-          setAutoSwitching(false);
-          setShowSources(false);
-          setIframeBootstrapped(false);
-          setPlaybackReady(false);
-        }
-      } catch (e) {
-        console.error('Failed to fetch servers:', e);
-      } finally {
-        setLoading(false);
+    try {
+      const params = new URLSearchParams({
+        tmdbId: tmdbId.toString(),
+        type,
+        ...(season && { season: season.toString() }),
+        ...(episode && { episode: episode.toString() }),
+        ...(vpnMode && { vpn: '1' }),
+        ...((options.refresh || vpnMode) && { refresh: '1' }),
+      });
+      const res = await fetch(`/api/stream-servers?${params}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (data.servers) {
+        const rankedServers = rankServersByQuality(data.servers as StreamServer[]);
+        const bestServerIndex = typeof data.bestServerIndex === 'number' ? data.bestServerIndex : 0;
+        const firstIndex = rankedServers.length > 0 ? Math.max(0, Math.min(bestServerIndex, rankedServers.length - 1)) : -1;
+
+        setServers(rankedServers);
+        setActiveServer(Math.max(firstIndex, 0));
+        const initialAttempted = firstIndex >= 0 ? [firstIndex] : [];
+        setAttemptedServers(initialAttempted);
+        attemptedServersRef.current = initialAttempted;
+        setIframeError(false);
+        setIframeLoading(rankedServers.length > 0);
+        setAutoSwitching(false);
+        setShowSources(vpnMode);
+        setIframeBootstrapped(false);
+        setPlaybackReady(false);
       }
-    };
-    fetchServers();
-  }, [tmdbId, type, season, episode]);
+    } catch (e) {
+      console.error('Failed to fetch servers:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [tmdbId, type, season, episode, vpnMode]);
+
+  useEffect(() => {
+    void fetchServers();
+  }, [fetchServers]);
 
   const handleServerChange = (index: number) => {
     setActiveServer(index);
@@ -253,8 +271,8 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
     const attemptIndex = Math.max(0, attemptedServersRef.current.length - 1);
     const backoffMultiplier = Math.min(1.8, 1 + attemptIndex * 0.2);
-    const connectTimeout = Math.round(AUTO_FAILOVER_TIMEOUT_MS * backoffMultiplier);
-    const playbackGraceTimeout = Math.round(PLAYBACK_GRACE_MS * backoffMultiplier);
+    const connectTimeout = Math.round((vpnMode ? VPN_AUTO_FAILOVER_TIMEOUT_MS : AUTO_FAILOVER_TIMEOUT_MS) * backoffMultiplier);
+    const playbackGraceTimeout = Math.round((vpnMode ? VPN_PLAYBACK_GRACE_MS : PLAYBACK_GRACE_MS) * backoffMultiplier);
 
     if (!iframeBootstrapped) {
       setIframeLoading(true);
@@ -283,18 +301,19 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       }
     }, playbackGraceTimeout);
 
+    const overlayReleaseMs = vpnMode ? IFRAME_BOOTSTRAP_MS + 9000 : IFRAME_BOOTSTRAP_MS + 4500;
     const releaseOverlayTimer = window.setTimeout(() => {
       setIframeLoading(false);
       setPlaybackReady(true);
       setAutoSwitching(false);
-    }, Math.min(playbackGraceTimeout - 1000, IFRAME_BOOTSTRAP_MS + 4500));
+    }, Math.min(playbackGraceTimeout - 1000, overlayReleaseMs));
 
     return () => {
       window.clearTimeout(bootstrapTimer);
       window.clearTimeout(playbackWatchdog);
       window.clearTimeout(releaseOverlayTimer);
     };
-  }, [activeServer, iframeBootstrapped, iframeError, loading, playbackReady, servers.length]);
+  }, [activeServer, iframeBootstrapped, iframeError, loading, playbackReady, servers.length, vpnMode]);
 
   return (
     <div className="fixed inset-0 z-[90] bg-black flex flex-col">
@@ -319,6 +338,30 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
             title="Show or hide source list"
           >
             {showSources ? 'Hide Sources' : 'Show Sources'}
+          </button>
+          <button
+            onClick={() => {
+              setVpnMode((prev) => !prev);
+              setIframeLoading(true);
+              setIframeError(false);
+              setIframeBootstrapped(false);
+              setPlaybackReady(false);
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition flex items-center gap-1.5 ${
+              vpnMode
+                ? 'bg-blue-500 text-white'
+                : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+            }`}
+            title="VPN mode refreshes probes and gives slow VPN routes more time"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" /> VPN
+          </button>
+          <button
+            onClick={() => void fetchServers({ refresh: true })}
+            className="p-2 hover:bg-neutral-800 rounded-full transition text-neutral-400 hover:text-white"
+            title="Refresh server checks"
+          >
+            <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={() => {
@@ -430,11 +473,16 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                   </div>
                   <p className="text-neutral-300 font-medium">{getServerLabel(activeServer)}</p>
                   <p className="text-neutral-500 text-sm mt-1">
-                    {formatProbeStatus(currentServer, autoSwitching)}
+                    {formatProbeStatus(currentServer, autoSwitching, vpnMode)}
                   </p>
                   {currentServer && !currentServer.isReachable && (
                     <p className="text-xs text-neutral-400 mt-2">
-                      Probe says {currentServer.availabilityState}, but manual test may still work on VPN.
+                      Probe says {currentServer.availabilityState}, but browser playback may still work with VPN mode.
+                    </p>
+                  )}
+                  {vpnMode && (
+                    <p className="text-blue-300 text-xs mt-2">
+                      VPN mode bypasses stale checks and waits longer before switching sources.
                     </p>
                   )}
                   {getNetworkHint(currentServer) && (
@@ -455,18 +503,46 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                 <div className="text-center p-6">
                   <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
                   <p className="text-lg font-semibold mb-2">Server unavailable</p>
-                  <p className="text-neutral-400 text-sm mb-4">This server might be down. Try a different one.</p>
-                  <button
-                    onClick={() => {
-                      setIframeError(false);
-                      setIframeLoading(true);
-                      setIframeBootstrapped(false);
-                      setPlaybackReady(false);
-                    }}
-                    className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-sm flex items-center gap-2 mx-auto transition"
-                  >
-                    <RefreshCw className="w-4 h-4" /> Retry
-                  </button>
+                  <p className="text-neutral-400 text-sm mb-4">
+                    This server might be down or blocked on this network. Try VPN mode, refresh checks, or open it in a new tab.
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      onClick={() => {
+                        setIframeError(false);
+                        setIframeLoading(true);
+                        setIframeBootstrapped(false);
+                        setPlaybackReady(false);
+                      }}
+                      className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-sm flex items-center gap-2 transition"
+                    >
+                      <RefreshCw className="w-4 h-4" /> Retry
+                    </button>
+                    {!vpnMode && (
+                      <button
+                        onClick={() => {
+                          setVpnMode(true);
+                          setIframeError(false);
+                          setIframeLoading(true);
+                          setIframeBootstrapped(false);
+                          setPlaybackReady(false);
+                        }}
+                        className="px-4 py-2 bg-blue-500 hover:bg-blue-400 text-white rounded-lg text-sm flex items-center gap-2 transition"
+                      >
+                        <ShieldCheck className="w-4 h-4" /> VPN Mode
+                      </button>
+                    )}
+                    {currentServer && (
+                      <a
+                        href={currentServer.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-sm flex items-center gap-2 transition"
+                      >
+                        <ExternalLink className="w-4 h-4" /> New Tab
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -497,7 +573,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
       {/* Footer hint */}
       <div className="px-4 py-2 bg-neutral-900 border-t border-neutral-800 text-center text-xs text-neutral-500 shrink-0">
-        Best quality source starts automatically · source list appears on failover or with Show Sources
+        Best quality source starts automatically · VPN mode refreshes checks and waits longer on slow routes
       </div>
     </div>
   );
