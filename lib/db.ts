@@ -111,7 +111,7 @@ db.exec(`
   );
 
   INSERT OR IGNORE INTO settings (key, value) VALUES ('vlcPath', 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe');
-  -- TMDB API key is now loaded from environment variable, not stored in DB
+  -- TMDB uses an optional settings override, then environment variable, then bundled default
 
   -- IPTV Channels
   CREATE TABLE IF NOT EXISTS iptv_channels (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Lock, Key, FolderOpen, Check, ChevronRight, ChevronLeft, Play } from 'lucide-react';
+import { Lock, FolderOpen, Check, ChevronRight, ChevronLeft, Play } from 'lucide-react';
 import FileBrowser from './FileBrowser';
 
 type Props = {
@@ -11,23 +11,18 @@ type Props = {
 export default function SetupWizard({ onComplete }: Props) {
   const [step, setStep] = useState(1);
   const [pin, setPin] = useState('');
-  const [apiKey, setApiKey] = useState('');
   const [folders, setFolders] = useState<string[]>([]);
   const [newFolder, setNewFolder] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showBrowser, setShowBrowser] = useState(false);
 
-  const totalSteps = 4;
+  const totalSteps = 3;
 
   const handleNext = () => {
     setError('');
     if (step === 1 && pin.length < 4) {
       setError('PIN must be at least 4 digits');
-      return;
-    }
-    if (step === 2 && apiKey.length < 10) {
-      setError('Please enter a valid TMDB API key');
       return;
     }
     if (step < totalSteps) {
@@ -59,7 +54,7 @@ export default function SetupWizard({ onComplete }: Props) {
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin, apiKey, folders })
+        body: JSON.stringify({ pin, folders })
       });
 
       if (!res.ok) {
@@ -68,8 +63,8 @@ export default function SetupWizard({ onComplete }: Props) {
       }
 
       onComplete();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Setup failed');
     } finally {
       setLoading(false);
     }
@@ -77,9 +72,8 @@ export default function SetupWizard({ onComplete }: Props) {
 
   const steps = [
     { number: 1, title: 'Security', description: 'Create a PIN' },
-    { number: 2, title: 'API Key', description: 'TMDB Configuration' },
-    { number: 3, title: 'Folders', description: 'Add Media Folders' },
-    { number: 4, title: 'Ready', description: 'Start Watching' },
+    { number: 2, title: 'Folders', description: 'Add Media Folders' },
+    { number: 3, title: 'Ready', description: 'Start Watching' },
   ];
 
   return (
@@ -137,38 +131,8 @@ export default function SetupWizard({ onComplete }: Props) {
             </div>
           )}
 
-          {/* Step 2: API Key */}
+          {/* Step 2: Folders */}
           {step === 2 && (
-            <div className="text-center">
-              <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Key className="w-8 h-8 text-blue-500" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2">TMDB API Key</h2>
-              <p className="text-neutral-400 mb-2">Needed to fetch movie & show info</p>
-              <a 
-                href="https://www.themoviedb.org/settings/api" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-400 text-sm hover:underline mb-6 block"
-              >
-                Get free API key from themoviedb.org →
-              </a>
-              <input
-                type="text"
-                placeholder="Paste your TMDB API key here"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-red-600 transition font-mono text-sm"
-                autoFocus
-              />
-              <p className="text-xs text-neutral-500 mt-2">
-                Example: 3d8c8476371d0730fb5bd7ae67241879
-              </p>
-            </div>
-          )}
-
-          {/* Step 3: Folders */}
-          {step === 3 && (
             <div>
               <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-yellow-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -225,8 +189,8 @@ export default function SetupWizard({ onComplete }: Props) {
             </div>
           )}
 
-          {/* Step 4: Ready */}
-          {step === 4 && (
+          {/* Step 3: Ready */}
+          {step === 3 && (
             <div className="text-center">
               <div className="w-20 h-20 bg-green-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Play className="w-10 h-10 text-green-500" />
@@ -234,13 +198,13 @@ export default function SetupWizard({ onComplete }: Props) {
               <h2 className="text-2xl font-bold mb-2">You're All Set!</h2>
               <div className="text-left bg-neutral-800/50 rounded-lg p-4 mb-6 text-sm space-y-2">
                 <p><span className="text-neutral-500">PIN:</span> <span className="text-green-400">✓ Set</span></p>
-                <p><span className="text-neutral-500">API Key:</span> <span className="text-green-400">✓ Configured</span></p>
+                <p><span className="text-neutral-500">TMDB:</span> <span className="text-green-400">✓ Built-in key active</span></p>
                 <p><span className="text-neutral-500">Folders:</span> <span className={folders.length > 0 ? 'text-green-400' : 'text-yellow-400'}>
                   {folders.length > 0 ? `✓ ${folders.length} folder(s)` : '⚠ None (can add later)'}
                 </span></p>
               </div>
               <p className="text-neutral-400 text-sm mb-4">
-                LFLIX will scan your folders and automatically organize your media.
+                LFLIX will scan your folders and automatically organize your media. You can change API keys later in Settings.
               </p>
             </div>
           )}

@@ -4,7 +4,9 @@ import { tmdbCache } from './cache';
 
 // --- Configuration & Rate Limiting ---
 
-// Get TMDB API key from settings or env
+export const DEFAULT_TMDB_API_KEY = '3d8c8476371d0730fb5bd7ae67241879';
+
+// Get TMDB API key from settings, env, or bundled default
 export function getTmdbApiKey(): string {
   try {
     // Try database setting first (if table exists)
@@ -14,7 +16,7 @@ export function getTmdbApiKey(): string {
     // ignore
   }
   // Fallback to env or default
-  return process.env.TMDB_API_KEY || '3d8c8476371d0730fb5bd7ae67241879';
+  return process.env.TMDB_API_KEY || DEFAULT_TMDB_API_KEY;
 }
 
 export function getOmdbApiKey(): string {

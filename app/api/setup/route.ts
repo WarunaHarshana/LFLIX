@@ -23,14 +23,11 @@ export async function GET() {
 // Save setup configuration
 export async function POST(req: Request) {
   try {
-    const { pin, apiKey, folders } = await req.json();
+    const { pin, folders } = await req.json();
+    const mediaFolders = Array.isArray(folders) ? folders : [];
 
     if (!pin || pin.length < 4) {
       return NextResponse.json({ error: 'PIN must be at least 4 digits' }, { status: 400 });
-    }
-
-    if (!apiKey || apiKey.length < 10) {
-      return NextResponse.json({ error: 'Valid TMDB API key required' }, { status: 400 });
     }
 
     // Save PIN to .env.local file
@@ -48,17 +45,14 @@ export async function POST(req: Request) {
       envContent += `\nAPP_PIN=${pin}`;
     }
 
-    // Update or add TMDB_API_KEY
-    if (envContent.includes('TMDB_API_KEY=')) {
-      envContent = envContent.replace(/TMDB_API_KEY=.*/g, `TMDB_API_KEY=${apiKey}`);
-    } else {
-      envContent += `\nTMDB_API_KEY=${apiKey}`;
-    }
-
     fs.writeFileSync(envPath, envContent.trim() + '\n');
 
     // Save folders to database with validation
-    for (const folderPath of folders) {
+    for (const folderPath of mediaFolders) {
+      if (typeof folderPath !== 'string') {
+        continue;
+      }
+
       // SECURITY: Validate each folder path
       const validation = validateExistingDirectory(folderPath);
       if (validation.error !== null) {

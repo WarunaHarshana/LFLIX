@@ -254,10 +254,10 @@ export default function SettingsPage() {
                             value={settings.tmdbApiKey}
                             onChange={(e) => setSettings(prev => ({ ...prev, tmdbApiKey: e.target.value }))}
                             className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-white/70 transition font-mono text-sm"
-                            placeholder="Enter your TMDB API key"
+                            placeholder="Using built-in TMDB key"
                         />
                         <p className="text-xs text-neutral-500 mt-2">
-                            Used to fetch movie/show metadata, posters, and ratings. Get a free key at{' '}
+                            Optional override for movie/show metadata, posters, and ratings. Leave blank to use the built-in key, or get your own at{' '}
                             <a href="https://www.themoviedb.org/settings/api" target="_blank" className="text-white hover:underline">
                                 themoviedb.org
                             </a>
