@@ -1,5 +1,5 @@
 /**
- * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS + PSArips + a.111477.xyz open directory
+ * Torrent Search - uses apibay.org (The Pirate Bay API), YTS, PSArips, open directories, and DDL providers
  */
 
 import { recordSourceHealth } from './sourceHealth';
@@ -74,6 +74,40 @@ type PsaRelease = {
     torrentUrl?: string;
     size?: string;
     sizeBytes: number;
+};
+
+type OpenDirectorySource = {
+    name: string;
+    baseUrl: string;
+    categories: Record<string, string[]>;
+};
+
+type InternetArchiveDoc = {
+    identifier?: string;
+    title?: string;
+    year?: string | number;
+    date?: string;
+};
+
+type InternetArchiveSearchResponse = {
+    response?: {
+        docs?: InternetArchiveDoc[];
+    };
+};
+
+type InternetArchiveFile = {
+    name?: string;
+    size?: string;
+    format?: string;
+};
+
+type InternetArchiveMetadataResponse = {
+    files?: InternetArchiveFile[];
+    metadata?: {
+        title?: string;
+        year?: string;
+        date?: string;
+    };
 };
 
 type SearchOptions = { year?: string; type?: 'movie' | 'tv' };
@@ -535,7 +569,7 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
     return [];
 }
 
-// --- a.111477.xyz open directory (direct downloads) ---
+// --- Direct downloads (open directories + DDL providers) ---
 
 const OPEN_DIR_BASE = 'https://a.111477.xyz';
 const OPEN_DIR_CATEGORIES: Record<string, string[]> = {
@@ -543,6 +577,19 @@ const OPEN_DIR_CATEGORIES: Record<string, string[]> = {
     tv: ['/kdrama/', '/asiandrama/', '/tvs/'],
     all: ['/movies/', '/kdrama/', '/asiandrama/', '/tvs/'],
 };
+const BUILTIN_OPEN_DIR_SOURCE: OpenDirectorySource = {
+    name: '111477',
+    baseUrl: OPEN_DIR_BASE,
+    categories: OPEN_DIR_CATEGORIES,
+};
+
+const INTERNET_ARCHIVE_SEARCH_URL = 'https://archive.org/advancedsearch.php';
+const INTERNET_ARCHIVE_METADATA_URL = 'https://archive.org/metadata/';
+const INTERNET_ARCHIVE_DOWNLOAD_URL = 'https://archive.org/download/';
+const INTERNET_ARCHIVE_MEDIA_REGEX = /\.(mkv|mp4|avi|mov|wmv|flv|webm|mpg|mpeg|m4v|iso)$/i;
+const INTERNET_ARCHIVE_MIN_SIZE_BYTES = 50 * 1024 * 1024;
+const INTERNET_ARCHIVE_MAX_ITEMS = 5;
+const INTERNET_ARCHIVE_MAX_FILES_PER_ITEM = 3;
 
 // In-memory cache for directory listings (avoids re-fetching the 7800+ entry index)
 const dirCache = new Map<string, { data: { name: string; href: string; sizeBytes: number }[]; ts: number }>();
@@ -591,6 +638,62 @@ function setCachedSearch(key: string, data: TorrentSearchDiagnostics): void {
     });
 }
 
+function parseCsvEnv(name: string): string[] {
+    return (process.env[name] || '')
+        .split(',')
+        .map(value => value.trim())
+        .filter(Boolean);
+}
+
+function normalizeDirectoryBase(rawBaseUrl: string): string | null {
+    try {
+        const url = new URL(rawBaseUrl.trim());
+        url.search = '';
+        url.hash = '';
+        return url.href.replace(/\/$/, '');
+    } catch {
+        return null;
+    }
+}
+
+function normalizeDirectoryPath(path: string): string {
+    const trimmed = path.trim();
+    if (!trimmed || trimmed === '/') return '/';
+    const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
+}
+
+function buildDirectoryUrl(source: OpenDirectorySource, category: string): string {
+    return `${source.baseUrl}${normalizeDirectoryPath(category)}`;
+}
+
+function getConfiguredOpenDirectorySources(): OpenDirectorySource[] {
+    const sources = [BUILTIN_OPEN_DIR_SOURCE];
+    const seen = new Set(sources.map(source => source.baseUrl));
+    const extraBases = parseCsvEnv('DDL_OPEN_DIR_BASES');
+    const allPaths = parseCsvEnv('DDL_OPEN_DIR_PATHS').map(normalizeDirectoryPath);
+    const moviePaths = parseCsvEnv('DDL_OPEN_DIR_MOVIE_PATHS').map(normalizeDirectoryPath);
+    const tvPaths = parseCsvEnv('DDL_OPEN_DIR_TV_PATHS').map(normalizeDirectoryPath);
+    const fallbackPaths = allPaths.length > 0 ? allPaths : ['/'];
+
+    extraBases.forEach((base, index) => {
+        const baseUrl = normalizeDirectoryBase(base);
+        if (!baseUrl || seen.has(baseUrl)) return;
+        seen.add(baseUrl);
+        sources.push({
+            name: `custom-${index + 1}`,
+            baseUrl,
+            categories: {
+                movie: moviePaths.length > 0 ? moviePaths : fallbackPaths,
+                tv: tvPaths.length > 0 ? tvPaths : fallbackPaths,
+                all: fallbackPaths,
+            },
+        });
+    });
+
+    return sources;
+}
+
 /** Fetch with retry — retries once after a delay on 429 or network error */
 async function fetchWithRetry(url: string, timeoutMs: number): Promise<Response | null> {
     const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' };
@@ -623,7 +726,7 @@ async function fetchDirectoryListing(url: string, timeoutMs: number): Promise<{ 
     const res = await fetchWithRetry(url, timeoutMs);
     if (!res) return [];
     const html = await res.text();
-    const entries = parseDirectoryListing(html);
+    const entries = parseDirectoryListing(html, url);
     dirCache.set(url, { data: entries, ts: Date.now() });
     return entries;
 }
@@ -639,7 +742,7 @@ function normalizeTitle(t: string): string {
 }
 
 /** Extract entries from the HTML index page (uses data-entry table rows) */
-function parseDirectoryListing(html: string): { name: string; href: string; sizeBytes: number }[] {
+function parseDirectoryListing(html: string, listingUrl: string): { name: string; href: string; sizeBytes: number }[] {
     const entries: { name: string; href: string; sizeBytes: number }[] = [];
     // Match all <tr data-entry="true" ...> rows — attributes can be in any order
     const rowRegex = /<tr[^>]+data-entry="true"[^>]*>([\s\S]*?)<\/tr>/gi;
@@ -670,10 +773,13 @@ function parseDirectoryListing(html: string): { name: string; href: string; size
             decodedName = unescape(name); // fallback
         }
 
-        // Resolve URL
-        const fullHref = dataUrl.startsWith('http')
-            ? dataUrl
-            : `${OPEN_DIR_BASE}${dataUrl}`;
+        // Resolve URL against the current listing so custom open-directory roots work too.
+        let fullHref = dataUrl;
+        try {
+            fullHref = new URL(dataUrl, listingUrl).href;
+        } catch {
+            fullHref = dataUrl.startsWith('http') ? dataUrl : `${OPEN_DIR_BASE}${dataUrl}`;
+        }
         entries.push({ name: decodedName.replace(/\/$/, ''), href: fullHref, sizeBytes });
     }
     return entries;
@@ -694,9 +800,23 @@ function titleMatches(folderName: string, query: string, type?: 'movie' | 'tv'):
     return queryWords.every(word => normalFolder.includes(word));
 }
 
-async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promise<TorrentResult[]> {
+function dedupeDirectDownloadResults(results: TorrentResult[]): TorrentResult[] {
+    const seen = new Set<string>();
+    return results.filter((result) => {
+        const key = result.magnet || result.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+async function searchOpenDirectorySource(
+    source: OpenDirectorySource,
+    query: string,
+    type?: 'movie' | 'tv'
+): Promise<TorrentResult[]> {
     try {
-        const categories = type ? (OPEN_DIR_CATEGORIES[type] || OPEN_DIR_CATEGORIES.all) : OPEN_DIR_CATEGORIES.all;
+        const categories = type ? (source.categories[type] || source.categories.all) : source.categories.all;
         const results: TorrentResult[] = [];
 
         // Query words for filtering — only keep words with length > 1
@@ -704,7 +824,7 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
         const queryWords = fullNormalQuery.split(' ').filter(w => w.length > 1);
 
         for (const category of categories) {
-            const categoryUrl = `${OPEN_DIR_BASE}${category}`;
+            const categoryUrl = buildDirectoryUrl(source, category);
             try {
                 // Use cached directory listing to avoid redundant fetches of the large index
                 const folders = await fetchDirectoryListing(categoryUrl, 20000);
@@ -773,15 +893,149 @@ async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promis
                     return results.slice(0, 50);
                 }
             } catch (e) {
-                console.error(`Open directory search error for ${category}:`, e);
+                console.error(`Open directory search error for ${source.name}:${category}:`, e);
             }
         }
 
         return results.slice(0, 50);
     } catch (e) {
-        console.error('Open directory search error:', e);
+        console.error(`Open directory search error for ${source.name}:`, e);
         return [];
     }
+}
+
+async function searchOpenDirectory(query: string, type?: 'movie' | 'tv'): Promise<TorrentResult[]> {
+    const sources = getConfiguredOpenDirectorySources();
+    const settled = await Promise.allSettled(
+        sources.map(source => searchOpenDirectorySource(source, query, type))
+    );
+    const results = settled.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
+    return dedupeDirectDownloadResults(results).slice(0, 75);
+}
+
+function cleanInternetArchiveQuery(query: string): string {
+    return query
+        .replace(/[^\p{L}\p{N}\s.'-]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function quoteInternetArchiveValue(value: string): string {
+    return `"${value.replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim()}"`;
+}
+
+function buildInternetArchiveSearchQuery(query: string): string {
+    const clean = cleanInternetArchiveQuery(query);
+    if (!clean) return '';
+    return `title:(${quoteInternetArchiveValue(clean)}) AND mediatype:(movies)`;
+}
+
+function parseArchiveFileSize(size?: string): number {
+    if (!size) return 0;
+    const bytes = Number.parseInt(size, 10);
+    if (Number.isFinite(bytes) && bytes > 0) return bytes;
+    return parseSizeToBytes(size);
+}
+
+function getInternetArchiveFileName(path: string): string {
+    const parts = path.split('/');
+    return parts[parts.length - 1] || path;
+}
+
+function buildInternetArchiveDownloadUrl(identifier: string, fileName: string): string {
+    const encodedIdentifier = encodeURIComponent(identifier);
+    const encodedFileName = fileName.split('/').map(part => encodeURIComponent(part)).join('/');
+    return `${INTERNET_ARCHIVE_DOWNLOAD_URL}${encodedIdentifier}/${encodedFileName}`;
+}
+
+function getInternetArchiveYear(doc: InternetArchiveDoc, metadata?: InternetArchiveMetadataResponse): string | undefined {
+    const yearSource = doc.year || metadata?.metadata?.year || doc.date || metadata?.metadata?.date || '';
+    const match = String(yearSource).match(/\b(19|20)\d{2}\b/);
+    return match ? match[0] : undefined;
+}
+
+function getInternetArchiveTimestamp(doc: InternetArchiveDoc, metadata?: InternetArchiveMetadataResponse): number | undefined {
+    const date = doc.date || metadata?.metadata?.date;
+    if (!date) return undefined;
+    const timestamp = Date.parse(date);
+    return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+async function searchInternetArchive(query: string): Promise<TorrentResult[]> {
+    const iaQuery = buildInternetArchiveSearchQuery(query);
+    if (!iaQuery) return [];
+
+    try {
+        const url = new URL(INTERNET_ARCHIVE_SEARCH_URL);
+        url.searchParams.set('q', iaQuery);
+        ['identifier', 'title', 'year', 'date'].forEach(field => url.searchParams.append('fl[]', field));
+        url.searchParams.set('rows', String(INTERNET_ARCHIVE_MAX_ITEMS));
+        url.searchParams.set('page', '1');
+        url.searchParams.set('output', 'json');
+
+        const res = await fetchWithRetry(url.href, 8000);
+        if (!res) return [];
+
+        const data = await res.json() as InternetArchiveSearchResponse;
+        const docs = data.response?.docs || [];
+        if (docs.length === 0) return [];
+
+        const settled = await Promise.allSettled(
+            docs
+                .filter(doc => Boolean(doc.identifier))
+                .slice(0, INTERNET_ARCHIVE_MAX_ITEMS)
+                .map(async (doc): Promise<TorrentResult[]> => {
+                    const identifier = doc.identifier || '';
+                    const metadataRes = await fetchWithRetry(`${INTERNET_ARCHIVE_METADATA_URL}${encodeURIComponent(identifier)}`, 8000);
+                    if (!metadataRes) return [];
+
+                    const metadata = await metadataRes.json() as InternetArchiveMetadataResponse;
+                    const itemTitle = metadata.metadata?.title || doc.title || identifier;
+                    const itemYear = getInternetArchiveYear(doc, metadata);
+                    const uploadTimestamp = getInternetArchiveTimestamp(doc, metadata);
+                    const uploadDate = uploadTimestamp ? new Date(uploadTimestamp).toISOString().split('T')[0] : undefined;
+                    const mediaFiles = (metadata.files || [])
+                        .filter(file => file.name && INTERNET_ARCHIVE_MEDIA_REGEX.test(file.name))
+                        .map(file => ({ file, sizeBytes: parseArchiveFileSize(file.size) }))
+                        .filter(({ sizeBytes }) => sizeBytes >= INTERNET_ARCHIVE_MIN_SIZE_BYTES)
+                        .sort((a, b) => b.sizeBytes - a.sizeBytes)
+                        .slice(0, INTERNET_ARCHIVE_MAX_FILES_PER_ITEM);
+
+                    return mediaFiles.map(({ file, sizeBytes }) => {
+                        const fileName = file.name || '';
+                        const displayName = getInternetArchiveFileName(fileName);
+                        const title = `${itemTitle}${itemYear ? ` (${itemYear})` : ''} - ${displayName}`;
+                        return {
+                            title,
+                            magnet: `http-direct:${buildInternetArchiveDownloadUrl(identifier, fileName)}`,
+                            size: formatBytes(sizeBytes),
+                            sizeBytes,
+                            seeds: 0,
+                            leeches: 0,
+                            quality: extractQuality(displayName),
+                            source: 'DDL',
+                            uploadDate,
+                            uploadTimestamp,
+                        };
+                    });
+                })
+        );
+
+        const results = settled.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
+        return dedupeDirectDownloadResults(results).slice(0, 25);
+    } catch (e) {
+        console.error('Internet Archive DDL search error:', e);
+        return [];
+    }
+}
+
+async function searchDirectDownloads(query: string, type?: 'movie' | 'tv'): Promise<TorrentResult[]> {
+    const settled = await Promise.allSettled([
+        searchOpenDirectory(query, type),
+        searchInternetArchive(query),
+    ]);
+    const results = settled.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
+    return dedupeDirectDownloadResults(results).slice(0, 100);
 }
 
 // --- Knaben API (meta-search, returns JSON) ---
@@ -1314,7 +1568,7 @@ export async function searchTorrentsWithDiagnostics(
         runSource('YTS', 12000, () => options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([]), { query: title, record: options?.type !== 'tv' }),
         runSource('Knaben', 9000, () => searchKnaben(query), { query }),
         runSource('Nyaa', 10000, () => searchNyaa(query), { query }),
-        runSource('DDL', 9000, () => searchOpenDirectory(title, options?.type), { query: title }),
+        runSource('DDL', 14000, () => searchDirectDownloads(title, options?.type), { query: title }),
     ]);
 
     const psaResults = psaSource.results;

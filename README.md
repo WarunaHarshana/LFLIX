@@ -99,6 +99,8 @@ Search TMDB for any movie or show and save it to your watchlist — a personal "
 | **Folder chooser** | Pick which library folder to save to (auto-import when done) |
 | **Download panel** | Click ⬇ in navbar → see progress, pause ⏸, resume ▶, delete 🗑 |
 
+Direct-download results include the built-in open-directory source and Internet Archive. You can add private or self-hosted open-directory roots with `DDL_OPEN_DIR_BASES`, and optionally narrow them with `DDL_OPEN_DIR_PATHS`, `DDL_OPEN_DIR_MOVIE_PATHS`, or `DDL_OPEN_DIR_TV_PATHS` as comma-separated paths.
+
 ## 🛠️ Tech Stack
 
 | Layer | Tech |
@@ -106,7 +108,7 @@ Search TMDB for any movie or show and save it to your watchlist — a personal "
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS |
 | Backend | Next.js API Routes, SQLite (better-sqlite3) |
 | Metadata | TMDB API |
-| Torrents | WebTorrent, apibay.org (TPB API) |
+| Torrents / DDL | WebTorrent, apibay.org (TPB API), YTS, PSA, open-directory DDL, Internet Archive DDL |
 | Players | VLC, PotPlayer, MPC-HC, mpv, HTML5, DLNA |
 | File Watching | Chokidar |
 
