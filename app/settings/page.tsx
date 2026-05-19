@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye, Palette } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye, Palette, Activity } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from '../components/ThemeProvider';
 
@@ -177,6 +177,27 @@ export default function SettingsPage() {
             </div>
 
             <div className="max-w-4xl mx-auto px-8 py-10 space-y-8">
+
+                {/* Diagnostics */}
+                <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
+                    <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
+                        <Activity className="w-5 h-5 text-[var(--text-secondary)]" />
+                        <h2 className="text-lg font-semibold">Diagnostics</h2>
+                    </div>
+                    <div className="p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <div className="font-medium text-white">System health</div>
+                            <div className="mt-1 text-sm text-neutral-400">Database, downloads, release queue, and torrent source status</div>
+                        </div>
+                        <Link
+                            href="/diagnostics"
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-neutral-800 px-4 py-2 text-sm font-medium transition hover:bg-neutral-700"
+                        >
+                            <Activity className="w-4 h-4" />
+                            Open Diagnostics
+                        </Link>
+                    </div>
+                </section>
 
                 {/* VLC Path */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
