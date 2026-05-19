@@ -134,6 +134,36 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
         return `${formatBytes(bps)}/s`;
     };
 
+    const getEtaSeconds = (dl: DownloadItem) => {
+        if (dl.status !== 'downloading') return null;
+        if (dl.downloadSpeed <= 0 || dl.totalSize <= 0) return null;
+
+        const remainingBytes = Math.max(0, dl.totalSize - dl.downloadedSize);
+        if (remainingBytes <= 0) return 0;
+
+        return Math.ceil(remainingBytes / dl.downloadSpeed);
+    };
+
+    const formatEta = (seconds: number | null) => {
+        if (seconds === null) return null;
+        if (seconds <= 0) return 'Finishing';
+
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+
+        if (days > 0) {
+            return `${days}d ${hours}h left`;
+        }
+        if (hours > 0) {
+            return minutes > 0 ? `${hours}h ${minutes}m left` : `${hours}h left`;
+        }
+        if (minutes > 0) {
+            return `${minutes}m left`;
+        }
+        return '<1m left';
+    };
+
     const downloadStatusText = (dl: DownloadItem) => {
         if (dl.status === 'metadata') {
             return dl.retryCount && dl.retryCount > 0
@@ -226,22 +256,28 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                 <p className="text-neutral-600 text-sm mt-1">Downloads will appear here</p>
                             </div>
                         ) : (
-                            downloads.map((dl) => (
-                                <div
-                                    key={dl.id}
-                                    className={`p-3 bg-neutral-800/60 rounded-xl border border-neutral-700/50 transition ${removingIds.has(dl.id) ? 'opacity-40 pointer-events-none' : ''}`}
-                                >
+                            downloads.map((dl) => {
+                                const etaText = formatEta(getEtaSeconds(dl));
+
+                                return (
+                                    <div
+                                        key={dl.id}
+                                        className={`p-3 bg-neutral-800/60 rounded-xl border border-neutral-700/50 transition ${removingIds.has(dl.id) ? 'opacity-40 pointer-events-none' : ''}`}
+                                    >
                                     {/* Name + status */}
                                     <div className="flex items-start gap-2 mb-2">
                                         {statusIcon(dl.status)}
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium truncate">{dl.name || 'Loading metadata...'}</p>
-                                            <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-500 mt-0.5">
                                                 {(dl.status === 'metadata' || dl.status === 'downloading' || dl.status === 'stalled') && (
                                                     <span className={dl.status === 'stalled' ? 'text-yellow-400' : 'text-blue-400'}>{downloadStatusText(dl)}</span>
                                                 )}
                                                 {dl.totalSize > 0 && (
                                                     <span>{formatBytes(dl.downloadedSize)} / {formatBytes(dl.totalSize)}</span>
+                                                )}
+                                                {etaText && (
+                                                    <span className="text-amber-300">ETA {etaText}</span>
                                                 )}
                                                 {dl.status === 'completed' && (
                                                     <span className="text-green-400">Completed</span>
@@ -305,8 +341,9 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                     {(dl.status === 'metadata' || dl.status === 'downloading' || dl.status === 'stalled' || dl.status === 'paused') && (
                                         <p className="text-[11px] text-neutral-500 mt-1 text-right">{dl.progress.toFixed(1)}%</p>
                                     )}
-                                </div>
-                            ))
+                                    </div>
+                                );
+                            })
                         )}
                     </div>
                 </div>
