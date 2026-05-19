@@ -5,6 +5,7 @@ A Netflix-style local media server that organizes and plays your movie & TV show
 ![LFLIX](https://img.shields.io/badge/LFLIX-v0.6.0-red?style=for-the-badge)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
+![CI](https://github.com/WarunaHarshana/LFLIX/actions/workflows/ci.yml/badge.svg)
 
 ## ✨ Features
 
@@ -42,6 +43,14 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000) — the setup wizard guides you through everything.
 
 **Windows users:** Just double-click `Setup.bat`, then `Start LFLIX.bat`.
+
+## ✅ Quality Gates
+
+```bash
+npm run verify
+```
+
+This runs TypeScript checking, ESLint, and a production Next.js build. The same checks run automatically in GitHub Actions on pushes to `main` and on pull requests.
 
 ## 📁 Media Structure
 

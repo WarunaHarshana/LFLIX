@@ -49,6 +49,5 @@ lflix.db
 # torrent downloads
 /downloads/
 
-# IDE and GitHub
+# IDE
 .vscode/
-.github/
