@@ -2,6 +2,8 @@
  * Torrent Search — uses apibay.org (The Pirate Bay API) + YTS + PSArips + a.111477.xyz open directory
  */
 
+import { recordSourceHealth } from './sourceHealth';
+
 export interface TorrentResult {
     title: string;
     magnet: string;
@@ -112,7 +114,8 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Pr
 async function runSource(
     name: TorrentSourceName,
     timeoutMs: number,
-    search: () => Promise<TorrentResult[]>
+    search: () => Promise<TorrentResult[]>,
+    health?: { query?: string; record?: boolean }
 ): Promise<{ results: TorrentResult[]; status: TorrentSourceStatus }> {
     const started = Date.now();
     try {
@@ -120,28 +123,55 @@ async function runSource(
             search(),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs)),
         ]);
+        const durationMs = Date.now() - started;
+        const status: TorrentSourceStatus = {
+            name,
+            status: 'ok',
+            results: results.length,
+            durationMs,
+        };
 
-        return {
-            results,
-            status: {
+        if (health?.record !== false) {
+            recordSourceHealth({
                 name,
                 status: 'ok',
                 results: results.length,
-                durationMs: Date.now() - started,
-            },
+                durationMs,
+                query: health?.query,
+            });
+        }
+
+        return {
+            results,
+            status,
         };
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Source failed';
         const timedOut = /timed out/i.test(message);
+        const durationMs = Date.now() - started;
+        const sourceStatus = timedOut ? 'timeout' : 'error';
+        const status: TorrentSourceStatus = {
+            name,
+            status: sourceStatus,
+            results: 0,
+            durationMs,
+            error: message,
+        };
+
+        if (health?.record !== false) {
+            recordSourceHealth({
+                name,
+                status: sourceStatus,
+                results: 0,
+                durationMs,
+                error: message,
+                query: health?.query,
+            });
+        }
+
         return {
             results: [],
-            status: {
-                name,
-                status: timedOut ? 'timeout' : 'error',
-                results: 0,
-                durationMs: Date.now() - started,
-                error: message,
-            },
+            status,
         };
     }
 }
@@ -892,13 +922,18 @@ async function fetchPsaFeed(): Promise<PsaFeedItem[]> {
         return psaFeedCache.data;
     }
 
+    const errors: string[] = [];
+
     for (const base of PSA_BASES) {
         try {
             const res = await fetch(`${base}/feed/`, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
                 signal: AbortSignal.timeout(10000),
             });
-            if (!res.ok) continue;
+            if (!res.ok) {
+                errors.push(`${base}/feed returned HTTP ${res.status}`);
+                continue;
+            }
 
             const xml = await res.text();
             const items: PsaFeedItem[] = [];
@@ -927,15 +962,19 @@ async function fetchPsaFeed(): Promise<PsaFeedItem[]> {
                 psaFeedCache = { ts: Date.now(), data: items };
                 return items;
             }
-        } catch {
+            errors.push(`${base}/feed returned no posts`);
+        } catch (error) {
             // Try the next active mirror.
+            errors.push(`${base}/feed ${error instanceof Error ? error.message : 'failed'}`);
         }
     }
 
-    return [];
+    throw new Error(`PSA feed unavailable: ${errors.slice(0, 3).join('; ') || 'all mirrors failed'}`);
 }
 
 async function searchPsaPosts(query: string, type?: 'movie' | 'tv'): Promise<PsaFeedItem[]> {
+    const errors: string[] = [];
+
     for (const base of PSA_BASES) {
         try {
             const url = `${base}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&subtype=post&per_page=20`;
@@ -946,10 +985,16 @@ async function searchPsaPosts(query: string, type?: 'movie' | 'tv'): Promise<Psa
                 },
                 signal: AbortSignal.timeout(10000),
             });
-            if (!res.ok) continue;
+            if (!res.ok) {
+                errors.push(`${base}/wp-json search returned HTTP ${res.status}`);
+                continue;
+            }
 
             const data = await res.json() as Array<{ title?: string; url?: string }>;
-            if (!Array.isArray(data)) continue;
+            if (!Array.isArray(data)) {
+                errors.push(`${base}/wp-json search returned invalid JSON`);
+                continue;
+            }
 
             return data
                 .map((item) => ({
@@ -959,12 +1004,13 @@ async function searchPsaPosts(query: string, type?: 'movie' | 'tv'): Promise<Psa
                 .filter((item) => item.title && item.link)
                 .filter((item) => !type || (type === 'tv' ? item.link.includes('/tv-show/') : item.link.includes('/movie/')))
                 .filter((item) => type === 'tv' ? titleMatches(item.title, query, 'tv') : matchesMovieTitleStrictly(item.title, query));
-        } catch {
+        } catch (error) {
             // Try the next mirror.
+            errors.push(`${base}/wp-json search ${error instanceof Error ? error.message : 'failed'}`);
         }
     }
 
-    return [];
+    throw new Error(`PSA post search unavailable: ${errors.slice(0, 3).join('; ') || 'all mirrors failed'}`);
 }
 
 function psaItemMatchesQuery(item: PsaFeedItem, query: string, type?: 'movie' | 'tv'): boolean {
@@ -973,17 +1019,15 @@ function psaItemMatchesQuery(item: PsaFeedItem, query: string, type?: 'movie' | 
     return type === 'tv' ? titleMatches(item.title, query, 'tv') : matchesMovieTitleStrictly(item.title, query);
 }
 
-async function fetchPsaPageHtml(url: string): Promise<string | null> {
-    try {
-        const res = await fetch(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-            signal: AbortSignal.timeout(12000),
-        });
-        if (!res.ok) return null;
-        return res.text();
-    } catch {
-        return null;
+async function fetchPsaPageHtml(url: string): Promise<string> {
+    const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) {
+        throw new Error(`PSA page returned HTTP ${res.status}`);
     }
+    return res.text();
 }
 
 function parsePsaReleases(html: string, query: string, type?: 'movie' | 'tv'): PsaRelease[] {
@@ -1175,23 +1219,46 @@ async function searchTPBForPsaRelease(releaseTitle: string): Promise<TorrentResu
 }
 
 async function searchOriginalPsa(query: string, options?: { year?: string; type?: 'movie' | 'tv' }): Promise<TorrentResult[]> {
+    let pages: PsaFeedItem[] = [];
+    let feedError: Error | null = null;
+
     try {
         const feed = await fetchPsaFeed();
-        let pages = feed.filter((item) => psaItemMatchesQuery(item, query, options?.type));
+        pages = feed.filter((item) => psaItemMatchesQuery(item, query, options?.type));
+    } catch (error) {
+        feedError = error instanceof Error ? error : new Error('PSA feed failed');
+    }
 
-        if (pages.length === 0) {
+    if (pages.length === 0) {
+        try {
             pages = await searchPsaPosts(query, options?.type);
+        } catch (error) {
+            if (feedError) {
+                const postMessage = error instanceof Error ? error.message : 'PSA post search failed';
+                throw new Error(`${feedError.message}; ${postMessage}`);
+            }
+            throw error;
+        }
+    }
+
+    const pageCandidates = pages
+        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        .slice(0, 3);
+    if (pageCandidates.length === 0) return [];
+
+    const pageErrors: string[] = [];
+
+    for (const page of pageCandidates) {
+        let html = '';
+        try {
+            html = await fetchPsaPageHtml(page.link);
+        } catch (error) {
+            pageErrors.push(`${page.link}: ${error instanceof Error ? error.message : 'failed'}`);
+            continue;
         }
 
-        const page = pages
-            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
-        if (!page) return [];
-
-        const html = await fetchPsaPageHtml(page.link);
-        if (!html) return [];
-
         const releases = parsePsaReleases(html, query, options?.type);
-        if (releases.length === 0) return [];
+        if (releases.length === 0) continue;
 
         const resolved = await Promise.allSettled(
             releases.map((release) => withTimeout(resolvePsaReleaseViaIndexers(release), 8000, null))
@@ -1212,10 +1279,13 @@ async function searchOriginalPsa(query: string, options?: { year?: string; type?
                 }
                 return b.seeds - a.seeds;
             });
-    } catch (e) {
-        console.error('PSA search error:', e);
-        return [];
     }
+
+    if (pageErrors.length === pageCandidates.length) {
+        throw new Error(`PSA page unavailable: ${pageErrors.slice(0, 2).join('; ')}`);
+    }
+
+    return [];
 }
 
 // --- Combined search ---
@@ -1239,12 +1309,12 @@ export async function searchTorrentsWithDiagnostics(
     const tpbCategory = '200';
 
     const [psaSource, tpbSource, ytsSource, knabenSource, nyaaSource, ddlSource] = await Promise.all([
-        runSource('PSA', 14000, () => searchOriginalPsa(query, options)),
-        runSource('TPB', 12000, () => searchTPB(query, tpbCategory)),
-        runSource('YTS', 12000, () => options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([])),
-        runSource('Knaben', 9000, () => searchKnaben(query)),
-        runSource('Nyaa', 10000, () => searchNyaa(query)),
-        runSource('DDL', 9000, () => searchOpenDirectory(title, options?.type)),
+        runSource('PSA', 14000, () => searchOriginalPsa(query, options), { query }),
+        runSource('TPB', 12000, () => searchTPB(query, tpbCategory), { query }),
+        runSource('YTS', 12000, () => options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([]), { query: title, record: options?.type !== 'tv' }),
+        runSource('Knaben', 9000, () => searchKnaben(query), { query }),
+        runSource('Nyaa', 10000, () => searchNyaa(query), { query }),
+        runSource('DDL', 9000, () => searchOpenDirectory(title, options?.type), { query: title }),
     ]);
 
     const psaResults = psaSource.results;
