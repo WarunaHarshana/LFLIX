@@ -187,7 +187,7 @@ export default function SettingsPage() {
                     <div className="p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <div className="font-medium text-white">System health</div>
-                            <div className="mt-1 text-sm text-neutral-400">Database, downloads, release queue, and torrent source status</div>
+                            <div className="mt-1 text-sm text-neutral-400">Database, downloads, local drives, release queue, and torrent source status</div>
                         </div>
                         <Link
                             href="/diagnostics"

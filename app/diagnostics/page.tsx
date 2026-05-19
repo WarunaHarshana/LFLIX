@@ -10,6 +10,8 @@ import {
   Clock3,
   Database,
   Download,
+  FolderOpen,
+  HardDrive,
   RefreshCw,
   Search,
   Server,
@@ -69,11 +71,57 @@ type HealthPayload = {
   error?: string;
 };
 
+type StorageStatus = 'ok' | 'low' | 'critical' | 'unknown';
+
+type StorageLocation = {
+  kind: 'app' | 'download' | 'library' | 'download-history';
+  label: string;
+  path: string;
+  contentType?: string | null;
+};
+
+type StorageDrive = {
+  name: string;
+  path: string;
+  status: StorageStatus;
+  totalBytes: number;
+  freeBytes: number;
+  usedBytes: number;
+  usedPercent: number;
+  freePercent: number;
+  locations: StorageLocation[];
+  error?: string;
+};
+
+type StoragePayload = {
+  status: StorageStatus;
+  checkedAt: string;
+  platform: string;
+  summary: {
+    driveCount: number;
+    totalBytes: number;
+    freeBytes: number;
+    usedBytes: number;
+    freePercent: number;
+    lowDrives: number;
+    criticalDrives: number;
+  };
+  drives: StorageDrive[];
+  error?: string;
+};
+
 const stateStyles: Record<SourceState | HealthPayload['status'], string> = {
   ok: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
   healthy: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
   degraded: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
   down: 'bg-red-500/15 text-red-300 border-red-500/30',
+  unknown: 'bg-neutral-800 text-neutral-400 border-neutral-700',
+};
+
+const storageStatusStyles: Record<StorageStatus, string> = {
+  ok: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  low: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  critical: 'bg-red-500/15 text-red-300 border-red-500/30',
   unknown: 'bg-neutral-800 text-neutral-400 border-neutral-700',
 };
 
@@ -106,6 +154,26 @@ function formatTimestamp(value?: string): string {
   });
 }
 
+function formatBytes(bytes?: number | null): string {
+  if (!bytes || bytes <= 0) return '-';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function formatPercent(value?: number | null): string {
+  if (value === undefined || value === null || Number.isNaN(value)) return '-';
+  return `${value.toFixed(value < 10 ? 1 : 0)}%`;
+}
+
 function StatusIcon({ status }: { status: SourceState | HealthPayload['status'] }) {
   if (status === 'healthy' || status === 'ok') return <CheckCircle2 className="h-4 w-4" />;
   if (status === 'down') return <XCircle className="h-4 w-4" />;
@@ -118,6 +186,24 @@ function StatusBadge({ status }: { status: SourceState | HealthPayload['status']
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${stateStyles[status]}`}>
       <StatusIcon status={status} />
       {status}
+    </span>
+  );
+}
+
+function StorageStatusBadge({ status }: { status: StorageStatus }) {
+  const label = status === 'ok' ? 'healthy' : status;
+  const icon = status === 'ok'
+    ? <CheckCircle2 className="h-4 w-4" />
+    : status === 'critical'
+      ? <XCircle className="h-4 w-4" />
+      : status === 'low'
+        ? <AlertTriangle className="h-4 w-4" />
+        : <Clock3 className="h-4 w-4" />;
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${storageStatusStyles[status]}`}>
+      {icon}
+      {label}
     </span>
   );
 }
@@ -141,6 +227,87 @@ function MetricTile({
       </div>
       <div className="text-2xl font-bold text-white">{value}</div>
       {detail && <div className="mt-1 text-xs text-neutral-500">{detail}</div>}
+    </div>
+  );
+}
+
+function StorageDriveRow({ drive }: { drive: StorageDrive }) {
+  const usedPercent = Math.min(100, Math.max(0, drive.usedPercent || 0));
+
+  return (
+    <div className="border-b border-neutral-900 px-4 py-4 last:border-b-0">
+      <div className="grid gap-4 lg:grid-cols-[minmax(170px,1fr)_minmax(260px,1.5fr)_minmax(200px,1fr)] lg:items-center">
+        <div>
+          <div className="flex items-center gap-2">
+            <HardDrive className="h-5 w-5 text-neutral-400" />
+            <span className="font-semibold text-white">{drive.name}</span>
+            <StorageStatusBadge status={drive.status} />
+          </div>
+          <div className="mt-1 truncate font-mono text-xs text-neutral-500" title={drive.path}>
+            {drive.path}
+          </div>
+          {drive.error && (
+            <div className="mt-1 truncate text-xs text-red-300" title={drive.error}>
+              {drive.error}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
+            <span>{formatBytes(drive.usedBytes)} used</span>
+            <span>{formatBytes(drive.freeBytes)} free</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-neutral-800">
+            <div
+              className={`h-full rounded-full ${
+                drive.status === 'critical'
+                  ? 'bg-red-400'
+                  : drive.status === 'low'
+                    ? 'bg-amber-400'
+                    : 'bg-emerald-400'
+              }`}
+              style={{ width: `${usedPercent}%` }}
+            />
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-3 text-xs">
+            <div>
+              <div className="text-neutral-500">Used</div>
+              <div className="mt-0.5 text-neutral-200">{formatPercent(drive.usedPercent)}</div>
+            </div>
+            <div>
+              <div className="text-neutral-500">Free</div>
+              <div className="mt-0.5 text-neutral-200">{formatPercent(drive.freePercent)}</div>
+            </div>
+            <div>
+              <div className="text-neutral-500">Total</div>
+              <div className="mt-0.5 text-neutral-200">{formatBytes(drive.totalBytes)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <FolderOpen className="h-3.5 w-3.5" />
+            LFLIX paths
+          </div>
+          {drive.locations.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {drive.locations.map((location) => (
+                <span
+                  key={`${location.kind}-${location.path}`}
+                  className="max-w-full rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-300"
+                  title={location.path}
+                >
+                  <span className="text-neutral-500">{location.kind.replace('-', ' ')}:</span> {location.label}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-neutral-500">No configured LFLIX folders on this drive</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -199,13 +366,16 @@ function SourceHealthRow({ source }: { source: SourceHealth }) {
 
 export default function DiagnosticsPage() {
   const [health, setHealth] = useState<HealthPayload | null>(null);
+  const [storage, setStorage] = useState<StoragePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
 
   const fetchHealth = useCallback(async (showSpinner = false) => {
     if (showSpinner) setRefreshing(true);
     setError(null);
+    setStorageError(null);
 
     try {
       const response = await fetch('/api/health', { cache: 'no-store' });
@@ -213,6 +383,17 @@ export default function DiagnosticsPage() {
       setHealth(payload);
       if (!response.ok) {
         setError(payload.error || 'Health check failed');
+      }
+
+      try {
+        const storageResponse = await fetch('/api/storage', { cache: 'no-store' });
+        const storagePayload = await storageResponse.json() as StoragePayload;
+        setStorage(storagePayload);
+        if (!storageResponse.ok) {
+          setStorageError(storagePayload.error || 'Storage check failed');
+        }
+      } catch (storageErr) {
+        setStorageError(storageErr instanceof Error ? storageErr.message : 'Storage check failed');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Health check failed');
@@ -235,6 +416,15 @@ export default function DiagnosticsPage() {
     return Object.entries(health?.downloads?.byStatus || {})
       .sort(([a], [b]) => a.localeCompare(b));
   }, [health]);
+
+  const sortedDrives = useMemo(() => {
+    return [...(storage?.drives || [])].sort((a, b) => {
+      const priority: Record<StorageStatus, number> = { critical: 0, low: 1, unknown: 2, ok: 3 };
+      const priorityDiff = priority[a.status] - priority[b.status];
+      if (priorityDiff !== 0) return priorityDiff;
+      return a.name.localeCompare(b.name);
+    });
+  }, [storage?.drives]);
 
   if (loading) {
     return (
@@ -284,7 +474,7 @@ export default function DiagnosticsPage() {
           </div>
         )}
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricTile
             icon={<Database className="h-4 w-4" />}
             label="Database"
@@ -309,6 +499,41 @@ export default function DiagnosticsPage() {
             value={formatUptime(health?.uptimeSeconds)}
             detail={health?.checkedAt ? new Date(health.checkedAt).toDateString() : undefined}
           />
+          <MetricTile
+            icon={<HardDrive className="h-4 w-4" />}
+            label="Storage"
+            value={storage?.status === 'ok' ? 'Healthy' : storage?.status || '-'}
+            detail={storage ? `${formatBytes(storage.summary.freeBytes)} free across ${storage.summary.driveCount} drive${storage.summary.driveCount === 1 ? '' : 's'}` : undefined}
+          />
+        </section>
+
+        <section className="mt-8 rounded-lg border border-neutral-800 bg-neutral-950">
+          <div className="flex flex-col gap-3 border-b border-neutral-800 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Storage Sense</h2>
+              <div className="mt-1 text-sm text-neutral-500">
+                Local drive capacity, free-space warnings, and LFLIX folder placement
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {storage && <StorageStatusBadge status={storage.status} />}
+              <span className="text-sm text-neutral-500">
+                {storage ? `${formatBytes(storage.summary.freeBytes)} free` : 'No storage data'}
+              </span>
+            </div>
+          </div>
+          {storageError && (
+            <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {storageError}
+            </div>
+          )}
+          <div>
+            {sortedDrives.length > 0 ? sortedDrives.map((drive) => (
+              <StorageDriveRow key={drive.path} drive={drive} />
+            )) : (
+              <div className="px-4 py-6 text-sm text-neutral-500">No local drives detected.</div>
+            )}
+          </div>
         </section>
 
         <section className="mt-8 rounded-lg border border-neutral-800 bg-neutral-950">
