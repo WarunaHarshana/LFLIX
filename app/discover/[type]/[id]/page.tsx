@@ -139,8 +139,8 @@ type TrailerData = {
   type: string;
 };
 
-function getEpisodeVideoLabel(video: TrailerData): string {
-  return ['Trailer', 'Teaser', 'Clip', 'Featurette'].includes(video.type) ? video.type : 'Trailer';
+function isTrailerVideo(video: TrailerData | null | undefined): video is TrailerData {
+  return Boolean(video?.key && video.type === 'Trailer');
 }
 
 type TrailerModalState = {
@@ -192,6 +192,7 @@ export default function DiscoverDetailPage() {
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  const [seasonTrailers, setSeasonTrailers] = useState<Record<string, TrailerData | null>>({});
   const [episodeTrailers, setEpisodeTrailers] = useState<Record<string, TrailerData | null>>({});
 
   const [streamModal, setStreamModal] = useState<{ tmdbId: number; type: 'movie' | 'tv'; title: string; season?: number; episode?: number } | null>(null);
@@ -366,6 +367,51 @@ export default function DiscoverDetailPage() {
   }, [mediaType, selectedSeason, tmdbId]);
 
   useEffect(() => {
+    if (mediaType !== 'tv' || !selectedSeason || !tmdbId) {
+      return;
+    }
+
+    const key = `${tmdbId}:${selectedSeason}`;
+    if (seasonTrailers[key] !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSeasonTrailer = async () => {
+      try {
+        const params = new URLSearchParams({
+          tmdbId: String(tmdbId),
+          mediaType: 'tv',
+          season: String(selectedSeason),
+        });
+        const res = await fetch(`/api/trailer?${params}`);
+        if (!res.ok) {
+          if (!cancelled) {
+            setSeasonTrailers((prev) => ({ ...prev, [key]: null }));
+          }
+          return;
+        }
+
+        const data = (await res.json()) as TrailerData;
+        if (!cancelled) {
+          setSeasonTrailers((prev) => ({ ...prev, [key]: isTrailerVideo(data) ? data : null }));
+        }
+      } catch {
+        if (!cancelled) {
+          setSeasonTrailers((prev) => ({ ...prev, [key]: null }));
+        }
+      }
+    };
+
+    void loadSeasonTrailer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaType, seasonTrailers, selectedSeason, tmdbId]);
+
+  useEffect(() => {
     if (mediaType !== 'tv' || !selectedSeason || episodes.length === 0 || !tmdbId) {
       return;
     }
@@ -397,7 +443,7 @@ export default function DiscoverDetailPage() {
               return [key, null] as const;
             }
             const data = (await res.json()) as TrailerData;
-            return [key, data.key ? data : null] as const;
+            return [key, isTrailerVideo(data) ? data : null] as const;
           } catch {
             return [key, null] as const;
           }
@@ -544,6 +590,8 @@ export default function DiscoverDetailPage() {
     : null;
 
   const tvFirstPlayableEpisode = selectedSeason && episodes.length > 0 ? episodes[0].episodeNumber : 1;
+  const selectedSeasonTrailerKey = mediaType === 'tv' && selectedSeason ? `${tmdbId}:${selectedSeason}` : null;
+  const selectedSeasonTrailer = selectedSeasonTrailerKey ? seasonTrailers[selectedSeasonTrailerKey] : null;
   const genreList = (activeDetails?.genres || '').split(',').map((g) => g.trim()).filter(Boolean);
   const logoUrl = activeDetails?.logoPath ? `https://image.tmdb.org/t/p/w500${activeDetails.logoPath}` : null;
   const heroCast = activeDetails?.cast?.slice(0, 8) || [];
@@ -763,7 +811,21 @@ export default function DiscoverDetailPage() {
       <main className="px-6 md:px-12 py-6 md:py-8 space-y-10">
         {mediaType === 'tv' && tvDetails && (
           <section className="space-y-4">
-            <h2 className="text-lg font-bold">Seasons & Episodes</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-bold">Seasons & Episodes</h2>
+              {isTrailerVideo(selectedSeasonTrailer) && (
+                <button
+                  onClick={() => setTrailerModal({
+                    title: `${pageTitle} - Season ${selectedSeason} Trailer`,
+                    season: selectedSeason || undefined,
+                  })}
+                  className="w-fit px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-200 text-xs font-semibold inline-flex items-center gap-1.5"
+                  title={`Watch ${pageTitle} season ${selectedSeason} trailer`}
+                >
+                  <PlayCircle className="w-3.5 h-3.5" /> Season Trailer
+                </button>
+              )}
+            </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {tvDetails.seasons.map((season) => (
                 <button
@@ -790,7 +852,7 @@ export default function DiscoverDetailPage() {
                   const seasonNumber = selectedSeason || 1;
                   const trailerKey = `${tmdbId}:${seasonNumber}:${ep.episodeNumber}`;
                   const episodeTrailer = episodeTrailers[trailerKey];
-                  const episodeVideoLabel = episodeTrailer ? getEpisodeVideoLabel(episodeTrailer) : 'Trailer';
+                  const hasEpisodeTrailer = isTrailerVideo(episodeTrailer);
 
                   return (
                     <div key={ep.episodeNumber} className="flex flex-col md:flex-row gap-3 p-3 bg-neutral-900/60 border border-neutral-800 rounded-xl">
@@ -828,7 +890,7 @@ export default function DiscoverDetailPage() {
                           >
                             <Play className="w-3 h-3 fill-black" /> Watch
                           </button>
-                          {episodeTrailer && (
+                          {hasEpisodeTrailer && (
                             <button
                               onClick={() => setTrailerModal({
                                 title: `${pageTitle} - S${seasonNumber}E${ep.episodeNumber} · ${ep.title}`,
@@ -838,7 +900,7 @@ export default function DiscoverDetailPage() {
                               className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-200 text-xs font-semibold inline-flex items-center gap-1"
                               title={`Watch ${ep.title} trailer`}
                             >
-                              <PlayCircle className="w-3 h-3" /> {episodeVideoLabel}
+                              <PlayCircle className="w-3 h-3" /> Trailer
                             </button>
                           )}
                           <button

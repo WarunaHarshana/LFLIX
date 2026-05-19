@@ -32,16 +32,28 @@ async function fetchEpisodeVideos(tmdbId: number, season: number, episode: numbe
     return response.json() as Promise<TmdbVideosResponse>;
 }
 
+async function fetchSeasonVideos(tmdbId: number, season: number): Promise<TmdbVideosResponse> {
+    const apiKey = getTmdbApiKey();
+    const url = new URL(`https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}/videos`);
+    url.searchParams.set('api_key', apiKey);
+
+    const response = await fetch(url, {
+        headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+        throw new Error(`TMDB season videos returned HTTP ${response.status}`);
+    }
+
+    return response.json() as Promise<TmdbVideosResponse>;
+}
+
 function pickBestTrailer(videos: TmdbVideo[]): TmdbVideo | null {
-    const youtubeVideos = videos.filter((video) => video.site === 'YouTube' && video.key);
+    const youtubeTrailers = videos.filter((video) => video.site === 'YouTube' && video.key && video.type === 'Trailer');
 
     return (
-        youtubeVideos.find((video) => video.type === 'Trailer' && video.official === true) ||
-        youtubeVideos.find((video) => video.type === 'Trailer') ||
-        youtubeVideos.find((video) => video.type === 'Teaser') ||
-        youtubeVideos.find((video) => video.type === 'Clip') ||
-        youtubeVideos.find((video) => video.type === 'Featurette') ||
-        youtubeVideos[0] ||
+        youtubeTrailers.find((video) => video.official === true) ||
+        youtubeTrailers[0] ||
         null
     );
 }
@@ -75,8 +87,16 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Episode trailers are only available for TV shows' }, { status: 400 });
         }
 
-        if (mediaType === 'tv' && (seasonParam != null || episodeParam != null)) {
-            if (!Number.isInteger(season) || season! < 0 || !Number.isInteger(episode) || episode! <= 0) {
+        if (mediaType === 'tv' && episodeParam != null && seasonParam == null) {
+            return NextResponse.json({ error: 'Missing season for episode trailer' }, { status: 400 });
+        }
+
+        if (mediaType === 'tv' && seasonParam != null) {
+            if (!Number.isInteger(season) || season! < 0) {
+                return NextResponse.json({ error: 'Invalid season or episode' }, { status: 400 });
+            }
+
+            if (episodeParam != null && (!Number.isInteger(episode) || episode! <= 0)) {
                 return NextResponse.json({ error: 'Invalid season or episode' }, { status: 400 });
             }
         }
@@ -86,6 +106,12 @@ export async function GET(req: Request) {
             videosRes = await cachedTmdbCall(
                 `tmdb-videos-tv-${id}-s${season}-e${episode}`,
                 () => fetchEpisodeVideos(id, season, episode),
+                24 * 60
+            );
+        } else if (mediaType === 'tv' && season !== undefined) {
+            videosRes = await cachedTmdbCall(
+                `tmdb-videos-tv-${id}-s${season}`,
+                () => fetchSeasonVideos(id, season),
                 24 * 60
             );
         } else if (mediaType === 'tv') {
