@@ -8,6 +8,8 @@ type Props = {
     tmdbId: number;
     mediaType: 'movie' | 'tv';
     title: string;
+    season?: number;
+    episode?: number;
     onClose: () => void;
 };
 
@@ -18,7 +20,7 @@ type TrailerData = {
     type: string;
 };
 
-export default function TrailerModal({ isOpen, tmdbId, mediaType, title, onClose }: Props) {
+export default function TrailerModal({ isOpen, tmdbId, mediaType, title, season, episode, onClose }: Props) {
     const [trailer, setTrailer] = useState<TrailerData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -28,7 +30,13 @@ export default function TrailerModal({ isOpen, tmdbId, mediaType, title, onClose
         setError(null);
         setTrailer(null);
         try {
-            const res = await fetch(`/api/trailer?tmdbId=${tmdbId}&mediaType=${mediaType}`);
+            const params = new URLSearchParams({
+                tmdbId: String(tmdbId),
+                mediaType,
+                ...(season !== undefined ? { season: String(season) } : {}),
+                ...(episode !== undefined ? { episode: String(episode) } : {}),
+            });
+            const res = await fetch(`/api/trailer?${params}`);
             const data = await res.json();
             if (!res.ok) {
                 setError(data.error || 'Failed to load trailer');
@@ -40,7 +48,7 @@ export default function TrailerModal({ isOpen, tmdbId, mediaType, title, onClose
         } finally {
             setLoading(false);
         }
-    }, [tmdbId, mediaType]);
+    }, [tmdbId, mediaType, season, episode]);
 
     useEffect(() => {
         if (isOpen && tmdbId) {

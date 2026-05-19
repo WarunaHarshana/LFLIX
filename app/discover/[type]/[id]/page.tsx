@@ -16,6 +16,7 @@ import {
   Volume2,
   VolumeX,
   X,
+  PlayCircle,
 } from 'lucide-react';
 import StreamServerModal from '../../../components/StreamServerModal';
 import DownloadModal from '../../../components/DownloadModal';
@@ -138,6 +139,16 @@ type TrailerData = {
   type: string;
 };
 
+function getEpisodeVideoLabel(video: TrailerData): string {
+  return ['Trailer', 'Teaser', 'Clip', 'Featurette'].includes(video.type) ? video.type : 'Trailer';
+}
+
+type TrailerModalState = {
+  title: string;
+  season?: number;
+  episode?: number;
+} | null;
+
 type WatchlistItem = {
   id: number;
   tmdbId: number;
@@ -181,10 +192,11 @@ export default function DiscoverDetailPage() {
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  const [episodeTrailers, setEpisodeTrailers] = useState<Record<string, TrailerData | null>>({});
 
   const [streamModal, setStreamModal] = useState<{ tmdbId: number; type: 'movie' | 'tv'; title: string; season?: number; episode?: number } | null>(null);
   const [downloadModal, setDownloadModal] = useState<{ title: string; year?: string | null; mediaType: 'movie' | 'tv'; posterPath?: string | null } | null>(null);
-  const [trailerModalOpen, setTrailerModalOpen] = useState(false);
+  const [trailerModal, setTrailerModal] = useState<TrailerModalState>(null);
   const [isInWatchlist, setIsInWatchlist] = useState(false);
   const [watchlistItemId, setWatchlistItemId] = useState<number | null>(null);
   const [watchlistBusy, setWatchlistBusy] = useState(false);
@@ -352,6 +364,60 @@ export default function DiscoverDetailPage() {
       cancelled = true;
     };
   }, [mediaType, selectedSeason, tmdbId]);
+
+  useEffect(() => {
+    if (mediaType !== 'tv' || !selectedSeason || episodes.length === 0 || !tmdbId) {
+      return;
+    }
+
+    const missingEpisodes = episodes.filter((episode) => {
+      const key = `${tmdbId}:${selectedSeason}:${episode.episodeNumber}`;
+      return episodeTrailers[key] === undefined;
+    });
+
+    if (missingEpisodes.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadEpisodeTrailers = async () => {
+      const entries = await Promise.all(
+        missingEpisodes.map(async (episode) => {
+          const key = `${tmdbId}:${selectedSeason}:${episode.episodeNumber}`;
+          try {
+            const params = new URLSearchParams({
+              tmdbId: String(tmdbId),
+              mediaType: 'tv',
+              season: String(selectedSeason),
+              episode: String(episode.episodeNumber),
+            });
+            const res = await fetch(`/api/trailer?${params}`);
+            if (!res.ok) {
+              return [key, null] as const;
+            }
+            const data = (await res.json()) as TrailerData;
+            return [key, data.key ? data : null] as const;
+          } catch {
+            return [key, null] as const;
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setEpisodeTrailers((prev) => ({
+          ...prev,
+          ...Object.fromEntries(entries),
+        }));
+      }
+    };
+
+    void loadEpisodeTrailers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [episodeTrailers, episodes, mediaType, selectedSeason, tmdbId]);
 
   const openPerson = async (personId: number) => {
     if (!personId) {
@@ -632,7 +698,7 @@ export default function DiscoverDetailPage() {
                 </button>
 
                 <button
-                  onClick={() => setTrailerModalOpen(true)}
+                  onClick={() => setTrailerModal({ title: pageTitle })}
                   className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-black/45 border border-neutral-500/60 hover:bg-black/70 inline-flex items-center justify-center backdrop-blur-md"
                   title="Watch trailer"
                 >
@@ -720,56 +786,76 @@ export default function DiscoverDetailPage() {
               </div>
             ) : episodes.length > 0 ? (
               <div className="space-y-2">
-                {episodes.map((ep) => (
-                  <div key={ep.episodeNumber} className="flex flex-col md:flex-row gap-3 p-3 bg-neutral-900/60 border border-neutral-800 rounded-xl">
-                    {ep.stillPath ? (
-                      <img
-                        src={`https://image.tmdb.org/t/p/w300${ep.stillPath}`}
-                        alt=""
-                        className="w-full md:w-40 h-24 object-cover rounded-lg"
-                      />
-                    ) : (
-                      <div className="w-full md:w-40 h-24 bg-neutral-800 rounded-lg flex items-center justify-center text-neutral-600 font-bold">
-                        E{ep.episodeNumber}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold">E{ep.episodeNumber} · {ep.title}</p>
-                        {ep.rating != null && ep.rating > 0 && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-semibold">
-                            TMDB {ep.rating.toFixed(1)}
-                          </span>
-                        )}
-                      </div>
-                      {ep.overview && <p className="text-xs text-neutral-400 mt-1 line-clamp-2">{ep.overview}</p>}
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={() => setStreamModal({
-                            tmdbId,
-                            type: 'tv',
-                            title: `${pageTitle} - S${selectedSeason || 1}E${ep.episodeNumber}`,
-                            season: selectedSeason || 1,
-                            episode: ep.episodeNumber,
-                          })}
-                          className="px-3 py-1.5 rounded-lg bg-white text-black hover:bg-neutral-200 text-xs font-semibold inline-flex items-center gap-1"
-                        >
-                          <Play className="w-3 h-3 fill-black" /> Watch
-                        </button>
-                        <button
-                          onClick={() => setDownloadModal({
-                            title: `${pageTitle} S${String(selectedSeason || 1).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`,
-                            mediaType: 'tv',
-                            posterPath: ep.stillPath || activeDetails?.posterPath,
-                          })}
-                          className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold inline-flex items-center gap-1"
-                        >
-                          <Download className="w-3 h-3" /> Download
-                        </button>
+                {episodes.map((ep) => {
+                  const seasonNumber = selectedSeason || 1;
+                  const trailerKey = `${tmdbId}:${seasonNumber}:${ep.episodeNumber}`;
+                  const episodeTrailer = episodeTrailers[trailerKey];
+                  const episodeVideoLabel = episodeTrailer ? getEpisodeVideoLabel(episodeTrailer) : 'Trailer';
+
+                  return (
+                    <div key={ep.episodeNumber} className="flex flex-col md:flex-row gap-3 p-3 bg-neutral-900/60 border border-neutral-800 rounded-xl">
+                      {ep.stillPath ? (
+                        <img
+                          src={`https://image.tmdb.org/t/p/w300${ep.stillPath}`}
+                          alt=""
+                          className="w-full md:w-40 h-24 object-cover rounded-lg"
+                        />
+                      ) : (
+                        <div className="w-full md:w-40 h-24 bg-neutral-800 rounded-lg flex items-center justify-center text-neutral-600 font-bold">
+                          E{ep.episodeNumber}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold">E{ep.episodeNumber} · {ep.title}</p>
+                          {ep.rating != null && ep.rating > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-semibold">
+                              TMDB {ep.rating.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                        {ep.overview && <p className="text-xs text-neutral-400 mt-1 line-clamp-2">{ep.overview}</p>}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setStreamModal({
+                              tmdbId,
+                              type: 'tv',
+                              title: `${pageTitle} - S${selectedSeason || 1}E${ep.episodeNumber}`,
+                              season: selectedSeason || 1,
+                              episode: ep.episodeNumber,
+                            })}
+                            className="px-3 py-1.5 rounded-lg bg-white text-black hover:bg-neutral-200 text-xs font-semibold inline-flex items-center gap-1"
+                          >
+                            <Play className="w-3 h-3 fill-black" /> Watch
+                          </button>
+                          {episodeTrailer && (
+                            <button
+                              onClick={() => setTrailerModal({
+                                title: `${pageTitle} - S${seasonNumber}E${ep.episodeNumber} · ${ep.title}`,
+                                season: seasonNumber,
+                                episode: ep.episodeNumber,
+                              })}
+                              className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-200 text-xs font-semibold inline-flex items-center gap-1"
+                              title={`Watch ${ep.title} trailer`}
+                            >
+                              <PlayCircle className="w-3 h-3" /> {episodeVideoLabel}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setDownloadModal({
+                              title: `${pageTitle} S${String(selectedSeason || 1).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`,
+                              mediaType: 'tv',
+                              posterPath: ep.stillPath || activeDetails?.posterPath,
+                            })}
+                            className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold inline-flex items-center gap-1"
+                          >
+                            <Download className="w-3 h-3" /> Download
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-neutral-500">No episodes available for this season.</p>
@@ -1022,11 +1108,13 @@ export default function DiscoverDetailPage() {
       />
 
       <TrailerModal
-        isOpen={trailerModalOpen}
+        isOpen={trailerModal !== null}
         tmdbId={tmdbId || 0}
         mediaType={mediaType}
-        title={pageTitle}
-        onClose={() => setTrailerModalOpen(false)}
+        title={trailerModal?.title || pageTitle}
+        season={trailerModal?.season}
+        episode={trailerModal?.episode}
+        onClose={() => setTrailerModal(null)}
       />
     </div>
   );
