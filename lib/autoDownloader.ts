@@ -43,16 +43,35 @@ export interface AutoDownloadStatus {
 /**
  * Score a torrent result by quality, size, and seeds.
  */
-function scoreTorrent(result: TorrentResult, preferredQuality: string): number {
+function scoreTorrent(result: TorrentResult, preferredQuality: string, maxQualityScore?: number): number {
   let score = 0;
 
   // Base quality score
   const quality = result.quality || 'Unknown';
-  score += QUALITY_SCORES[quality] || QUALITY_SCORES['Unknown'];
+  const qualityScore = QUALITY_SCORES[quality] || QUALITY_SCORES['Unknown'];
+  score += qualityScore;
 
   // Massive bonus for DDLs (User preference: check DDL first, fallback to torrent)
   if (result.source === 'DDL') {
-    score += 1000;
+    let preferredQualityScore = 100; // default for 'best'
+    if (preferredQuality === 'any') {
+      preferredQualityScore = 0;
+    } else if (preferredQuality && preferredQuality !== 'best') {
+      preferredQualityScore = QUALITY_SCORES[preferredQuality] || 80;
+    }
+
+    const targetQualityScore = maxQualityScore !== undefined
+      ? Math.min(preferredQualityScore, maxQualityScore)
+      : preferredQualityScore;
+
+    // Only apply the massive DDL bonus if the DDL meets or exceeds the target quality score.
+    // If it's below the target quality, we give it a much smaller bonus (+15)
+    // so it doesn't override higher quality torrents, but still beats torrents in its own lower quality tier.
+    if (qualityScore >= targetQualityScore) {
+      score += 1000;
+    } else {
+      score += 15;
+    }
   }
 
   // Source bonuses (check title for encoding info)
@@ -221,9 +240,15 @@ class AutoDownloader {
         return false;
       }
 
+      // Calculate maxQualityScore across all episode results
+      const maxQualityScore = episodeResults.reduce((max, r) => {
+        const score = QUALITY_SCORES[r.quality || 'Unknown'] || QUALITY_SCORES['Unknown'];
+        return score > max ? score : max;
+      }, 0);
+
       // Score and rank results
       const scored = episodeResults
-        .map(r => ({ ...r, _score: scoreTorrent(r, ep.qualityPreference) }))
+        .map(r => ({ ...r, _score: scoreTorrent(r, ep.qualityPreference, maxQualityScore) }))
         .sort((a, b) => b._score - a._score);
 
       const best = scored[0];

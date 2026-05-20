@@ -57,7 +57,7 @@ export interface MovieReleaseRow {
 /**
  * Score a torrent result for a movie (simplified from autoDownloader).
  */
-function scoreMovieTorrent(result: TorrentResult): number {
+function scoreMovieTorrent(result: TorrentResult, maxQualityScore?: number): number {
   if (!isGoodMovieReleaseQuality(result)) {
     return 0;
   }
@@ -65,11 +65,17 @@ function scoreMovieTorrent(result: TorrentResult): number {
   let score = 0;
 
   const quality = result.quality || 'Unknown';
-  score += QUALITY_SCORES[quality] || QUALITY_SCORES['Unknown'];
+  const qualityScore = QUALITY_SCORES[quality] || QUALITY_SCORES['Unknown'];
+  score += qualityScore;
 
   // DDL bonus
   if (result.source === 'DDL') {
-    score += 1000;
+    const targetQualityScore = maxQualityScore !== undefined ? maxQualityScore : 100;
+    if (qualityScore >= targetQualityScore) {
+      score += 1000;
+    } else {
+      score += 15;
+    }
   }
 
   // Seed count bonus
@@ -281,9 +287,15 @@ class MovieReleaseMonitor {
       return false;
     }
 
+    // Calculate maxQualityScore across all good-quality results
+    const maxQualityScore = releaseQualityResults.reduce((max, r) => {
+      const score = QUALITY_SCORES[r.quality || 'Unknown'] || QUALITY_SCORES['Unknown'];
+      return score > max ? score : max;
+    }, 0);
+
     // Score and find the best good-quality result
     const scored = releaseQualityResults
-      .map(r => ({ ...r, _score: scoreMovieTorrent(r) }))
+      .map(r => ({ ...r, _score: scoreMovieTorrent(r, maxQualityScore) }))
       .sort((a, b) => b._score - a._score);
 
     const best = scored[0];
