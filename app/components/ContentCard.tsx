@@ -59,6 +59,14 @@ export default function ContentCard({ item, onClick, onContextMenu, showProgress
                     fill
                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, (max-width: 1536px) 16vw, 12vw"
                     className="w-full h-full object-cover transition duration-500 group-hover:brightness-75"
+                    fallback={
+                        <div className="w-full h-full flex items-center justify-center p-4 text-center text-[var(--text-muted)] bg-[var(--surface-2)]">
+                            <div>
+                                {item.type === 'movie' ? <Film className="w-8 h-8 mx-auto mb-2" /> : <Tv className="w-8 h-8 mx-auto mb-2" />}
+                                <span className="text-sm">{item.title}</span>
+                            </div>
+                        </div>
+                    }
                 />
             ) : (
                 <div className="w-full h-full flex items-center justify-center p-4 text-center text-[var(--text-muted)] bg-[var(--surface-2)]">
