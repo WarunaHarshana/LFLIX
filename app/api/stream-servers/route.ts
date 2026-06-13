@@ -24,6 +24,8 @@ type StreamServerResponse = StreamServer & {
   probeState: ProbeState;
   lastCheckedAt: string | null;
   latencyMs: number;
+  isDirect?: boolean;
+  directSubtitles?: { label: string; url: string; language?: string }[];
 };
 
 const BASE_SERVER_CHECK_TIMEOUT_MS = 4500;
@@ -161,6 +163,26 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
       type === 'movie'
         ? `https://embed.smashystream.com/playere.php?tmdb=${tmdbId}`
         : `https://embed.smashystream.com/playere.php?tmdb=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
+  },
+  {
+    id: 'embedsu',
+    name: 'EMBED.SU',
+    color: '#d946ef',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://embed.su/embed/movie/${tmdbId}`
+        : `https://embed.su/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+  },
+  {
+    id: 'videasy',
+    name: 'VIDEASY',
+    color: '#06b6d4',
+    baselineQuality: '1080p',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://player.videasy.net/movie/${tmdbId}`
+        : `https://player.videasy.net/tv/${tmdbId}/${season || 1}/${episode || 1}`,
   },
 ];
 
@@ -572,7 +594,91 @@ export async function GET(req: Request) {
       });
     }
 
+    const coorenApiUrl = process.env.COOREN_API_URL;
+    if (coorenApiUrl) {
+      try {
+        const coorenType = type === 'movie' ? 'movie' : 'tv';
+        const url = coorenType === 'movie'
+          ? `${coorenApiUrl}/movie-tv/primesrc/movie/${parsedTmdbId}`
+          : `${coorenApiUrl}/movie-tv/primesrc/tv/${parsedTmdbId}/${season || 1}/${episode || 1}`;
+
+        console.info(`[stream-servers] Querying PrimeSrc: ${url}`);
+        const primeSrcRes = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+          signal: AbortSignal.timeout(3500),
+        });
+
+        if (primeSrcRes.ok) {
+          const result = await primeSrcRes.json();
+          if (result.success && Array.isArray(result.data)) {
+            for (const host of result.data) {
+              if (Array.isArray(host.sources) && host.sources.length > 0) {
+                const sourceItem = host.sources.find((s: any) => typeof s.url === 'string' || typeof s.file === 'string');
+                if (sourceItem) {
+                  const videoUrl = sourceItem.url || sourceItem.file;
+                  const label = sourceItem.label || sourceItem.quality || '1080p';
+                  let qualityHint: StreamQualityValue = '1080p';
+                  if (/2160|4k|uhd/i.test(label)) {
+                    qualityHint = '2160p';
+                  } else if (/720|hd/i.test(label)) {
+                    qualityHint = '720p';
+                  }
+
+                  const directSubtitles: { label: string; url: string; language?: string }[] = [];
+                  if (Array.isArray(host.subtitles)) {
+                    for (const sub of host.subtitles) {
+                      const subUrl = sub.url || sub.file;
+                      if (typeof subUrl === 'string') {
+                        directSubtitles.push({
+                          label: sub.label || sub.lang || sub.language || 'English',
+                          url: subUrl,
+                          language: sub.lang || sub.language || 'en',
+                        });
+                      }
+                    }
+                  }
+
+                  responseServers.push({
+                    id: `primesrc-${host.name.toLowerCase()}`,
+                    name: `PrimeSrc (${host.name})`,
+                    url: videoUrl,
+                    color: host.name.toLowerCase() === 'primevid' ? '#3b82f6' : host.name.toLowerCase() === 'streamtape' ? '#10b981' : '#ec4899',
+                    order: -100, // Put them first
+                    baselineQuality: '1080p',
+                    isReachable: true,
+                    availabilityState: 'reachable',
+                    probeError: null,
+                    probeCheckedAt: new Date().toISOString(),
+                    qualityHint,
+                    confidence: 1.0,
+                    probeState: 'cached',
+                    lastCheckedAt: new Date().toISOString(),
+                    latencyMs: 50,
+                    isDirect: true,
+                    directSubtitles,
+                  });
+                }
+              }
+            }
+          }
+        } else {
+          console.warn(`[stream-servers] PrimeSrc returned status ${primeSrcRes.status}`);
+        }
+      } catch (error: any) {
+        console.error('[stream-servers] PrimeSrc query failed:', error.message || error);
+      }
+    }
+
     responseServers.sort((a, b) => {
+      // Put direct servers first if they are reachable
+      if (a.isDirect !== b.isDirect) {
+        if (a.isDirect && a.isReachable) return -1;
+        if (b.isDirect && b.isReachable) return 1;
+      }
+
       const qualityDiff = getQualityRank(b.qualityHint) - getQualityRank(a.qualityHint);
       if (qualityDiff !== 0) {
         return qualityDiff;
@@ -596,16 +702,19 @@ export async function GET(req: Request) {
       return a.order - b.order;
     });
 
-    const workingCount = checks.filter((check) => check.probe.working).length;
+    const directWorkingCount = responseServers.filter(s => s.isDirect && s.isReachable).length;
+    const workingCount = checks.filter((check) => check.probe.working).length + directWorkingCount;
+    const directTotalCount = responseServers.filter(s => s.isDirect).length;
+    const totalCount = servers.length + directTotalCount;
     const bestServerIndex = responseServers.length > 0 ? 0 : -1;
 
     console.info(
-      `[stream-servers] tmdbId=${parsedTmdbId} type=${type} network=${vpnMode ? 'vpn' : 'standard'} reachable=${workingCount}/${servers.length}`
+      `[stream-servers] tmdbId=${parsedTmdbId} type=${type} network=${vpnMode ? 'vpn' : 'standard'} reachable=${workingCount}/${totalCount}`
     );
 
     return NextResponse.json({
       servers: responseServers,
-      totalCount: servers.length,
+      totalCount,
       workingCount,
       bestServerIndex,
       qualityMode: 'hybrid',

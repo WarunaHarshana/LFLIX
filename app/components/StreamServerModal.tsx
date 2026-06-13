@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward, ShieldCheck } from 'lucide-react';
+import VideoPlayer from './VideoPlayer';
 
 type StreamServer = {
   id: string;
@@ -18,6 +19,8 @@ type StreamServer = {
   probeState: 'cached' | 'fast' | 'deep-pending';
   lastCheckedAt: string | null;
   latencyMs: number;
+  isDirect?: boolean;
+  directSubtitles?: { label: string; url: string; language?: string }[];
 };
 
 const AUTO_FAILOVER_TIMEOUT_MS = 15000;
@@ -315,6 +318,16 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     };
   }, [activeServer, iframeBootstrapped, iframeError, loading, playbackReady, servers.length, vpnMode]);
 
+  useEffect(() => {
+    if (currentServer?.isDirect) {
+      setIframeLoading(false);
+      setIframeError(false);
+      setIframeBootstrapped(true);
+      setPlaybackReady(true);
+      setAutoSwitching(false);
+    }
+  }, [activeServer, currentServer]);
+
   return (
     <div className="fixed inset-0 z-[90] bg-black flex flex-col">
       {/* Header */}
@@ -547,26 +560,35 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               </div>
             )}
 
-            {/* Iframe */}
-            <iframe
-              key={`${activeServer}-${currentServer?.url}`}
-              src={currentServer?.url}
-              className="w-full h-full border-0"
-              allowFullScreen
-              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-              referrerPolicy="no-referrer"
-              onLoad={handleIframeLoad}
-              onError={() => {
-                const switched = tryNextServer(activeServer, 'auto');
-                if (switched) {
-                  return;
-                }
+            {/* Playback Source */}
+            {currentServer?.isDirect ? (
+              <VideoPlayer
+                src={currentServer.url}
+                title={title}
+                subtitles={currentServer.directSubtitles}
+                onClose={onClose}
+              />
+            ) : (
+              <iframe
+                key={`${activeServer}-${currentServer?.url}`}
+                src={currentServer?.url}
+                className="w-full h-full border-0"
+                allowFullScreen
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                referrerPolicy="no-referrer"
+                onLoad={handleIframeLoad}
+                onError={() => {
+                  const switched = tryNextServer(activeServer, 'auto');
+                  if (switched) {
+                    return;
+                  }
 
-                setIframeLoading(false);
-                setPlaybackReady(true);
-                setIframeError(true);
-              }}
-            />
+                  setIframeLoading(false);
+                  setPlaybackReady(true);
+                  setIframeError(true);
+                }}
+              />
+            )}
           </>
         )}
       </div>

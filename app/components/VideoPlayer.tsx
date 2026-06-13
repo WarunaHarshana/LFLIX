@@ -12,6 +12,7 @@ type Props = {
   onClose: () => void;
   initialTime?: number;
   isHDR?: boolean;
+  subtitles?: { label: string; url: string; language?: string }[];
 };
 
 // Extended HTMLVideoElement with non-standard audioTracks API
@@ -32,7 +33,7 @@ interface AudioTrack {
   language: string;
 }
 
-export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false }: Props) {
+export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false, subtitles }: Props) {
   const videoRef = useRef<ExtendedHTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -167,6 +168,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
       // Text tracks (subtitles)
       const textTracks = [];
+      let activeSubtitleIndex = -1;
       for (let i = 0; i < video.textTracks.length; i++) {
         const track = video.textTracks[i];
         if (track.kind === 'subtitles' || track.kind === 'captions') {
@@ -175,9 +177,15 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
             label: track.label || `Subtitle ${i + 1}`,
             language: track.language || 'unknown'
           });
+          if (track.mode === 'showing') {
+            activeSubtitleIndex = i;
+          }
         }
       }
       setSubtitleTracks(textTracks);
+      if (activeSubtitleIndex >= 0) {
+        setCurrentSubtitleTrack(activeSubtitleIndex);
+      }
     };
 
     video.addEventListener('loadedmetadata', detectTracks);
@@ -450,7 +458,17 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
               onError={handleError}
               onCanPlay={handleCanPlay}
             >
-              {subtitleUrl && (
+              {subtitles && subtitles.map((sub, index) => (
+                <track
+                  key={index}
+                  kind="subtitles"
+                  src={sub.url}
+                  srcLang={sub.language || 'en'}
+                  label={sub.label}
+                  default={index === 0}
+                />
+              ))}
+              {subtitleUrl && !subtitles && (
                 <track
                   kind="subtitles"
                   src={subtitleUrl}
