@@ -6,13 +6,26 @@ import { Capacitor } from '@capacitor/core';
 import { CapacitorVideoPlayer } from 'capacitor-video-player';
 import { getServerUrl } from '@/lib/mobileConfig';
 
+// HLS sources are played via hls.js (or natively on Safari). The on-the-fly
+// transcode endpoint also returns an HLS playlist, so it matches here too.
+function isHlsSource(url: string): boolean {
+  return /\.m3u8(\?|$)/i.test(url) || /\/api\/transcode(\?|$)/i.test(url);
+}
+
 type Props = {
   src: string;
   title: string;
   onClose: () => void;
   initialTime?: number;
   isHDR?: boolean;
+  // Explicitly supplied subtitle tracks (e.g. from a streaming server). When
+  // provided these take priority; otherwise tracks are auto-discovered from
+  // /api/subtitles for local-library files.
   subtitles?: { label: string; url: string; language?: string }[];
+  // Source codecs (when known) so the player can pre-emptively transcode
+  // browser-incompatible media instead of playing it silently / not at all.
+  videoCodec?: string | null;
+  audioCodec?: string | null;
 };
 
 // Extended HTMLVideoElement with non-standard audioTracks API
@@ -33,18 +46,147 @@ interface AudioTrack {
   language: string;
 }
 
-export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false, subtitles }: Props) {
+export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false, subtitles, videoCodec, audioCodec }: Props) {
   const videoRef = useRef<ExtendedHTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [audioTracks, setAudioTracks] = useState<{ id: number; label: string; language: string }[]>([]);
-  const [subtitleTracks, setSubtitleTracks] = useState<{ id: number; label: string; language: string }[]>([]);
+  const [subtitleTracks, setSubtitleTracks] = useState<{ id: number; label: string; language: string; url: string }[]>([]);
+  const [activeSrc, setActiveSrc] = useState(src);
+  const [didFallback, setDidFallback] = useState(false);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(0);
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState<number>(-1);
   const [hdrSupported, setHdrSupported] = useState<boolean | null>(null);
   const isNative = Capacitor.isNativePlatform();
+
+  // Build an API URL that forwards the same auth params present on the stream src
+  // (token OR contentType/contentId/episodeId), so subtitles & transcode resolve the
+  // same underlying file.
+  const buildApiUrl = (base: string, extra?: Record<string, string>): string => {
+    try {
+      const u = new URL(src, window.location.origin);
+      const params = new URLSearchParams();
+      for (const k of ['token', 'contentType', 'contentId', 'episodeId']) {
+        const v = u.searchParams.get(k);
+        if (v) params.set(k, v);
+      }
+      if (extra) for (const [k, v] of Object.entries(extra)) params.set(k, v);
+      const qs = params.toString();
+      return qs ? `${base}?${qs}` : base;
+    } catch {
+      return '';
+    }
+  };
+
+  // Keep the active source in sync when the parent changes src. For media whose
+  // audio/video codec browsers can't decode (e.g. AC3/E-AC3/DTS/TrueHD audio or
+  // HEVC video, common in MKV/AVI files), start playback through the HLS
+  // transcoder up front: the browser would otherwise play such files silently
+  // (video only) without ever firing an error, so the error-based fallback below
+  // would never run.
+  useEffect(() => {
+    setDidFallback(false);
+    const norm = (s?: string | null) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const a = norm(audioCodec);
+    const v = norm(videoCodec);
+    const badAudio = ['ac3', 'eac3', 'dts', 'dtshd', 'truehd', 'mlp', 'flac', 'pcm'];
+    const badVideo = ['hevc', 'h265', 'vc1', 'mpeg2', 'wmv', 'vp6'];
+    const incompatible =
+      (a !== '' && badAudio.some((c) => a.includes(c))) ||
+      (v !== '' && badVideo.some((c) => v.includes(c)));
+    if (!isNative && incompatible) {
+      const transcodeUrl = buildApiUrl('/api/transcode');
+      setActiveSrc(transcodeUrl || src);
+    } else {
+      setActiveSrc(src);
+    }
+  }, [src, isNative, audioCodec, videoCodec]);
+
+  // Attach hls.js for HLS sources (e.g. the on-the-fly transcode endpoint).
+  useEffect(() => {
+    if (isNative) return;
+    const video = videoRef.current;
+    if (!video) return;
+    if (!isHlsSource(activeSrc)) return;
+
+    // Safari / iOS can play HLS natively.
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = activeSrc;
+      return;
+    }
+
+    let hls: any;
+    let cancelled = false;
+    import('hls.js')
+      .then(({ default: Hls }) => {
+        if (cancelled || !videoRef.current) return;
+        if (!Hls.isSupported()) {
+          setError('This browser cannot play the converted stream.');
+          return;
+        }
+        hls = new Hls({ enableWorker: true });
+        hls.loadSource(activeSrc);
+        hls.attachMedia(videoRef.current);
+        hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
+          if (!data?.fatal) return;
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          } else {
+            setError('Playback failed during streaming.');
+            try { hls.destroy(); } catch { /* ignore */ }
+          }
+        });
+      })
+      .catch(() => setError('Failed to load streaming engine.'));
+
+    return () => {
+      cancelled = true;
+      if (hls) {
+        try { hls.destroy(); } catch { /* ignore */ }
+      }
+    };
+  }, [activeSrc, isNative]);
+
+  // Subtitle tracks: use explicitly provided ones (e.g. from a streaming server),
+  // otherwise auto-discover external sidecar files + embedded streams for local files.
+  useEffect(() => {
+    if (isNative) return;
+
+    // Explicitly provided subtitles take priority over auto-discovery.
+    if (subtitles && subtitles.length > 0) {
+      setSubtitleTracks(
+        subtitles.map((t, i) => ({
+          id: i,
+          label: t.label || `Subtitle ${i + 1}`,
+          language: t.language || 'unknown',
+          url: t.url,
+        })),
+      );
+      return;
+    }
+
+    const listUrl = buildApiUrl('/api/subtitles', { list: '1' });
+    if (!listUrl) return;
+    let cancelled = false;
+    fetch(listUrl)
+      .then((r) => (r.ok ? r.json() : { tracks: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        const tracks = (data.tracks || []).map((t: any, i: number) => ({
+          id: i,
+          label: t.label || `Subtitle ${i + 1}`,
+          language: t.language || 'unknown',
+          url: t.url,
+        }));
+        setSubtitleTracks(tracks);
+      })
+      .catch(() => { /* subtitles are optional */ });
+    return () => { cancelled = true; };
+  }, [src, isNative, subtitles]);
 
   // Detect HDR display capability
   useEffect(() => {
@@ -166,26 +308,8 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
         setAudioTracks(tracks);
       }
 
-      // Text tracks (subtitles)
-      const textTracks = [];
-      let activeSubtitleIndex = -1;
-      for (let i = 0; i < video.textTracks.length; i++) {
-        const track = video.textTracks[i];
-        if (track.kind === 'subtitles' || track.kind === 'captions') {
-          textTracks.push({
-            id: i,
-            label: track.label || `Subtitle ${i + 1}`,
-            language: track.language || 'unknown'
-          });
-          if (track.mode === 'showing') {
-            activeSubtitleIndex = i;
-          }
-        }
-      }
-      setSubtitleTracks(textTracks);
-      if (activeSubtitleIndex >= 0) {
-        setCurrentSubtitleTrack(activeSubtitleIndex);
-      }
+      // Subtitle tracks come from /api/subtitles (external files + embedded streams),
+      // so they are loaded separately and not overwritten from the video element here.
     };
 
     video.addEventListener('loadedmetadata', detectTracks);
@@ -198,6 +322,20 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
       const errorCode = video.error?.code;
       const errorMessage = video.error?.message || 'Unknown error';
       console.error('Video error:', errorCode, errorMessage);
+
+      // Auto-fallback: if the browser can't decode the raw file (unsupported codec or
+      // container such as MKV/AVI/HEVC), retry through the on-the-fly HLS transcoder.
+      if (!didFallback && !isHlsSource(activeSrc) && (errorCode === 3 || errorCode === 4)) {
+        const transcodeUrl = buildApiUrl('/api/transcode');
+        if (transcodeUrl) {
+          console.log('Falling back to transcode:', transcodeUrl);
+          setDidFallback(true);
+          setError(null);
+          setLoading(true);
+          setActiveSrc(transcodeUrl);
+          return;
+        }
+      }
 
       let friendlyError = 'Failed to play video';
       switch (errorCode) {
@@ -270,14 +408,16 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     const video = videoRef.current;
     if (!video) return;
 
-    // Disable all tracks first
-    for (let i = 0; i < video.textTracks.length; i++) {
-      video.textTracks[i].mode = 'disabled';
-    }
+    const targetId = `lflix-sub-${index}`;
 
-    // Enable selected track
-    if (index >= 0 && video.textTracks[index]) {
-      video.textTracks[index].mode = 'showing';
+    // Disable all tracks first, then enable the one matching the target ID
+    for (let i = 0; i < video.textTracks.length; i++) {
+      const track = video.textTracks[i];
+      if (index >= 0 && track.id === targetId) {
+        track.mode = 'showing';
+      } else {
+        track.mode = 'disabled';
+      }
     }
     setCurrentSubtitleTrack(index);
   };
@@ -397,7 +537,6 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
             onClick={onClose}
             className="p-3 hover:bg-neutral-800 rounded-full transition bg-neutral-800/50"
             title="Close"
-            style={{ touchAction: 'manipulation' }}
           >
             <X className="w-6 h-6" />
           </button>
@@ -436,51 +575,28 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
           </div>
         )}
 
-        {/* Subtitle track derived from path parameter */}
-        {(() => {
-          let subtitleUrl = '';
-          try {
-            const parsedUrl = new URL(src, window.location.origin);
-            const pathParam = parsedUrl.searchParams.get('path');
-            if (pathParam) {
-              subtitleUrl = `/api/subtitles?path=${encodeURIComponent(pathParam)}`;
-            }
-          } catch (e) {}
-
-          return (
-            <video
-              ref={videoRef}
-              src={src}
-              controls
-              autoPlay
-              className="max-w-full max-h-full"
-              playsInline
-              onError={handleError}
-              onCanPlay={handleCanPlay}
-            >
-              {subtitles && subtitles.map((sub, index) => (
-                <track
-                  key={index}
-                  kind="subtitles"
-                  src={sub.url}
-                  srcLang={sub.language || 'en'}
-                  label={sub.label}
-                  default={index === 0}
-                />
-              ))}
-              {subtitleUrl && !subtitles && (
-                <track
-                  kind="subtitles"
-                  src={subtitleUrl}
-                  srcLang="en"
-                  label="English (Auto-detected)"
-                  default
-                />
-              )}
-              Your browser does not support the video tag.
-            </video>
-          );
-        })()}
+        <video
+          ref={videoRef}
+          src={isHlsSource(activeSrc) ? undefined : activeSrc}
+          controls
+          autoPlay
+          className="max-w-full max-h-full"
+          playsInline
+          onError={handleError}
+          onCanPlay={handleCanPlay}
+        >
+          {subtitleTracks.map((track) => (
+            <track
+              key={track.id}
+              id={`lflix-sub-${track.id}`}
+              kind="subtitles"
+              src={track.url}
+              srcLang={(track.language || 'und').slice(0, 3)}
+              label={track.label}
+            />
+          ))}
+          Your browser does not support the video tag.
+        </video>
       </div>
 
       {/* HDR Compatibility Warning */}

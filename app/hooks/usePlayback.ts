@@ -8,7 +8,7 @@ export function usePlayback(
   showToast: (message: string, type: 'success' | 'error') => void
 ) {
   // Video Player (for mobile streaming)
-  const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number; isHDR?: boolean } | null>(null);
+  const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number; isHDR?: boolean; audioCodec?: string | null; videoCodec?: string | null } | null>(null);
 
   // Force browser player (for TVs without VLC)
   const [forceBrowserPlayer, setForceBrowserPlayer] = useState(false);
@@ -53,6 +53,43 @@ export function usePlayback(
       const isNative = Capacitor.isNativePlatform();
       console.log('isMobile result:', mobile, 'isNative:', isNative);
 
+      let title = 'Unknown';
+      let isHDR = false;
+      let audioCodec: string | null | undefined;
+      let videoCodec: string | null | undefined;
+
+      if (contentType === 'movie') {
+        const movie = library.find(m => m.id === contentId);
+        title = movie?.title || 'Movie';
+        isHDR = !!movie?.isHDR;
+        audioCodec = movie?.audioCodec;
+        videoCodec = movie?.videoCodec;
+      } else {
+        const show = library.find(s => s.id === contentId);
+        title = show?.title || 'TV Show';
+        if (episodeId) {
+          try {
+            const res = await fetch(`/api/episodes?showId=${contentId}`);
+            if (res.ok) {
+              const data = await res.json();
+              let foundEp: any = null;
+              for (const s of (data.seasons || [])) {
+                foundEp = s.episodes.find((e: any) => e.id === episodeId);
+                if (foundEp) break;
+              }
+              if (foundEp) {
+                title = `${title} - S${foundEp.seasonNumber}E${foundEp.episodeNumber} - ${foundEp.title}`;
+                isHDR = !!foundEp.isHDR;
+                audioCodec = foundEp.audioCodec;
+                videoCodec = foundEp.videoCodec;
+              }
+            }
+          } catch (e) {
+            console.error('Failed to fetch episode details:', e);
+          }
+        }
+      }
+
       // Native App: Use Built-in Player (Capacitor)
       if (isNative) {
         const tokenRes = await fetch(apiUrl('/api/token'), {
@@ -66,18 +103,7 @@ export function usePlayback(
 
         const streamUrl = apiUrl(`/api/stream?token=${token}`);
 
-        let title = 'Unknown';
-        let isHDR = false;
-        if (contentType === 'movie') {
-          const movie = library.find(m => m.id === contentId);
-          title = movie?.title || 'Movie';
-          isHDR = !!movie?.isHDR;
-        } else {
-          const show = library.find(s => s.id === contentId);
-          title = show?.title || 'TV Show';
-        }
-
-        setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR });
+        setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR, audioCodec, videoCodec });
         return;
       }
 
@@ -90,24 +116,13 @@ export function usePlayback(
         });
         const streamUrl = `/api/stream?${params.toString()}`;
 
-        let title = 'Unknown';
-        let isHDR = false;
-        if (contentType === 'movie') {
-          const movie = library.find(m => m.id === contentId);
-          title = movie?.title || 'Movie';
-          isHDR = !!movie?.isHDR;
-        } else {
-          const show = library.find(s => s.id === contentId);
-          title = show?.title || 'TV Show';
-        }
-
         setPlayChoice({
           title,
           streamUrl: window.location.origin + streamUrl,
           contentType,
           contentId,
           episodeId,
-          onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR })
+          onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR, audioCodec, videoCodec })
         });
         return;
       }
