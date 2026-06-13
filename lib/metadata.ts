@@ -408,7 +408,7 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
 
   try {
     let res = await cachedTmdbCall(`tmdb-movie-search-${rawName.toLowerCase()}-${year || ''}`, () =>
-      moviedb.searchMovie({ query: rawName, year: year }),
+      moviedb.searchMovie({ query: rawName, primary_release_year: year }),
       24 * 60
     );
 
@@ -430,7 +430,30 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
     }
 
     if (res.results && res.results.length > 0) {
-      const hit = res.results[0];
+      const targetKey = rawName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const scored = [...res.results].sort((a, b) => {
+        const aTitle = (a.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const aOrigTitle = (a.original_title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const bTitle = (b.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const bOrigTitle = (b.original_title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        const aNameScore = (aTitle === targetKey || aOrigTitle === targetKey) ? 2 : 0;
+        const bNameScore = (bTitle === targetKey || bOrigTitle === targetKey) ? 2 : 0;
+
+        const aYear = a.release_date ? parseInt(a.release_date.substring(0, 4), 10) : undefined;
+        const bYear = b.release_date ? parseInt(b.release_date.substring(0, 4), 10) : undefined;
+
+        const aYearScore = year && aYear === year ? 1 : 0;
+        const bYearScore = year && bYear === year ? 1 : 0;
+
+        const aScore = aNameScore + aYearScore;
+        const bScore = bNameScore + bYearScore;
+
+        if (bScore !== aScore) return bScore - aScore;
+        return (b.popularity || 0) - (a.popularity || 0);
+      });
+
+      const hit = scored[0];
       const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'movie') : '';
       const imdbRating = await fetchMovieImdbRating(moviedb, hit.id || null);
 

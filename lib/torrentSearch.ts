@@ -384,20 +384,87 @@ function titleContainsQueryWord(normTitle: string, word: string): boolean {
     return (romanAlternates[word] || []).some(alt => titleWords.includes(alt));
 }
 
-function matchesMovieTitleStrictly(title: string, query: string): boolean {
-    const normTitle = normalizeTitle(title);
-    const words = getSignificantQueryWords(query);
-    if (words.length === 0) return true;
+export function isTvShowTitle(title: string): boolean {
+    const lower = title.toLowerCase();
+    // Season/Episode pattern: S01E01, s1e12, s01e012, s01-s02, etc.
+    if (/\bs\d{1,2}\s*[ex]\d{1,3}\b/i.test(lower)) return true;
+    if (/\b\d{1,2}x\d{1,3}\b/i.test(lower)) return true;
+    
+    // Season indicator: S01, S12, S01-S02 (usually a boundary like word, or preceded/followed by dot, space, dash)
+    if (/\bs\d{1,2}\b/i.test(lower)) return true;
+    
+    // Season/Episode spelled out
+    if (/\b(?:season|seasons|series|episode|episodes|ep|eps)\s*\d{1,2}\b/i.test(lower)) return true;
+    
+    return false;
+}
 
-    const matchedWords = words.filter(word => titleContainsQueryWord(normTitle, word));
+export function extractCleanTitle(title: string, query: string): string {
+    const lower = title.toLowerCase();
+    
+    // Find index of first matching token
+    const tokens = [
+        /\b(19|20)\d{2}\b/g, // year
+        /\b(2160p|4k|uhd|1080p|720p|480p|576p|360p)\b/g, // resolution
+        /\b(hdrip|bdrip|bluray|blu-ray|webrip|web-dl|web|hdtv|cam|ts|tc|dvdrip|brrip|remux|h264|h265|x264|x265|hevc|10bit|aac|dd5|ddp5)\b/g, // quality/codec
+        /\b(s\d{1,2}(e\d{1,3})?|\d{1,2}x\d{1,3})\b/g, // season/episode
+        /\b(season|episodes|episode|complete)\b/g, // tv terms
+    ];
 
-    // Sequels and short movie titles need a stricter match. This prevents
-    // "Mortal Kombat" from satisfying "Mortal Kombat II".
-    if (words.length <= 3) {
-        return matchedWords.length === words.length;
+    let minIndex = title.length;
+    const normalizedQuery = normalizeTitle(query);
+    const queryWords = normalizedQuery.split(' ');
+
+    for (const regex of tokens) {
+        regex.lastIndex = 0; // reset
+        let match;
+        while ((match = regex.exec(lower)) !== null) {
+            const matchedText = match[0];
+            if (queryWords.includes(matchedText)) {
+                continue;
+            }
+            if (match.index < minIndex) {
+                minIndex = match.index;
+            }
+            break;
+        }
     }
 
-    return matchedWords.length / words.length >= 0.75;
+    let clean = title.slice(0, minIndex);
+    clean = clean.replace(/[._\-]+/g, ' ').trim();
+    return clean;
+}
+
+export function getSignificantWords(text: string): string[] {
+    const STOP_WORDS = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'is', 'are', 'was', 'were', 'it', 'its']);
+    return normalizeTitle(text)
+        .split(' ')
+        .filter(w => (w.length > 1 || /^\d$/.test(w)) && !STOP_WORDS.has(w) && !/^(19|20)\d{2}$/.test(w));
+}
+
+export function matchesMovieTitleStrictly(title: string, query: string): boolean {
+    if (isTvShowTitle(title)) return false;
+
+    const cleanTitle = extractCleanTitle(title, query);
+    
+    const queryWords = getSignificantWords(query);
+    const candidateWords = getSignificantWords(cleanTitle);
+
+    if (queryWords.length === 0) return true;
+
+    // The candidate clean title must contain all significant words from the query
+    const hasAllQueryWords = queryWords.every(word => candidateWords.includes(word));
+    if (!hasAllQueryWords) return false;
+
+    // For short queries (<= 3 words), the candidate clean title shouldn't have extra significant words that are not in the query.
+    if (queryWords.length <= 3) {
+        const extraWords = candidateWords.filter(word => !queryWords.includes(word));
+        if (extraWords.length > 0) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 function matchesTvTitleStrictly(title: string, query: string): boolean {
@@ -441,11 +508,13 @@ function filterByRelevance(
 
             const years = extractYears(r.title);
             const hasExactYear = years.includes(targetYear);
-            const hasConflictingYear = years.length > 0 && !hasExactYear;
+            const hasCloseYear = years.some(y => Math.abs(y - targetYear) <= 1);
+            const hasConflictingYear = years.length > 0 && !hasExactYear && !hasCloseYear;
 
             // Prefer exact year heavily for movie queries with a given year.
             let yearBonus = 0;
             if (hasExactYear) yearBonus += 30;
+            else if (hasCloseYear) yearBonus += 15; // Close year (±1 year) is acceptable with a smaller bonus.
             else if (hasConflictingYear) yearBonus -= 40;
             else yearBonus += 5; // No explicit year still acceptable.
 
@@ -541,7 +610,11 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
 
             for (const movie of movies) {
                 if (!movie.torrents) continue;
-                if (year && movie.year && String(movie.year) !== year) continue;
+                if (year && movie.year) {
+                    const targetYearNum = parseInt(year, 10);
+                    const movieYearNum = parseInt(String(movie.year), 10);
+                    if (Math.abs(movieYearNum - targetYearNum) > 1) continue;
+                }
 
                 for (const torrent of movie.torrents) {
                     const name = `${movie.title} (${movie.year}) [${torrent.quality}] [YTS]`;
