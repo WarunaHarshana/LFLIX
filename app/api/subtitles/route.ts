@@ -194,6 +194,42 @@ function findEmbeddedSubs(videoPath: string): Promise<EmbeddedSub[]> {
   });
 }
 
+type AudioTrackInfo = { index: number; label: string; language: string };
+
+function findAudioTracks(videoPath: string): Promise<AudioTrackInfo[]> {
+  return new Promise((resolve) => {
+    execFile(
+      findFFprobe(),
+      ['-v', 'error', '-print_format', 'json', '-show_streams', '-select_streams', 'a', videoPath],
+      { timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
+      (error, stdout) => {
+        if (error) {
+          resolve([]);
+          return;
+        }
+        try {
+          const data = JSON.parse(stdout);
+          const streams = data.streams || [];
+          const tracks: AudioTrackInfo[] = streams.map((s: any, i: number) => {
+            const lang = s.tags?.language || '';
+            const title = s.tags?.title || '';
+            const codec = s.codec_name || '';
+            const label = title || langLabel(lang) || `Track ${i + 1}`;
+            return {
+              index: i,
+              language: lang,
+              label: `${label} (${codec.toUpperCase()})`,
+            };
+          });
+          resolve(tracks);
+        } catch {
+          resolve([]);
+        }
+      },
+    );
+  });
+}
+
 function extractEmbeddedVtt(videoPath: string, subStreamIndex: number): Promise<string | null> {
   return new Promise((resolve) => {
     const ff = spawn(findFFmpeg(), [
@@ -253,6 +289,7 @@ export async function GET(req: Request) {
     if (searchParams.get('list')) {
       const external = findExternalSubs(videoPath);
       const embedded = await findEmbeddedSubs(videoPath);
+      const audioTracks = await findAudioTracks(videoPath);
 
       const tracks = [
         ...external.map((s, i) => ({
@@ -268,7 +305,7 @@ export async function GET(req: Request) {
       ];
 
       return NextResponse.json(
-        { tracks },
+        { tracks, audioTracks },
         { headers: { 'Cache-Control': 'public, max-age=300' } },
       );
     }

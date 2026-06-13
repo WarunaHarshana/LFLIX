@@ -182,7 +182,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     if (!listUrl) return;
     let cancelled = false;
     fetch(listUrl)
-      .then((r) => (r.ok ? r.json() : { tracks: [] }))
+      .then((r) => (r.ok ? r.json() : { tracks: [], audioTracks: [] }))
       .then((data) => {
         if (cancelled) return;
         const tracks = (data.tracks || []).map((t: any, i: number) => ({
@@ -192,6 +192,16 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
           url: t.url,
         }));
         setSubtitleTracks(tracks);
+
+        if (data.audioTracks && data.audioTracks.length > 0) {
+          setAudioTracks(
+            data.audioTracks.map((t: any) => ({
+              id: t.index,
+              label: t.label,
+              language: t.language || 'unknown',
+            })),
+          );
+        }
       })
       .catch(() => { /* subtitles are optional */ });
     return () => { cancelled = true; };
@@ -404,7 +414,35 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
   // Change audio track
   const changeAudioTrack = (index: number) => {
     const video = videoRef.current as ExtendedHTMLVideoElement | null;
-    if (video && video.audioTracks) {
+    if (!video) return;
+
+    if (isHlsSource(activeSrc)) {
+      const newUrl = buildApiUrl('/api/transcode', { audio: String(index) });
+      if (newUrl) {
+        const currentTime = video.currentTime;
+        const wasPlaying = !video.paused;
+
+        setError(null);
+        setLoading(true);
+        setActiveSrc(newUrl);
+        setCurrentAudioTrack(index);
+
+        const handleSeek = () => {
+          if (videoRef.current) {
+            videoRef.current.currentTime = currentTime;
+            if (wasPlaying) {
+              videoRef.current.play().catch(() => {});
+            }
+            videoRef.current.removeEventListener('canplay', handleSeek);
+          }
+        };
+        setTimeout(() => {
+          if (videoRef.current) {
+            videoRef.current.addEventListener('canplay', handleSeek);
+          }
+        }, 100);
+      }
+    } else if (video.audioTracks) {
       for (let i = 0; i < video.audioTracks.length; i++) {
         video.audioTracks[i].enabled = (i === index);
       }
