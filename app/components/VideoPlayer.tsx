@@ -26,6 +26,7 @@ type Props = {
   // browser-incompatible media instead of playing it silently / not at all.
   videoCodec?: string | null;
   audioCodec?: string | null;
+  fileName?: string | null;
 };
 
 // Extended HTMLVideoElement with non-standard audioTracks API
@@ -46,7 +47,7 @@ interface AudioTrack {
   language: string;
 }
 
-export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false, subtitles, videoCodec, audioCodec }: Props) {
+export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false, subtitles, videoCodec, audioCodec, fileName }: Props) {
   const videoRef = useRef<ExtendedHTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,16 +94,24 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     const v = norm(videoCodec);
     const badAudio = ['ac3', 'eac3', 'dts', 'dtshd', 'truehd', 'mlp', 'flac', 'pcm'];
     const badVideo = ['hevc', 'h265', 'vc1', 'mpeg2', 'wmv', 'vp6'];
+    
+    // Check if filename suggests an incompatible container format (MKV, AVI, etc.)
+    const ext = fileName ? fileName.split('.').pop()?.toLowerCase() : '';
+    const badContainers = ['mkv', 'avi', 'wmv', 'flv', 'ts', 'divx', 'xvid', 'mpg', 'mpeg'];
+    const isBadContainer = badContainers.includes(ext || '');
+
     const incompatible =
+      isBadContainer ||
       (a !== '' && badAudio.some((c) => a.includes(c))) ||
       (v !== '' && badVideo.some((c) => v.includes(c)));
+      
     if (!isNative && incompatible) {
       const transcodeUrl = buildApiUrl('/api/transcode');
       setActiveSrc(transcodeUrl || src);
     } else {
       setActiveSrc(src);
     }
-  }, [src, isNative, audioCodec, videoCodec]);
+  }, [src, isNative, audioCodec, videoCodec, fileName]);
 
   // Attach hls.js for HLS sources (e.g. the on-the-fly transcode endpoint).
   useEffect(() => {

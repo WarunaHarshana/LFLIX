@@ -632,6 +632,7 @@ export default function Home() {
           isHDR={playback.videoPlayer.isHDR}
           audioCodec={playback.videoPlayer.audioCodec}
           videoCodec={playback.videoPlayer.videoCodec}
+          fileName={playback.videoPlayer.fileName}
           onClose={() => playback.setVideoPlayer(null)}
         />
       )}

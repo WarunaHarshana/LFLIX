@@ -8,7 +8,7 @@ export function usePlayback(
   showToast: (message: string, type: 'success' | 'error') => void
 ) {
   // Video Player (for mobile streaming)
-  const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number; isHDR?: boolean; audioCodec?: string | null; videoCodec?: string | null } | null>(null);
+  const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number; isHDR?: boolean; audioCodec?: string | null; videoCodec?: string | null; fileName?: string | null } | null>(null);
 
   // Force browser player (for TVs without VLC)
   const [forceBrowserPlayer, setForceBrowserPlayer] = useState(false);
@@ -57,6 +57,7 @@ export function usePlayback(
       let isHDR = false;
       let audioCodec: string | null | undefined;
       let videoCodec: string | null | undefined;
+      let fileName: string | null | undefined;
 
       if (contentType === 'movie') {
         const movie = library.find(m => m.id === contentId);
@@ -64,6 +65,7 @@ export function usePlayback(
         isHDR = !!movie?.isHDR;
         audioCodec = movie?.audioCodec;
         videoCodec = movie?.videoCodec;
+        fileName = movie?.filePath ? movie.filePath.split(/[/\\]/).pop() : null;
       } else {
         const show = library.find(s => s.id === contentId);
         title = show?.title || 'TV Show';
@@ -82,6 +84,7 @@ export function usePlayback(
                 isHDR = !!foundEp.isHDR;
                 audioCodec = foundEp.audioCodec;
                 videoCodec = foundEp.videoCodec;
+                fileName = foundEp.filePath ? foundEp.filePath.split(/[/\\]/).pop() : null;
               }
             }
           } catch (e) {
@@ -103,7 +106,7 @@ export function usePlayback(
 
         const streamUrl = apiUrl(`/api/stream?token=${token}`);
 
-        setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR, audioCodec, videoCodec });
+        setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR, audioCodec, videoCodec, fileName });
         return;
       }
 
@@ -122,7 +125,7 @@ export function usePlayback(
           contentType,
           contentId,
           episodeId,
-          onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR, audioCodec, videoCodec })
+          onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR, audioCodec, videoCodec, fileName })
         });
         return;
       }
