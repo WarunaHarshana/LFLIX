@@ -19,15 +19,75 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
   const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [qualities, setQualities] = useState<{ index: number; label: string }[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const hlsRef = useRef<any>(null);
+
+  const handleQualityChange = (index: number) => {
+    setCurrentQuality(index);
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = index;
+    }
+  };
 
   useEffect(() => {
+    setQualities([]);
+    setCurrentQuality(-1);
+    hlsRef.current = null;
     const video = videoRef.current;
-    if (video) {
-      video.src = channel.url;
-      video.play().catch(() => {
-        // Auto-play blocked, user needs to click
-      });
+    if (!video) return;
+
+    const isIframe = channel.url.includes('embed') || 
+                     channel.url.includes('pages.dev') || 
+                     channel.url.includes('html');
+
+    if (isIframe) {
+      setLoading(false);
+      return;
     }
+
+    setLoading(true);
+    setError(null);
+
+    // Use HLS.js for stream if supported (allows quality selection)
+    let hls: any;
+    import('hls.js').then(({ default: Hls }) => {
+      if (!videoRef.current) return;
+      if (Hls.isSupported()) {
+        hls = new Hls({ enableWorker: true });
+        hls.loadSource(channel.url);
+        hls.attachMedia(videoRef.current);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          const levels = hls.levels.map((level: any, idx: number) => {
+            const label = level.name || (level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)}k`);
+            return { index: idx, label };
+          });
+          setQualities([{ index: -1, label: 'Auto' }, ...levels]);
+          setLoading(false);
+          videoRef.current?.play().catch(() => {});
+        });
+        hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
+          if (data.fatal) {
+            setError('Playback failed during streaming.');
+            setLoading(false);
+          }
+        });
+        hlsRef.current = hls;
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = channel.url;
+        video.play().catch(() => {});
+      } else {
+        video.src = channel.url;
+        video.play().catch(() => {});
+      }
+    });
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+      hlsRef.current = null;
+    };
   }, [channel.url]);
 
   const toggleFullscreen = () => {
@@ -72,6 +132,19 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {qualities.length > 0 && (
+            <select
+              value={currentQuality}
+              onChange={(e) => handleQualityChange(Number(e.target.value))}
+              className="bg-neutral-800 text-white text-xs rounded border border-neutral-700 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-600/50 mr-2 cursor-pointer font-medium"
+            >
+              {qualities.map((q) => (
+                <option key={q.index} value={q.index}>
+                  {q.label}
+                </option>
+              ))}
+            </select>
+          )}
           <button 
             onClick={() => setIsMuted(!isMuted)}
             className="p-2 hover:bg-neutral-800 rounded-full transition"

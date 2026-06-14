@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Trophy, Play, X, Activity, Clock, Globe, AlertCircle, ChevronLeft } from 'lucide-react';
 
 type Sport = {
@@ -59,6 +59,65 @@ export default function LiveSports({ onClose }: Props) {
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [activeTab, setActiveTab] = useState<'live' | 'today'>('live');
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [qualities, setQualities] = useState<{ index: number; label: string }[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const hlsRef = useRef<any>(null);
+
+  const handleQualityChange = (index: number) => {
+    setCurrentQuality(index);
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = index;
+    }
+  };
+
+  // Setup HLS.js for direct video streams (.m3u8) on browsers that don't support it natively
+  useEffect(() => {
+    setQualities([]);
+    setCurrentQuality(-1);
+    hlsRef.current = null; 
+    if (!selectedStream) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const isIframe = selectedStream.embedUrl.includes('embed') || 
+                     selectedStream.embedUrl.includes('pages.dev') || 
+                     selectedStream.embedUrl.includes('html');
+
+    if (isIframe) return;
+
+    let hls: any;
+    import('hls.js').then(({ default: Hls }) => {
+      if (!videoRef.current) return;
+      if (Hls.isSupported()) {
+        hls = new Hls({ enableWorker: true });
+        hls.loadSource(selectedStream.embedUrl);
+        hls.attachMedia(videoRef.current);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          const levels = hls.levels.map((level: any, idx: number) => {
+            const label = level.name || (level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)}k`);
+            return { index: idx, label };
+          });
+          setQualities([{ index: -1, label: 'Auto' }, ...levels]);
+          videoRef.current?.play().catch(() => {});
+        });
+        hlsRef.current = hls;
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = selectedStream.embedUrl;
+        video.play().catch(() => {});
+      } else {
+        video.src = selectedStream.embedUrl;
+        video.play().catch(() => {});
+      }
+    });
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+      hlsRef.current = null;
+    };
+  }, [selectedStream]);
 
   // Fetch sports categories
   useEffect(() => {
@@ -227,15 +286,28 @@ export default function LiveSports({ onClose }: Props) {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Video Player - Takes 2/3 */}
                   <div className="lg:col-span-2">
-                    <div className="relative bg-black rounded-2xl overflow-hidden border border-neutral-800/50 shadow-2xl shadow-black/50 aspect-video">
-                      <iframe
-                        key={selectedStream.id}
-                        src={selectedStream.embedUrl}
-                        className="w-full h-full"
-                        allowFullScreen
-                        allow="autoplay; fullscreen; picture-in-picture"
-                        sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-downloads allow-modals allow-pointer-lock"
-                      />
+                    <div className="relative bg-black rounded-2xl overflow-hidden border border-neutral-800/50 shadow-2xl shadow-black/50 aspect-video flex items-center justify-center">
+                      {selectedStream.embedUrl.includes('embed') || 
+                       selectedStream.embedUrl.includes('pages.dev') || 
+                       selectedStream.embedUrl.includes('html') ? (
+                        <iframe
+                          key={selectedStream.id}
+                          src={selectedStream.embedUrl}
+                          className="w-full h-full border-0"
+                          allowFullScreen
+                          allow="autoplay; fullscreen; picture-in-picture"
+                        />
+                      ) : (
+                        <video
+                          ref={videoRef}
+                          controls
+                          autoPlay
+                          className="w-full h-full object-contain bg-black"
+                          playsInline
+                        >
+                          Your browser does not support the video tag.
+                        </video>
+                      )}
                       {/* Live indicator */}
                       {selectedMatch.isLive && (
                         <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm rounded-full pointer-events-none">
@@ -324,12 +396,36 @@ export default function LiveSports({ onClose }: Props) {
                         </div>
                       </div>
 
+                      {/* Quality Selection */}
+                      {qualities.length > 0 && (
+                        <div className="space-y-2 mt-4">
+                          <p className="text-xs text-neutral-500 uppercase tracking-wider">Stream Quality</p>
+                          <div className="flex flex-wrap gap-2">
+                            {qualities.map((q) => (
+                              <button
+                                key={q.index}
+                                onClick={() => handleQualityChange(q.index)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                  currentQuality === q.index
+                                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/30'
+                                    : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                                }`}
+                              >
+                                {q.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Close Player */}
                       <button
                         onClick={() => {
                           setSelectedMatch(null);
                           setSelectedStream(null);
                           setStreams([]);
+                          setQualities([]);
+                          setCurrentQuality(-1);
                         }}
                         className="w-full mt-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl text-sm font-medium transition"
                       >

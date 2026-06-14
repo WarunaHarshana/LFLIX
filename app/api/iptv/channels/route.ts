@@ -39,7 +39,14 @@ export async function GET(req: NextRequest) {
                 if (data.channels && Array.isArray(data.channels)) {
                     const genres = data.genres || {};
                     timStreamsChannels = data.channels.map((ch: any, index: number) => {
-                        const streamUrl = ch.streams && ch.streams[0] ? ch.streams[0].url : '';
+                        let streamUrl = ch.streams && ch.streams[0] ? ch.streams[0].url : '';
+                        if (streamUrl && (streamUrl.includes('junkieembeds.pages.dev') || streamUrl.includes('vivocdn'))) {
+                            const match = streamUrl.match(/\/embed\/([^\/?#]+)/);
+                            const streamId = match ? match[1] : streamUrl.split('/').pop();
+                            if (streamId) {
+                                streamUrl = `/api/sports/streams/resolve?id=${streamId}&ext=.m3u8`;
+                            }
+                        }
                         return {
                             id: -1000 - index,
                             name: ch.name || 'Unknown Channel',

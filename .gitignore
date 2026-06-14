@@ -51,3 +51,7 @@ lflix.db
 
 # IDE
 .vscode/
+
+# Temporary / developer files
+/scratch/
+/Shortcut

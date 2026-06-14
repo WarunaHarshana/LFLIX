@@ -81,7 +81,8 @@ export function middleware(request: NextRequest) {
     '/api/browse',
     '/api/auth/login',
     '/api/auth/logout',
-    '/api/ping'
+    '/api/ping',
+    '/api/sports/streams/resolve'
   ];
 
   const isPublic = publicPaths.some(path =>

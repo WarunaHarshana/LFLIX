@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
 import { Play, Plus, Tv, Trash2, Search, X, Loader2, Globe } from 'lucide-react';
 import clsx from 'clsx';
 import type { IPTVChannel } from '@/app/types';
@@ -37,6 +38,66 @@ export default function LiveTVSection({
   onManageChannels,
   onDeleteChannel,
 }: LiveTVSectionProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [qualities, setQualities] = useState<{ index: number; label: string }[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const hlsRef = useRef<any>(null);
+
+  const handleQualityChange = (index: number) => {
+    setCurrentQuality(index);
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = index;
+    }
+  };
+
+  useEffect(() => {
+    setQualities([]);
+    setCurrentQuality(-1);
+    hlsRef.current = null;
+    if (!selectedIPTVChannel) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const isIframe = selectedIPTVChannel.url.includes('embed') || 
+                     selectedIPTVChannel.url.includes('pages.dev') || 
+                     selectedIPTVChannel.url.includes('html');
+
+    if (isIframe) return;
+
+    // Use HLS.js for stream if supported (allows quality selection)
+    let hls: any;
+    import('hls.js').then(({ default: Hls }) => {
+      if (!videoRef.current) return;
+      if (Hls.isSupported()) {
+        hls = new Hls({ enableWorker: true });
+        hls.loadSource(selectedIPTVChannel.url);
+        hls.attachMedia(videoRef.current);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          const levels = hls.levels.map((level: any, idx: number) => {
+            const label = level.name || (level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)}k`);
+            return { index: idx, label };
+          });
+          setQualities([{ index: -1, label: 'Auto' }, ...levels]);
+          videoRef.current?.play().catch(() => {});
+        });
+        hlsRef.current = hls;
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = selectedIPTVChannel.url;
+        video.play().catch(() => {});
+      } else {
+        video.src = selectedIPTVChannel.url;
+        video.play().catch(() => {});
+      }
+    });
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+      hlsRef.current = null;
+    };
+  }, [selectedIPTVChannel]);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-neutral-950 via-black to-neutral-950">
       {/* Hero Section with Video Player */}
@@ -85,8 +146,7 @@ export default function LiveTVSection({
                       />
                     ) : (
                       <video
-                        key={selectedIPTVChannel.id}
-                        src={selectedIPTVChannel.url}
+                        ref={videoRef}
                         controls
                         autoPlay
                         className="w-full h-full object-contain bg-black"
@@ -136,6 +196,30 @@ export default function LiveTVSection({
                         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                         Stream Status: Active
                       </div>
+
+                      {/* Quality Selector */}
+                      {qualities.length > 0 && (
+                        <div className="space-y-1.5 pt-2 border-t border-neutral-800">
+                          <label className="text-xs text-neutral-500 font-medium block">
+                            Stream Quality
+                          </label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {qualities.map((q) => (
+                              <button
+                                key={q.index}
+                                onClick={() => handleQualityChange(q.index)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                                  currentQuality === q.index
+                                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/30'
+                                    : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                                }`}
+                              >
+                                {q.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

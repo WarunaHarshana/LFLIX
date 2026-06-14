@@ -106,7 +106,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ streams: transformedStreams });
   } catch (error) {
-    console.error('Sports streams API error:', error);
+    console.error('Sports sports streams API error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch streams' },
       { status: 500 }
