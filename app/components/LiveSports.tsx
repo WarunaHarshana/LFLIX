@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Trophy, Play, X, Activity, Clock, Globe, AlertCircle, ChevronLeft } from 'lucide-react';
+import { Trophy, Play, X, Activity, Clock, Globe, AlertCircle, ChevronLeft, ChevronDown, Check, Tv } from 'lucide-react';
 
 type Sport = {
   id: string;
@@ -63,6 +63,19 @@ export default function LiveSports({ onClose }: Props) {
   const [qualities, setQualities] = useState<{ index: number; label: string }[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const hlsRef = useRef<any>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleQualityChange = (index: number) => {
     setCurrentQuality(index);
@@ -326,74 +339,118 @@ export default function LiveSports({ onClose }: Props) {
                       {/* Match Info */}
                       <div className="mb-6">
                         {selectedMatch.teams?.home && selectedMatch.teams?.away ? (
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex flex-col items-center flex-1">
-                              {selectedMatch.teams.home.badge && (
+                          <div className="flex items-center justify-between mb-5 bg-neutral-950/40 border border-neutral-900/60 rounded-xl p-4">
+                            <div className="flex flex-col items-center flex-1 min-w-0">
+                              {selectedMatch.teams.home.badge ? (
                                 <img
                                   src={`https://streamed.pk/api/images/${selectedMatch.teams.home.badge}`}
                                   alt={selectedMatch.teams.home.name}
-                                  className="w-14 h-14 object-contain mb-2"
+                                  className="w-12 h-12 object-contain mb-2.5 transition hover:scale-105"
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                 />
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mb-2.5 text-neutral-400 text-lg font-bold">
+                                  {selectedMatch.teams.home.name.substring(0, 2).toUpperCase()}
+                                </div>
                               )}
-                              <span className="text-sm text-white text-center font-medium">
+                              <span className="text-xs text-neutral-300 text-center font-semibold truncate w-full">
                                 {selectedMatch.teams.home.name}
                               </span>
                             </div>
-                            <span className="text-2xl font-bold text-neutral-500 px-4">VS</span>
-                            <div className="flex flex-col items-center flex-1">
-                              {selectedMatch.teams.away.badge && (
+                            <span className="text-sm font-bold text-neutral-600 px-3 shrink-0">VS</span>
+                            <div className="flex flex-col items-center flex-1 min-w-0">
+                              {selectedMatch.teams.away.badge ? (
                                 <img
                                   src={`https://streamed.pk/api/images/${selectedMatch.teams.away.badge}`}
                                   alt={selectedMatch.teams.away.name}
-                                  className="w-14 h-14 object-contain mb-2"
+                                  className="w-12 h-12 object-contain mb-2.5 transition hover:scale-105"
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                 />
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mb-2.5 text-neutral-400 text-lg font-bold">
+                                  {selectedMatch.teams.away.name.substring(0, 2).toUpperCase()}
+                                </div>
                               )}
-                              <span className="text-sm text-white text-center font-medium">
+                              <span className="text-xs text-neutral-300 text-center font-semibold truncate w-full">
                                 {selectedMatch.teams.away.name}
                               </span>
                             </div>
                           </div>
                         ) : (
-                          <h2 className="text-xl font-bold text-white mb-4">{selectedMatch.title}</h2>
+                          <h2 className="text-lg font-bold text-white mb-4 leading-snug">{selectedMatch.title}</h2>
                         )}
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2 text-neutral-400 text-sm">
-                            <Globe className="w-4 h-4" />
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-neutral-400 text-xs font-semibold">
+                            <Globe className="w-3.5 h-3.5 text-neutral-500" />
                             <span className="capitalize">{selectedMatch.category}</span>
                           </div>
                           {selectedMatch.is4k && (
-                            <span className="text-xs bg-purple-600/20 text-purple-400 px-2 py-0.5 rounded-full border border-purple-600/30 font-semibold">
-                              📺 4K UHD
+                            <span className="text-[10px] bg-purple-600/10 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/20 font-semibold uppercase tracking-wider">
+                              4K UHD
                             </span>
                           )}
                         </div>
                       </div>
 
-                      {/* Stream Selection */}
-                      <div className="space-y-2">
-                        <p className="text-xs text-neutral-500 uppercase tracking-wider">Available Streams</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {streams.map((stream, idx) => (
-                            <button
-                              key={`${stream.id}-${idx}`}
-                              onClick={() => setSelectedStream(stream)}
-                              className={`p-3 rounded-xl text-sm font-medium transition-all min-w-0 ${selectedStream?.id === stream.id
-                                ? 'bg-red-600 text-white shadow-lg shadow-red-900/30'
-                                : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                                }`}
-                            >
-                              <div className="flex items-center justify-center gap-2 text-sm font-semibold truncate">
-                                <Play className="w-4 h-4 shrink-0" />
-                                <span className="truncate">{stream.language}</span>
-                              </div>
-                              <div className="text-xs mt-1 opacity-75">
-                                Source {stream.streamNo} {stream.hd && '• HD'}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
+                      {/* Stream Selection Dropdown */}
+                      <div className="space-y-2 relative" ref={dropdownRef}>
+                        <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Available Streams</p>
+                        
+                        {/* Custom Dropdown Trigger */}
+                        <button
+                          type="button"
+                          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                          className="w-full flex items-center justify-between p-3.5 bg-neutral-900/80 hover:bg-neutral-800/80 border border-neutral-800 rounded-xl text-neutral-200 transition-all focus:outline-none focus:ring-2 focus:ring-red-600/50 cursor-pointer shadow-inner"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Tv className="w-4 h-4 text-red-500 shrink-0" />
+                            <div className="flex flex-col items-start min-w-0 text-left">
+                              <span className="text-sm font-semibold truncate text-white leading-tight">
+                                {selectedStream ? selectedStream.language || `Stream ${selectedStream.streamNo}` : 'Select a stream'}
+                              </span>
+                              {selectedStream && (
+                                <span className="text-xs text-neutral-400 mt-0.5">
+                                  Source {selectedStream.streamNo} {selectedStream.hd && '• HD'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <ChevronDown className={`w-4 h-4 text-neutral-400 shrink-0 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        {isDropdownOpen && (
+                          <div className="absolute top-full left-0 right-0 mt-1.5 max-h-[280px] overflow-y-auto bg-neutral-900/98 backdrop-blur-xl border border-neutral-800 rounded-xl shadow-2xl z-50 py-1.5 custom-scrollbar divide-y divide-neutral-800/40">
+                            {streams.map((stream, idx) => {
+                              const isSelected = selectedStream?.id === stream.id;
+                              return (
+                                <button
+                                  key={`${stream.id}-${idx}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedStream(stream);
+                                    setIsDropdownOpen(false);
+                                  }}
+                                  className={`w-full flex items-center justify-between px-4 py-3 text-left transition-all cursor-pointer ${
+                                    isSelected 
+                                      ? 'bg-red-950/20 text-red-400' 
+                                      : 'hover:bg-neutral-800/70 text-neutral-300'
+                                  }`}
+                                >
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-sm font-semibold truncate">
+                                      {stream.language || `Stream ${stream.streamNo}`}
+                                    </span>
+                                    <span className="text-xs text-neutral-500 mt-0.5">
+                                      Source {stream.streamNo} {stream.hd && '• HD'}
+                                    </span>
+                                  </div>
+                                  {isSelected && <Check className="w-4 h-4 text-red-500 shrink-0 ml-2" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       {/* Quality Selection */}
@@ -426,8 +483,9 @@ export default function LiveSports({ onClose }: Props) {
                           setStreams([]);
                           setQualities([]);
                           setCurrentQuality(-1);
+                          setIsDropdownOpen(false);
                         }}
-                        className="w-full mt-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl text-sm font-medium transition"
+                        className="w-full mt-5 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white rounded-xl text-xs font-semibold transition-all cursor-pointer text-center"
                       >
                         Close Player
                       </button>
