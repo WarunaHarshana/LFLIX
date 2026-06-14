@@ -10,6 +10,7 @@ type StreamServer = {
   color: string;
   order: number;
   baselineQuality: Exclude<StreamQualityValue, 'unknown'>;
+  tier?: 'best' | 'great' | 'good' | 'ok';
 };
 
 type ProbeState = 'cached' | 'fast' | 'deep-pending';
@@ -60,61 +61,202 @@ type ServerRegistryEntry = {
   name: string;
   color: string;
   baselineQuality: Exclude<StreamQualityValue, 'unknown'>;
+  tier?: 'best' | 'great' | 'good' | 'ok';
   buildUrl: (tmdbId: number, type: 'movie' | 'tv', season?: number, episode?: number) => string;
 };
 
 const SERVER_REGISTRY: ServerRegistryEntry[] = [
   {
-    id: 'zxcstream-1',
-    name: 'ZXCSTREAM',
-    color: '#3b82f6',
+    id: 'flux',
+    name: 'FLUX',
+    color: '#a855f7',
     baselineQuality: '1080p',
+    tier: 'best',
     buildUrl: (tmdbId, type, season, episode) =>
-      `https://vidsrc.xyz/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
+      type === 'movie'
+        ? `https://beta.player.fluxtv.cc/player?type=movie&id=${tmdbId}`
+        : `https://beta.player.fluxtv.cc/player?type=tv&id=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
+  },
+  {
+    id: '112cinema',
+    name: '112CINEMA',
+    color: '#e11d48',
+    baselineQuality: '1080p',
+    tier: 'best',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidgod.net/movie/${tmdbId}`
+        : `https://vidgod.net/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+  },
+  {
+    id: 'vidfast-me',
+    name: 'VIDFAST (ME)',
+    color: '#059669',
+    baselineQuality: '1080p',
+    tier: 'best',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidfast.me/movie/${tmdbId}?autoPlay=true`
+        : `https://vidfast.me/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
+  },
+  {
+    id: 'vidfast-pro',
+    name: 'VIDFAST (PRO)',
+    color: '#10b981',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidfast.pro/movie/${tmdbId}?autoPlay=true`
+        : `https://vidfast.pro/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
+  },
+  {
+    id: 'vidfast-io',
+    name: 'VIDFAST (IO)',
+    color: '#10b981',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidfast.io/movie/${tmdbId}?autoPlay=true`
+        : `https://vidfast.io/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
+  },
+  {
+    id: 'vidfast-in',
+    name: 'VIDFAST (IN)',
+    color: '#10b981',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidfast.in/movie/${tmdbId}?autoPlay=true`
+        : `https://vidfast.in/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
+  },
+  {
+    id: 'vidfast-net',
+    name: 'VIDFAST (NET)',
+    color: '#10b981',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidfast.net/movie/${tmdbId}?autoPlay=true`
+        : `https://vidfast.net/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
+  },
+  {
+    id: 'vidfast-pm',
+    name: 'VIDFAST (PM)',
+    color: '#10b981',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidfast.pm/movie/${tmdbId}?autoPlay=true`
+        : `https://vidfast.pm/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
+  },
+  {
+    id: 'vidfast-xyz',
+    name: 'VIDFAST (XYZ)',
+    color: '#10b981',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidfast.xyz/movie/${tmdbId}?autoPlay=true`
+        : `https://vidfast.xyz/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
+  },
+  {
+    id: 'vidking',
+    name: 'VIDKING',
+    color: '#d97706',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://www.vidking.net/embed/movie/${tmdbId}?autoPlay=true&color=e11d48`
+        : `https://www.vidking.net/embed/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true&nextEpisode=true&episodeSelector=true&color=e11d48`,
   },
   {
     id: 'vidlink',
     name: 'VIDLINK',
     color: '#ef4444',
     baselineQuality: '2160p',
+    tier: 'great',
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://vidlink.pro/movie/${tmdbId}`
         : `https://vidlink.pro/tv/${tmdbId}/${season || 1}/${episode || 1}`,
   },
   {
+    id: '2embed-cc',
+    name: '2EMBED CC',
+    color: '#f59e0b',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://www.2embed.cc/embed/${tmdbId}`
+        : `https://www.2embed.cc/embedtv/${tmdbId}&s=${season || 1}&e=${episode || 1}`,
+  },
+  {
+    id: 'vidsrc-to',
+    name: 'VIDSRC TO',
+    color: '#3b82f6',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidsrc.to/embed/movie/${tmdbId}`
+        : `https://vidsrc.to/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+  },
+  {
     id: 'frembed',
     name: 'FREMBED',
     color: '#10b981',
     baselineQuality: '1080p',
+    tier: 'great',
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://frembed.pro/api/film.php?id=${tmdbId}`
         : `https://frembed.pro/api/serie.php?id=${tmdbId}&sa=${season || 1}&epi=${episode || 1}`,
   },
   {
-    id: 'vixsrc',
-    name: 'VIXSRC',
-    color: '#f97316',
+    id: 'vidnest',
+    name: 'VIDNEST',
+    color: '#06b6d4',
     baselineQuality: '1080p',
+    tier: 'great',
     buildUrl: (tmdbId, type, season, episode) =>
-      `https://vidsrc.cc/v2/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
+      type === 'movie'
+        ? `https://vidnest.fun/movie/${tmdbId}`
+        : `https://vidnest.fun/tv/${tmdbId}/${season || 1}/${episode || 1}`,
   },
   {
     id: 'rgshows',
     name: 'RGSHOWS',
     color: '#8b5cf6',
     baselineQuality: '2160p',
+    tier: 'great',
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`
         : `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season || 1}&e=${episode || 1}`,
   },
   {
+    id: 'vixsrc',
+    name: 'VIXSRC',
+    color: '#f97316',
+    baselineQuality: '1080p',
+    tier: 'good',
+    buildUrl: (tmdbId, type, season, episode) =>
+      `https://vidsrc.cc/v2/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
+  },
+  {
     id: 'superflix',
     name: 'SUPERFLIX',
     color: '#ec4899',
     baselineQuality: '1080p',
+    tier: 'good',
     buildUrl: (tmdbId, type, season, episode) =>
       `https://vidsrc.xyz/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
   },
@@ -123,42 +265,71 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
     name: 'MODOCINE',
     color: '#06b6d4',
     baselineQuality: '1080p',
+    tier: 'good',
     buildUrl: (tmdbId, type, season, episode) =>
       `https://vidsrc.cc/v2/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
   },
   {
-    id: 'zxcstream-2',
-    name: 'ZXCSTREAM',
+    id: 'vidsrc-rip',
+    name: 'VIDSRC RIP',
+    color: '#ef4444',
+    baselineQuality: '1080p',
+    tier: 'good',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidsrc.rip/embed/movie/${tmdbId}`
+        : `https://vidsrc.rip/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+  },
+  {
+    id: 'vidsrc-pm',
+    name: 'VIDSRC PM',
+    color: '#8b5cf6',
+    baselineQuality: '1080p',
+    tier: 'good',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidsrc.pm/embed/movie?tmdb=${tmdbId}`
+        : `https://vidsrc.pm/embed/tv?tmdb=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
+  },
+  {
+    id: 'vidsrc-me',
+    name: 'VIDSRC ME',
     color: '#60a5fa',
-    baselineQuality: '720p',
-    buildUrl: (tmdbId, type, season, episode) =>
-      `https://vidsrc.me/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
-  },
-  {
-    id: 'vidsrcme-ru',
-    name: 'VIDSRCME',
-    color: '#22d3ee',
     baselineQuality: '1080p',
+    tier: 'ok',
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
-        ? `https://vidsrc-embed.ru/embed/movie/${tmdbId}`
-        : `https://vidsrc-embed.ru/embed/tv/${tmdbId}/${season || 1}-${episode || 1}`,
+        ? `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`
+        : `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
   },
   {
-    id: '2embed',
-    name: '2EMBED',
-    color: '#f59e0b',
+    id: 'videasy',
+    name: 'VIDEASY',
+    color: '#06b6d4',
     baselineQuality: '1080p',
+    tier: 'ok',
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
-        ? `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`
-        : `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season || 1}&e=${episode || 1}`,
+        ? `https://player.videasy.net/movie/${tmdbId}`
+        : `https://player.videasy.net/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+  },
+  {
+    id: 'rivestream',
+    name: 'RIVESTREAM',
+    color: '#6366f1',
+    baselineQuality: '1080p',
+    tier: 'ok',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://rivestream.org/embed?type=movie&id=${tmdbId}`
+        : `https://rivestream.org/embed?type=tv&id=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
   },
   {
     id: 'smashystream',
     name: 'SMASHYSTREAM',
     color: '#a855f7',
     baselineQuality: '1080p',
+    tier: 'ok',
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://embed.smashystream.com/playere.php?tmdb=${tmdbId}`
@@ -169,20 +340,11 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
     name: 'EMBED.SU',
     color: '#d946ef',
     baselineQuality: '1080p',
+    tier: 'ok',
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://embed.su/embed/movie/${tmdbId}`
         : `https://embed.su/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
-  },
-  {
-    id: 'videasy',
-    name: 'VIDEASY',
-    color: '#06b6d4',
-    baselineQuality: '1080p',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://player.videasy.net/movie/${tmdbId}`
-        : `https://player.videasy.net/tv/${tmdbId}/${season || 1}/${episode || 1}`,
   },
 ];
 
@@ -454,6 +616,7 @@ function buildServerUrls(
     color: entry.color,
     order: index,
     baselineQuality: entry.baselineQuality,
+    tier: entry.tier || 'ok',
   }));
 }
 
@@ -672,31 +835,44 @@ export async function GET(req: Request) {
       }
     }
 
-    responseServers.sort((a, b) => {
-      // Put direct servers first if they are reachable
-      if (a.isDirect !== b.isDirect) {
-        if (a.isDirect && a.isReachable) return -1;
-        if (b.isDirect && b.isReachable) return 1;
-      }
+    const TIER_RANK: Record<string, number> = {
+      best: 4,
+      great: 3,
+      good: 2,
+      ok: 1,
+    };
 
+    responseServers.sort((a, b) => {
+      // 1. Quality Resolution (highest quality first)
       const qualityDiff = getQualityRank(b.qualityHint) - getQualityRank(a.qualityHint);
       if (qualityDiff !== 0) {
         return qualityDiff;
       }
 
+      // 2. Reachability (reachable first)
       const reachableDiff = Number(b.isReachable) - Number(a.isReachable);
       if (reachableDiff !== 0) {
         return reachableDiff;
       }
 
+      // 3. Direct Streams (direct first)
+      if (a.isDirect !== b.isDirect) {
+        if (a.isDirect && a.isReachable) return -1;
+        if (b.isDirect && b.isReachable) return 1;
+      }
+
+      // 4. Source Tier (best > great > good > ok)
+      const tierRankA = a.tier ? (TIER_RANK[a.tier] ?? 1) : 1;
+      const tierRankB = b.tier ? (TIER_RANK[b.tier] ?? 1) : 1;
+      if (tierRankB !== tierRankA) {
+        return tierRankB - tierRankA;
+      }
+
+      // 5. Latency (lower latency first)
       const latencyA = Number.isFinite(a.latencyMs) ? a.latencyMs : Number.MAX_SAFE_INTEGER;
       const latencyB = Number.isFinite(b.latencyMs) ? b.latencyMs : Number.MAX_SAFE_INTEGER;
       if (latencyA !== latencyB) {
         return latencyA - latencyB;
-      }
-
-      if (Math.abs(b.confidence - a.confidence) > 0.01) {
-        return b.confidence - a.confidence;
       }
 
       return a.order - b.order;

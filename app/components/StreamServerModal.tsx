@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward, ShieldCheck } from 'lucide-react';
+import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward, ShieldCheck, Crown } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
+import { useTheme } from './ThemeProvider';
 
 type StreamServer = {
   id: string;
@@ -21,6 +22,7 @@ type StreamServer = {
   latencyMs: number;
   isDirect?: boolean;
   directSubtitles?: { label: string; url: string; language?: string }[];
+  tier?: 'best' | 'great' | 'good' | 'ok';
 };
 
 const AUTO_FAILOVER_TIMEOUT_MS = 15000;
@@ -28,6 +30,7 @@ const VPN_AUTO_FAILOVER_TIMEOUT_MS = 35000;
 const IFRAME_BOOTSTRAP_MS = 2500;
 const PLAYBACK_GRACE_MS = 18000;
 const VPN_PLAYBACK_GRACE_MS = 55000;
+
 const QUALITY_RANK: Record<StreamServer['qualityHint'], number> = {
   unknown: 0,
   '720p': 1,
@@ -35,34 +38,56 @@ const QUALITY_RANK: Record<StreamServer['qualityHint'], number> = {
   '2160p': 3,
 };
 
+const TIER_RANK: Record<string, number> = {
+  best: 4,
+  great: 3,
+  good: 2,
+  ok: 1,
+};
+
 function rankServersByQuality(servers: StreamServer[]): StreamServer[] {
   return [...servers].sort((a, b) => {
+    // 1. Quality Resolution (highest quality first)
     const rankDiff = QUALITY_RANK[b.qualityHint] - QUALITY_RANK[a.qualityHint];
     if (rankDiff !== 0) {
       return rankDiff;
     }
 
+    // 2. Reachability (reachable first)
     const reachableDiff = Number(b.isReachable) - Number(a.isReachable);
     if (reachableDiff !== 0) {
       return reachableDiff;
     }
 
+    // 3. Direct Streams (direct first)
+    if (a.isDirect !== b.isDirect) {
+      if (a.isDirect && a.isReachable) return -1;
+      if (b.isDirect && b.isReachable) return 1;
+    }
+
+    // 4. Source Tier (best > great > good > ok)
+    const tierRankA = a.tier ? (TIER_RANK[a.tier] ?? 1) : 1;
+    const tierRankB = b.tier ? (TIER_RANK[b.tier] ?? 1) : 1;
+    if (tierRankB !== tierRankA) {
+      return tierRankB - tierRankA;
+    }
+
+    // 5. Latency (lower latency first)
     const latencyA = Number.isFinite(a.latencyMs) ? a.latencyMs : Number.MAX_SAFE_INTEGER;
     const latencyB = Number.isFinite(b.latencyMs) ? b.latencyMs : Number.MAX_SAFE_INTEGER;
     if (latencyA !== latencyB) {
       return latencyA - latencyB;
     }
 
-    if (Math.abs(b.confidence - a.confidence) > 0.01) {
-      return b.confidence - a.confidence;
-    }
-
     return a.order - b.order;
   });
 }
 
-function getServerLabel(index: number): string {
-  return `Server ${index + 1}`;
+function getServerLabel(server: StreamServer | undefined, index: number): string {
+  if (!server) {
+    return `Server ${index + 1}`;
+  }
+  return server.name;
 }
 
 function getAvailabilityBadge(server: StreamServer): {
@@ -227,6 +252,8 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       }
     }
 
+
+
     return -1;
   };
 
@@ -256,8 +283,24 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     setIframeBootstrapped(true);
   };
 
+  const { accent } = useTheme();
+
+  const accentHexMap = {
+    default: 'e50914',
+    red: 'e50914',
+    blue: '3b82f6',
+    purple: '8b5cf6',
+    green: '10b981',
+  };
+  const currentAccentHex = accentHexMap[accent] || 'e50914';
+
   const currentServer = servers[activeServer];
   const hasAlternateServer = servers.length > 1;
+
+  let displayUrl = currentServer?.url || '';
+  if (currentServer?.id === 'vidking' && displayUrl) {
+    displayUrl = displayUrl.replace(/color=e11d48/g, `color=${currentAccentHex}`);
+  }
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -397,7 +440,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
           </button>
           {currentServer && (
             <a
-              href={currentServer.url}
+              href={displayUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="p-2 hover:bg-neutral-800 rounded-full transition text-neutral-400 hover:text-white"
@@ -420,36 +463,43 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       {!loading && servers.length > 0 && showSources && (
         <div className="px-4 py-2.5 bg-neutral-900/80 backdrop-blur border-b border-neutral-800 shrink-0">
           <div className="flex gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700 pb-1">
-            {servers.map((server, i) => (
-              <button
-                key={i}
-                onClick={() => handleServerChange(i)}
-                className={`server-chip-enter px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
-                  activeServer === i
-                    ? 'text-white shadow-lg scale-105 server-chip-active-ring'
-                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white'
-                }`}
-                style={{
-                  ...(activeServer === i
-                    ? {
-                        backgroundColor: server.color,
-                        boxShadow: `0 0 20px ${server.color}40`,
-                      }
-                    : {}),
-                  animationDelay: `${Math.min(i * 55, 450)}ms`,
-                }}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <span>{getServerLabel(i)}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-black/35">
-                    {server.qualityHint.toUpperCase()}
+            {servers.map((server, i) => {
+              const isBest = server.tier === 'best';
+              const qualityText = server.qualityHint === '2160p' ? '4K' : server.qualityHint.toUpperCase();
+              return (
+                <button
+                  key={i}
+                  onClick={() => handleServerChange(i)}
+                  className={`server-chip-enter px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-1.5 ${
+                    activeServer === i
+                      ? 'text-white shadow-lg scale-105 server-chip-active-ring'
+                      : isBest
+                        ? 'bg-amber-500/10 text-amber-300 border border-amber-500/35 hover:bg-amber-500/20'
+                        : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white'
+                  }`}
+                  style={{
+                    ...(activeServer === i
+                      ? {
+                          backgroundColor: server.color,
+                          boxShadow: `0 0 20px ${server.color}40`,
+                        }
+                      : {}),
+                    animationDelay: `${Math.min(i * 55, 450)}ms`,
+                  }}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    {isBest && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />}
+                    <span>{getServerLabel(server, i)}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-black/35 font-bold text-neutral-300">
+                      {qualityText}
+                    </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${getAvailabilityBadge(server).className}`}>
+                      {getAvailabilityBadge(server).text}
+                    </span>
                   </span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${getAvailabilityBadge(server).className}`}>
-                    {getAvailabilityBadge(server).text}
-                  </span>
-                </span>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -484,7 +534,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                       style={{ borderColor: `${currentServer?.color || '#3b82f6'} transparent transparent transparent` }}
                     />
                   </div>
-                  <p className="text-neutral-300 font-medium">{getServerLabel(activeServer)}</p>
+                  <p className="text-neutral-300 font-medium">{getServerLabel(currentServer, activeServer)}</p>
                   <p className="text-neutral-500 text-sm mt-1">
                     {formatProbeStatus(currentServer, autoSwitching, vpnMode)}
                   </p>
@@ -547,7 +597,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                     )}
                     {currentServer && (
                       <a
-                        href={currentServer.url}
+                        href={displayUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-sm flex items-center gap-2 transition"
@@ -563,15 +613,15 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
             {/* Playback Source */}
             {currentServer?.isDirect ? (
               <VideoPlayer
-                src={currentServer.url}
+                src={displayUrl}
                 title={title}
                 subtitles={currentServer.directSubtitles}
                 onClose={onClose}
               />
             ) : (
               <iframe
-                key={`${activeServer}-${currentServer?.url}`}
-                src={currentServer?.url}
+                key={`${activeServer}-${displayUrl}`}
+                src={displayUrl}
                 className="w-full h-full border-0"
                 allowFullScreen
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
