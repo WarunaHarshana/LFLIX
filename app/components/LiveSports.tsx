@@ -291,17 +291,17 @@ export default function LiveSports({ onClose }: Props) {
                             <button
                               key={`${stream.id}-${idx}`}
                               onClick={() => setSelectedStream(stream)}
-                              className={`p-3 rounded-xl text-sm font-medium transition-all ${selectedStream?.id === stream.id
-                                ? 'bg-red-600 text-white'
+                              className={`p-3 rounded-xl text-sm font-medium transition-all min-w-0 ${selectedStream?.id === stream.id
+                                ? 'bg-red-600 text-white shadow-lg shadow-red-900/30'
                                 : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
                                 }`}
                             >
-                              <div className="flex items-center justify-center gap-2">
-                                <Play className="w-4 h-4" />
-                                Stream {stream.streamNo}
+                              <div className="flex items-center justify-center gap-2 text-sm font-semibold truncate">
+                                <Play className="w-4 h-4 shrink-0" />
+                                <span className="truncate">{stream.language}</span>
                               </div>
                               <div className="text-xs mt-1 opacity-75">
-                                {stream.language} {stream.hd && '• HD'}
+                                Source {stream.streamNo} {stream.hd && '• HD'}
                               </div>
                             </button>
                           ))}
