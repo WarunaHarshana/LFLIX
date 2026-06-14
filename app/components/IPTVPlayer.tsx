@@ -116,18 +116,28 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
           </div>
         )}
         
-        <video
-          ref={videoRef}
-          controls
-          autoPlay
-          muted={isMuted}
-          className="max-w-full max-h-full"
-          playsInline
-          onError={handleError}
-          onCanPlay={handleCanPlay}
-        >
-          Your browser does not support the video tag.
-        </video>
+        {channel.url.includes('embed') || channel.url.includes('pages.dev') || channel.url.includes('html') ? (
+          <iframe
+            src={channel.url}
+            className="w-full h-full border-0"
+            allowFullScreen
+            allow="autoplay; fullscreen; picture-in-picture"
+            onLoad={() => setLoading(false)}
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            controls
+            autoPlay
+            muted={isMuted}
+            className="max-w-full max-h-full"
+            playsInline
+            onError={handleError}
+            onCanPlay={handleCanPlay}
+          >
+            Your browser does not support the video tag.
+          </video>
+        )}
       </div>
     </div>
   );

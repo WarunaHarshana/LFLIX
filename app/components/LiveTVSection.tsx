@@ -74,14 +74,24 @@ export default function LiveTVSection({
                 {/* Video Player - Takes 2/3 of the space */}
                 <div className="lg:col-span-2">
                   <div className="relative bg-black rounded-xl sm:rounded-2xl overflow-hidden border border-neutral-800/50 shadow-2xl shadow-black/50 aspect-video">
-                    <video
-                      key={selectedIPTVChannel.id}
-                      src={selectedIPTVChannel.url}
-                      controls
-                      autoPlay
-                      className="w-full h-full object-contain bg-black"
-                      playsInline
-                    />
+                    {selectedIPTVChannel.url.includes('embed') || selectedIPTVChannel.url.includes('pages.dev') || selectedIPTVChannel.url.includes('html') ? (
+                      <iframe
+                        key={selectedIPTVChannel.id}
+                        src={selectedIPTVChannel.url}
+                        className="w-full h-full border-0"
+                        allowFullScreen
+                        allow="autoplay; fullscreen; picture-in-picture"
+                      />
+                    ) : (
+                      <video
+                        key={selectedIPTVChannel.id}
+                        src={selectedIPTVChannel.url}
+                        controls
+                        autoPlay
+                        className="w-full h-full object-contain bg-black"
+                        playsInline
+                      />
+                    )}
                     {/* Live indicator */}
                     <div className="absolute top-2 left-2 sm:top-4 sm:left-4 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-red-600/90 backdrop-blur-sm rounded-full">
                       <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse" />
@@ -345,16 +355,18 @@ export default function LiveTVSection({
                             </span>
                           </div>
                           {/* Delete button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteChannel(channel.id);
-                            }}
-                            className="p-1 sm:p-1.5 text-neutral-600 hover:text-red-500 hover:bg-red-900/30 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all shrink-0"
-                            title="Delete channel"
-                          >
-                            <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                          </button>
+                          {channel.id >= 0 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteChannel(channel.id);
+                              }}
+                              className="p-1 sm:p-1.5 text-neutral-600 hover:text-red-500 hover:bg-red-900/30 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all shrink-0"
+                              title="Delete channel"
+                            >
+                              <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}

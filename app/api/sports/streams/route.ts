@@ -18,6 +18,40 @@ export async function GET(request: Request) {
     );
   }
 
+  if (source === 'timstreams') {
+    try {
+      const response = await fetch('https://api.nuevasantino.xyz/api/live-upcoming', {
+        headers: {
+          'Accept': 'application/json',
+        },
+        next: { revalidate: 30 } // Cache for 30 seconds
+      });
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      const data = await response.json();
+      const event = data.events?.find((e: any) => e.url === id);
+      if (!event || !event.streams) {
+        return NextResponse.json({ streams: [] });
+      }
+      const transformedStreams = event.streams.map((stream: any, index: number) => ({
+        id: `${id}-${index}`,
+        streamNo: index + 1,
+        language: stream.name || 'English',
+        hd: true,
+        embedUrl: stream.url,
+        source: 'timstreams'
+      }));
+      return NextResponse.json({ streams: transformedStreams });
+    } catch (error) {
+      console.error('TimStreams sports streams API error:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch streams from TimStreams' },
+        { status: 500 }
+      );
+    }
+  }
+
   try {
     const response = await fetch(`${API_BASE}/stream/${source}/${id}`, {
       headers: {

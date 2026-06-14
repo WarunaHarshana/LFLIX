@@ -23,9 +23,39 @@ export async function GET(req: NextRequest) {
           )
         `);
 
-        const channels = db.prepare('SELECT * FROM iptv_channels ORDER BY name').all();
+        const dbChannels = db.prepare('SELECT * FROM iptv_channels ORDER BY name').all();
         db.close();
 
+        let timStreamsChannels: any[] = [];
+        try {
+            const response = await fetch('https://api.nuevasantino.xyz/api/channels', {
+                headers: {
+                    'Accept': 'application/json',
+                },
+                next: { revalidate: 300 } // Cache for 5 minutes
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.channels && Array.isArray(data.channels)) {
+                    const genres = data.genres || {};
+                    timStreamsChannels = data.channels.map((ch: any, index: number) => {
+                        const streamUrl = ch.streams && ch.streams[0] ? ch.streams[0].url : '';
+                        return {
+                            id: -1000 - index,
+                            name: ch.name || 'Unknown Channel',
+                            url: streamUrl,
+                            logo: ch.logo || null,
+                            category: genres[ch.genre] || 'TimStreams',
+                            country: 'Global'
+                        };
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch TimStreams channels:', error);
+        }
+
+        const channels = [...dbChannels, ...timStreamsChannels];
         return NextResponse.json({ channels });
     } catch (error) {
         console.error('Failed to fetch IPTV channels:', error);
