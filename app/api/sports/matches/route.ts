@@ -112,6 +112,9 @@ export async function GET(request: Request) {
         let rawMatches = tsData.events.map((event: any) => {
           const dateMs = parseEasternTimeToUTC(event.time);
           const isLive = Date.now() >= dateMs;
+          const has4k = event.streams && event.streams.some((s: any) => 
+            s.name && (s.name.toLowerCase().includes('4k') || s.name.toLowerCase().includes('uhd'))
+          );
           
           return {
             id: `tim-${event.url}`,
@@ -121,7 +124,8 @@ export async function GET(request: Request) {
             poster: event.logo || null,
             popular: !!event.featured,
             sources: [{ source: 'timstreams', id: event.url }],
-            isLive: isLive
+            isLive: isLive,
+            is4k: has4k
           };
         });
 
@@ -133,7 +137,9 @@ export async function GET(request: Request) {
         }
 
         // Apply sport filtering
-        if (sport !== 'all') {
+        if (sport === '4k') {
+          rawMatches = rawMatches.filter((match: any) => match.is4k);
+        } else if (sport !== 'all') {
           rawMatches = rawMatches.filter((match: any) => {
             const categoryLower = match.category.toLowerCase();
             const sportLower = sport.toLowerCase();

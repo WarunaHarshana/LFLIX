@@ -32,6 +32,7 @@ type Match = {
   };
   sources: StreamSource[];
   isLive: boolean;
+  is4k?: boolean;
 };
 
 type Stream = {
@@ -65,12 +66,17 @@ export default function LiveSports({ onClose }: Props) {
       .then(res => res.json())
       .then(data => {
         if (data.sports) {
-          setSports([{ id: 'all', name: 'All Sports', icon: '🏆' }, ...data.sports]);
+          setSports([
+            { id: 'all', name: 'All Sports', icon: '🏆' },
+            { id: '4k', name: '4K Ultra HD', icon: '📺' },
+            ...data.sports
+          ]);
         }
       })
       .catch(() => {
         setSports([
           { id: 'all', name: 'All Sports', icon: '🏆' },
+          { id: '4k', name: '4K Ultra HD', icon: '📺' },
           { id: 'football', name: 'Football', icon: '⚽' },
           { id: 'basketball', name: 'Basketball', icon: '🏀' },
           { id: 'cricket', name: 'Cricket', icon: '🏏' },
@@ -264,9 +270,16 @@ export default function LiveSports({ onClose }: Props) {
                         ) : (
                           <h2 className="text-xl font-bold text-white mb-4">{selectedMatch.title}</h2>
                         )}
-                        <div className="flex items-center gap-2 text-neutral-400 text-sm mb-2">
-                          <Globe className="w-4 h-4" />
-                          <span className="capitalize">{selectedMatch.category}</span>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 text-neutral-400 text-sm">
+                            <Globe className="w-4 h-4" />
+                            <span className="capitalize">{selectedMatch.category}</span>
+                          </div>
+                          {selectedMatch.is4k && (
+                            <span className="text-xs bg-purple-600/20 text-purple-400 px-2 py-0.5 rounded-full border border-purple-600/30 font-semibold">
+                              📺 4K UHD
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -385,18 +398,25 @@ export default function LiveSports({ onClose }: Props) {
                   >
                     <div className="p-4">
                       {/* Status Badge */}
-                      <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${match.isLive
                           ? 'bg-red-600 text-white'
                           : 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
                           }`}>
                           {match.isLive ? '🔴 LIVE' : formatTime(match.date)}
                         </span>
-                        {match.popular && (
-                          <span className="text-xs bg-yellow-600/20 text-yellow-400 px-2 py-1 rounded-full border border-yellow-600/30">
-                            ⭐ Popular
-                          </span>
-                        )}
+                        <div className="flex gap-1">
+                          {match.is4k && (
+                            <span className="text-xs bg-purple-600/20 text-purple-400 px-2 py-1 rounded-full border border-purple-600/30 font-semibold">
+                              📺 4K
+                            </span>
+                          )}
+                          {match.popular && (
+                            <span className="text-xs bg-yellow-600/20 text-yellow-400 px-2 py-1 rounded-full border border-yellow-600/30">
+                              ⭐ Popular
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Teams */}
