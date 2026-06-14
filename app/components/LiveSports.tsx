@@ -109,26 +109,41 @@ export default function LiveSports({ onClose }: Props) {
       });
   }, [selectedSport, activeTab]);
 
-  const loadStreams = async (match: Match, source: StreamSource) => {
+  const loadStreams = async (match: Match) => {
     setLoadingStreams(true);
     setSelectedMatch(match);
     setSelectedStream(null);
+    setStreams([]);
 
     try {
-      const res = await fetch(`/api/sports/streams?source=${source.source}&id=${source.id}`);
-      const data = await res.json();
+      const fetchPromises = match.sources.map(async (source) => {
+        try {
+          const res = await fetch(`/api/sports/streams?source=${source.source}&id=${source.id}`);
+          if (!res.ok) return [];
+          const data = await res.json();
+          return data.streams || [];
+        } catch (err) {
+          console.error(`Error loading stream source ${source.source}:`, err);
+          return [];
+        }
+      });
 
-      if (data.streams && data.streams.length > 0) {
-        setStreams(data.streams);
-        // Auto-select first stream
-        setSelectedStream(data.streams[0]);
+      const results = await Promise.all(fetchPromises);
+      const allStreams = results.flat();
+
+      if (allStreams.length > 0) {
+        setStreams(allStreams);
+        // Auto-select the first stream
+        setSelectedStream(allStreams[0]);
       } else {
         setStreams([]);
       }
-    } catch {
+    } catch (err) {
+      console.error('Failed to load streams:', err);
       setStreams([]);
+    } finally {
+      setLoadingStreams(false);
     }
-    setLoadingStreams(false);
   };
 
   const formatTime = (timestamp: number) => {
@@ -462,24 +477,34 @@ export default function LiveSports({ onClose }: Props) {
                         {match.category}
                       </div>
 
-                      {/* Watch Buttons */}
-                      <div className="flex flex-wrap gap-2">
-                        {match.sources.slice(0, 2).map((source, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => loadStreams(match, source)}
-                            disabled={loadingStreams && selectedMatch?.id === match.id}
-                            className="flex-1 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:from-neutral-700 disabled:to-neutral-700 text-white text-xs font-semibold py-2.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-red-900/20"
-                          >
-                            {loadingStreams && selectedMatch?.id === match.id ? (
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
-                            ) : (
-                              <Play className="w-3 h-3" />
-                            )}
-                            {source.source.toUpperCase()}
-                          </button>
-                        ))}
+                      {/* Available Sources Badges */}
+                      <div className="flex flex-wrap gap-1.5 mb-3 justify-center">
+                        {match.sources.map((source, idx) => {
+                          const displaySource = source.source.toUpperCase();
+                          return (
+                            <span
+                              key={idx}
+                              className="text-[10px] font-semibold bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded border border-neutral-700/50"
+                            >
+                              {displaySource}
+                            </span>
+                          );
+                        })}
                       </div>
+
+                      {/* Watch Button */}
+                      <button
+                        onClick={() => loadStreams(match)}
+                        disabled={loadingStreams && selectedMatch?.id === match.id}
+                        className="w-full bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:from-neutral-700 disabled:to-neutral-700 text-white text-xs font-semibold py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-red-900/20"
+                      >
+                        {loadingStreams && selectedMatch?.id === match.id ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
+                        ) : (
+                          <Play className="w-3 h-3" />
+                        )}
+                        Watch Match
+                      </button>
                     </div>
                   </div>
                 ))}

@@ -42,6 +42,21 @@ function parseEasternTimeToUTC(dateStr: string): number {
   }
 }
 
+function getMatchKey(match: any): string {
+  if (match.teams?.home?.name && match.teams?.away?.name) {
+    const t1 = match.teams.home.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const t2 = match.teams.away.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return [t1, t2].sort().join('-vs-');
+  }
+  const vsMatch = match.title.match(/(.+)\s+vs\s+(.+)/i);
+  if (vsMatch) {
+    const t1 = vsMatch[1].toLowerCase().replace(/[^a-z0-9]/g, '');
+    const t2 = vsMatch[2].toLowerCase().replace(/[^a-z0-9]/g, '');
+    return [t1, t2].sort().join('-vs-');
+  }
+  return match.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type') || 'live';
@@ -111,7 +126,7 @@ export async function GET(request: Request) {
         
         let rawMatches = tsData.events.map((event: any) => {
           const dateMs = parseEasternTimeToUTC(event.time);
-          const isLive = Date.now() >= dateMs;
+          const isLive = Date.now() >= (dateMs - 30 * 60 * 1000); // 30 minutes pre-kickoff window
           const has4k = event.streams && event.streams.some((s: any) => 
             s.name && (s.name.toLowerCase().includes('4k') || s.name.toLowerCase().includes('uhd'))
           );
@@ -164,7 +179,32 @@ export async function GET(request: Request) {
     console.error('TimStreams sports API error:', error);
   }
 
-  const combinedMatches = [...transformedMatches, ...timStreamsMatches];
+  // 3. Group and merge duplicate matches
+  const groupedMap = new Map<string, any>();
+  
+  for (const match of transformedMatches) {
+    const key = getMatchKey(match);
+    groupedMap.set(key, match);
+  }
+  
+  for (const match of timStreamsMatches) {
+    const key = getMatchKey(match);
+    const existing = groupedMap.get(key);
+    if (existing) {
+      // Merge unique sources
+      const existingSrcs = existing.sources || [];
+      const newSrcs = match.sources || [];
+      existing.sources = [...existingSrcs, ...newSrcs.filter((ns: any) => !existingSrcs.some((es: any) => es.source === ns.source && es.id === ns.id))];
+      if (!existing.poster) existing.poster = match.poster;
+      if (match.is4k) existing.is4k = true;
+      if (match.isLive) existing.isLive = true;
+      if (!existing.teams && match.teams) existing.teams = match.teams;
+    } else {
+      groupedMap.set(key, match);
+    }
+  }
+  
+  const combinedMatches = Array.from(groupedMap.values());
 
   // Sort combined matches: live first, then by date ascending
   combinedMatches.sort((a, b) => {
