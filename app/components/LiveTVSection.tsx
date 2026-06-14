@@ -81,6 +81,7 @@ export default function LiveTVSection({
                         className="w-full h-full border-0"
                         allowFullScreen
                         allow="autoplay; fullscreen; picture-in-picture"
+                        sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-downloads allow-modals allow-pointer-lock"
                       />
                     ) : (
                       <video

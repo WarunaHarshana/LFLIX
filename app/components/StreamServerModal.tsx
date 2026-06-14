@@ -625,6 +625,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                 className="w-full h-full border-0"
                 allowFullScreen
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-downloads allow-modals allow-pointer-lock"
                 referrerPolicy="no-referrer"
                 onLoad={handleIframeLoad}
                 onError={() => {

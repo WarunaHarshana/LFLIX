@@ -234,6 +234,7 @@ export default function LiveSports({ onClose }: Props) {
                         className="w-full h-full"
                         allowFullScreen
                         allow="autoplay; fullscreen; picture-in-picture"
+                        sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-downloads allow-modals allow-pointer-lock"
                       />
                       {/* Live indicator */}
                       {selectedMatch.isLive && (
