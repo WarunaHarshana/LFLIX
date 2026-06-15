@@ -360,10 +360,10 @@ export default function LiveSports({ onClose }: Props) {
                           setCurrentQuality(-1);
                           setIsDropdownOpen(false);
                         }}
-                        className="absolute top-3 right-3 sm:top-5 sm:right-5 z-50 p-2.5 sm:p-3 bg-black/70 hover:bg-red-600 text-white hover:text-white backdrop-blur-md rounded-full transition-all duration-200 cursor-pointer shadow-xl border border-white/30 hover:scale-110 active:scale-95"
+                        className="absolute top-4 right-4 z-10 p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10"
                         title="Close Player"
                       >
-                        <X className="w-4 h-4 sm:w-6 sm:h-6" />
+                        <X className="w-5 h-5" />
                       </button>
                     </div>
                   </div>
