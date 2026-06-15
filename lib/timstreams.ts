@@ -48,7 +48,7 @@ export async function resolveTimStream(embedUrl: string): Promise<string> {
     throw new Error('Could not extract stream ID from URL: ' + embedUrl);
   }
 
-  const response = await fetch('https://nl-081-v1.vivocdn.xyz/fetch', {
+  const response = await fetch('https://viznf.gdgdfhbdfidsf.xyz/fetch', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
