@@ -6,37 +6,12 @@ export const dynamic = 'force-dynamic';
 // Streamed.pk API integration for live sports
 const API_BASE = 'https://streamed.pk/api';
 
-function parseEasternTimeToUTC(dateStr: string): number {
+function parseTimStreamsTimeToUTC(dateStr: string): number {
   if (!dateStr) return 0;
   // normalize format to YYYY-MM-DDTHH:mm:ss
   const normalized = dateStr.trim().replace(' ', 'T');
   try {
-    const tzDate = new Date(normalized + 'Z');
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York',
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      second: 'numeric',
-      hour12: false
-    });
-    
-    const parts = formatter.formatToParts(tzDate);
-    const partMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
-    
-    const formattedDate = new Date(Date.UTC(
-      parseInt(partMap.year),
-      parseInt(partMap.month) - 1,
-      parseInt(partMap.day),
-      parseInt(partMap.hour),
-      parseInt(partMap.minute),
-      parseInt(partMap.second || '0')
-    ));
-    
-    const diff = tzDate.getTime() - formattedDate.getTime();
-    return tzDate.getTime() + diff;
+    return new Date(normalized + 'Z').getTime() || Date.parse(normalized) || Date.now();
   } catch (e) {
     return new Date(normalized).getTime() || Date.now();
   }
@@ -125,7 +100,7 @@ export async function GET(request: Request) {
         const tsGenres = tsData.genres || {};
         
         let rawMatches = tsData.events.map((event: any) => {
-          const dateMs = parseEasternTimeToUTC(event.time);
+          const dateMs = parseTimStreamsTimeToUTC(event.time);
           const isLive = Date.now() >= (dateMs - 30 * 60 * 1000); // 30 minutes pre-kickoff window
           const has4k = event.streams && event.streams.some((s: any) => 
             s.name && (s.name.toLowerCase().includes('4k') || s.name.toLowerCase().includes('uhd'))
@@ -146,7 +121,11 @@ export async function GET(request: Request) {
 
         // Apply type filtering
         if (type === 'live') {
-          rawMatches = rawMatches.filter((match: any) => match.isLive);
+          rawMatches = rawMatches.filter((match: any) => {
+            const key = getMatchKey(match);
+            const existsInStreamedPk = transformedMatches.some(m => getMatchKey(m) === key);
+            return match.isLive || existsInStreamedPk;
+          });
         } else if (type === 'popular') {
           rawMatches = rawMatches.filter((match: any) => match.popular);
         }
