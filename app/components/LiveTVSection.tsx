@@ -158,13 +158,30 @@ export default function LiveTVSection({
                       <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse" />
                       <span className="text-white text-xs sm:text-sm font-medium">LIVE</span>
                     </div>
+                    {/* Close button overlay */}
+                    <button
+                      onClick={() => setSelectedIPTVChannel(null)}
+                      className="absolute top-2 right-2 sm:top-4 sm:right-4 z-10 p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10"
+                      title="Close Player"
+                    >
+                      <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </button>
                   </div>
                 </div>
-
+ 
                 {/* Now Playing Info Panel */}
                 <div className="lg:col-span-1">
                   <div className="bg-gradient-to-br from-neutral-900/90 to-neutral-950/90 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-neutral-800/50 p-4 sm:p-6 h-full">
-                    <p className="text-xs sm:text-sm text-neutral-500 uppercase tracking-wider mb-3 sm:mb-4">Now Playing</p>
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
+                      <p className="text-xs sm:text-sm text-neutral-500 uppercase tracking-wider">Now Playing</p>
+                      <button
+                        onClick={() => setSelectedIPTVChannel(null)}
+                        className="p-1.5 text-neutral-500 hover:text-white hover:bg-neutral-800 rounded-full transition-all cursor-pointer"
+                        title="Close Player"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                     <div className="flex items-start gap-3 sm:gap-4 mb-4 sm:mb-6">
                       {selectedIPTVChannel.logo ? (
                         <div className="w-14 h-14 sm:w-20 sm:h-20 bg-neutral-800 rounded-lg sm:rounded-xl flex items-center justify-center p-1.5 sm:p-2 shrink-0">

@@ -350,14 +350,45 @@ export default function LiveSports({ onClose }: Props) {
                           <span className="text-white text-sm font-medium">LIVE</span>
                         </div>
                       )}
+                      {/* Close button overlay */}
+                      <button
+                        onClick={() => {
+                          setSelectedMatch(null);
+                          setSelectedStream(null);
+                          setStreams([]);
+                          setQualities([]);
+                          setCurrentQuality(-1);
+                          setIsDropdownOpen(false);
+                        }}
+                        className="absolute top-4 right-4 z-10 p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10"
+                        title="Close Player"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
                     </div>
                   </div>
-
+ 
                   {/* Now Playing Info Panel */}
                   <div className="lg:col-span-1">
                     <div className="bg-gradient-to-br from-neutral-900/90 to-neutral-950/90 backdrop-blur-xl rounded-2xl border border-neutral-800/50 p-6 h-full">
-                      <p className="text-sm text-neutral-500 uppercase tracking-wider mb-4">Now Watching</p>
-
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm text-neutral-500 uppercase tracking-wider">Now Watching</p>
+                        <button
+                          onClick={() => {
+                            setSelectedMatch(null);
+                            setSelectedStream(null);
+                            setStreams([]);
+                            setQualities([]);
+                            setCurrentQuality(-1);
+                            setIsDropdownOpen(false);
+                          }}
+                          className="p-1.5 text-neutral-500 hover:text-white hover:bg-neutral-800 rounded-full transition-all cursor-pointer"
+                          title="Close Player"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+ 
                       {/* Match Info */}
                       <div className="mb-6">
                         {selectedMatch.teams?.home && selectedMatch.teams?.away ? (
