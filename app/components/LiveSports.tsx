@@ -242,6 +242,28 @@ export default function LiveSports({ onClose }: Props) {
     }
   };
 
+  const getStreamTitle = (stream: Stream) => {
+    let title = stream.language || `Feed ${stream.streamNo}`;
+    
+    // Check if the title already contains quality indicators
+    const hasQuality = title.toLowerCase().includes('720p') ||
+                       title.toLowerCase().includes('1080p') ||
+                       title.toLowerCase().includes('fhd') ||
+                       title.toLowerCase().includes('4k') ||
+                       title.toLowerCase().includes('uhd') ||
+                       title.toLowerCase().includes('hevc');
+                       
+    if (stream.hd && !hasQuality) {
+      title += ' (HD)';
+    }
+    return title;
+  };
+
+  const getStreamSubtitle = (stream: Stream) => {
+    const providerName = stream.source ? stream.source.toUpperCase() : 'UNKNOWN';
+    return `${providerName} • Stream ${stream.streamNo}`;
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black z-50 overflow-y-auto"
@@ -406,11 +428,11 @@ export default function LiveSports({ onClose }: Props) {
                             <Tv className="w-4 h-4 text-red-500 shrink-0" />
                             <div className="flex flex-col items-start min-w-0 text-left">
                               <span className="text-sm font-semibold truncate text-white leading-tight">
-                                {selectedStream ? selectedStream.language || `Stream ${selectedStream.streamNo}` : 'Select a stream'}
+                                {selectedStream ? getStreamTitle(selectedStream) : 'Select a stream'}
                               </span>
                               {selectedStream && (
                                 <span className="text-xs text-neutral-400 mt-0.5">
-                                  Source {selectedStream.streamNo} {selectedStream.hd && '• HD'}
+                                  {getStreamSubtitle(selectedStream)}
                                 </span>
                               )}
                             </div>
@@ -439,10 +461,10 @@ export default function LiveSports({ onClose }: Props) {
                                 >
                                   <div className="flex flex-col min-w-0">
                                     <span className="text-sm font-semibold truncate">
-                                      {stream.language || `Stream ${stream.streamNo}`}
+                                      {getStreamTitle(stream)}
                                     </span>
                                     <span className="text-xs text-neutral-500 mt-0.5">
-                                      Source {stream.streamNo} {stream.hd && '• HD'}
+                                      {getStreamSubtitle(stream)}
                                     </span>
                                   </div>
                                   {isSelected && <Check className="w-4 h-4 text-red-500 shrink-0 ml-2" />}
