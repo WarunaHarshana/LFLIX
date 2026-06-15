@@ -15,6 +15,7 @@ type Props = {
 
 export default function IPTVPlayer({ channel, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,12 +91,47 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
     };
   }, [channel.url]);
 
+  // Redirect video requestFullscreen to containerRef to prevent washed-out HDR colors in browser fullscreen overlay
+  useEffect(() => {
+    const video = videoRef.current;
+    const container = containerRef.current;
+    if (!video || !container) return;
+
+    const originalRequestFullscreen = video.requestFullscreen || (video as any).webkitRequestFullscreen;
+    
+    const customRequestFullscreen = function (options?: FullscreenOptions) {
+      if (container.requestFullscreen) {
+        return container.requestFullscreen(options);
+      } else if ((container as any).webkitRequestFullscreen) {
+        return (container as any).webkitRequestFullscreen(options);
+      }
+      return originalRequestFullscreen.call(video, options);
+    };
+
+    (video as any).requestFullscreen = customRequestFullscreen;
+    (video as any).webkitRequestFullscreen = customRequestFullscreen;
+
+    const handleDblClick = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFullscreen();
+    };
+
+    video.addEventListener('dblclick', handleDblClick);
+
+    return () => {
+      (video as any).requestFullscreen = originalRequestFullscreen;
+      (video as any).webkitRequestFullscreen = originalRequestFullscreen;
+      video.removeEventListener('dblclick', handleDblClick);
+    };
+  }, [channel.url]);
+
   const toggleFullscreen = () => {
-    if (videoRef.current) {
+    if (containerRef.current) {
       if (document.fullscreenElement) {
-        document.exitFullscreen();
+        document.exitFullscreen().catch(() => {});
       } else {
-        videoRef.current.requestFullscreen().catch(() => {});
+        containerRef.current.requestFullscreen().catch(() => {});
       }
     }
   };
@@ -119,7 +155,7 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div ref={containerRef} className="fixed inset-0 z-50 bg-black flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-neutral-900">
         <div className="flex items-center gap-3">
@@ -193,8 +229,7 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
           <iframe
             src={channel.url}
             className="w-full h-full border-0"
-            allowFullScreen
-            allow="autoplay; fullscreen; picture-in-picture"
+            allow="autoplay; picture-in-picture"
             sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-downloads allow-modals allow-pointer-lock"
             onLoad={() => setLoading(false)}
           />
@@ -202,6 +237,7 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
           <video
             ref={videoRef}
             controls
+            controlsList="nofullscreen"
             autoPlay
             muted={isMuted}
             className="max-w-full max-h-full"

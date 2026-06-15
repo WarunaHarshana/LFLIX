@@ -49,6 +49,7 @@ interface AudioTrack {
 
 export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false, subtitles, videoCodec, audioCodec, fileName }: Props) {
   const videoRef = useRef<ExtendedHTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -112,6 +113,42 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
       setActiveSrc(src);
     }
   }, [src, isNative, audioCodec, videoCodec, fileName]);
+
+  // Redirect video requestFullscreen to containerRef to prevent washed-out HDR colors in browser fullscreen overlay
+  useEffect(() => {
+    if (isNative) return;
+    const video = videoRef.current;
+    const container = containerRef.current;
+    if (!video || !container) return;
+
+    const originalRequestFullscreen = video.requestFullscreen || (video as any).webkitRequestFullscreen;
+    
+    const customRequestFullscreen = function (options?: FullscreenOptions) {
+      if (container.requestFullscreen) {
+        return container.requestFullscreen(options);
+      } else if ((container as any).webkitRequestFullscreen) {
+        return (container as any).webkitRequestFullscreen(options);
+      }
+      return originalRequestFullscreen.call(video, options);
+    };
+
+    (video as any).requestFullscreen = customRequestFullscreen;
+    (video as any).webkitRequestFullscreen = customRequestFullscreen;
+
+    const handleDblClick = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFullscreen();
+    };
+
+    video.addEventListener('dblclick', handleDblClick);
+
+    return () => {
+      (video as any).requestFullscreen = originalRequestFullscreen;
+      (video as any).webkitRequestFullscreen = originalRequestFullscreen;
+      video.removeEventListener('dblclick', handleDblClick);
+    };
+  }, [activeSrc, isNative]);
 
   // Attach hls.js for HLS sources (e.g. the on-the-fly transcode endpoint).
   useEffect(() => {
@@ -383,11 +420,13 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
   // Handle fullscreen
   const toggleFullscreen = () => {
-    if (videoRef.current) {
+    if (containerRef.current) {
       if (document.fullscreenElement) {
-        document.exitFullscreen();
+        document.exitFullscreen().catch(err => {
+          console.error('Exit fullscreen error:', err);
+        });
       } else {
-        videoRef.current.requestFullscreen().catch(err => {
+        containerRef.current.requestFullscreen().catch(err => {
           console.error('Fullscreen error:', err);
         });
       }
@@ -400,8 +439,8 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     if (!video) return;
 
     const handlePlay = () => {
-      if (!document.fullscreenElement && video.requestFullscreen) {
-        video.requestFullscreen().catch(() => {
+      if (!document.fullscreenElement && containerRef.current && containerRef.current.requestFullscreen) {
+        containerRef.current.requestFullscreen().catch(() => {
           // Ignore errors
         });
       }
@@ -480,7 +519,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
   }, [audioTracks, subtitleTracks]);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col">
+    <div ref={containerRef} className="fixed inset-0 z-[100] bg-black flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-neutral-900">
         <h2 className="text-lg font-medium truncate flex-1">{title}</h2>
@@ -626,6 +665,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
           ref={videoRef}
           src={isHlsSource(activeSrc) ? undefined : activeSrc}
           controls
+          controlsList="nofullscreen"
           autoPlay
           className="max-w-full max-h-full"
           playsInline

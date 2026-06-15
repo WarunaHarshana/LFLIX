@@ -379,3 +379,32 @@ body {
 .server-switch-progress > div {
   animation: serverSwitchProgress 1.4s linear infinite;
 }
+
+/* Hide native video controls fullscreen button to prevent browser direct video overlay bugs on HDR monitors */
+video::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+}
+video::-moz-media-controls-fullscreen-button {
+  display: none !important;
+}
+
+/* Ensure fullscreen containers occupy the entire screen, ignoring aspect ratios or borders */
+:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  aspect-ratio: auto !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+:-webkit-full-screen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  aspect-ratio: auto !important;
+  border-radius: 0 !important;
+  border: none !important;
+}

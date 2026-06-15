@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Trophy, Play, X, Activity, Clock, Globe, AlertCircle, ChevronLeft, ChevronDown, Check, Tv } from 'lucide-react';
+import { Trophy, Play, X, Activity, Clock, Globe, AlertCircle, ChevronLeft, ChevronDown, Check, Tv, Maximize, Minimize } from 'lucide-react';
 
 type Sport = {
   id: string;
@@ -60,11 +60,32 @@ export default function LiveSports({ onClose }: Props) {
   const [activeTab, setActiveTab] = useState<'live' | 'today'>('live');
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [qualities, setQualities] = useState<{ index: number; label: string }[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const hlsRef = useRef<any>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Track fullscreen state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (containerRef.current) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else {
+        containerRef.current.requestFullscreen().catch(() => {});
+      }
+    }
+  };
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -129,6 +150,41 @@ export default function LiveSports({ onClose }: Props) {
         hls.destroy();
       }
       hlsRef.current = null;
+    };
+  }, [selectedStream]);
+
+  // Redirect video requestFullscreen to containerRef to prevent washed-out HDR colors in browser fullscreen overlay
+  useEffect(() => {
+    const video = videoRef.current;
+    const container = containerRef.current;
+    if (!video || !container) return;
+
+    const originalRequestFullscreen = video.requestFullscreen || (video as any).webkitRequestFullscreen;
+    
+    const customRequestFullscreen = function (options?: FullscreenOptions) {
+      if (container.requestFullscreen) {
+        return container.requestFullscreen(options);
+      } else if ((container as any).webkitRequestFullscreen) {
+        return (container as any).webkitRequestFullscreen(options);
+      }
+      return originalRequestFullscreen.call(video, options);
+    };
+
+    (video as any).requestFullscreen = customRequestFullscreen;
+    (video as any).webkitRequestFullscreen = customRequestFullscreen;
+
+    const handleDblClick = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFullscreen();
+    };
+
+    video.addEventListener('dblclick', handleDblClick);
+
+    return () => {
+      (video as any).requestFullscreen = originalRequestFullscreen;
+      (video as any).webkitRequestFullscreen = originalRequestFullscreen;
+      video.removeEventListener('dblclick', handleDblClick);
     };
   }, [selectedStream]);
 
@@ -321,7 +377,24 @@ export default function LiveSports({ onClose }: Props) {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Video Player - Takes 2/3 */}
                   <div className="lg:col-span-2">
-                    <div className="relative bg-black rounded-2xl overflow-hidden border border-neutral-800/50 shadow-2xl shadow-black/50 aspect-video flex items-center justify-center">
+                    <div
+                      ref={containerRef}
+                      onDoubleClick={toggleFullscreen}
+                      style={isFullscreen ? {
+                        width: '100vw',
+                        height: '100vh',
+                        maxWidth: '100vw',
+                        maxHeight: '100vh',
+                        aspectRatio: 'auto',
+                        borderRadius: '0px',
+                        border: 'none',
+                        zIndex: 9999,
+                        position: 'fixed',
+                        top: 0,
+                        left: 0
+                      } : undefined}
+                      className="relative bg-black rounded-2xl overflow-hidden border border-neutral-800/50 shadow-2xl shadow-black/50 aspect-video flex items-center justify-center cursor-pointer"
+                    >
                       {selectedStream.embedUrl.includes('embed') || 
                        selectedStream.embedUrl.includes('pages.dev') || 
                        selectedStream.embedUrl.includes('html') ? (
@@ -329,13 +402,13 @@ export default function LiveSports({ onClose }: Props) {
                           key={selectedStream.id}
                           src={selectedStream.embedUrl}
                           className="w-full h-full border-0"
-                          allowFullScreen
-                          allow="autoplay; fullscreen; picture-in-picture"
+                          allow="autoplay; picture-in-picture"
                         />
                       ) : (
                         <video
                           ref={videoRef}
                           controls
+                          controlsList="nofullscreen"
                           autoPlay
                           className="w-full h-full object-contain bg-black"
                           playsInline
@@ -345,11 +418,33 @@ export default function LiveSports({ onClose }: Props) {
                       )}
                       {/* Live indicator */}
                       {selectedMatch.isLive && (
-                        <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm rounded-full pointer-events-none">
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '16px',
+                            left: '16px',
+                            zIndex: 50
+                          }}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm rounded-full pointer-events-none"
+                        >
                           <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
                           <span className="text-white text-sm font-medium">LIVE</span>
                         </div>
                       )}
+                      {/* Fullscreen button overlay */}
+                      <button
+                        onClick={toggleFullscreen}
+                        style={{
+                          position: 'absolute',
+                          top: '16px',
+                          right: '64px',
+                          zIndex: 50
+                        }}
+                        className="p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10"
+                        title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                      >
+                        {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                      </button>
                       {/* Close button overlay */}
                       <button
                         onClick={() => {
@@ -360,7 +455,13 @@ export default function LiveSports({ onClose }: Props) {
                           setCurrentQuality(-1);
                           setIsDropdownOpen(false);
                         }}
-                        className="absolute top-4 right-4 z-10 p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10"
+                        style={{
+                          position: 'absolute',
+                          top: '16px',
+                          right: '16px',
+                          zIndex: 50
+                        }}
+                        className="p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10"
                         title="Close Player"
                       >
                         <X className="w-5 h-5" />
