@@ -415,64 +415,47 @@ export default function LiveSports({ onClose }: Props) {
                       </div>
 
                       {/* Stream Selection Dropdown */}
-                      <div className="space-y-2 relative" ref={dropdownRef}>
-                        <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Available Streams</p>
-                        
-                        {/* Custom Dropdown Trigger */}
-                        <button
-                          type="button"
-                          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                          className="w-full flex items-center justify-between p-3.5 bg-neutral-900/80 hover:bg-neutral-800/80 border border-neutral-800 rounded-xl text-neutral-200 transition-all focus:outline-none focus:ring-2 focus:ring-red-600/50 cursor-pointer shadow-inner"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <Tv className="w-4 h-4 text-red-500 shrink-0" />
-                            <div className="flex flex-col items-start min-w-0 text-left">
-                              <span className="text-sm font-semibold truncate text-white leading-tight">
-                                {selectedStream ? getStreamTitle(selectedStream) : 'Select a stream'}
-                              </span>
-                              {selectedStream && (
-                                <span className="text-xs text-neutral-400 mt-0.5">
-                                  {getStreamSubtitle(selectedStream)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <ChevronDown className={`w-4 h-4 text-neutral-400 shrink-0 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
-                        </button>
+                      <div className="flex items-center gap-3 mb-6 relative z-50" ref={dropdownRef}>
+                        <span className="text-neutral-400 text-sm font-medium shrink-0">Source:</span>
+                        <div className="relative flex-1">
+                          {/* Custom Dropdown Trigger */}
+                          <button
+                            type="button"
+                            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                            className="w-full flex items-center justify-between px-3.5 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer shadow-sm"
+                          >
+                            <span className="truncate">
+                              {selectedStream ? getStreamTitle(selectedStream) : 'Select a stream'}
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-neutral-400 shrink-0 ml-2 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
 
-                        {/* Dropdown Menu */}
-                        {isDropdownOpen && (
-                          <div className="absolute top-full left-0 right-0 mt-1.5 max-h-[280px] overflow-y-auto bg-neutral-900/98 backdrop-blur-xl border border-neutral-800 rounded-xl shadow-2xl z-50 py-1.5 custom-scrollbar divide-y divide-neutral-800/40">
-                            {streams.map((stream, idx) => {
-                              const isSelected = selectedStream?.id === stream.id;
-                              return (
-                                <button
-                                  key={`${stream.id}-${idx}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedStream(stream);
-                                    setIsDropdownOpen(false);
-                                  }}
-                                  className={`w-full flex items-center justify-between px-4 py-3 text-left transition-all cursor-pointer ${
-                                    isSelected 
-                                      ? 'bg-red-950/20 text-red-400' 
-                                      : 'hover:bg-neutral-800/70 text-neutral-300'
-                                  }`}
-                                >
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="text-sm font-semibold truncate">
-                                      {getStreamTitle(stream)}
-                                    </span>
-                                    <span className="text-xs text-neutral-500 mt-0.5">
-                                      {getStreamSubtitle(stream)}
-                                    </span>
-                                  </div>
-                                  {isSelected && <Check className="w-4 h-4 text-red-500 shrink-0 ml-2" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
+                          {/* Dropdown Menu */}
+                          {isDropdownOpen && (
+                            <div className="absolute top-full left-0 right-0 mt-1 max-h-[250px] overflow-y-auto bg-neutral-900 border border-neutral-700 rounded-lg shadow-2xl z-50 py-1.5 custom-scrollbar">
+                              {streams.map((stream, idx) => {
+                                const isSelected = selectedStream?.id === stream.id;
+                                return (
+                                  <button
+                                    key={`${stream.id}-${idx}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedStream(stream);
+                                      setIsDropdownOpen(false);
+                                    }}
+                                    className={`w-full px-4 py-2 text-left text-sm transition-all cursor-pointer block truncate ${
+                                      isSelected 
+                                        ? 'bg-blue-600 text-white font-medium' 
+                                        : 'hover:bg-blue-600 hover:text-white text-neutral-300'
+                                    }`}
+                                  >
+                                    {getStreamTitle(stream)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Quality Selection */}
