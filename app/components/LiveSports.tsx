@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Trophy, Play, X, Activity, Clock, Globe, AlertCircle, ChevronLeft, ChevronDown, Check, Tv, Maximize, Minimize } from 'lucide-react';
 
 type Sport = {
@@ -67,6 +67,61 @@ export default function LiveSports({ onClose }: Props) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const timeoutRef = useRef<any>(null);
+
+  // Activity handler to show controls and start hide timer
+  const handleActivity = useCallback(() => {
+    setShowControls(true);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+  }, []);
+
+  // Activity tracking for showing/hiding controls and cursor
+  useEffect(() => {
+    if (!selectedStream) {
+      setShowControls(true);
+      return;
+    }
+
+    // Initialize timer
+    handleActivity();
+
+    const container = containerRef.current;
+    
+    // Listen to mouse movement and clicks on container
+    if (container) {
+      container.addEventListener('mousemove', handleActivity);
+      container.addEventListener('mousedown', handleActivity);
+      container.addEventListener('touchstart', handleActivity);
+      // Mouse leave event
+      container.addEventListener('mouseleave', () => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
+        setShowControls(false);
+      });
+    }
+
+    // Keyboard activity anywhere
+    document.addEventListener('keydown', handleActivity);
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      if (container) {
+        container.removeEventListener('mousemove', handleActivity);
+        container.removeEventListener('mousedown', handleActivity);
+        container.removeEventListener('touchstart', handleActivity);
+      }
+      document.removeEventListener('keydown', handleActivity);
+    };
+  }, [selectedStream, handleActivity]);
 
   // Track fullscreen state
   useEffect(() => {
@@ -393,7 +448,9 @@ export default function LiveSports({ onClose }: Props) {
                         top: 0,
                         left: 0
                       } : undefined}
-                      className="relative bg-black rounded-2xl overflow-hidden border border-neutral-800/50 shadow-2xl shadow-black/50 aspect-video flex items-center justify-center cursor-pointer"
+                      className={`relative bg-black rounded-2xl overflow-hidden border border-neutral-800/50 shadow-2xl shadow-black/50 aspect-video flex items-center justify-center transition-all duration-300 ${
+                        !showControls ? 'cursor-none' : 'cursor-pointer'
+                      }`}
                     >
                       {selectedStream.embedUrl.includes('embed') || 
                        selectedStream.embedUrl.includes('pages.dev') || 
@@ -425,7 +482,9 @@ export default function LiveSports({ onClose }: Props) {
                             left: '16px',
                             zIndex: 50
                           }}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm rounded-full pointer-events-none"
+                          className={`flex items-center gap-2 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm rounded-full pointer-events-none transition-opacity duration-300 ${
+                            showControls ? 'opacity-100' : 'opacity-0'
+                          }`}
                         >
                           <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
                           <span className="text-white text-sm font-medium">LIVE</span>
@@ -440,7 +499,9 @@ export default function LiveSports({ onClose }: Props) {
                           right: '64px',
                           zIndex: 50
                         }}
-                        className="p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10"
+                        className={`p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10 ${
+                          showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                        }`}
                         title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
                       >
                         {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
@@ -461,11 +522,22 @@ export default function LiveSports({ onClose }: Props) {
                           right: '16px',
                           zIndex: 50
                         }}
-                        className="p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10"
+                        className={`p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10 ${
+                          showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                        }`}
                         title="Close Player"
                       >
                         <X className="w-5 h-5" />
                       </button>
+                      {/* Invisible activity sensor overlay - active only when controls are hidden */}
+                      {!showControls && (
+                        <div
+                          className="absolute inset-0 z-40 bg-transparent cursor-none"
+                          onMouseMove={handleActivity}
+                          onMouseDown={handleActivity}
+                          onTouchStart={handleActivity}
+                        />
+                      )}
                     </div>
                   </div>
  
