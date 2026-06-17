@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Trophy, Play, X, Activity, Clock, Globe, AlertCircle, ChevronLeft, ChevronDown, Check, Tv, Maximize, Minimize } from 'lucide-react';
+import { Trophy, Play, X, Activity, Clock, Globe, AlertCircle, ChevronLeft, ChevronDown, Check, Tv, Maximize, Minimize, SlidersHorizontal } from 'lucide-react';
 
 type Sport = {
   id: string;
@@ -59,6 +59,7 @@ export default function LiveSports({ onClose }: Props) {
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [activeTab, setActiveTab] = useState<'live' | 'today'>('live');
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null);
+  const [sortByQuality, setSortByQuality] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [qualities, setQualities] = useState<{ index: number; label: string }[]>([]);
@@ -317,8 +318,13 @@ export default function LiveSports({ onClose }: Props) {
 
       if (allStreams.length > 0) {
         setStreams(allStreams);
-        // Auto-select the first stream
-        setSelectedStream(allStreams[0]);
+        // Auto-select the first stream (sorted by quality if enabled)
+        if (sortByQuality) {
+          const sorted = [...allStreams].sort((a, b) => getQualityRank(b) - getQualityRank(a));
+          setSelectedStream(sorted[0]);
+        } else {
+          setSelectedStream(allStreams[0]);
+        }
       } else {
         setStreams([]);
       }
@@ -394,6 +400,28 @@ export default function LiveSports({ onClose }: Props) {
         return 'bg-neutral-800 text-neutral-400 border-neutral-700/50';
     }
   };
+
+  const getQualityRank = (stream: Stream) => {
+    const title = (stream.language || '').toLowerCase();
+    if (title.includes('4k') || title.includes('uhd') || title.includes('2160p')) {
+      return 4;
+    }
+    if (title.includes('fhd') || title.includes('1080p')) {
+      return 3;
+    }
+    if (title.includes('hd') || title.includes('720p') || stream.hd) {
+      return 2;
+    }
+    if (title.includes('sd') || title.includes('480p') || title.includes('360p')) {
+      return 1;
+    }
+    return 0;
+  };
+
+  const getSortedStreams = useCallback(() => {
+    if (!sortByQuality) return streams;
+    return [...streams].sort((a, b) => getQualityRank(b) - getQualityRank(a));
+  }, [streams, sortByQuality]);
 
   return (
     <div
@@ -640,14 +668,29 @@ export default function LiveSports({ onClose }: Props) {
                       </div>
 
                       {/* Stream Selection Dropdown */}
-                      <div className="flex items-center gap-3 mb-6 relative z-50" ref={dropdownRef}>
-                        <span className="text-neutral-400 text-sm font-medium shrink-0">Source:</span>
-                        <div className="relative flex-1">
+                      <div className="flex flex-col gap-2 mb-6 relative z-50" ref={dropdownRef}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider">Select Stream Feed</span>
+                          {/* Sort Toggle Button */}
+                          <button
+                            type="button"
+                            onClick={() => setSortByQuality(!sortByQuality)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all cursor-pointer ${
+                              sortByQuality
+                                ? 'bg-purple-950/40 text-purple-400 border-purple-800/50 hover:bg-purple-900/30'
+                                : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800'
+                            }`}
+                          >
+                            <SlidersHorizontal className="w-3 h-3" />
+                            <span>Sort: Quality First</span>
+                          </button>
+                        </div>
+                        <div className="relative w-full">
                           {/* Custom Dropdown Trigger */}
                           <button
                             type="button"
                             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                            className="w-full flex items-center justify-between px-3.5 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer shadow-sm animate-fade-in"
+                            className="w-full flex items-center justify-between px-3.5 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer shadow-sm"
                           >
                             <span className="truncate flex items-center gap-2">
                               {selectedStream ? (
@@ -667,7 +710,7 @@ export default function LiveSports({ onClose }: Props) {
                           {/* Dropdown Menu */}
                           {isDropdownOpen && (
                             <div className="absolute top-full left-0 right-0 mt-1 max-h-[250px] overflow-y-auto bg-neutral-900 border border-neutral-700 rounded-lg shadow-2xl z-50 py-1.5 custom-scrollbar">
-                              {streams.map((stream, idx) => {
+                              {getSortedStreams().map((stream, idx) => {
                                 const isSelected = selectedStream?.id === stream.id;
                                 return (
                                   <button
