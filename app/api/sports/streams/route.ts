@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchStreamiEventById, getStreamiStreams } from '@/lib/streami';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,23 @@ export async function GET(request: Request) {
       { error: 'Source and ID are required' },
       { status: 400 }
     );
+  }
+
+  if (source === 'streami') {
+    try {
+      const event = await fetchStreamiEventById(id);
+      if (!event) {
+        return NextResponse.json({ streams: [] });
+      }
+      const transformedStreams = getStreamiStreams(event);
+      return NextResponse.json({ streams: transformedStreams });
+    } catch (error) {
+      console.error('Streami sports streams API error:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch streams from Streami' },
+        { status: 500 }
+      );
+    }
   }
 
   if (source === 'timstreams') {

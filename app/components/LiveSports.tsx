@@ -171,7 +171,8 @@ export default function LiveSports({ onClose }: Props) {
 
     const isIframe = selectedStream.embedUrl.includes('embed') || 
                      selectedStream.embedUrl.includes('pages.dev') || 
-                     selectedStream.embedUrl.includes('html');
+                     selectedStream.embedUrl.includes('html') ||
+                     selectedStream.source === 'streami';
 
     if (isIframe) return;
 
@@ -375,6 +376,25 @@ export default function LiveSports({ onClose }: Props) {
     return `${providerName} • Stream ${stream.streamNo}`;
   };
 
+  const getSourceBadgeClass = (source: string) => {
+    switch (source?.toLowerCase()) {
+      case 'streami':
+        return 'bg-emerald-950/40 text-emerald-400 border-emerald-800/50';
+      case 'timstreams':
+        return 'bg-sky-950/40 text-sky-400 border-sky-800/50';
+      case 'admin':
+        return 'bg-red-950/40 text-red-400 border-red-800/50';
+      case 'delta':
+        return 'bg-purple-950/40 text-purple-400 border-purple-800/50';
+      case 'echo':
+        return 'bg-rose-950/40 text-rose-400 border-rose-800/50';
+      case 'golf':
+        return 'bg-amber-950/40 text-amber-400 border-amber-800/50';
+      default:
+        return 'bg-neutral-800 text-neutral-400 border-neutral-700/50';
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black z-50 overflow-y-auto"
@@ -454,7 +474,8 @@ export default function LiveSports({ onClose }: Props) {
                     >
                       {selectedStream.embedUrl.includes('embed') || 
                        selectedStream.embedUrl.includes('pages.dev') || 
-                       selectedStream.embedUrl.includes('html') ? (
+                       selectedStream.embedUrl.includes('html') ||
+                       selectedStream.source === 'streami' ? (
                         <iframe
                           key={selectedStream.id}
                           src={selectedStream.embedUrl}
@@ -626,10 +647,19 @@ export default function LiveSports({ onClose }: Props) {
                           <button
                             type="button"
                             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                            className="w-full flex items-center justify-between px-3.5 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer shadow-sm"
+                            className="w-full flex items-center justify-between px-3.5 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer shadow-sm animate-fade-in"
                           >
-                            <span className="truncate">
-                              {selectedStream ? getStreamTitle(selectedStream) : 'Select a stream'}
+                            <span className="truncate flex items-center gap-2">
+                              {selectedStream ? (
+                                <>
+                                  <span className="truncate">{getStreamTitle(selectedStream)}</span>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${getSourceBadgeClass(selectedStream.source)}`}>
+                                    {selectedStream.source}
+                                  </span>
+                                </>
+                              ) : (
+                                'Select a stream'
+                              )}
                             </span>
                             <ChevronDown className={`w-4 h-4 text-neutral-400 shrink-0 ml-2 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
                           </button>
@@ -647,13 +677,16 @@ export default function LiveSports({ onClose }: Props) {
                                       setSelectedStream(stream);
                                       setIsDropdownOpen(false);
                                     }}
-                                    className={`w-full px-4 py-2 text-left text-sm transition-all cursor-pointer block truncate ${
+                                    className={`w-full px-4 py-2.5 text-left text-sm transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
                                       isSelected 
-                                        ? 'bg-blue-600 text-white font-medium' 
-                                        : 'hover:bg-blue-600 hover:text-white text-neutral-300'
+                                        ? 'bg-neutral-800 text-white font-medium' 
+                                        : 'hover:bg-neutral-800/60 text-neutral-300'
                                     }`}
                                   >
-                                    {getStreamTitle(stream)}
+                                    <span className="truncate">{getStreamTitle(stream)}</span>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${getSourceBadgeClass(stream.source)}`}>
+                                      {stream.source}
+                                    </span>
                                   </button>
                                 );
                               })}
@@ -845,10 +878,11 @@ export default function LiveSports({ onClose }: Props) {
                       <div className="flex flex-wrap gap-1.5 mb-3 justify-center">
                         {match.sources.map((source, idx) => {
                           const displaySource = source.source.toUpperCase();
+                          const badgeClass = getSourceBadgeClass(source.source);
                           return (
                             <span
                               key={idx}
-                              className="text-[10px] font-semibold bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded border border-neutral-700/50"
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${badgeClass}`}
                             >
                               {displaySource}
                             </span>

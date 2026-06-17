@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchStreamiEvents, getStreamiTitle, mapStreamiCategory } from '@/lib/streami';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -158,7 +159,89 @@ export async function GET(request: Request) {
     console.error('TimStreams sports API error:', error);
   }
 
-  // 3. Group and merge duplicate matches
+  // 3. Fetch Streami.click events
+  let streamiMatches: any[] = [];
+  try {
+    const streamiEvents = await fetchStreamiEvents();
+
+    let rawStreamiMatches = streamiEvents.map((event) => {
+      const title = getStreamiTitle(event);
+      const category = mapStreamiCategory(event.category);
+      const dateMs = event.startTime * 1000;
+      const isLive = Date.now() >= (dateMs - 30 * 60 * 1000); // 30 min pre-kickoff window
+      const has4k = event._embeds?.some(block => {
+        const embeds = Array.isArray(block.embeds) ? block.embeds : Object.values(block.embeds);
+        return embeds.some((e: any) =>
+          e.label && (e.label.toLowerCase().includes('4k') || e.label.toLowerCase().includes('uhd'))
+        );
+      });
+
+      // Try to extract team names from title (supports "Team A - Team B" format)
+      let teams: any = undefined;
+      const vsMatch = title.match(/^(.+?)\s*[-–vs.]+\s*(.+)$/i);
+      if (vsMatch && category !== 'pinned' && category !== 'tv') {
+        teams = {
+          home: { name: vsMatch[1].trim() },
+          away: { name: vsMatch[2].trim() },
+        };
+      }
+
+      return {
+        id: `streami-${event.id}`,
+        title,
+        category: category === 'pinned' || category === 'tv' ? 'Others' : category,
+        date: dateMs,
+        poster: null,
+        popular: event.category === 'pilkanozna_wazne' || event.category === 'przypiete',
+        teams,
+        sources: [{ source: 'streami', id: event.id }],
+        isLive,
+        is4k: !!has4k,
+      };
+    });
+
+    // Filter out pinned/TV items for sport-specific queries
+    rawStreamiMatches = rawStreamiMatches.filter((m: any) => m.category !== 'pinned' && m.category !== 'tv');
+
+    // Apply type filtering
+    if (type === 'live') {
+      rawStreamiMatches = rawStreamiMatches.filter((match: any) => {
+        const key = getMatchKey(match);
+        const existsInOther = transformedMatches.some(m => getMatchKey(m) === key) ||
+                              timStreamsMatches.some(m => getMatchKey(m) === key);
+        return match.isLive || existsInOther;
+      });
+    } else if (type === 'popular') {
+      rawStreamiMatches = rawStreamiMatches.filter((match: any) => match.popular);
+    }
+
+    // Apply sport filtering
+    if (sport === '4k') {
+      rawStreamiMatches = rawStreamiMatches.filter((match: any) => match.is4k);
+    } else if (sport !== 'all') {
+      rawStreamiMatches = rawStreamiMatches.filter((match: any) => {
+        const categoryLower = match.category.toLowerCase();
+        const sportLower = sport.toLowerCase();
+
+        if (sportLower === 'football') {
+          return categoryLower.includes('football') || categoryLower === 'futsal';
+        }
+        if (sportLower === 'mma') {
+          return categoryLower.includes('mma') || categoryLower.includes('boxing') || categoryLower.includes('wrestling');
+        }
+        if (sportLower === 'formula1') {
+          return categoryLower.includes('formula') || categoryLower.includes('motorsport');
+        }
+        return categoryLower.includes(sportLower);
+      });
+    }
+
+    streamiMatches = rawStreamiMatches;
+  } catch (error) {
+    console.error('Streami sports API error:', error);
+  }
+
+  // 4. Group and merge duplicate matches
   const groupedMap = new Map<string, any>();
   
   for (const match of transformedMatches) {
@@ -175,6 +258,22 @@ export async function GET(request: Request) {
       const newSrcs = match.sources || [];
       existing.sources = [...existingSrcs, ...newSrcs.filter((ns: any) => !existingSrcs.some((es: any) => es.source === ns.source && es.id === ns.id))];
       if (!existing.poster) existing.poster = match.poster;
+      if (match.is4k) existing.is4k = true;
+      if (match.isLive) existing.isLive = true;
+      if (!existing.teams && match.teams) existing.teams = match.teams;
+    } else {
+      groupedMap.set(key, match);
+    }
+  }
+
+  for (const match of streamiMatches) {
+    const key = getMatchKey(match);
+    const existing = groupedMap.get(key);
+    if (existing) {
+      // Merge unique sources
+      const existingSrcs = existing.sources || [];
+      const newSrcs = match.sources || [];
+      existing.sources = [...existingSrcs, ...newSrcs.filter((ns: any) => !existingSrcs.some((es: any) => es.source === ns.source && es.id === ns.id))];
       if (match.is4k) existing.is4k = true;
       if (match.isLive) existing.isLive = true;
       if (!existing.teams && match.teams) existing.teams = match.teams;
