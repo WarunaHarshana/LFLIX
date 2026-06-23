@@ -132,9 +132,11 @@ class FolderWatcher {
                 pollInterval: 100
             },
             ignored: [
-                /(^|[\/\\])\./, // Ignore dotfiles
+                /(^|[/\\])\./,  // Ignore dotfiles
                 /\$RECYCLE\.BIN/,
-                /System Volume Information/
+                /System Volume Information/,
+                // Skip extras/bonus content folders
+                /(^|[/\\])(extras|extra|bonus|bonus features|bonus content|featurettes?|behind the scenes|behind-the-scenes|deleted scenes?|deleted-scenes|special features|specials|interviews|bloopers|gag reel|outtakes|making of|making-of|the making of|commentary|commentaries|shorts|promos|trailers?)([/\\]|$)/i,
             ]
         });
 
@@ -355,6 +357,22 @@ class FolderWatcher {
         }
     }
 
+    // Folders that contain bonus/extras content which should not appear in the main library
+    private static EXTRAS_FOLDER_NAMES = new Set([
+        'extras', 'extra', 'bonus', 'bonus features', 'bonus content',
+        'featurettes', 'featurette', 'behind the scenes', 'behind-the-scenes',
+        'deleted scenes', 'deleted-scenes', 'deleted scene',
+        'special features', 'specials',
+        'interviews', 'bloopers', 'gag reel', 'outtakes',
+        'making of', 'making-of', 'the making of',
+        'commentary', 'commentaries',
+        'shorts', 'promos', 'trailers', 'trailer',
+    ]);
+
+    private isExtrasFolder(name: string): boolean {
+        return FolderWatcher.EXTRAS_FOLDER_NAMES.has(name.toLowerCase().trim());
+    }
+
     // Helper: recursively get video files from a folder
     private getVideoFilesRecursive(dir: string, fs: typeof import('fs'), fileList: string[] = []): string[] {
         if (!fs.existsSync(dir)) return fileList;
@@ -365,6 +383,8 @@ class FolderWatcher {
                 try {
                     const stat = fs.statSync(filePath);
                     if (stat.isDirectory()) {
+                        // Skip extras/bonus content folders
+                        if (this.isExtrasFolder(file)) continue;
                         this.getVideoFilesRecursive(filePath, fs, fileList);
                     } else if (this.isVideoFile(filePath)) {
                         fileList.push(filePath);

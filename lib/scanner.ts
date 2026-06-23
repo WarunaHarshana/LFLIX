@@ -28,6 +28,24 @@ function isSampleClip(filePath: string): boolean {
   return /(^|[._ -])sample([._ -]|$)/.test(baseName);
 }
 
+// Folders that contain bonus/extras content which should not appear in the main library
+const EXTRAS_FOLDER_NAMES = new Set([
+  'extras', 'extra', 'bonus', 'bonus features', 'bonus content',
+  'featurettes', 'featurette', 'behind the scenes', 'behind-the-scenes',
+  'deleted scenes', 'deleted-scenes', 'deleted scene',
+  'special features', 'specials',
+  'interviews', 'bloopers', 'gag reel', 'outtakes',
+  'making of', 'making-of', 'the making of',
+  'commentary', 'commentaries',
+  'shorts', 'promos', 'trailers', 'trailer',
+]);
+
+function isExtrasContent(filePath: string): boolean {
+  const parts = filePath.split(/[\\/]+/).map(part => part.toLowerCase().trim());
+  const parentDirs = parts.slice(0, -1);
+  return parentDirs.some(dir => EXTRAS_FOLDER_NAMES.has(dir));
+}
+
 export function getVideoFiles(dir: string, fileList: string[] = []): string[] {
   if (!fs.existsSync(dir)) return fileList;
 
@@ -38,7 +56,7 @@ export function getVideoFiles(dir: string, fileList: string[] = []): string[] {
       const stat = fs.statSync(filePath);
       if (stat.isDirectory()) {
         getVideoFiles(filePath, fileList);
-      } else if (isVideoFile(filePath) && !isSampleClip(filePath)) {
+      } else if (isVideoFile(filePath) && !isSampleClip(filePath) && !isExtrasContent(filePath)) {
         fileList.push(filePath);
       }
     } catch {
@@ -117,7 +135,7 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
       return { added: false };
     }
 
-    if (isSampleClip(filePath)) {
+    if (isSampleClip(filePath) || isExtrasContent(filePath)) {
       return { added: false };
     }
 
