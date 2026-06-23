@@ -67,6 +67,28 @@ type ServerRegistryEntry = {
 
 const SERVER_REGISTRY: ServerRegistryEntry[] = [
   {
+    id: 'vidsrc-wtf',
+    name: 'VIDSRC WTF',
+    color: '#ef4444',
+    baselineQuality: '1080p',
+    tier: 'best',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidsrc.wtf/1/movie/${tmdbId}`
+        : `https://vidsrc.wtf/1/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+  },
+  {
+    id: 'vidsrc-wtf-premium',
+    name: 'VIDSRC WTF (PREMIUM)',
+    color: '#dc2626',
+    baselineQuality: '1080p',
+    tier: 'great',
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://vidsrc.wtf/4/movie/${tmdbId}`
+        : `https://vidsrc.wtf/4/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+  },
+  {
     id: 'flux',
     name: 'FLUX',
     color: '#a855f7',
