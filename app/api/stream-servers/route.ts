@@ -110,61 +110,7 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
         ? `https://vidfast.pro/movie/${tmdbId}?autoPlay=true`
         : `https://vidfast.pro/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
   },
-  {
-    id: 'vidfast-io',
-    name: 'VIDFAST (IO)',
-    color: '#10b981',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidfast.io/movie/${tmdbId}?autoPlay=true`
-        : `https://vidfast.io/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
-  },
-  {
-    id: 'vidfast-in',
-    name: 'VIDFAST (IN)',
-    color: '#10b981',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidfast.in/movie/${tmdbId}?autoPlay=true`
-        : `https://vidfast.in/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
-  },
-  {
-    id: 'vidfast-net',
-    name: 'VIDFAST (NET)',
-    color: '#10b981',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidfast.net/movie/${tmdbId}?autoPlay=true`
-        : `https://vidfast.net/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
-  },
-  {
-    id: 'vidfast-pm',
-    name: 'VIDFAST (PM)',
-    color: '#10b981',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidfast.pm/movie/${tmdbId}?autoPlay=true`
-        : `https://vidfast.pm/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
-  },
-  {
-    id: 'vidfast-xyz',
-    name: 'VIDFAST (XYZ)',
-    color: '#10b981',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidfast.xyz/movie/${tmdbId}?autoPlay=true`
-        : `https://vidfast.xyz/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
-  },
+
   {
     id: 'vidking',
     name: 'VIDKING',
@@ -261,15 +207,6 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
       `https://vidsrc.xyz/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
   },
   {
-    id: 'modocine',
-    name: 'MODOCINE',
-    color: '#06b6d4',
-    baselineQuality: '1080p',
-    tier: 'good',
-    buildUrl: (tmdbId, type, season, episode) =>
-      `https://vidsrc.cc/v2/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
-  },
-  {
     id: 'vidsrc-rip',
     name: 'VIDSRC RIP',
     color: '#ef4444',
@@ -290,50 +227,6 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
       type === 'movie'
         ? `https://vidsrc.pm/embed/movie?tmdb=${tmdbId}`
         : `https://vidsrc.pm/embed/tv?tmdb=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
-  },
-  {
-    id: 'vidsrc-me',
-    name: 'VIDSRC ME',
-    color: '#60a5fa',
-    baselineQuality: '1080p',
-    tier: 'ok',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`
-        : `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
-  },
-  {
-    id: 'videasy',
-    name: 'VIDEASY',
-    color: '#06b6d4',
-    baselineQuality: '1080p',
-    tier: 'ok',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://player.videasy.net/movie/${tmdbId}`
-        : `https://player.videasy.net/tv/${tmdbId}/${season || 1}/${episode || 1}`,
-  },
-  {
-    id: 'rivestream',
-    name: 'RIVESTREAM',
-    color: '#6366f1',
-    baselineQuality: '1080p',
-    tier: 'ok',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://rivestream.org/embed?type=movie&id=${tmdbId}`
-        : `https://rivestream.org/embed?type=tv&id=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
-  },
-  {
-    id: 'smashystream',
-    name: 'SMASHYSTREAM',
-    color: '#a855f7',
-    baselineQuality: '1080p',
-    tier: 'ok',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://embed.smashystream.com/playere.php?tmdb=${tmdbId}`
-        : `https://embed.smashystream.com/playere.php?tmdb=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
   },
   {
     id: 'embedsu',
