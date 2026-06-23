@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download } from 'lucide-react';
+import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, BookmarkMinus, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 
 type Episode = {
@@ -48,6 +48,7 @@ type Props = {
     onClose: () => void;
     onPlayEpisode: (episodeId: number, startTime?: number) => void;
     onDeleteEpisode?: (episodeId: number) => void;
+    onRemoveEpisodeFromLibrary?: (episodeId: number) => void;
     onMarkWatched?: (episode: Episode, watched: boolean) => void;
 };
 
@@ -58,7 +59,7 @@ function formatDuration(seconds: number): string {
     return `${m}m`;
 }
 
-export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEpisode, onDeleteEpisode, onMarkWatched }: Props) {
+export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEpisode, onDeleteEpisode, onRemoveEpisodeFromLibrary, onMarkWatched }: Props) {
     const [activeSeason, setActiveSeason] = useState(seasons[0]?.season || 1);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; episode: Episode } | null>(null);
     const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
@@ -83,6 +84,13 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     const handleContextMenu = (e: React.MouseEvent, episode: Episode) => {
         e.preventDefault();
         setContextMenu({ x: e.clientX, y: e.clientY, episode });
+    };
+
+    const handleRemoveFromLibrary = () => {
+        if (contextMenu && onRemoveEpisodeFromLibrary) {
+            onRemoveEpisodeFromLibrary(contextMenu.episode.id);
+        }
+        setContextMenu(null);
     };
 
     const handleDelete = () => {
@@ -640,11 +648,18 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             </button>
                         )}
                         <button
+                            onClick={handleRemoveFromLibrary}
+                            className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left border-t border-neutral-700 text-neutral-200"
+                        >
+                            <BookmarkMinus className="w-4 h-4" />
+                            Remove from Library
+                        </button>
+                        <button
                             onClick={handleDelete}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-red-600 transition w-full text-left border-t border-neutral-700 text-neutral-200"
+                            className="flex items-center gap-3 px-4 py-3 hover:bg-red-600 transition w-full text-left border-t border-neutral-700 text-red-400"
                         >
                             <Trash2 className="w-4 h-4" />
-                            Delete Episode
+                            Delete Permanently
                         </button>
                     </div>
                 </>

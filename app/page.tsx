@@ -292,6 +292,23 @@ export default function Home() {
     }
   };
 
+  const handleRemoveFromLibrary = async (item: ContentItem) => {
+    const confirmed = confirm(`Remove "${item.title}" from library? The file will remain on disk.`);
+    if (!confirmed) return;
+    try {
+      const res = await fetch(apiUrl(`/api/delete?type=${item.type}&id=${item.id}&deleteFile=0`), {
+        method: 'DELETE', credentials: 'same-origin'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Remove failed');
+      showToast(`"${item.title}" removed from library`, 'success');
+      setContextMenu(null);
+      await fetchLibrary();
+    } catch (e) {
+      showToast('Failed to remove item from library', 'error');
+    }
+  };
+
   const handleDelete = async (item: ContentItem) => {
     const confirmed = confirm(`Delete "${item.title}" from library AND local disk permanently?`);
     if (!confirmed) return;
@@ -323,6 +340,23 @@ export default function Home() {
       await fetchLibrary();
     } catch (e) {
       showToast('Failed to delete episode', 'error');
+    }
+  };
+
+  const handleRemoveEpisodeFromLibrary = async (episodeId: number) => {
+    const confirmed = confirm('Remove this episode from library? The file will remain on disk.');
+    if (!confirmed) return;
+    try {
+      const res = await fetch(apiUrl(`/api/delete?type=episode&id=${episodeId}&deleteFile=0`), {
+        method: 'DELETE', credentials: 'same-origin'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Remove failed');
+      showToast('Episode removed from library', 'success');
+      if (selectedShow) openShow(selectedShow);
+      await fetchLibrary();
+    } catch (e) {
+      showToast('Failed to remove episode from library', 'error');
     }
   };
 
@@ -509,6 +543,7 @@ export default function Home() {
           onClose={() => setSelectedShow(null)}
           onPlayEpisode={(episodeId, startTime) => playback.playFile('show', selectedShow.id, episodeId, startTime)}
           onDeleteEpisode={handleDeleteEpisode}
+          onRemoveEpisodeFromLibrary={handleRemoveEpisodeFromLibrary}
           onMarkWatched={async (episode, watched) => {
             await handleMarkWatched({ ...selectedShow, type: 'show', title: episode.title } as ContentItem, watched, episode.id);
             if (selectedShow) openShow(selectedShow);
@@ -530,6 +565,7 @@ export default function Home() {
           contextMenu={contextMenu}
           onClose={() => setContextMenu(null)}
           onMarkWatched={(item, watched) => handleMarkWatched(item, watched)}
+          onRemoveFromLibrary={handleRemoveFromLibrary}
           onDelete={handleDelete}
         />
       )}
