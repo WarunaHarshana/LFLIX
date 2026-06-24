@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { streamQualityDb, type StreamQualityValue } from '@/lib/db';
+import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,7 @@ const MAX_SERVER_CHECK_TIMEOUT_MS = 10000;
 const VPN_SERVER_CHECK_TIMEOUT_MS = 9000;
 const MAX_VPN_SERVER_CHECK_TIMEOUT_MS = 18000;
 const SERVER_CHECK_CACHE_TTL_MS = 90_000;
-const VPN_SERVER_CHECK_CACHE_TTL_MS = 15_000;
+const VPN_SERVER_CHECK_CACHE_TTL_MS = 5_000;
 const OBSERVATION_STALE_MS = 6 * 60 * 60 * 1000;
 
 type ProbeCacheEntry = {
@@ -78,17 +79,6 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
         : `https://vidsrc.wtf/1/tv/${tmdbId}/${season || 1}/${episode || 1}`,
   },
   {
-    id: 'vidsrc-wtf-premium',
-    name: 'VIDSRC WTF (PREMIUM)',
-    color: '#dc2626',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidsrc.wtf/4/movie/${tmdbId}`
-        : `https://vidsrc.wtf/4/tv/${tmdbId}/${season || 1}/${episode || 1}`,
-  },
-  {
     id: 'flux',
     name: 'FLUX',
     color: '#a855f7',
@@ -98,51 +88,6 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
       type === 'movie'
         ? `https://beta.player.fluxtv.cc/player?type=movie&id=${tmdbId}`
         : `https://beta.player.fluxtv.cc/player?type=tv&id=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
-  },
-  {
-    id: '112cinema',
-    name: '112CINEMA',
-    color: '#e11d48',
-    baselineQuality: '1080p',
-    tier: 'best',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidgod.net/movie/${tmdbId}`
-        : `https://vidgod.net/tv/${tmdbId}/${season || 1}/${episode || 1}`,
-  },
-  {
-    id: 'vidfast-me',
-    name: 'VIDFAST (ME)',
-    color: '#059669',
-    baselineQuality: '1080p',
-    tier: 'best',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidfast.me/movie/${tmdbId}?autoPlay=true`
-        : `https://vidfast.me/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
-  },
-  {
-    id: 'vidfast-pro',
-    name: 'VIDFAST (PRO)',
-    color: '#10b981',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidfast.pro/movie/${tmdbId}?autoPlay=true`
-        : `https://vidfast.pro/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true`,
-  },
-
-  {
-    id: 'vidking',
-    name: 'VIDKING',
-    color: '#d97706',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://www.vidking.net/embed/movie/${tmdbId}?autoPlay=true&color=e11d48`
-        : `https://www.vidking.net/embed/tv/${tmdbId}/${season || 1}/${episode || 1}?autoPlay=true&nextEpisode=true&episodeSelector=true&color=e11d48`,
   },
   {
     id: 'vidlink',
@@ -156,17 +101,6 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
         : `https://vidlink.pro/tv/${tmdbId}/${season || 1}/${episode || 1}`,
   },
   {
-    id: '2embed-cc',
-    name: '2EMBED CC',
-    color: '#f59e0b',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://www.2embed.cc/embed/${tmdbId}`
-        : `https://www.2embed.cc/embedtv/${tmdbId}&s=${season || 1}&e=${episode || 1}`,
-  },
-  {
     id: 'vidsrc-to',
     name: 'VIDSRC TO',
     color: '#3b82f6',
@@ -178,88 +112,15 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
         : `https://vidsrc.to/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
   },
   {
-    id: 'frembed',
-    name: 'FREMBED',
-    color: '#10b981',
+    id: 'autoembed',
+    name: 'AUTOEMBED',
+    color: '#f43f5e',
     baselineQuality: '1080p',
     tier: 'great',
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
-        ? `https://frembed.pro/api/film.php?id=${tmdbId}`
-        : `https://frembed.pro/api/serie.php?id=${tmdbId}&sa=${season || 1}&epi=${episode || 1}`,
-  },
-  {
-    id: 'vidnest',
-    name: 'VIDNEST',
-    color: '#06b6d4',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidnest.fun/movie/${tmdbId}`
-        : `https://vidnest.fun/tv/${tmdbId}/${season || 1}/${episode || 1}`,
-  },
-  {
-    id: 'rgshows',
-    name: 'RGSHOWS',
-    color: '#8b5cf6',
-    baselineQuality: '2160p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`
-        : `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season || 1}&e=${episode || 1}`,
-  },
-  {
-    id: 'vixsrc',
-    name: 'VIXSRC',
-    color: '#f97316',
-    baselineQuality: '1080p',
-    tier: 'good',
-    buildUrl: (tmdbId, type, season, episode) =>
-      `https://vidsrc.cc/v2/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
-  },
-  {
-    id: 'superflix',
-    name: 'SUPERFLIX',
-    color: '#ec4899',
-    baselineQuality: '1080p',
-    tier: 'good',
-    buildUrl: (tmdbId, type, season, episode) =>
-      `https://vidsrc.xyz/embed/${type}/${tmdbId}${type === 'tv' ? `/${season || 1}/${episode || 1}` : ''}`,
-  },
-  {
-    id: 'vidsrc-rip',
-    name: 'VIDSRC RIP',
-    color: '#ef4444',
-    baselineQuality: '1080p',
-    tier: 'good',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidsrc.rip/embed/movie/${tmdbId}`
-        : `https://vidsrc.rip/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
-  },
-  {
-    id: 'vidsrc-pm',
-    name: 'VIDSRC PM',
-    color: '#8b5cf6',
-    baselineQuality: '1080p',
-    tier: 'good',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://vidsrc.pm/embed/movie?tmdb=${tmdbId}`
-        : `https://vidsrc.pm/embed/tv?tmdb=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
-  },
-  {
-    id: 'embedsu',
-    name: 'EMBED.SU',
-    color: '#d946ef',
-    baselineQuality: '1080p',
-    tier: 'ok',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://embed.su/embed/movie/${tmdbId}`
-        : `https://embed.su/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+        ? `https://autoembed.cc/embed/movie/${tmdbId}`
+        : `https://autoembed.cc/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
   },
 ];
 
@@ -469,7 +330,7 @@ async function isServerWorking(
         Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.8',
         'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       },
     });
 
@@ -518,13 +379,60 @@ async function isServerWorking(
   }
 }
 
-function buildServerUrls(
+// IMDB ID cache for SmashyStream (TMDB ID -> IMDB ID)
+const imdbIdCache = new Map<string, { imdbId: string | null; expiresAt: number }>();
+const IMDB_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+async function resolveImdbId(tmdbId: number, type: 'movie' | 'tv'): Promise<string | null> {
+  const cacheKey = `${type}-${tmdbId}`;
+  const cached = imdbIdCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.imdbId;
+  }
+
+  try {
+    const moviedb = getTmdbClient();
+    const externalIds = await cachedTmdbCall(`${type}-external-ids-${tmdbId}`, () =>
+      type === 'movie'
+        ? moviedb.movieExternalIds({ id: tmdbId })
+        : moviedb.tvExternalIds({ id: tmdbId })
+    );
+    const imdbId = (externalIds as any).imdb_id || null;
+    imdbIdCache.set(cacheKey, { imdbId, expiresAt: Date.now() + IMDB_CACHE_TTL_MS });
+    return imdbId;
+  } catch (error) {
+    console.warn(`[stream-servers] Failed to resolve IMDB ID for ${type}/${tmdbId}:`, error);
+    imdbIdCache.set(cacheKey, { imdbId: null, expiresAt: Date.now() + 5 * 60 * 1000 }); // cache failure for 5 min
+    return null;
+  }
+}
+
+async function buildServerUrls(
   tmdbId: number,
   type: 'movie' | 'tv',
   season?: number,
   episode?: number
-): StreamServer[] {
-  return SERVER_REGISTRY.map((entry, index) => ({
+): Promise<StreamServer[]> {
+  // Resolve IMDB ID in background for SmashyStream
+  const imdbId = await resolveImdbId(tmdbId, type).catch(() => null);
+
+  const smashyEntry: ServerRegistryEntry | null = imdbId
+    ? {
+        id: 'smashystream',
+        name: 'SMASHYSTREAM',
+        color: '#facc15',
+        baselineQuality: '1080p',
+        tier: 'great',
+        buildUrl: (_tmdbId, t, s, e) =>
+          t === 'movie'
+            ? `https://player.smashy.stream/movie/${imdbId}`
+            : `https://player.smashy.stream/tv/${imdbId}?s=${s || 1}&e=${e || 1}`,
+      }
+    : null;
+
+  const registry = smashyEntry ? [...SERVER_REGISTRY, smashyEntry] : SERVER_REGISTRY;
+
+  return registry.map((entry, index) => ({
     id: entry.id,
     name: entry.name,
     url: entry.buildUrl(tmdbId, type, season, episode),
@@ -590,19 +498,32 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Invalid tmdbId' }, { status: 400 });
     }
 
-    const servers = buildServerUrls(
+    const servers = await buildServerUrls(
       parsedTmdbId,
       type,
       season ? parseInt(season, 10) : undefined,
       episode ? parseInt(episode, 10) : undefined
     );
 
-    const checks = await Promise.all(
-      servers.map(async (server) => ({
-        server,
-        probe: await isServerWorking(server, { vpnMode, refresh: refreshProbe }),
-      }))
-    );
+    const checks = vpnMode
+      ? servers.map((server) => ({
+          server,
+          probe: {
+            working: true,
+            blocked: false,
+            htmlSnippet: '',
+            checkedAt: Date.now(),
+            latencyMs: 0,
+            probeError: null,
+            expiresAt: Date.now() + VPN_SERVER_CHECK_CACHE_TTL_MS,
+          } as ProbeCacheEntry,
+        }))
+      : await Promise.all(
+          servers.map(async (server) => ({
+            server,
+            probe: await isServerWorking(server, { vpnMode, refresh: refreshProbe }),
+          }))
+        );
 
     const responseServers: StreamServerResponse[] = [];
     for (const check of checks) {
@@ -748,6 +669,70 @@ export async function GET(req: Request) {
       } catch (error: any) {
         console.error('[stream-servers] PrimeSrc query failed:', error.message || error);
       }
+    }
+
+    // SuperEmbed (seapi.link) — direct HLS stream source
+    try {
+      const seType = type === 'movie' ? 'movie' : 'tv';
+      const seUrl = seType === 'movie'
+        ? `https://seapi.link/?type=tmdb&id=${parsedTmdbId}&max_results=1`
+        : `https://seapi.link/?type=tmdb&id=${parsedTmdbId}&season=${season || 1}&episode=${episode || 1}&max_results=1`;
+
+      const seRes = await fetch(seUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000),
+      });
+
+      if (seRes.ok) {
+        const seData = await seRes.json();
+        const results = Array.isArray(seData) ? seData : (seData?.results || []);
+        for (const result of results) {
+          const videoUrl = result.url || result.file || result.link;
+          if (typeof videoUrl !== 'string') continue;
+
+          const label = result.quality || result.label || '1080p';
+          let qualityHint: StreamQualityValue = '1080p';
+          if (/2160|4k|uhd/i.test(label)) qualityHint = '2160p';
+          else if (/720/i.test(label)) qualityHint = '720p';
+
+          const directSubtitles: { label: string; url: string; language?: string }[] = [];
+          if (Array.isArray(result.subtitles)) {
+            for (const sub of result.subtitles) {
+              const subUrl = sub.url || sub.file;
+              if (typeof subUrl === 'string') {
+                directSubtitles.push({
+                  label: sub.label || sub.lang || 'English',
+                  url: subUrl,
+                  language: sub.lang || sub.language || 'en',
+                });
+              }
+            }
+          }
+
+          responseServers.push({
+            id: `superembed-${results.indexOf(result)}`,
+            name: `SuperEmbed${result.server ? ` (${result.server})` : ''}`,
+            url: videoUrl,
+            color: '#22d3ee',
+            order: -90,
+            baselineQuality: '1080p',
+            isReachable: true,
+            availabilityState: 'reachable',
+            probeError: null,
+            probeCheckedAt: new Date().toISOString(),
+            qualityHint,
+            confidence: 0.9,
+            probeState: 'cached',
+            lastCheckedAt: new Date().toISOString(),
+            latencyMs: 50,
+            isDirect: true,
+            directSubtitles,
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error('[stream-servers] SuperEmbed query failed:', error.message || error);
     }
 
     const TIER_RANK: Record<string, number> = {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward, ShieldCheck, Crown } from 'lucide-react';
+import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward, ShieldCheck, Crown, Lock, Unlock } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import { useTheme } from './ThemeProvider';
 
@@ -26,10 +26,10 @@ type StreamServer = {
 };
 
 const AUTO_FAILOVER_TIMEOUT_MS = 15000;
-const VPN_AUTO_FAILOVER_TIMEOUT_MS = 35000;
+const VPN_AUTO_FAILOVER_TIMEOUT_MS = 60000;
 const IFRAME_BOOTSTRAP_MS = 2500;
 const PLAYBACK_GRACE_MS = 18000;
-const VPN_PLAYBACK_GRACE_MS = 55000;
+const VPN_PLAYBACK_GRACE_MS = 90000;
 
 const QUALITY_RANK: Record<StreamServer['qualityHint'], number> = {
   unknown: 0,
@@ -170,6 +170,17 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
   const [iframeBootstrapped, setIframeBootstrapped] = useState(false);
   const [playbackReady, setPlaybackReady] = useState(false);
   const [vpnMode, setVpnMode] = useState(false);
+  const [sandboxEnabled, setSandboxEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('lflix-sandbox-enabled') === 'true';
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('lflix-sandbox-enabled', sandboxEnabled.toString());
+  }, [sandboxEnabled]);
+
   const attemptedServersRef = useRef<number[]>([0]);
 
   useEffect(() => {
@@ -413,6 +424,23 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
             <ShieldCheck className="w-3.5 h-3.5" /> VPN
           </button>
           <button
+            onClick={() => {
+              setSandboxEnabled((prev) => !prev);
+              setIframeLoading(true);
+              setIframeError(false);
+              setIframeBootstrapped(false);
+              setPlaybackReady(false);
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition flex items-center gap-1.5 ${
+              sandboxEnabled
+                ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+            }`}
+            title={sandboxEnabled ? "Sandbox is enabled (safer, blocks redirects)" : "Sandbox is disabled (better compatibility for VidLink/Flux)"}
+          >
+            {sandboxEnabled ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />} Sandbox: {sandboxEnabled ? 'On' : 'Off'}
+          </button>
+          <button
             onClick={() => void fetchServers({ refresh: true })}
             className="p-2 hover:bg-neutral-800 rounded-full transition text-neutral-400 hover:text-white"
             title="Refresh server checks"
@@ -625,7 +653,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                 className="w-full h-full border-0"
                 allowFullScreen
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-downloads allow-modals allow-pointer-lock"
+                sandbox={sandboxEnabled ? "allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-downloads allow-modals allow-pointer-lock" : undefined}
                 referrerPolicy="no-referrer"
                 onLoad={handleIframeLoad}
                 onError={() => {
@@ -646,7 +674,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
       {/* Footer hint */}
       <div className="px-4 py-2 bg-neutral-900 border-t border-neutral-800 text-center text-xs text-neutral-500 shrink-0">
-        Best quality source starts automatically · VPN mode refreshes checks and waits longer on slow routes
+        Best quality source starts automatically · VPN mode skips probes and gives slow routes more time
       </div>
     </div>
   );
