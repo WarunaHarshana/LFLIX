@@ -6,7 +6,7 @@
  *  - /api/getEvents.php  → all scheduled events (base64-encoded, requires X-SSIG header)
  */
 
-const STREAMI_BASE = 'https://streami.click';
+const STREAMI_BASE = 'https://streamic.ru';
 const STREAMI_SSIG = 'bytmo8xialhem066';
 
 // Map Streami's Polish category names → LFLIX sport IDs
@@ -111,12 +111,14 @@ export function getStreamiStreams(event: StreamiEvent) {
   const embeds = flattenEmbeds(event._embeds);
   return embeds.map((e, index) => {
     const label = e.label?.toUpperCase() || '';
-    const isHd = ['HD', 'FHD', 'UHD', '4K', '4K (BETA)'].some(q => label.includes(q));
+    const is4k = ['4K', '4K (BETA)', 'UHD'].some(q => label.includes(q));
+    const isHd = is4k || ['HD', 'FHD'].some(q => label.includes(q));
     return {
       id: `streami-${event.id}-${index}`,
       streamNo: index + 1,
       language: `${e.language} (${e.label})`,
       hd: isHd,
+      is4k: is4k,
       embedUrl: e.embed,
       source: 'streami',
     };

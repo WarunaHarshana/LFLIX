@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchStreamiEvents, getStreamiTitle, mapStreamiCategory } from '@/lib/streami';
+import { fetchXyzEvents } from '@/lib/xyzstreams';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -241,6 +242,80 @@ export async function GET(request: Request) {
     console.error('Streami sports API error:', error);
   }
 
+  // 3b. Fetch xyzstreams events
+  let xyzMatches: any[] = [];
+  try {
+    const xyzEvents = await fetchXyzEvents();
+    let rawXyzMatches = xyzEvents.map((event) => {
+      const dateMs = new Date(event.start).getTime();
+      const endMs = new Date(event.end).getTime();
+      const isLive = Date.now() >= (dateMs - 30 * 60 * 1000) && Date.now() <= endMs;
+      
+      const cleanTitle = event.title.replace(/^FIFA\s+WC\s+\d+™\s*-\s*/i, '');
+      let teams: any = undefined;
+      const vsMatch = cleanTitle.match(/^(.+?)\s*[-–vs.]+\s*(.+)$/i);
+      if (vsMatch) {
+        teams = {
+          home: { name: vsMatch[1].trim() },
+          away: { name: vsMatch[2].trim() },
+        };
+      }
+
+      const is4k = cleanTitle.toLowerCase().includes('4k') || 
+                   cleanTitle.toLowerCase().includes('uhd') || 
+                   cleanTitle.toLowerCase().includes('wc') || 
+                   cleanTitle.toLowerCase().includes('fifa');
+
+      return {
+        id: `xyz-${event.href}-${dateMs}`,
+        title: cleanTitle,
+        category: event.category,
+        date: dateMs,
+        poster: event.bg || null,
+        popular: event.category === 'Football' || event.category === 'Combat Sports',
+        teams,
+        sources: [{ source: 'xyzstreams', id: event.href }],
+        isLive,
+        is4k
+      };
+    });
+
+    // Apply type filtering
+    if (type === 'live') {
+      rawXyzMatches = rawXyzMatches.filter((match: any) => {
+        const key = getMatchKey(match);
+        const existsInOther = transformedMatches.some(m => getMatchKey(m) === key) ||
+                              timStreamsMatches.some(m => getMatchKey(m) === key) ||
+                              streamiMatches.some(m => getMatchKey(m) === key);
+        return match.isLive || existsInOther;
+      });
+    } else if (type === 'popular') {
+      rawXyzMatches = rawXyzMatches.filter((match: any) => match.popular);
+    }
+
+    // Apply sport filtering
+    if (sport === '4k') {
+      rawXyzMatches = rawXyzMatches.filter((match: any) => match.is4k);
+    } else if (sport !== 'all') {
+      rawXyzMatches = rawXyzMatches.filter((match: any) => {
+        const categoryLower = match.category.toLowerCase();
+        const sportLower = sport.toLowerCase();
+
+        if (sportLower === 'football') {
+          return categoryLower.includes('football') || categoryLower === 'soccer';
+        }
+        if (sportLower === 'mma') {
+          return categoryLower.includes('mma') || categoryLower.includes('combat') || categoryLower.includes('boxing');
+        }
+        return categoryLower.includes(sportLower);
+      });
+    }
+
+    xyzMatches = rawXyzMatches;
+  } catch (error) {
+    console.error('xyzstreams sports API error:', error);
+  }
+
   // 4. Group and merge duplicate matches
   const groupedMap = new Map<string, any>();
   
@@ -267,6 +342,22 @@ export async function GET(request: Request) {
   }
 
   for (const match of streamiMatches) {
+    const key = getMatchKey(match);
+    const existing = groupedMap.get(key);
+    if (existing) {
+      // Merge unique sources
+      const existingSrcs = existing.sources || [];
+      const newSrcs = match.sources || [];
+      existing.sources = [...existingSrcs, ...newSrcs.filter((ns: any) => !existingSrcs.some((es: any) => es.source === ns.source && es.id === ns.id))];
+      if (match.is4k) existing.is4k = true;
+      if (match.isLive) existing.isLive = true;
+      if (!existing.teams && match.teams) existing.teams = match.teams;
+    } else {
+      groupedMap.set(key, match);
+    }
+  }
+
+  for (const match of xyzMatches) {
     const key = getMatchKey(match);
     const existing = groupedMap.get(key);
     if (existing) {

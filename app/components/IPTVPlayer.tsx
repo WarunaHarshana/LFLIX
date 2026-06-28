@@ -229,7 +229,8 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
           <iframe
             src={channel.url}
             className="w-full h-full border-0"
-            allow="autoplay; picture-in-picture"
+            allow="autoplay; picture-in-picture; fullscreen *"
+            allowFullScreen
             sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-downloads allow-modals allow-pointer-lock"
             onLoad={() => setLoading(false)}
           />

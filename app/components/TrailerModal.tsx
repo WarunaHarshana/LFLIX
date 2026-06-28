@@ -137,7 +137,7 @@ export default function TrailerModal({ isOpen, tmdbId, mediaType, title, season,
                             src={`https://www.youtube.com/embed/${trailer.key}?autoplay=1&rel=0&modestbranding=1`}
                             title={trailer.name || `${title} Trailer`}
                             className="w-full h-full"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen *"
                             allowFullScreen
                         />
                     )}

@@ -627,7 +627,7 @@ export default function DiscoverDetailPage() {
                 src={heroTrailerUrl}
                 title={`${pageTitle} Trailer Background`}
                 className="h-full w-full pointer-events-none opacity-72"
-                allow="autoplay; encrypted-media; picture-in-picture"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen *"
                 referrerPolicy="strict-origin-when-cross-origin"
                 allowFullScreen
               />

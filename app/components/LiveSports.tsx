@@ -40,6 +40,7 @@ type Stream = {
   streamNo: number;
   language: string;
   hd: boolean;
+  is4k?: boolean;
   embedUrl: string;
   source: string;
 };
@@ -371,7 +372,9 @@ export default function LiveSports({ onClose }: Props) {
                        title.toLowerCase().includes('uhd') ||
                        title.toLowerCase().includes('hevc');
                        
-    if (stream.hd && !hasQuality) {
+    if (stream.is4k && !hasQuality) {
+      title += ' (4K)';
+    } else if (stream.hd && !hasQuality) {
       title += ' (HD)';
     }
     return title;
@@ -388,6 +391,8 @@ export default function LiveSports({ onClose }: Props) {
         return 'bg-emerald-950/40 text-emerald-400 border-emerald-800/50';
       case 'timstreams':
         return 'bg-sky-950/40 text-sky-400 border-sky-800/50';
+      case 'xyzstreams':
+        return 'bg-yellow-950/40 text-yellow-400 border-yellow-800/50';
       case 'admin':
         return 'bg-red-950/40 text-red-400 border-red-800/50';
       case 'delta':
@@ -402,6 +407,9 @@ export default function LiveSports({ onClose }: Props) {
   };
 
   const getQualityRank = (stream: Stream) => {
+    if (stream.is4k) {
+      return 4;
+    }
     const title = (stream.language || '').toLowerCase();
     if (title.includes('4k') || title.includes('uhd') || title.includes('2160p')) {
       return 4;
@@ -508,7 +516,8 @@ export default function LiveSports({ onClose }: Props) {
                           key={selectedStream.id}
                           src={selectedStream.embedUrl}
                           className="w-full h-full border-0"
-                          allow="autoplay; picture-in-picture"
+                          allow="autoplay; picture-in-picture; fullscreen *"
+                          allowFullScreen
                         />
                       ) : (
                         <video

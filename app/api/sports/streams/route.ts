@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchStreamiEventById, getStreamiStreams } from '@/lib/streami';
+import { fetchXyzStreams } from '@/lib/xyzstreams';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,19 @@ export async function GET(request: Request) {
       console.error('Streami sports streams API error:', error);
       return NextResponse.json(
         { error: 'Failed to fetch streams from Streami' },
+        { status: 500 }
+      );
+    }
+  }
+
+  if (source === 'xyzstreams') {
+    try {
+      const transformedStreams = await fetchXyzStreams(id);
+      return NextResponse.json({ streams: transformedStreams });
+    } catch (error) {
+      console.error('xyzstreams sports streams API error:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch streams from xyzstreams' },
         { status: 500 }
       );
     }
@@ -71,18 +85,15 @@ export async function GET(request: Request) {
       }
 
       const transformedStreams = event.streams.map((stream: any, index: number) => {
-        const isHd = stream.name && (
-          stream.name.toLowerCase().includes('4k') ||
-          stream.name.toLowerCase().includes('fhd') ||
-          stream.name.toLowerCase().includes('720p') ||
-          stream.name.toLowerCase().includes('max') ||
-          stream.name.toLowerCase().includes('hevc')
-        );
+        const label = (stream.name || '').toUpperCase();
+        const is4k = label.includes('4K') || label.includes('UHD');
+        const isHd = is4k || label.includes('FHD') || label.includes('720P') || label.includes('MAX') || label.includes('HEVC');
         return {
           id: `${id}-${index}`,
           streamNo: index + 1,
           language: stream.name || `Stream ${index + 1}`,
           hd: !!isHd,
+          is4k: is4k,
           embedUrl: stream.url,
           source: 'timstreams'
         };
@@ -113,14 +124,19 @@ export async function GET(request: Request) {
     const streams = await response.json();
     
     // Transform streams
-    const transformedStreams = streams.map((stream: any) => ({
-      id: stream.id,
-      streamNo: stream.streamNo,
-      language: stream.language,
-      hd: stream.hd,
-      embedUrl: stream.embedUrl,
-      source: stream.source
-    }));
+    const transformedStreams = streams.map((stream: any) => {
+      const label = (stream.language || '').toUpperCase();
+      const is4k = label.includes('4K') || label.includes('UHD');
+      return {
+        id: stream.id,
+        streamNo: stream.streamNo,
+        language: stream.language,
+        hd: stream.hd || is4k,
+        is4k: is4k,
+        embedUrl: stream.embedUrl,
+        source: stream.source
+      };
+    });
 
     return NextResponse.json({ streams: transformedStreams });
   } catch (error) {
