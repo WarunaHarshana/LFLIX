@@ -6,7 +6,7 @@
  *  - /api/getEvents.php  → all scheduled events (base64-encoded, requires X-SSIG header)
  */
 
-const STREAMI_BASE = 'https://streamic.ru';
+const STREAMI_BASE = 'https://streamic.st';
 const STREAMI_SSIG = 'bytmo8xialhem066';
 
 // Map Streami's Polish category names → LFLIX sport IDs
