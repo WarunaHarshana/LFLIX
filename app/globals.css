@@ -28,6 +28,12 @@
   --btn-secondary-bg: rgba(64, 64, 64, 0.85);
   --btn-secondary-bg-hover: rgba(82, 82, 82, 0.95);
   --btn-secondary-text: #f5f5f5;
+
+  --accent-color: #e50914;
+  --accent-color-rgb: 229, 9, 20;
+  --accent-gradient-from: #e50914;
+  --accent-gradient-to: #b91c1c;
+  --accent-shadow: rgba(229, 9, 20, 0.3);
 }
 
 [data-theme="dark"] {
@@ -44,28 +50,56 @@
   --border-strong: #52525b;
 }
 
+[data-accent="default"] {
+  --accent-color: #e50914;
+  --accent-color-rgb: 229, 9, 20;
+  --accent-gradient-from: #e50914;
+  --accent-gradient-to: #b91c1c;
+  --accent-shadow: rgba(229, 9, 20, 0.3);
+}
+
 [data-accent="red"] {
   --btn-primary-bg: #e50914;
   --btn-primary-text: #ffffff;
   --btn-primary-hover: #f40612;
+  --accent-color: #e50914;
+  --accent-color-rgb: 229, 9, 20;
+  --accent-gradient-from: #e50914;
+  --accent-gradient-to: #b91c1c;
+  --accent-shadow: rgba(229, 9, 20, 0.3);
 }
 
 [data-accent="blue"] {
   --btn-primary-bg: #3b82f6;
   --btn-primary-text: #ffffff;
   --btn-primary-hover: #60a5fa;
+  --accent-color: #3b82f6;
+  --accent-color-rgb: 59, 130, 246;
+  --accent-gradient-from: #3b82f6;
+  --accent-gradient-to: #1d4ed8;
+  --accent-shadow: rgba(59, 130, 246, 0.3);
 }
 
 [data-accent="purple"] {
   --btn-primary-bg: #8b5cf6;
   --btn-primary-text: #ffffff;
   --btn-primary-hover: #a78bfa;
+  --accent-color: #8b5cf6;
+  --accent-color-rgb: 139, 92, 246;
+  --accent-gradient-from: #8b5cf6;
+  --accent-gradient-to: #6d28d9;
+  --accent-shadow: rgba(139, 92, 246, 0.3);
 }
 
 [data-accent="green"] {
   --btn-primary-bg: #10b981;
   --btn-primary-text: #ffffff;
   --btn-primary-hover: #34d399;
+  --accent-color: #10b981;
+  --accent-color-rgb: 16, 185, 129;
+  --accent-gradient-from: #10b981;
+  --accent-gradient-to: #047857;
+  --accent-shadow: rgba(16, 185, 129, 0.3);
 }
 
 @theme inline {
@@ -141,6 +175,11 @@ body {
   outline: none;
   box-shadow: 0 0 0 2px var(--focus-ring);
   border-radius: 0.5rem;
+}
+
+.accent-gradient-box {
+  background: linear-gradient(135deg, var(--accent-gradient-from), var(--accent-gradient-to));
+  box-shadow: 0 8px 30px var(--accent-shadow);
 }
 
 /* Reusable neutral action styles */

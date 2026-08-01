@@ -264,7 +264,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
             {/* Header */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2.5 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl">
+                    <div className="p-2.5 accent-gradient-box rounded-xl text-white">
                         <Globe className="w-7 h-7" />
                     </div>
                     <div>
@@ -277,7 +277,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                         onClick={() => onSwitchToTorrents(searchQuery.trim() || undefined)}
                         className="mt-3 px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-xl hover:bg-neutral-800 transition text-sm text-neutral-300 flex items-center gap-2"
                     >
-                        <Magnet className="w-4 h-4 text-blue-400" />
+                        <Magnet className="w-4 h-4 text-[var(--accent-color)]" />
                         Switch to Torrents
                     </button>
                 )}
@@ -294,7 +294,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                             value={searchQuery}
                             onChange={(e) => handleSearchChange(e.target.value)}
                             placeholder="Search any movie or TV show..."
-                            className="w-full bg-black border border-neutral-700 rounded-xl pl-12 pr-10 py-3.5 outline-none focus:border-blue-500 transition text-sm"
+                            className="w-full bg-black border border-neutral-700 rounded-xl pl-12 pr-10 py-3.5 outline-none focus:border-[var(--accent-color)] transition text-sm"
                             autoFocus
                         />
                         {searchQuery && (
@@ -312,8 +312,8 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 key={type}
                                 onClick={() => handleTypeChange(type)}
                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition ${searchType === type
-                                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                                    ? 'bg-[rgba(var(--accent-color-rgb),0.15)] text-[var(--accent-color)] border border-[rgba(var(--accent-color-rgb),0.3)]'
+                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'
                                     }`}
                             >
                                 {type === 'multi' ? 'All' : type === 'movie' ? 'Movies' : 'TV Shows'}
@@ -326,7 +326,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
             {/* Searching indicator */}
             {searching && (
                 <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    <Loader2 className="w-8 h-8 animate-spin text-[var(--accent-color)]" />
                 </div>
             )}
 
@@ -337,19 +337,19 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                         {/* Title / Toggle */}
                         <div className="flex items-center gap-4 sm:min-w-fit">
                             <div className="flex items-center gap-2">
-                                <Filter className="w-5 h-5 text-blue-500" />
+                                <Filter className="w-5 h-5 text-[var(--accent-color)]" />
                                 <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-400">Filters</h2>
                             </div>
                             <div className="flex bg-black border border-neutral-700 rounded-xl p-1">
                                 <button
                                     onClick={() => { setDiscoverType('movie'); setSelectedGenre(''); }}
-                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'movie' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
+                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'movie' ? 'bg-[rgba(var(--accent-color-rgb),0.15)] text-[var(--accent-color)] border border-[rgba(var(--accent-color-rgb),0.3)]' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
                                 >
                                     <Film className="w-4 h-4" /> Movies
                                 </button>
                                 <button
                                     onClick={() => { setDiscoverType('tv'); setSelectedGenre(''); }}
-                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'tv' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
+                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'tv' ? 'bg-[rgba(var(--accent-color-rgb),0.15)] text-[var(--accent-color)] border border-[rgba(var(--accent-color-rgb),0.3)]' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
                                 >
                                     <Tv className="w-4 h-4" /> TV Shows
                                 </button>
@@ -363,7 +363,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 <select 
                                     value={selectedGenre} 
                                     onChange={(e) => setSelectedGenre(e.target.value)}
-                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm text-neutral-300 pr-10"
+                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-[var(--accent-color)] transition text-sm text-neutral-300 pr-10"
                                 >
                                     <option value="">All Genres</option>
                                     {activeGenres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -376,7 +376,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 <select 
                                     value={selectedLanguage} 
                                     onChange={(e) => setSelectedLanguage(e.target.value)}
-                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm text-neutral-300 pr-10"
+                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-[var(--accent-color)] transition text-sm text-neutral-300 pr-10"
                                 >
                                     <option value="">All Languages</option>
                                     {LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -389,7 +389,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 <select 
                                     value={sortBy} 
                                     onChange={(e) => setSortBy(e.target.value)}
-                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm text-neutral-300 pr-10"
+                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-[var(--accent-color)] transition text-sm text-neutral-300 pr-10"
                                 >
                                     {SORT_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </select>
@@ -416,7 +416,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                 <div className="flex items-center gap-2 mb-4">
                     {isFiltering ? (
                         <>
-                            <Filter className="w-5 h-5 text-blue-500" />
+                            <Filter className="w-5 h-5 text-[var(--accent-color)]" />
                             <h2 className="text-lg font-bold">Filtered Results</h2>
                         </>
                     ) : (
@@ -469,7 +469,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 {/* Hover overlay */}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end">
                                     <div className="p-3 w-full">
-                                        <div className="flex items-center gap-1.5 text-xs text-blue-400 font-medium">
+                                        <div className="flex items-center gap-1.5 text-xs text-[var(--accent-color)] font-medium">
                                             <Globe className="w-3.5 h-3.5" />
                                             Watch Online
                                         </div>

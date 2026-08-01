@@ -41,7 +41,7 @@ type Stream = {
   language: string;
   hd: boolean;
   is4k?: boolean;
-  embedUrl: string;
+  embedUrl?: string;
   source: string;
 };
 
@@ -171,9 +171,12 @@ export default function LiveSports({ onClose }: Props) {
     const video = videoRef.current;
     if (!video) return;
 
-    const isIframe = selectedStream.embedUrl.includes('embed') || 
-                     selectedStream.embedUrl.includes('pages.dev') || 
-                     selectedStream.embedUrl.includes('html') ||
+    const { embedUrl } = selectedStream;
+    if (!embedUrl) return;
+
+    const isIframe = embedUrl.includes('embed') || 
+                     embedUrl.includes('pages.dev') || 
+                     embedUrl.includes('html') ||
                      selectedStream.source === 'streami';
 
     if (isIframe) return;
@@ -183,7 +186,7 @@ export default function LiveSports({ onClose }: Props) {
       if (!videoRef.current) return;
       if (Hls.isSupported()) {
         hls = new Hls({ enableWorker: true });
-        hls.loadSource(selectedStream.embedUrl);
+        hls.loadSource(embedUrl);
         hls.attachMedia(videoRef.current);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           const levels = hls.levels.map((level: any, idx: number) => {
@@ -195,10 +198,10 @@ export default function LiveSports({ onClose }: Props) {
         });
         hlsRef.current = hls;
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = selectedStream.embedUrl;
+        video.src = embedUrl;
         video.play().catch(() => {});
       } else {
-        video.src = selectedStream.embedUrl;
+        video.src = embedUrl;
         video.play().catch(() => {});
       }
     });
@@ -508,7 +511,13 @@ export default function LiveSports({ onClose }: Props) {
                         !showControls ? 'cursor-none' : 'cursor-pointer'
                       }`}
                     >
-                      {selectedStream.embedUrl.includes('embed') || 
+                      {!selectedStream.embedUrl ? (
+                        <div className="flex flex-col items-center justify-center p-6 text-center">
+                          <AlertCircle className="w-12 h-12 text-red-500 mb-3 animate-pulse" />
+                          <p className="text-neutral-200 font-semibold mb-1">Stream feed unavailable</p>
+                          <p className="text-neutral-400 text-sm max-w-md">The source did not provide a valid streaming URL. Please try another feed.</p>
+                        </div>
+                      ) : selectedStream.embedUrl.includes('embed') || 
                        selectedStream.embedUrl.includes('pages.dev') || 
                        selectedStream.embedUrl.includes('html') ||
                        selectedStream.source === 'streami' ? (
