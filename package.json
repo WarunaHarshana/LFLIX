@@ -10,21 +10,24 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run lint && npm run build"
   },
+  "overrides": {
+    "sharp": "^0.35.3",
+    "postcss": "^8.5.25",
+    "tar": "^7.5.22"
+  },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
     "@capacitor/app": "^6.0.0",
-    "@capacitor/cli": "^6.2.1",
     "@capacitor/core": "^6.0.0",
     "better-sqlite3": "^12.6.2",
     "capacitor-video-player": "^6.0.2",
     "chokidar": "^5.0.0",
     "clsx": "^2.1.1",
-    "dlnacasts": "^0.1.0",
     "framer-motion": "^12.38.0",
     "hls.js": "^1.6.15",
     "lucide-react": "^0.563.0",
     "moviedb-promise": "^4.0.8",
-    "next": "16.1.6",
+    "next": "^16.2.12",
     "qrcode.react": "^4.2.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -33,14 +36,15 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.2.1",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
-    "sharp": "^0.34.5",
+    "eslint-config-next": "^16.2.12",
+    "sharp": "^0.35.3",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5"
