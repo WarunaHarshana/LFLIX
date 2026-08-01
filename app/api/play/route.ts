@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import db from '@/lib/db';
-import { getSafeErrorMessage, parsePositiveInt } from '@/lib/security';
+import { getSafeErrorMessage, parsePositiveInt, validatePlayerExecutable } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -153,10 +153,13 @@ export async function POST(req: Request) {
 
     const playerPath = getPlayerPath();
 
-    if (!fs.existsSync(playerPath)) {
+    // Re-validate at spawn time, not just on write: a row stored by an older
+    // build could point anywhere, and this is the line that actually executes it.
+    const playerValidation = validatePlayerExecutable(playerPath);
+    if (!playerValidation.valid) {
       return NextResponse.json({
-        error: `Player not found at: ${playerPath}. Please update the player path in Settings.`
-      }, { status: 500 });
+        error: `${playerValidation.error} Please update the player path in Settings.`
+      }, { status: 400 });
     }
 
     // Detect player type and build appropriate arguments

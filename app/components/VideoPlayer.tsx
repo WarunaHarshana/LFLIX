@@ -311,36 +311,19 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     };
   }, [src, isNative]); // Effect dependencies
 
-  // If Native, show a placeholder (player covers screen)
-  if (isNative) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-neutral-400">Opening system player...</p>
-          <button
-            onClick={onClose}
-            className="mt-8 px-6 py-2 bg-neutral-800 rounded-lg text-white text-sm hover:bg-neutral-700"
-          >
-            Cancel / Close
-          </button>
-        </div>
-        {error && <div className="absolute bottom-10 text-red-500">{error}</div>}
-      </div>
-    );
-  }
-
   // Track fullscreen state
   useEffect(() => {
+    if (isNative) return;
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
+  }, [isNative]);
 
   // Set initial time and detect tracks when video loads
   useEffect(() => {
+    if (isNative) return;
     const video = videoRef.current;
     if (!video) return;
 
@@ -370,7 +353,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
     video.addEventListener('loadedmetadata', detectTracks);
     return () => video.removeEventListener('loadedmetadata', detectTracks);
-  }, [initialTime]);
+  }, [initialTime, isNative]);
 
   const handleError = () => {
     const video = videoRef.current;
@@ -435,6 +418,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
   // Auto-enter fullscreen on play (for TV/better experience)
   useEffect(() => {
+    if (isNative) return;
     const video = videoRef.current;
     if (!video) return;
 
@@ -448,7 +432,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
     video.addEventListener('play', handlePlay);
     return () => video.removeEventListener('play', handlePlay);
-  }, []);
+  }, [isNative]);
 
   // Change audio track
   const changeAudioTrack = (index: number) => {
@@ -514,9 +498,30 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
   // Debug log to see what's detected
   useEffect(() => {
+    if (isNative) return;
     console.log('VideoPlayer - Audio tracks:', audioTracks.length, audioTracks);
     console.log('VideoPlayer - Subtitle tracks:', subtitleTracks.length, subtitleTracks);
-  }, [audioTracks, subtitleTracks]);
+  }, [audioTracks, subtitleTracks, isNative]);
+
+  // If Native, show a placeholder (the system player covers the screen).
+  // This bails out *after* every hook so the hook count stays stable.
+  if (isNative) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-neutral-400">Opening system player...</p>
+          <button
+            onClick={onClose}
+            className="mt-8 px-6 py-2 bg-neutral-800 rounded-lg text-white text-sm hover:bg-neutral-700"
+          >
+            Cancel / Close
+          </button>
+        </div>
+        {error && <div className="absolute bottom-10 text-red-500">{error}</div>}
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-[100] bg-black flex flex-col">

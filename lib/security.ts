@@ -71,6 +71,56 @@ export function isPathInsideAny(childPath: string, parentPaths: string[]): boole
   return parentPaths.some((parentPath) => isPathInside(childPath, parentPath));
 }
 
+// Executables the media-player setting is allowed to point at. `/api/play`
+// spawns this path, so an open-ended value would turn a settings write into
+// arbitrary process execution. Keep in sync with detectPlayerType().
+export const ALLOWED_PLAYER_BASENAMES = [
+  'vlc',
+  'potplayer', 'potplayermini', 'potplayermini64',
+  'mpc-hc', 'mpc-hc64', 'mpc-be', 'mpc-be64', 'mpc64',
+  'mpv',
+];
+
+/**
+ * Validate that a configured player path points at a real file whose basename is
+ * a recognised media player. Enforced both when the setting is written
+ * (/api/settings) and when it is used (/api/play), so rows written by an older
+ * build cannot be spawned.
+ */
+export function validatePlayerExecutable(playerPath: unknown): { valid: boolean; error?: string } {
+  if (typeof playerPath !== 'string' || playerPath.trim() === '') {
+    return { valid: false, error: 'Player path is required' };
+  }
+  if (playerPath.includes('\0')) {
+    return { valid: false, error: 'Invalid player path' };
+  }
+
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(playerPath);
+  } catch {
+    return { valid: false, error: `Player not found at: ${playerPath}. Please check the path.` };
+  }
+  if (!stat.isFile()) {
+    return { valid: false, error: `Player not found at: ${playerPath}. Please check the path.` };
+  }
+
+  const extension = path.extname(playerPath).toLowerCase();
+  if (extension !== '' && extension !== '.exe') {
+    return { valid: false, error: 'Player path must point at an executable' };
+  }
+
+  const baseName = path.basename(playerPath, path.extname(playerPath)).toLowerCase();
+  if (!ALLOWED_PLAYER_BASENAMES.includes(baseName)) {
+    return {
+      valid: false,
+      error: `Unsupported player "${baseName}". Supported: VLC, PotPlayer, MPC-HC/BE, mpv.`,
+    };
+  }
+
+  return { valid: true };
+}
+
 export function sanitizeFilename(filename: string, fallback = 'download'): string {
   const base = path.basename(filename || fallback);
   const sanitized = base.replace(/[^a-z0-9._-]/gi, '_').replace(/^_+/, '');

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { guardSetupRoute } from '@/lib/authGuard';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,11 @@ function getWindowsDrives(): string[] {
 
 export async function GET(req: Request) {
     try {
+        // This route enumerates the host filesystem. It is only open while the
+        // setup wizard still needs the folder picker; after that it requires auth.
+        const denied = guardSetupRoute(req);
+        if (denied) return denied;
+
         const { searchParams } = new URL(req.url);
         let dirPath = searchParams.get('path') || '';
 

@@ -27,8 +27,9 @@ type Props = {
 };
 
 export default function ContinueWatching({ items, onPlay, onOpenShow }: Props) {
-    if (items.length === 0) return null;
-
+    // Hooks must run before any early return — `items` goes 0 -> n once the
+    // continue-watching fetch resolves, and bailing out first would change the
+    // hook count between renders.
     const scrollRef = useRef<HTMLDivElement>(null);
     const [showLeftArrow, setShowLeftArrow] = useState(false);
     const [showRightArrow, setShowRightArrow] = useState(true);
@@ -57,6 +58,8 @@ export default function ContinueWatching({ items, onPlay, onOpenShow }: Props) {
         setShowLeftArrow(scrollLeft > 10);
         setShowRightArrow(scrollLeft + clientWidth < scrollWidth - 10);
     };
+
+    if (items.length === 0) return null;
 
     return (
         <section className="px-4 md:px-12 mb-10 relative group/cw">

@@ -9,7 +9,9 @@ const eslintConfig = defineConfig([
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "warn",
-      "react-hooks/rules-of-hooks": "warn",
+      // Hard error: a conditional hook changes the hook count between renders,
+      // which crashes the component at runtime rather than degrading.
+      "react-hooks/rules-of-hooks": "error",
       "react-hooks/set-state-in-effect": "warn",
       "react/no-unescaped-entities": "warn",
       "prefer-const": "warn",

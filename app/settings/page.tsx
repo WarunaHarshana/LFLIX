@@ -98,6 +98,7 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [tmdbConfigured, setTmdbConfigured] = useState(true);
 
     const { theme, setTheme, accent, setAccent, isMounted } = useTheme();
 
@@ -129,6 +130,7 @@ export default function SettingsPage() {
                 omdbApiKey: data.omdbApiKey || '',
                 downloadPath: data.downloadPath || ''
             });
+            setTmdbConfigured(data.tmdbConfigured !== false);
         } catch (e) {
             console.error('Failed to load settings', e);
         } finally {
@@ -248,16 +250,24 @@ export default function SettingsPage() {
                         <h2 className="text-lg font-semibold">TMDB Integration</h2>
                     </div>
                     <div className="p-6">
+                        {!tmdbConfigured && (
+                            <p className="mb-4 px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm">
+                                No TMDB API key configured. Posters, ratings, and Discover are unavailable until you add
+                                one below — your library will still scan using filenames.
+                            </p>
+                        )}
                         <label className="block text-sm text-neutral-400 mb-2">API Key</label>
                         <input
                             type="password"
                             value={settings.tmdbApiKey}
                             onChange={(e) => setSettings(prev => ({ ...prev, tmdbApiKey: e.target.value }))}
                             className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-white/70 transition font-mono text-sm"
-                            placeholder="Using built-in TMDB key"
+                            placeholder={tmdbConfigured ? 'Set via TMDB_API_KEY' : 'Required for metadata'}
                         />
                         <p className="text-xs text-neutral-500 mt-2">
-                            Optional override for movie/show metadata, posters, and ratings. Leave blank to use the built-in key, or get your own at{' '}
+                            Required for movie/show metadata, posters, and ratings. You can also set{' '}
+                            <code className="text-neutral-400">TMDB_API_KEY</code> in <code className="text-neutral-400">.env.local</code>.
+                            Get a free key at{' '}
                             <a href="https://www.themoviedb.org/settings/api" target="_blank" className="text-white hover:underline">
                                 themoviedb.org
                             </a>

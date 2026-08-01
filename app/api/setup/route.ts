@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import db from '@/lib/db';
 import { getSafeErrorMessage, validateExistingDirectory } from '@/lib/security';
+import { apiErrorResponse, rateLimit, readJsonObject } from '@/lib/apiSecurity';
+import { guardSetupRoute } from '@/lib/authGuard';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -23,11 +25,22 @@ export async function GET() {
 // Save setup configuration
 export async function POST(req: Request) {
   try {
-    const { pin, folders } = await req.json();
+    // Without this, anyone who can reach the port could re-run setup and
+    // overwrite APP_PIN, taking over the instance on the next restart.
+    const denied = guardSetupRoute(req);
+    if (denied) return denied;
+
+    const limited = rateLimit(req, 'setup', { windowMs: 5 * 60 * 1000, max: 10 });
+    if (limited) return limited;
+
+    const { pin, folders } = await readJsonObject(req, 64 * 1024);
     const mediaFolders = Array.isArray(folders) ? folders : [];
 
-    if (!pin || pin.length < 4) {
-      return NextResponse.json({ error: 'PIN must be at least 4 digits' }, { status: 400 });
+    if (typeof pin !== 'string' || !/^\d{4,64}$/.test(pin)) {
+      return NextResponse.json(
+        { error: 'PIN must be 4 to 64 digits' },
+        { status: 400 }
+      );
     }
 
     // Save PIN to .env.local file
@@ -80,6 +93,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (e) {
-    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+    return apiErrorResponse(e, 'Setup failed');
   }
 }

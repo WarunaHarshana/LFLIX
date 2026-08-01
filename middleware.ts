@@ -75,7 +75,13 @@ export function middleware(request: NextRequest) {
     return applySecurityHeaders(new NextResponse(null, { status: 204, headers: response.headers }), request);
   }
 
-  // Skip auth for these paths
+  // Skip auth for these paths.
+  //
+  // `/api/setup` and `/api/browse` must bypass middleware because the first-run
+  // wizard calls them before any PIN exists. They are NOT actually public: both
+  // enforce `guardSetupRoute` (lib/authGuard.ts) in-route, which rejects once
+  // setup is complete and no valid PIN cookie is present. That check needs the
+  // database, so it cannot run here in edge middleware.
   const publicPaths = [
     '/api/setup',
     '/api/browse',

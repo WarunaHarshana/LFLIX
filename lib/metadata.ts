@@ -4,19 +4,32 @@ import { tmdbCache } from './cache';
 
 // --- Configuration & Rate Limiting ---
 
-export const DEFAULT_TMDB_API_KEY = '3d8c8476371d0730fb5bd7ae67241879';
+export const TMDB_NOT_CONFIGURED_MESSAGE =
+  'TMDB API key is not configured. Add one in Settings, or set TMDB_API_KEY in .env.local.';
 
-// Get TMDB API key from settings, env, or bundled default
-export function getTmdbApiKey(): string {
+/** Thrown when a TMDB-backed feature is used before a key has been supplied. */
+export class TmdbNotConfiguredError extends Error {
+  constructor() {
+    super(TMDB_NOT_CONFIGURED_MESSAGE);
+    this.name = 'TmdbNotConfiguredError';
+  }
+}
+
+// Get TMDB API key from settings, then env. There is deliberately no bundled
+// default — a shared key in a public repo gets scraped and rate-limited.
+export function getTmdbApiKey(): string | null {
   try {
     // Try database setting first (if table exists)
     const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('tmdbApiKey') as { value: string } | undefined;
-    if (setting?.value) return setting.value;
+    if (setting?.value?.trim()) return setting.value.trim();
   } catch {
     // ignore
   }
-  // Fallback to env or default
-  return process.env.TMDB_API_KEY || DEFAULT_TMDB_API_KEY;
+  return process.env.TMDB_API_KEY?.trim() || null;
+}
+
+export function isTmdbConfigured(): boolean {
+  return getTmdbApiKey() !== null;
 }
 
 export function getOmdbApiKey(): string {
@@ -58,6 +71,7 @@ async function waitForTmdbSlot(): Promise<void> {
 
 export function getTmdbClient(): MovieDb {
   const apiKey = getTmdbApiKey();
+  if (!apiKey) throw new TmdbNotConfiguredError();
   if (!cachedTmdbClient || cachedTmdbClient.apiKey !== apiKey) {
     cachedTmdbClient = { apiKey, client: new MovieDb(apiKey) };
   }
@@ -389,8 +403,6 @@ async function fetchGenres(moviedb: MovieDb, genreIds: number[], type: 'movie' |
 }
 
 export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadata> {
-  const moviedb = getTmdbClient();
-
   const rawName = cleanFilename(fileName);
   const year = extractYear(fileName);
 
@@ -407,6 +419,10 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
   };
 
   try {
+    // Inside the try so a missing TMDB key degrades to filename-derived data
+    // rather than aborting the scan for this file.
+    const moviedb = getTmdbClient();
+
     let res = await cachedTmdbCall(`tmdb-movie-search-${rawName.toLowerCase()}-${year || ''}`, () =>
       moviedb.searchMovie({ query: rawName, primary_release_year: year }),
       24 * 60
@@ -482,7 +498,6 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
 }
 
 export async function fetchShowMetadata(showName: string): Promise<MediaMetadata> {
-  const moviedb = getTmdbClient();
   const normalizedInput = normalizeShowName(showName) || showName.trim();
   const strippedYear = normalizedInput.replace(/\s+(19|20)\d{2}\s*$/g, '').trim();
   const hintedYear = extractYear(showName);
@@ -500,6 +515,10 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
   };
 
   try {
+    // Inside the try so a missing TMDB key degrades to filename-derived data
+    // rather than aborting the scan for this show.
+    const moviedb = getTmdbClient();
+
     const candidates = Array.from(
       new Set([showName, normalizedInput, strippedYear].map(s => s.trim()).filter(Boolean))
     );

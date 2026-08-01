@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cachedTmdbCall, getTmdbApiKey, getTmdbClient } from '@/lib/metadata';
+import { cachedTmdbCall, getTmdbApiKey, getTmdbClient, TmdbNotConfiguredError } from '@/lib/metadata';
+
+function requireTmdbApiKey(): string {
+    const apiKey = getTmdbApiKey();
+    if (!apiKey) throw new TmdbNotConfiguredError();
+    return apiKey;
+}
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -17,7 +23,7 @@ type TmdbVideosResponse = {
 };
 
 async function fetchEpisodeVideos(tmdbId: number, season: number, episode: number): Promise<TmdbVideosResponse> {
-    const apiKey = getTmdbApiKey();
+    const apiKey = requireTmdbApiKey();
     const url = new URL(`https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}/episode/${episode}/videos`);
     url.searchParams.set('api_key', apiKey);
 
@@ -33,7 +39,7 @@ async function fetchEpisodeVideos(tmdbId: number, season: number, episode: numbe
 }
 
 async function fetchSeasonVideos(tmdbId: number, season: number): Promise<TmdbVideosResponse> {
-    const apiKey = getTmdbApiKey();
+    const apiKey = requireTmdbApiKey();
     const url = new URL(`https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}/videos`);
     url.searchParams.set('api_key', apiKey);
 

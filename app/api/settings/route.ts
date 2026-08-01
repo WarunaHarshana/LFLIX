@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import fs from 'fs';
-import { getSafeErrorMessage, validateExistingDirectory } from '@/lib/security';
+import { getSafeErrorMessage, validateExistingDirectory, validatePlayerExecutable } from '@/lib/security';
+import { isTmdbConfigured } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -9,23 +9,8 @@ export const dynamic = 'force-dynamic';
 // Valid setting keys to prevent injection
 const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey', 'omdbApiKey', 'downloadPath'];
 
-// Validate VLC path exists
-function validateVlcPath(path: string): { valid: boolean; error?: string } {
-    if (!path) {
-        return { valid: false, error: 'VLC path is required' };
-    }
-
-    if (!fs.existsSync(path)) {
-        return { valid: false, error: `VLC not found at: ${path}. Please check the path.` };
-    }
-
-    // Check if it's actually vlc.exe
-    if (!path.toLowerCase().includes('vlc')) {
-        console.warn(`Warning: VLC path "${path}" doesn't contain "vlc" in filename`);
-    }
-
-    return { valid: true };
-}
+// Validate the configured player path points at a real, recognised player binary
+const validateVlcPath = validatePlayerExecutable;
 
 // Get all settings
 export async function GET() {
@@ -45,7 +30,7 @@ export async function GET() {
             }
         }
 
-        return NextResponse.json(settingsObj);
+        return NextResponse.json({ ...settingsObj, tmdbConfigured: isTmdbConfigured() });
     } catch (e) {
         return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
     }
