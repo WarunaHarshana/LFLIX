@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { probeFile } from '@/lib/mediainfo';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -72,8 +73,8 @@ export async function POST() {
             failed,
             total: movies.length + episodes.length
         });
-    } catch (e: any) {
+    } catch (e) {
         console.error('Reprobe error:', e);
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        return apiErrorResponse(e);
     }
 }

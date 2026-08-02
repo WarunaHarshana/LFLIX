@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cachedTmdbCall, fetchImdbRatingById, getTmdbClient } from '@/lib/metadata';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,8 +142,8 @@ export async function GET(req: Request) {
         }
 
         return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
-    } catch (e: any) {
+    } catch (e) {
         console.error('TMDB details error:', e);
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        return apiErrorResponse(e);
     }
 }

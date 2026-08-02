@@ -3,12 +3,21 @@ import db from '@/lib/db';
 import autoDownloader from '@/lib/autoDownloader';
 import { NewEpisodeInfo } from '@/lib/releaseMonitor';
 import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
+import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
+import { parsePositiveInt } from '@/lib/security';
 
 export async function POST(req: Request) {
     try {
-        const { tmdbId, showId, seasonNumber } = await req.json();
-        if (!tmdbId || !showId || !seasonNumber) {
-            return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+        const body = await readJsonObject(req);
+        const tmdbId = parsePositiveInt(body.tmdbId);
+        const showId = parsePositiveInt(body.showId);
+        // Season 0 is the specials season, so this one may legitimately be zero.
+        const seasonNumber = Number.isInteger(body.seasonNumber) && (body.seasonNumber as number) >= 0
+            ? (body.seasonNumber as number)
+            : null;
+
+        if (!tmdbId || !showId || seasonNumber === null) {
+            return NextResponse.json({ error: 'Missing or invalid parameters' }, { status: 400 });
         }
 
         // Get quality preference from auto_track, default to 'best'

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -113,7 +114,7 @@ export async function GET(req: Request) {
     const seasons = Array.from(seasonMap.values()).sort((a, b) => a.season - b.season);
 
     return NextResponse.json({ seasons, totalEpisodes: episodes.length });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }

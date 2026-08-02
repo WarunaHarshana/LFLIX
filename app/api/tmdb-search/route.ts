@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -73,8 +74,8 @@ export async function GET(req: Request) {
         results.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
 
         return NextResponse.json({ results: results.slice(0, 20) });
-    } catch (e: any) {
+    } catch (e) {
         console.error('TMDB search error:', e);
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        return apiErrorResponse(e);
     }
 }

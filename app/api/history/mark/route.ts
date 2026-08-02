@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, watched });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }

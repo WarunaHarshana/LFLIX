@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Database from 'better-sqlite3';
 import path from 'path';
+import { readJsonObject } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const { name, url, logo, category } = await req.json();
+        const { name, url, logo, category } = await readJsonObject(req);
 
         if (!name || !url) {
             return NextResponse.json({ error: 'Name and URL are required' }, { status: 400 });

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { startDlnaServer, stopDlnaServer, getDlnaStatus } from '@/lib/dlna';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,8 @@ export async function POST() {
         'Some routers block DLNA - check router settings'
       ]
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
@@ -30,8 +31,8 @@ export async function DELETE() {
       running: false,
       message: 'DLNA server stopped' 
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 

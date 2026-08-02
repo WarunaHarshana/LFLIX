@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { getSafeErrorMessage, parsePositiveInt } from '@/lib/security';
+import { parsePositiveInt } from '@/lib/security';
+import { apiErrorResponse, rateLimit, readJsonObject } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,12 @@ setInterval(() => {
 
 export async function POST(req: Request) {
   try {
-    const { contentType, contentId, episodeId } = await req.json();
+    // Each call adds a 24h entry to an in-memory map; cap the mint rate so it
+    // cannot be inflated indefinitely.
+    const limited = rateLimit(req, 'token', { windowMs: 60 * 1000, max: 60 });
+    if (limited) return limited;
+
+    const { contentType, contentId, episodeId } = await readJsonObject(req, 8 * 1024);
     const parsedContentId = parsePositiveInt(contentId);
     const parsedEpisodeId = episodeId ? parsePositiveInt(episodeId) ?? undefined : undefined;
 
@@ -45,7 +51,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ token });
   } catch (e) {
-    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+    return apiErrorResponse(e, 'Failed to create stream token');
   }
 }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { DiscoverMovieRequest, DiscoverTvRequest } from 'moviedb-promise';
 import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -71,8 +72,8 @@ export async function GET(req: Request) {
             totalPages: res.total_pages || 1,
             totalResults: res.total_results || 0
         });
-    } catch (e: any) {
+    } catch (e) {
         console.error('TMDB discover error:', e);
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        return apiErrorResponse(e);
     }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { streamQualityDb, type StreamQualityValue } from '@/lib/db';
 import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -798,8 +799,8 @@ export async function GET(req: Request) {
       networkMode: vpnMode ? 'vpn' : 'standard',
       probeCacheTtlMs: vpnMode ? VPN_SERVER_CHECK_CACHE_TTL_MS : SERVER_CHECK_CACHE_TTL_MS,
     });
-  } catch (e: any) {
+  } catch (e) {
     console.error('Stream servers error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return apiErrorResponse(e);
   }
 }

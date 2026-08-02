@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { iptvDb } from '@/lib/db';
+import { readJsonObject } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -16,11 +17,14 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { name } = body;
+    const body = await readJsonObject(req);
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
 
     if (!name) {
       return NextResponse.json({ error: 'Category name is required' }, { status: 400 });
+    }
+    if (name.length > 100) {
+      return NextResponse.json({ error: 'Category name is too long' }, { status: 400 });
     }
 
     const result = iptvDb.addCategory(name);

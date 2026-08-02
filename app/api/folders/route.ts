@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import db, { removeAutoTrackingForShow } from '@/lib/db';
 import path from 'path';
-import { getSafeErrorMessage, parsePositiveInt, validateExistingDirectory } from '@/lib/security';
+import { parsePositiveInt, validateExistingDirectory } from '@/lib/security';
+import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -12,14 +13,14 @@ export async function GET() {
         const folders = db.prepare('SELECT * FROM scanned_folders ORDER BY addedAt DESC').all();
         return NextResponse.json(folders);
     } catch (e) {
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+        return apiErrorResponse(e, 'Failed to load folders');
     }
 }
 
 // Add a new folder
 export async function POST(req: Request) {
     try {
-        const { folderPath, contentType = 'auto' } = await req.json();
+        const { folderPath, contentType } = await readJsonObject(req, 64 * 1024);
 
         if (!folderPath) {
             return NextResponse.json({ error: 'Missing folderPath' }, { status: 400 });
@@ -30,16 +31,24 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: validation.error }, { status: 400 });
         }
 
+        // contentType feeds a DB column that the scanner branches on; only the
+        // known values are accepted rather than whatever the caller sends.
+        const VALID_CONTENT_TYPES = ['auto', 'movie', 'show', 'mixed'];
+        const resolvedContentType =
+            typeof contentType === 'string' && VALID_CONTENT_TYPES.includes(contentType)
+                ? contentType
+                : 'auto';
+
         const folderName = path.basename(validation.path);
 
         db.prepare(`
       INSERT OR IGNORE INTO scanned_folders (folderPath, folderName, contentType)
       VALUES (?, ?, ?)
-    `).run(validation.path, folderName, contentType);
+    `).run(validation.path, folderName, resolvedContentType);
 
         return NextResponse.json({ success: true });
     } catch (e) {
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+        return apiErrorResponse(e, 'Failed to add folder');
     }
 }
 
@@ -95,6 +104,6 @@ export async function DELETE(req: Request) {
         return NextResponse.json({ success: true, message: 'Folder removed from library' });
     } catch (e) {
         console.error('Delete folder error:', e);
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+        return apiErrorResponse(e, 'Failed to remove folder');
     }
 }

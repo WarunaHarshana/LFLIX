@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
+import { getSafeErrorMessage } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -47,8 +48,12 @@ export async function GET() {
             tv: trendingData.tv,
             fetchedAt: trendingData.fetchedAt,
         });
-    } catch (e: any) {
+    } catch (e) {
         console.error('Trending fetch error:', e);
-        return NextResponse.json({ error: e.message, movies: [], tv: [] }, { status: 500 });
+        // Keeps the empty-array shape the client expects on failure.
+        return NextResponse.json(
+            { error: getSafeErrorMessage(e), movies: [], tv: [] },
+            { status: 500 }
+        );
     }
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import movieReleaseMonitor from '@/lib/movieReleaseMonitor';
+import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
+import { parsePositiveInt } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,18 +30,19 @@ export async function GET() {
     `).all();
 
     return NextResponse.json({ items });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
 // POST — manually trigger a check for a specific movie
 export async function POST(req: Request) {
   try {
-    const { tmdbId } = await req.json();
+    const body = await readJsonObject(req);
+    const tmdbId = parsePositiveInt(body.tmdbId);
 
     if (!tmdbId) {
-      return NextResponse.json({ error: 'Missing tmdbId' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing or invalid tmdbId' }, { status: 400 });
     }
 
     const result = await movieReleaseMonitor.checkSingleMovie(tmdbId);
@@ -49,15 +52,15 @@ export async function POST(req: Request) {
       available: result.available,
       bestResult: result.bestResult,
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
 // PATCH — toggle trackRelease on/off for a watchlist item
 export async function PATCH(req: Request) {
   try {
-    const { id, tmdbId, trackRelease } = await req.json();
+    const { id, tmdbId, trackRelease } = await readJsonObject(req);
 
     if (trackRelease === undefined) {
       return NextResponse.json({ error: 'Missing trackRelease field' }, { status: 400 });
@@ -74,7 +77,7 @@ export async function PATCH(req: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db, { removeAutoTrackingForShow } from '@/lib/db';
 import releaseMonitor from '@/lib/releaseMonitor';
+import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,15 +16,15 @@ export async function GET() {
       ORDER BY at.addedAt DESC
     `).all();
     return NextResponse.json({ tracked });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
 // POST — add a show to auto-tracking
 export async function POST(req: Request) {
   try {
-    const { showId, tmdbId, title, qualityPreference } = await req.json();
+    const { showId, tmdbId, title, qualityPreference } = await readJsonObject(req);
 
     if (!showId || !tmdbId || !title) {
       return NextResponse.json({ error: 'Missing required fields: showId, tmdbId, title' }, { status: 400 });
@@ -64,15 +65,15 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, id: result.lastInsertRowid });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
 // PATCH — update tracking settings
 export async function PATCH(req: Request) {
   try {
-    const { id, showId, enabled, qualityPreference } = await req.json();
+    const { id, showId, enabled, qualityPreference } = await readJsonObject(req);
 
     const trackId = id || showId;
     if (!trackId) {
@@ -91,8 +92,8 @@ export async function PATCH(req: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
@@ -115,7 +116,7 @@ export async function DELETE(req: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }

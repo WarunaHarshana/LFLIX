@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import db from '@/lib/db';
-import { getSafeErrorMessage, parsePositiveInt, validatePlayerExecutable } from '@/lib/security';
+import { parsePositiveInt, validatePlayerExecutable } from '@/lib/security';
+import { apiErrorResponse, rateLimit, readJsonObject } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -109,7 +110,11 @@ function resolveExistingMediaPath(filePath: string): string | null {
 
 export async function POST(req: Request) {
   try {
-    const { contentType, contentId, episodeId, startTime } = await req.json();
+    // This spawns a desktop process; cap how fast that can be triggered.
+    const limited = rateLimit(req, 'play', { windowMs: 60 * 1000, max: 30 });
+    if (limited) return limited;
+
+    const { contentType, contentId, episodeId, startTime } = await readJsonObject(req, 8 * 1024);
     const parsedContentId = parsePositiveInt(contentId);
     const parsedEpisodeId = episodeId !== undefined ? parsePositiveInt(episodeId) : undefined;
 
@@ -186,6 +191,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, message: `${playerNames[playerType]} Launched` });
   } catch (e) {
-    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+    return apiErrorResponse(e, 'Failed to launch player');
   }
 }

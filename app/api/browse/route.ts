@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { guardSetupRoute } from '@/lib/authGuard';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -115,7 +116,7 @@ export async function GET(req: Request) {
             parentPath: isRoot ? '' : parentPath,
             items
         });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        return apiErrorResponse(e);
     }
 }

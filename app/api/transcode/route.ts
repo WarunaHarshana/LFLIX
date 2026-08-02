@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { findFFprobe, resolveMediaFromParams, forwardAuthParams } from '@/lib/ffmpeg';
 import { getSafeErrorMessage } from '@/lib/security';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // On-the-fly HLS transcoding for browser-incompatible files (MKV/AVI, HEVC, DTS, ...).
 // This endpoint returns a VOD m3u8 playlist whose segments are produced on demand by
@@ -73,6 +74,6 @@ export async function GET(req: Request) {
     });
   } catch (e) {
     console.error('Transcode playlist error:', e);
-    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+    return apiErrorResponse(e);
   }
 }

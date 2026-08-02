@@ -3,7 +3,7 @@ import downloadManager from '@/lib/downloader';
 import db from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
-import { apiErrorResponse, readJsonObject, rateLimit } from '@/lib/apiSecurity';
+import { apiErrorResponse, rateLimit, readJsonObject } from '@/lib/apiSecurity';
 import {
     getSafeErrorMessage,
     parsePositiveInt,
@@ -49,7 +49,7 @@ export async function GET() {
         const activeCount = downloadManager.getActiveCount();
         return NextResponse.json({ downloads, activeCount });
     } catch (e) {
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+        return apiErrorResponse(e);
     }
 }
 
@@ -180,6 +180,6 @@ export async function DELETE(req: Request) {
         return NextResponse.json({ success });
     } catch (e) {
         console.error('Delete download error:', e);
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+        return apiErrorResponse(e);
     }
 }

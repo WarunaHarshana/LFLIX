@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -48,15 +49,15 @@ export async function GET() {
     `).all();
 
     return NextResponse.json(history);
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
 // Update watch progress
 export async function POST(req: Request) {
   try {
-    const { contentType, contentId, episodeId, progress, duration } = await req.json();
+    const { contentType, contentId, episodeId, progress, duration } = await readJsonObject(req);
 
     if (!contentType || !contentId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -83,7 +84,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid duration. Must be a non-negative number' }, { status: 400 });
     }
 
-    const completed = (duration && duration > 0 && progress / duration > 0.9) ? 1 : 0;
+    const safeProgress = typeof progress === 'number' ? progress : 0;
+    const completed =
+      typeof duration === 'number' && duration > 0 && safeProgress / duration > 0.9 ? 1 : 0;
 
     db.prepare(`
       INSERT INTO watch_history (contentType, contentId, episodeId, progress, duration, completed, lastWatched)
@@ -93,8 +96,8 @@ export async function POST(req: Request) {
     `).run(contentType, contentId, episodeId || null, progress, duration, completed, progress, duration, completed);
 
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
@@ -115,7 +118,7 @@ export async function DELETE(req: Request) {
 
     db.prepare('DELETE FROM watch_history WHERE id = ?').run(id);
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }

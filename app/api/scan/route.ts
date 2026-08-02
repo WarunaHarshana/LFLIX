@@ -3,13 +3,18 @@ import path from 'path';
 import db from '@/lib/db';
 import { getVideoFiles, isVideoFile, scanFile } from '@/lib/scanner';
 import { clearEpisodeCache } from '@/lib/metadata';
-import { getSafeErrorMessage, isPathInside, validateExistingDirectory, validateExistingFile } from '@/lib/security';
+import { isPathInside, validateExistingDirectory, validateExistingFile } from '@/lib/security';
+import { apiErrorResponse, rateLimit, readJsonObject } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const { folderPath, specificFile } = await req.json();
+    // A scan walks the filesystem and fans out to TMDB, so it is worth capping.
+    const limited = rateLimit(req, 'scan', { windowMs: 60 * 1000, max: 10 });
+    if (limited) return limited;
+
+    const { folderPath, specificFile } = await readJsonObject(req, 64 * 1024);
     const folder = validateExistingDirectory(folderPath);
 
     if (folder.error !== null) {
@@ -59,6 +64,6 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     console.error('Scan error:', e);
-    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+    return apiErrorResponse(e, 'Scan failed');
   }
 }

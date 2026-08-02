@@ -78,6 +78,19 @@ export async function readJsonObject(req: Request, maxBytes = 1024 * 1024): Prom
   return parsed as Record<string, unknown>;
 }
 
+/** better-sqlite3 surfaces constraint failures via a `code` string on the error. */
+export function getSqliteErrorCode(error: unknown): string | null {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code: unknown }).code;
+    if (typeof code === 'string') return code;
+  }
+  return null;
+}
+
+export function isSqliteConstraintError(error: unknown): boolean {
+  return getSqliteErrorCode(error)?.startsWith('SQLITE_CONSTRAINT') ?? false;
+}
+
 export function apiErrorResponse(error: unknown, fallback = 'Unexpected server error'): NextResponse {
   if (error instanceof ApiRequestError) {
     return NextResponse.json({ error: error.message }, { status: error.status });

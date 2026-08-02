@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -9,15 +10,15 @@ export async function GET() {
     try {
         const items = db.prepare('SELECT * FROM watchlist ORDER BY addedAt DESC').all();
         return NextResponse.json({ items });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        return apiErrorResponse(e);
     }
 }
 
 // POST — add item to watchlist
 export async function POST(req: Request) {
     try {
-        const { tmdbId, mediaType, title, posterPath, backdropPath, overview, rating, imdbRating, year, genres, notes } = await req.json();
+        const { tmdbId, mediaType, title, posterPath, backdropPath, overview, rating, imdbRating, year, genres, notes } = await readJsonObject(req);
 
         if (!tmdbId || !mediaType || !title) {
             return NextResponse.json({ error: 'Missing required fields: tmdbId, mediaType, title' }, { status: 400 });
@@ -51,8 +52,8 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ success: true, id: result.lastInsertRowid });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        return apiErrorResponse(e);
     }
 }
 
@@ -68,7 +69,7 @@ export async function DELETE(req: Request) {
 
         db.prepare('DELETE FROM watchlist WHERE id = ?').run(parseInt(id));
         return NextResponse.json({ success: true });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        return apiErrorResponse(e);
     }
 }

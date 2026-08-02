@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import db, { cleanupOrphanedAutoTracks } from '@/lib/db';
 import { scanFile } from '@/lib/scanner';
+import { apiErrorResponse } from '@/lib/apiSecurity';
+import { getSafeErrorMessage } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -84,8 +86,8 @@ export async function POST() {
           WHERE id NOT IN (SELECT DISTINCT showId FROM episodes)
         `).run();
         cleanupOrphanedAutoTracks();
-      } catch (e: any) {
-        errors.push(`Cleanup error in ${folderPath}: ${e.message}`);
+      } catch (e) {
+        errors.push(`Cleanup error in ${folderPath}: ${getSafeErrorMessage(e)}`);
       }
 
       // 2) Add newly found files
@@ -97,8 +99,8 @@ export async function POST() {
           if (result.added) {
             totalAdded++;
           }
-        } catch (e: any) {
-          errors.push(`Error scanning ${filePath}: ${e.message}`);
+        } catch (e) {
+          errors.push(`Error scanning ${filePath}: ${getSafeErrorMessage(e)}`);
         }
       }
     }
@@ -110,8 +112,8 @@ export async function POST() {
       removed: totalRemoved,
       errors: errors.length > 0 ? errors : undefined
     });
-  } catch (e: any) {
+  } catch (e) {
     console.error('Rescan error:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return apiErrorResponse(e);
   }
 }

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { resolveMediaFromParams } from '@/lib/ffmpeg';
 import { getSafeErrorMessage } from '@/lib/security';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -107,8 +108,8 @@ export async function GET(req: Request) {
         'Accept-Ranges': 'bytes',
       },
     });
-  } catch (e: any) {
+  } catch (e) {
     console.error('Stream error:', e);
-    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+    return apiErrorResponse(e);
   }
 }

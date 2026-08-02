@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import db, { removeAutoTrackingForShow } from '@/lib/db';
 import { getSafeErrorMessage, isPathInsideAny, parsePositiveInt, validateExistingFile } from '@/lib/security';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -80,7 +81,7 @@ export async function DELETE(req: Request) {
         }
 
         return NextResponse.json({ success: true, filesDeleted, fileErrors: fileErrors.length ? fileErrors : undefined });
-    } catch (e: any) {
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+    } catch (e) {
+        return apiErrorResponse(e);
     }
 }

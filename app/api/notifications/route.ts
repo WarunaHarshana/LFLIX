@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import releaseMonitor from '@/lib/releaseMonitor';
+import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,22 +15,25 @@ export async function GET(req: Request) {
     const unreadCount = releaseMonitor.getUnreadCount();
 
     return NextResponse.json({ notifications, unreadCount });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
 // PATCH — mark notification(s) as read
 export async function PATCH(req: Request) {
   try {
-    const body = await req.json();
-    const { ids } = body; // optional array of IDs; if omitted, marks all as read
+    const body = await readJsonObject(req);
+    // Optional array of IDs; if omitted or malformed, marks all as read.
+    const ids = Array.isArray(body.ids)
+      ? body.ids.filter((id): id is number => Number.isInteger(id) && id > 0)
+      : undefined;
 
     releaseMonitor.markAsRead(ids);
 
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
@@ -38,7 +42,7 @@ export async function DELETE() {
   try {
     releaseMonitor.clearAll();
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }

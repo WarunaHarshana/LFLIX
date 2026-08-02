@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import { findFFmpeg, resolveMediaFromParams } from '@/lib/ffmpeg';
 import { getSafeErrorMessage } from '@/lib/security';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Produces a single MPEG-TS segment, transcoded on demand, for the HLS playlist
 // served by /api/transcode. Each segment is independent: we fast-seek to its start
@@ -85,6 +86,6 @@ export async function GET(req: Request) {
     });
   } catch (e) {
     console.error('Transcode segment error:', e);
-    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+    return apiErrorResponse(e);
   }
 }

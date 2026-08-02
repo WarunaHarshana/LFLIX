@@ -18,7 +18,7 @@ export async function GET() {
 
     return NextResponse.json({ setupComplete: isSetup });
   } catch (e) {
-    return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+    return apiErrorResponse(e);
   }
 }
 

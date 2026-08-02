@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { getSafeErrorMessage, validateExistingDirectory, validatePlayerExecutable } from '@/lib/security';
+import { validateExistingDirectory, validatePlayerExecutable } from '@/lib/security';
+import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
 import { isTmdbConfigured } from '@/lib/metadata';
 
 // Mark as dynamic for static export compatibility
@@ -32,14 +33,14 @@ export async function GET() {
 
         return NextResponse.json({ ...settingsObj, tmdbConfigured: isTmdbConfigured() });
     } catch (e) {
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+        return apiErrorResponse(e, 'Settings request failed');
     }
 }
 
 // Update settings
 export async function POST(req: Request) {
     try {
-        const settings = await req.json();
+        const settings = await readJsonObject(req, 32 * 1024);
 
         // Validate setting keys
         for (const key of Object.keys(settings)) {
@@ -77,6 +78,6 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ success: true });
     } catch (e) {
-        return NextResponse.json({ error: getSafeErrorMessage(e) }, { status: 500 });
+        return apiErrorResponse(e, 'Settings request failed');
     }
 }

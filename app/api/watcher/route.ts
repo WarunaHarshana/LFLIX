@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { folderWatcher, WatcherEvent } from '@/lib/watcher';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -60,8 +61,8 @@ export async function POST() {
             watching: folderWatcher.isWatching(),
             paths: folderWatcher.getWatchedPaths()
         });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        return apiErrorResponse(e);
     }
 }
 
@@ -70,7 +71,7 @@ export async function DELETE() {
     try {
         await folderWatcher.stop();
         return NextResponse.json({ success: true, watching: false });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        return apiErrorResponse(e);
     }
 }

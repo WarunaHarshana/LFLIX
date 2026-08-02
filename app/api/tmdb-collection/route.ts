@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,8 +50,8 @@ export async function GET(req: Request) {
             overview: (collection as any).overview || null,
             parts,
         });
-    } catch (e: any) {
+    } catch (e) {
         console.error('TMDB collection error:', e);
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        return apiErrorResponse(e);
     }
 }

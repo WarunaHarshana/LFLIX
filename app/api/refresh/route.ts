@@ -1,17 +1,20 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { fetchEpisodeMetadata, fetchMovieMetadata, fetchShowMetadata } from '@/lib/metadata';
+import { apiErrorResponse, getSqliteErrorCode, isSqliteConstraintError, readJsonObject } from '@/lib/apiSecurity';
+import { parsePositiveInt } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
     try {
-        const body = await req.json().catch(() => ({}));
-        const { id, type } = body;
+        const body = await readJsonObject(req).catch(() => ({} as Record<string, unknown>));
+        const id = parsePositiveInt(body.id);
+        const type = body.type;
 
         // If specific ID provided, refresh just that one
-        if (id && type) {
+        if (id && (type === 'movie' || type === 'show')) {
             return await refreshSingle(id, type);
         }
 
@@ -50,7 +53,7 @@ export async function POST(req: Request) {
                 } else {
                     errors.push(`Movie metadata not found: ${movie.title}`);
                 }
-            } catch (e: any) {
+            } catch (e) {
                 console.error(`Error refreshing movie ${movie.title}:`, e);
                 errors.push(`Movie error: ${movie.title}`);
             }
@@ -105,9 +108,9 @@ export async function POST(req: Request) {
                 } else {
                     errors.push(`Show not found: ${show.title}`);
                 }
-            } catch (e: any) {
+            } catch (e) {
                 // Handle uniqueness constraint if title update conflicts
-                if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' || e.code === 'SQLITE_CONSTRAINT') {
+                if (isSqliteConstraintError(e)) {
                     errors.push(`Duplicate title conflict for show: ${show.title}`);
                 } else {
                     console.error(`Error refreshing show ${show.title}:`, e);
@@ -137,7 +140,7 @@ export async function POST(req: Request) {
                         .run(epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, ep.id);
                     episodesRefreshed++;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 errors.push(`Episode error: S${ep.seasonNumber}E${ep.episodeNumber} of show ${ep.showId}`);
             }
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -149,8 +152,8 @@ export async function POST(req: Request) {
             episodes: episodesRefreshed,
             errors: errors.length > 0 ? errors : undefined
         });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        return apiErrorResponse(e);
     }
 }
 
@@ -218,10 +221,10 @@ async function refreshSingle(id: number, type: 'movie' | 'show') {
             }
             return NextResponse.json({ error: 'No TMDB match found' }, { status: 404 });
         }
-    } catch (e: any) {
-        if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    } catch (e) {
+        if (getSqliteErrorCode(e) === 'SQLITE_CONSTRAINT_UNIQUE') {
             return NextResponse.json({ error: 'Title conflict detected' }, { status: 409 });
         }
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        return apiErrorResponse(e);
     }
 }

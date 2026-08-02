@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import autoDownloader from '@/lib/autoDownloader';
 import releaseMonitor from '@/lib/releaseMonitor';
+import { apiErrorResponse } from '@/lib/apiSecurity';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,8 +10,8 @@ export async function GET() {
   try {
     const status = autoDownloader.getStatus();
     return NextResponse.json(status);
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }
 
@@ -39,7 +40,7 @@ export async function POST() {
       newEpisodesFound: newEpisodes.length,
       status,
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e) {
+    return apiErrorResponse(e);
   }
 }

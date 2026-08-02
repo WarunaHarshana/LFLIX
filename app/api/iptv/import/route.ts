@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Database from 'better-sqlite3';
 import path from 'path';
+import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
+import { validateHttpDownloadUrl } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -45,8 +47,10 @@ function parseM3U(content: string): Array<{ name: string; url: string; logo?: st
 
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json();
-        const { m3uUrl, m3uContent, source } = body;
+        const body = await readJsonObject(req);
+        const m3uUrl = typeof body.m3uUrl === 'string' ? body.m3uUrl : null;
+        const m3uContent = typeof body.m3uContent === 'string' ? body.m3uContent : null;
+        const source = body.source;
 
         let content = '';
 
@@ -60,9 +64,16 @@ export async function POST(req: NextRequest) {
         }
         // If importing from URL
         else if (m3uUrl) {
-            const response = await fetch(m3uUrl);
+            // The server performs this fetch, so an unvalidated URL would let a
+            // caller probe the loopback interface and the local network.
+            const validated = await validateHttpDownloadUrl(m3uUrl);
+            if (validated.error !== null) {
+                return NextResponse.json({ error: validated.error }, { status: 400 });
+            }
+
+            const response = await fetch(validated.url, { redirect: 'error' });
             if (!response.ok) {
-                return NextResponse.json({ error: 'Failed to fetch M3U from URL' }, { status: 500 });
+                return NextResponse.json({ error: 'Failed to fetch M3U from URL' }, { status: 502 });
             }
             content = await response.text();
         }
