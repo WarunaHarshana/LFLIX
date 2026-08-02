@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
 import db from '@/lib/db';
 import { verifyStreamToken } from './streamTokens';
 
@@ -47,6 +48,85 @@ export function findFFmpeg(): string {
 
 export function findFFprobe(): string {
   return findBinary('ffprobe');
+}
+
+// ---- Video encoder selection ----
+
+/**
+ * Hardware H.264 encoders, best first. Software transcoding pegs a CPU core per
+ * stream; offloading to a GPU is the single biggest win available to the
+ * transcode path when the hardware is actually usable.
+ */
+const HW_ENCODER_CANDIDATES = [
+  { name: 'h264_nvenc', args: ['-preset', 'p4', '-rc', 'vbr', '-cq', '23'] },
+  { name: 'h264_qsv', args: ['-preset', 'veryfast', '-global_quality', '23'] },
+  { name: 'h264_amf', args: ['-quality', 'speed', '-rc', 'cqp', '-qp_i', '23', '-qp_p', '23'] },
+  { name: 'h264_videotoolbox', args: ['-q:v', '55'] },
+];
+
+const SOFTWARE_ENCODER = {
+  name: 'libx264',
+  args: ['-preset', 'veryfast', '-crf', '23', '-profile:v', 'high', '-level', '4.1'],
+};
+
+type EncoderChoice = { name: string; args: string[] };
+
+let cachedEncoder: EncoderChoice | null = null;
+
+/**
+ * Probe an encoder by actually initialising it on a tiny synthetic clip.
+ *
+ * Listing `ffmpeg -encoders` is not enough: builds advertise every encoder they
+ * were compiled with, whether or not the machine has the driver or GPU. The
+ * only reliable signal is trying to encode a frame.
+ */
+function encoderWorks(encoder: string): boolean {
+  try {
+    const result = spawnSync(
+      findFFmpeg(),
+      [
+        '-hide_banner', '-loglevel', 'error',
+        '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=30:duration=0.2',
+        '-c:v', encoder,
+        '-f', 'null', '-',
+      ],
+      { timeout: 15000, encoding: 'utf8' }
+    );
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The encoder to transcode with, resolved once per process.
+ * Set `LFLIX_FORCE_SOFTWARE_ENCODER=1` to skip hardware entirely.
+ */
+export function getVideoEncoder(): EncoderChoice {
+  if (cachedEncoder) return cachedEncoder;
+
+  if (process.env.LFLIX_FORCE_SOFTWARE_ENCODER === '1') {
+    cachedEncoder = SOFTWARE_ENCODER;
+    return cachedEncoder;
+  }
+
+  for (const candidate of HW_ENCODER_CANDIDATES) {
+    if (encoderWorks(candidate.name)) {
+      console.log(`[Transcode] Using hardware encoder: ${candidate.name}`);
+      cachedEncoder = candidate;
+      return cachedEncoder;
+    }
+  }
+
+  console.log('[Transcode] No usable hardware encoder, falling back to libx264');
+  cachedEncoder = SOFTWARE_ENCODER;
+  return cachedEncoder;
+}
+
+/** Flags for the chosen encoder, ready to splice into an ffmpeg argument list. */
+export function getVideoEncoderArgs(): string[] {
+  const encoder = getVideoEncoder();
+  return ['-c:v', encoder.name, ...encoder.args];
 }
 
 // ---- Media path resolution (shared by stream / transcode / subtitle routes) ----

@@ -2,7 +2,7 @@
 
 A Netflix-style local media server that organizes and plays your movie & TV show collection. Built with Next.js, SQLite, and your favourite player.
 
-![LFLIX](https://img.shields.io/badge/LFLIX-v0.6.0-red?style=for-the-badge)
+![LFLIX](https://img.shields.io/badge/LFLIX-v0.7.0-red?style=for-the-badge)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
 ![CI](https://github.com/WarunaHarshana/LFLIX/actions/workflows/ci.yml/badge.svg)

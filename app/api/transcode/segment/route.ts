@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
-import { findFFmpeg, resolveMediaFromParams } from '@/lib/ffmpeg';
+import { findFFmpeg, getVideoEncoderArgs, resolveMediaFromParams } from '@/lib/ffmpeg';
 
 import { apiErrorResponse } from '@/lib/apiSecurity';
 
@@ -39,11 +39,9 @@ export async function GET(req: Request) {
       '-i', resolved.mediaPath,
       '-map', '0:v:0',
       '-map', `0:a:${audioIndex}?`,    // selected audio ("?" => optional, no error if absent)
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '23',
-      '-profile:v', 'high',
-      '-level', '4.1',
+      // GPU encoder when one is genuinely usable, else libx264. Resolved once
+      // per process by actually initialising the encoder — see lib/ffmpeg.ts.
+      ...getVideoEncoderArgs(),
       '-pix_fmt', 'yuv420p',           // ensure broad browser compatibility (no 10-bit/4:4:4)
       '-c:a', 'aac',
       '-ac', '2',

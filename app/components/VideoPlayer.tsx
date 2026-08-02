@@ -172,7 +172,31 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
           setError('This browser cannot play the converted stream.');
           return;
         }
-        hls = new Hls({ enableWorker: true });
+        // Tuned for a LAN media server rather than a public CDN. Segments are
+        // transcoded on demand, so the cost to avoid is ffmpeg starting late —
+        // not bandwidth. Buffering further ahead than the defaults keeps the
+        // encoder working steadily and absorbs a slow segment without a stall.
+        hls = new Hls({
+          enableWorker: true,
+          // ~2 min ahead: on a LAN the bytes are cheap, and it gives the
+          // on-demand transcoder a wide runway.
+          maxBufferLength: 120,
+          maxMaxBufferLength: 240,
+          // Cap by size too, so 4K segments cannot balloon memory on a TV.
+          maxBufferSize: 120 * 1000 * 1000,
+          // Keep some behind for instant short seeks backwards.
+          backBufferLength: 60,
+          // Segments come from localhost or the LAN; a slow one means ffmpeg is
+          // still working, so retry rather than giving up quickly.
+          fragLoadPolicy: {
+            default: {
+              maxTimeToFirstByteMs: 30_000,
+              maxLoadTimeMs: 120_000,
+              timeoutRetry: { maxNumRetry: 4, retryDelayMs: 500, maxRetryDelayMs: 4000 },
+              errorRetry: { maxNumRetry: 6, retryDelayMs: 500, maxRetryDelayMs: 4000 },
+            },
+          },
+        });
         hls.loadSource(activeSrc);
         hls.attachMedia(videoRef.current);
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
