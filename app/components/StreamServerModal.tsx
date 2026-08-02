@@ -383,7 +383,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
   }, [activeServer, currentServer]);
 
   return (
-    <div className="fixed inset-0 z-[90] bg-black flex flex-col">
+    <div role="dialog" aria-modal="true" aria-label="Stream servers" className="fixed inset-0 z-[90] bg-black flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-neutral-900/95 backdrop-blur-xl border-b border-neutral-800 shrink-0">
         <div className="flex items-center gap-3 min-w-0">

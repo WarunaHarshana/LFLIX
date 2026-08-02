@@ -1,6 +1,6 @@
-import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import db from './db';
+import { SESSION_COOKIE, verifySessionValue } from './session';
 
 /**
  * Auth helpers for the two routes that must stay reachable *before* the app has
@@ -42,37 +42,24 @@ function readCookie(req: Request, name: string): string | null {
   return null;
 }
 
-function safeEquals(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-  // timingSafeEqual throws on length mismatch, so compare lengths separately.
-  // Length is not the secret here; the value is.
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
-}
-
-export function hasValidPin(req: Request): boolean {
-  // Must match middleware.ts exactly, including the legacy '1234' fallback —
-  // if the two disagree, a genuinely logged-in user gets rejected here.
-  // Removing that default is tracked separately as PIN hardening.
-  const expected = process.env.APP_PIN || '1234';
-
-  const provided = readCookie(req, 'app-pin');
-  if (!provided) return false;
-
-  return safeEquals(provided, expected);
+/**
+ * Whether the caller holds a valid session. Shares lib/session.ts with
+ * middleware.ts so the two can never drift apart on what counts as authorised.
+ */
+export async function hasValidSession(req: Request): Promise<boolean> {
+  return verifySessionValue(readCookie(req, SESSION_COOKIE));
 }
 
 /**
  * Allow the request when setup has not finished yet (the wizard needs it), or
  * when the caller is already authenticated. Returns a 401 response otherwise.
  */
-export function guardSetupRoute(req: Request): NextResponse | null {
+export async function guardSetupRoute(req: Request): Promise<NextResponse | null> {
   if (!isSetupComplete()) return null;
-  if (hasValidPin(req)) return null;
+  if (await hasValidSession(req)) return null;
 
   return NextResponse.json(
-    { error: 'Unauthorized. Please provide valid PIN.' },
+    { error: 'Unauthorized. Please sign in.' },
     { status: 401 }
   );
 }

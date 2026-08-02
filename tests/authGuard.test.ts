@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // lib/authGuard imports lib/db, which would open the real library database on
 // import. Stub it so these tests stay hermetic and can drive setupComplete.
@@ -12,7 +12,8 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
-const { guardSetupRoute, hasValidPin, isSetupComplete } = await import('@/lib/authGuard');
+const { guardSetupRoute, hasValidSession, isSetupComplete } = await import('@/lib/authGuard');
+const { SESSION_COOKIE, createSessionValue } = await import('@/lib/session');
 
 const PIN = '4321';
 
@@ -22,13 +23,13 @@ function request(cookie?: string): Request {
   });
 }
 
+async function sessionCookie(): Promise<string> {
+  return `${SESSION_COOKIE}=${await createSessionValue()}`;
+}
+
 beforeEach(() => {
   process.env.APP_PIN = PIN;
   settingsValue.current = 'true';
-});
-
-afterEach(() => {
-  vi.unstubAllEnvs();
 });
 
 describe('isSetupComplete', () => {
@@ -45,59 +46,57 @@ describe('isSetupComplete', () => {
   });
 });
 
-describe('hasValidPin', () => {
-  it('accepts the correct PIN cookie', () => {
-    expect(hasValidPin(request(`app-pin=${PIN}`))).toBe(true);
+describe('hasValidSession', () => {
+  it('accepts a valid session cookie', async () => {
+    expect(await hasValidSession(request(await sessionCookie()))).toBe(true);
   });
 
-  it('rejects a wrong PIN', () => {
-    expect(hasValidPin(request('app-pin=0000'))).toBe(false);
+  it('rejects a missing or unrelated cookie', async () => {
+    expect(await hasValidSession(request())).toBe(false);
+    expect(await hasValidSession(request('theme=dark'))).toBe(false);
   });
 
-  it('rejects a missing cookie header and an unrelated cookie', () => {
-    expect(hasValidPin(request())).toBe(false);
-    expect(hasValidPin(request('theme=dark'))).toBe(false);
+  it('rejects a forged value', async () => {
+    expect(await hasValidSession(request(`${SESSION_COOKIE}=forged.signature`))).toBe(false);
   });
 
-  it('rejects a PIN that is only a prefix or suffix of the real one', () => {
-    expect(hasValidPin(request('app-pin=432'))).toBe(false);
-    expect(hasValidPin(request(`app-pin=${PIN}0`))).toBe(false);
+  it('rejects the legacy plaintext PIN cookie', async () => {
+    // Pre-hardening clients sent the PIN itself; it must no longer authorise.
+    expect(await hasValidSession(request(`app-pin=${PIN}`))).toBe(false);
+    expect(await hasValidSession(request(`${SESSION_COOKIE}=${PIN}`))).toBe(false);
   });
 
-  it('finds the cookie among several, in any position', () => {
-    expect(hasValidPin(request(`theme=dark; app-pin=${PIN}; other=1`))).toBe(true);
-    expect(hasValidPin(request(`app-pin=${PIN}; theme=dark`))).toBe(true);
+  it('finds the cookie among several, in any position', async () => {
+    const session = await sessionCookie();
+    expect(await hasValidSession(request(`theme=dark; ${session}; other=1`))).toBe(true);
+    expect(await hasValidSession(request(`${session}; theme=dark`))).toBe(true);
   });
 
-  it('does not confuse a similarly named cookie for the real one', () => {
-    expect(hasValidPin(request(`xapp-pin=${PIN}`))).toBe(false);
-    expect(hasValidPin(request(`app-pin-old=${PIN}`))).toBe(false);
-  });
-
-  it('falls back to the legacy default when APP_PIN is unset, matching middleware', () => {
-    delete process.env.APP_PIN;
-    expect(hasValidPin(request('app-pin=1234'))).toBe(true);
-    expect(hasValidPin(request('app-pin=9999'))).toBe(false);
+  it('does not confuse a similarly named cookie for the real one', async () => {
+    const value = await createSessionValue();
+    expect(await hasValidSession(request(`x${SESSION_COOKIE}=${value}`))).toBe(false);
+    expect(await hasValidSession(request(`${SESSION_COOKIE}-old=${value}`))).toBe(false);
   });
 });
 
 describe('guardSetupRoute', () => {
-  it('allows anyone through while setup is incomplete', () => {
+  it('allows anyone through while setup is incomplete', async () => {
     settingsValue.current = undefined;
-    expect(guardSetupRoute(request())).toBeNull();
+    expect(await guardSetupRoute(request())).toBeNull();
   });
 
-  it('allows an authenticated caller once setup is complete', () => {
-    expect(guardSetupRoute(request(`app-pin=${PIN}`))).toBeNull();
+  it('allows an authenticated caller once setup is complete', async () => {
+    expect(await guardSetupRoute(request(await sessionCookie()))).toBeNull();
   });
 
-  it('rejects an unauthenticated caller once setup is complete', () => {
-    const denied = guardSetupRoute(request());
+  it('rejects an unauthenticated caller once setup is complete', async () => {
+    const denied = await guardSetupRoute(request());
     expect(denied).not.toBeNull();
     expect(denied!.status).toBe(401);
   });
 
-  it('rejects a wrong PIN once setup is complete', () => {
-    expect(guardSetupRoute(request('app-pin=0000'))?.status).toBe(401);
+  it('rejects a forged session once setup is complete', async () => {
+    const denied = await guardSetupRoute(request(`${SESSION_COOKIE}=nope.nope`));
+    expect(denied?.status).toBe(401);
   });
 });

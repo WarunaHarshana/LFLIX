@@ -90,7 +90,7 @@ export default function LoginScreen({ onLogin }: Props) {
                 </form>
 
                 <p className="text-xs text-neutral-600 text-center mt-6">
-                    Default PIN: 1234 (change in .env.local)
+                    Set with APP_PIN in .env.local
                 </p>
             </div>
         </div>

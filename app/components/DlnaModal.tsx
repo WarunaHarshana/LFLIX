@@ -79,7 +79,7 @@ export default function DlnaModal({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="DLNA server" className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
       <div 
         className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-md p-6"
         onClick={e => e.stopPropagation()}

@@ -79,6 +79,9 @@ export default function TrailerModal({ isOpen, tmdbId, mediaType, title, season,
 
     return (
         <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Trailer"
             className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-8"
             onClick={onClose}
         >

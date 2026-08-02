@@ -524,7 +524,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
   }
 
   return (
-    <div ref={containerRef} className="fixed inset-0 z-[100] bg-black flex flex-col">
+    <div role="dialog" aria-modal="true" aria-label="Video player" ref={containerRef} className="fixed inset-0 z-[100] bg-black flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-neutral-900">
         <h2 className="text-lg font-medium truncate flex-1">{title}</h2>

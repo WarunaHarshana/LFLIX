@@ -91,7 +91,7 @@ export default function FileBrowser({ onSelect, onCancel, initialPath = '' }: Pr
     };
 
     return (
-        <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onClick={onCancel}>
+        <div role="dialog" aria-modal="true" aria-label="Choose a folder" className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onClick={onCancel}>
             <div
                 className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
                 onClick={e => e.stopPropagation()}

@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   try {
     // Without this, anyone who can reach the port could re-run setup and
     // overwrite APP_PIN, taking over the instance on the next restart.
-    const denied = guardSetupRoute(req);
+    const denied = await guardSetupRoute(req);
     if (denied) return denied;
 
     const limited = rateLimit(req, 'setup', { windowMs: 5 * 60 * 1000, max: 10 });

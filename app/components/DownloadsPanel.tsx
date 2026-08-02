@@ -205,7 +205,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
 
     return (
         <>
-            <div className="fixed inset-0 z-[100] flex items-start justify-end">
+            <div role="dialog" aria-modal="true" aria-label="Downloads" className="fixed inset-0 z-[100] flex items-start justify-end">
                 <div className="absolute inset-0 bg-black/50" onClick={onClose} />
                 <div className="relative w-full max-w-md h-full bg-neutral-900 border-l border-neutral-700 overflow-hidden flex flex-col">
 
@@ -351,7 +351,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
 
             {/* Confirm Delete Dialog */}
             {confirmDelete && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                <div role="dialog" aria-modal="true" aria-label="Confirm delete download" className="fixed inset-0 z-[200] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/70" onClick={() => setConfirmDelete(null)} />
                     <div className="relative bg-neutral-900 border border-neutral-700 rounded-2xl p-6 max-w-sm w-full">
                         <div className="flex items-center gap-3 mb-4">

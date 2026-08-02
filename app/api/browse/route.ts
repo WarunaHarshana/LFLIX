@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     try {
         // This route enumerates the host filesystem. It is only open while the
         // setup wizard still needs the folder picker; after that it requires auth.
-        const denied = guardSetupRoute(req);
+        const denied = await guardSetupRoute(req);
         if (denied) return denied;
 
         const { searchParams } = new URL(req.url);

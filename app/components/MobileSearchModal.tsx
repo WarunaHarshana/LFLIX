@@ -49,7 +49,7 @@ export default function MobileSearchModal({ isOpen, onClose, library, onPlay, on
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col overscroll-none touch-none">
+    <div role="dialog" aria-modal="true" aria-label="Search your library" className="fixed inset-0 z-[100] bg-black flex flex-col overscroll-none touch-none">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-neutral-800">
         <div className="flex-1 relative">

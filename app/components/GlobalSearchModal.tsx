@@ -255,7 +255,7 @@ export default function GlobalSearchModal({ isOpen, onClose, onPlay, onOpenShow,
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex justify-center items-start pt-[10vh] bg-black/60 backdrop-blur-md">
+    <div role="dialog" aria-modal="true" aria-label="Search" className="fixed inset-0 z-[100] flex justify-center items-start pt-[10vh] bg-black/60 backdrop-blur-md">
       {/* Click outside to close */}
       <div className="absolute inset-0" onClick={onClose} />
       

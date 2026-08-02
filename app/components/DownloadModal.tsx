@@ -190,7 +190,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="Download options" className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
             <div className="relative w-full max-w-2xl max-h-[85vh] bg-neutral-900 rounded-2xl border border-neutral-700 overflow-hidden flex flex-col">
 

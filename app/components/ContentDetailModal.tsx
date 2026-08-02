@@ -396,7 +396,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+        <div role="dialog" aria-modal="true" aria-label="Title details" className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
             <div
                 className="relative w-full max-w-4xl max-h-[90vh] bg-neutral-900 rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col"
                 onClick={(e) => e.stopPropagation()}
@@ -777,7 +777,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
 
             {/* Person Modal */}
             {personModalOpen && (
-                <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
+                <div role="dialog" aria-modal="true" aria-label="Cast member details" className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
                     <div
                         className="w-full max-w-4xl max-h-[90vh] bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col"
                         onClick={(e) => e.stopPropagation()}

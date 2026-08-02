@@ -42,7 +42,7 @@ export default function KeyboardShortcuts({ isOpen, onClose }: Props) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center">
+        <div role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" className="fixed inset-0 z-[90] flex items-center justify-center">
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 

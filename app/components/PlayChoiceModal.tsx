@@ -73,7 +73,7 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
   };
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Choose how to play" className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
       <div 
         className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-sm p-6"
         onClick={e => e.stopPropagation()}

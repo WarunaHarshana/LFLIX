@@ -436,6 +436,9 @@ export default function LiveSports({ onClose }: Props) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Live sports"
       className="fixed inset-0 bg-black z-50 overflow-y-auto"
       onClick={(e) => e.stopPropagation()}
     >

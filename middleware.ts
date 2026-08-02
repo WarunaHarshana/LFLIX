@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { SESSION_COOKIE, verifySessionValue } from '@/lib/session';
 
 const ALLOWED_CUSTOM_PROTOCOL_ORIGINS = new Set([
   'capacitor://localhost',
@@ -53,7 +54,7 @@ function applySecurityHeaders(response: NextResponse, request: NextRequest): Nex
   return response;
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const allowedOrigin = getAllowedOrigin(request);
 
   // Create base response
@@ -102,16 +103,17 @@ export function middleware(request: NextRequest) {
 
   // Check authentication for API routes
   if (request.nextUrl.pathname.startsWith('/api/')) {
-    const pin = request.cookies.get('app-pin')?.value;
-    const expectedPin = process.env.APP_PIN || '1234';
-
     // Skip auth if token is provided for stream/m3u8
     if (request.nextUrl.pathname.startsWith('/api/stream') && request.nextUrl.searchParams.has('token')) {
       return response;
     }
 
-    // Validate PIN
-    if (!pin || pin !== expectedPin) {
+    // The cookie carries a signed, expiring session rather than the PIN itself.
+    // Verification is HMAC-based so it works here on the edge runtime, where a
+    // database-backed session store would not.
+    const session = request.cookies.get(SESSION_COOKIE)?.value;
+
+    if (!(await verifySessionValue(session))) {
       return applySecurityHeaders(NextResponse.json(
         { error: 'Unauthorized. Please provide valid PIN.' },
         {
