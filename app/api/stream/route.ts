@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 import { resolveMediaFromParams } from '@/lib/ffmpeg';
 import { getSafeErrorMessage } from '@/lib/security';
 import { apiErrorResponse } from '@/lib/apiSecurity';
@@ -53,6 +54,23 @@ function parseRangeHeader(range: string | null, fileSize: number): { start: numb
   return { start, end: Math.min(end, fileSize - 1) };
 }
 
+/**
+ * Adapt a Node read stream into a web ReadableStream.
+ *
+ * Handing the Node stream straight to `new Response(file as any)` throws an
+ * uncaught `ERR_INVALID_STATE` ("ReadableStream is already closed") whenever the
+ * client goes away mid-transfer — which every seek in a video player does, since
+ * the browser abandons the in-flight range request and issues a new one.
+ * Converting explicitly lets us destroy the file handle on cancel/abort instead.
+ */
+function toWebStream(file: fs.ReadStream, req: Request): ReadableStream<Uint8Array> {
+  const abort = () => file.destroy();
+  req.signal?.addEventListener('abort', abort, { once: true });
+  file.once('close', () => req.signal?.removeEventListener('abort', abort));
+
+  return Readable.toWeb(file) as ReadableStream<Uint8Array>;
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -84,9 +102,7 @@ export async function GET(req: Request) {
       const { start, end } = parsedRange;
       const chunksize = end - start + 1;
 
-      const file = fs.createReadStream(mediaPath, { start, end });
-      
-      return new Response(file as any, {
+      return new Response(toWebStream(fs.createReadStream(mediaPath, { start, end }), req), {
         status: 206,
         headers: {
           'Content-Range': `bytes ${start}-${end}/${fileSize}`,
@@ -98,9 +114,7 @@ export async function GET(req: Request) {
     }
 
     // Full file stream (no range)
-    const file = fs.createReadStream(mediaPath);
-    
-    return new Response(file as any, {
+    return new Response(toWebStream(fs.createReadStream(mediaPath), req), {
       status: 200,
       headers: {
         'Content-Length': fileSize.toString(),

@@ -1,29 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveTimStream } from '@/lib/timstreams';
 import { resolveEmbedStream } from '@/lib/embedResolver';
+import { MemoryCache } from '@/lib/cache';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
-// Cache resolved streams for 60 seconds to avoid re-resolving
-const streamCache = new Map<string, { data: any; expiry: number }>();
+// Cache resolved streams briefly to avoid re-resolving on every segment fetch.
+// Uses the shared MemoryCache so TTL and eviction behave the same everywhere.
+type ResolvedEmbedStream = Awaited<ReturnType<typeof resolveEmbedStream>>;
 
-function getCached(key: string) {
-  const entry = streamCache.get(key);
-  if (entry && entry.expiry > Date.now()) return entry.data;
-  streamCache.delete(key);
-  return null;
+const RESOLVED_STREAM_TTL_MS = 55_000;
+const streamCache = new MemoryCache<ResolvedEmbedStream | null>(1, 50);
+
+function getCached(key: string): ResolvedEmbedStream | null {
+  return streamCache.get(key);
 }
 
-function setCache(key: string, data: any, ttlMs = 55000) {
-  streamCache.set(key, { data, expiry: Date.now() + ttlMs });
-  // Cleanup old entries
-  if (streamCache.size > 50) {
-    const now = Date.now();
-    for (const [k, v] of streamCache) {
-      if (v.expiry < now) streamCache.delete(k);
-    }
-  }
+function setCache(key: string, data: ResolvedEmbedStream, ttlMs = RESOLVED_STREAM_TTL_MS) {
+  streamCache.set(key, data, ttlMs);
 }
 
 export async function GET(req: NextRequest) {

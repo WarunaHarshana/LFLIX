@@ -242,6 +242,17 @@ db.exec(`
     UNIQUE(tmdbId, seasonNumber, episodeNumber)
   );
 
+  -- Stream tokens (cookie-less playback for DLNA / Smart TV / mobile).
+  -- Persisted so a server restart does not kill in-flight playback.
+  CREATE TABLE IF NOT EXISTS stream_tokens (
+    tokenHash TEXT PRIMARY KEY,
+    contentType TEXT NOT NULL,
+    contentId INTEGER NOT NULL,
+    episodeId INTEGER,
+    expiresAt INTEGER NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   -- Movie release tracking (watchlist movies availability)
   CREATE TABLE IF NOT EXISTS movie_releases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -312,6 +323,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_movie_releases_tmdbId ON movie_releases(tmdbId);
   CREATE INDEX IF NOT EXISTS idx_movie_releases_available ON movie_releases(isAvailable, lastCheckedAt);
   CREATE INDEX IF NOT EXISTS idx_stream_quality_checkedAt ON stream_server_quality_cache(checkedAt);
+
+  -- Stream tokens: swept by expiry on every mint
+  CREATE INDEX IF NOT EXISTS idx_stream_tokens_expiresAt ON stream_tokens(expiresAt);
 `);
 
 function initializeFullTextSearch(): void {

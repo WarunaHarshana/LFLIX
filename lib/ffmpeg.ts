@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import db from '@/lib/db';
-import { verifyToken } from '@/app/api/token/route';
+import { verifyStreamToken } from './streamTokens';
 
 /**
  * Locate the ffmpeg / ffprobe binaries.
@@ -112,7 +112,7 @@ export function resolveMediaFromParams(searchParams: URLSearchParams): ResolveRe
   let info: { contentType: string; contentId: number; episodeId?: number } | null = null;
 
   if (token) {
-    info = verifyToken(token);
+    info = verifyStreamToken(token);
     if (!info) return { ok: false, status: 401, error: 'Invalid or expired token' };
   } else if (contentType && contentId) {
     info = {
