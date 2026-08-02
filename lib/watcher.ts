@@ -1,9 +1,7 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import path from 'path';
 import db from './db';
-
-// Video file extensions to watch
-const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.wmv', '.flv', '.webm', '.ts'];
+import { isExtrasFolderName, isVideoFile } from './mediaNaming';
 
 // Event emitter for SSE clients
 type WatcherEventCallback = (event: WatcherEvent) => void;
@@ -41,8 +39,7 @@ class FolderWatcher {
 
     // Check if file is a video
     private isVideoFile(filePath: string): boolean {
-        const ext = path.extname(filePath).toLowerCase();
-        return VIDEO_EXTENSIONS.includes(ext);
+        return isVideoFile(filePath);
     }
 
     // Check if file is already in database
@@ -357,20 +354,8 @@ class FolderWatcher {
         }
     }
 
-    // Folders that contain bonus/extras content which should not appear in the main library
-    private static EXTRAS_FOLDER_NAMES = new Set([
-        'extras', 'extra', 'bonus', 'bonus features', 'bonus content',
-        'featurettes', 'featurette', 'behind the scenes', 'behind-the-scenes',
-        'deleted scenes', 'deleted-scenes', 'deleted scene',
-        'special features', 'specials',
-        'interviews', 'bloopers', 'gag reel', 'outtakes',
-        'making of', 'making-of', 'the making of',
-        'commentary', 'commentaries',
-        'shorts', 'promos', 'trailers', 'trailer',
-    ]);
-
     private isExtrasFolder(name: string): boolean {
-        return FolderWatcher.EXTRAS_FOLDER_NAMES.has(name.toLowerCase().trim());
+        return isExtrasFolderName(name);
     }
 
     // Helper: recursively get video files from a folder

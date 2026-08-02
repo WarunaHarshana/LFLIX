@@ -229,7 +229,7 @@ function formatBytes(bytes: number): string {
 }
 
 /** Parse a human-readable size string (e.g. "1.5 GB", "850 MB") back to bytes */
-function parseSizeToBytes(sizeStr: string): number {
+export function parseSizeToBytes(sizeStr: string): number {
     const match = sizeStr.match(/([\d.]+)\s*(B|KB|KiB|MB|MiB|GB|GiB|TB|TiB)/i);
     if (!match) return 0;
     const value = parseFloat(match[1]);
@@ -271,7 +271,7 @@ function extractYears(title: string): number[] {
 }
 
 /** Score how relevant a torrent title is to the search query (0-100) */
-function relevanceScore(title: string, query: string): number {
+export function relevanceScore(title: string, query: string): number {
     const normTitle = title.toLowerCase().replace(/[._\-]+/g, ' ');
     const normQuery = query.toLowerCase().replace(/[._\-]+/g, ' ');
     const queryWords = normQuery.split(/\s+/).filter(w => w.length > 1);
@@ -326,7 +326,7 @@ function getSignificantTvQueryWords(query: string): string[] {
         );
 }
 
-function extractEpisodeQuery(query: string): { season: number; episode: number } | null {
+export function extractEpisodeQuery(query: string): { season: number; episode: number } | null {
     const sxxexx = query.match(/\bs(\d{1,2})\s*[\W_]*\s*e(\d{1,3})\b/i);
     if (sxxexx) {
         return { season: parseInt(sxxexx[1], 10), episode: parseInt(sxxexx[2], 10) };
@@ -340,13 +340,13 @@ function extractEpisodeQuery(query: string): { season: number; episode: number }
     return null;
 }
 
-function extractEpisodeKey(title: string): string | null {
+export function extractEpisodeKey(title: string): string | null {
     const episode = extractEpisodeQuery(title);
     if (!episode) return null;
     return `s${String(episode.season).padStart(2, '0')}e${String(episode.episode).padStart(2, '0')}`;
 }
 
-function titleMatchesEpisode(title: string, episodeQuery: { season: number; episode: number }): boolean {
+export function titleMatchesEpisode(title: string, episodeQuery: { season: number; episode: number }): boolean {
     const compact = title.toLowerCase().replace(/[^a-z0-9]/g, '');
     const season = String(episodeQuery.season);
     const episode = String(episodeQuery.episode);
