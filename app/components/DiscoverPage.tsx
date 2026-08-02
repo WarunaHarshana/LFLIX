@@ -277,7 +277,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                         onClick={() => onSwitchToTorrents(searchQuery.trim() || undefined)}
                         className="mt-3 px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-xl hover:bg-neutral-800 transition text-sm text-neutral-300 flex items-center gap-2"
                     >
-                        <Magnet className="w-4 h-4 text-[var(--accent-color)]" />
+                        <Magnet className="w-4 h-4 accent-text" />
                         Switch to Torrents
                     </button>
                 )}
@@ -312,7 +312,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 key={type}
                                 onClick={() => handleTypeChange(type)}
                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition ${searchType === type
-                                    ? 'bg-[rgba(var(--accent-color-rgb),0.15)] text-[var(--accent-color)] border border-[rgba(var(--accent-color-rgb),0.3)]'
+                                    ? 'accent-chip'
                                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'
                                     }`}
                             >
@@ -326,7 +326,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
             {/* Searching indicator */}
             {searching && (
                 <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-8 h-8 animate-spin text-[var(--accent-color)]" />
+                    <Loader2 className="w-8 h-8 animate-spin accent-text" />
                 </div>
             )}
 
@@ -337,19 +337,19 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                         {/* Title / Toggle */}
                         <div className="flex items-center gap-4 sm:min-w-fit">
                             <div className="flex items-center gap-2">
-                                <Filter className="w-5 h-5 text-[var(--accent-color)]" />
+                                <Filter className="w-5 h-5 accent-text" />
                                 <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-400">Filters</h2>
                             </div>
                             <div className="flex bg-black border border-neutral-700 rounded-xl p-1">
                                 <button
                                     onClick={() => { setDiscoverType('movie'); setSelectedGenre(''); }}
-                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'movie' ? 'bg-[rgba(var(--accent-color-rgb),0.15)] text-[var(--accent-color)] border border-[rgba(var(--accent-color-rgb),0.3)]' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
+                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'movie' ? 'accent-chip' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
                                 >
                                     <Film className="w-4 h-4" /> Movies
                                 </button>
                                 <button
                                     onClick={() => { setDiscoverType('tv'); setSelectedGenre(''); }}
-                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'tv' ? 'bg-[rgba(var(--accent-color-rgb),0.15)] text-[var(--accent-color)] border border-[rgba(var(--accent-color-rgb),0.3)]' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
+                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'tv' ? 'accent-chip' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
                                 >
                                     <Tv className="w-4 h-4" /> TV Shows
                                 </button>
@@ -398,7 +398,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
 
                             {/* Clear Filters */}
                             {isFiltering && (
-                                <button
+                                <button aria-label="Reset Filters"
                                     onClick={() => { setSelectedGenre(''); setSelectedLanguage(''); setSortBy('popularity.desc'); }}
                                     className="p-2.5 bg-neutral-800 hover:bg-neutral-700 rounded-xl text-neutral-400 hover:text-white transition flex-shrink-0"
                                     title="Reset Filters"
@@ -416,7 +416,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                 <div className="flex items-center gap-2 mb-4">
                     {isFiltering ? (
                         <>
-                            <Filter className="w-5 h-5 text-[var(--accent-color)]" />
+                            <Filter className="w-5 h-5 accent-text" />
                             <h2 className="text-lg font-bold">Filtered Results</h2>
                         </>
                     ) : (
@@ -469,7 +469,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 {/* Hover overlay */}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end">
                                     <div className="p-3 w-full">
-                                        <div className="flex items-center gap-1.5 text-xs text-[var(--accent-color)] font-medium">
+                                        <div className="flex items-center gap-1.5 text-xs accent-text font-medium">
                                             <Globe className="w-3.5 h-3.5" />
                                             Watch Online
                                         </div>

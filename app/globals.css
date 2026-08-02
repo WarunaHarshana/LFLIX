@@ -182,6 +182,44 @@ body {
   box-shadow: 0 8px 30px var(--accent-shadow);
 }
 
+/* Accent utilities.
+   Use these for brand/active/selected states so they follow the chosen accent.
+   Keep literal Tailwind colours for semantic meaning — destructive red,
+   success green, warning amber — which must not change with the accent. */
+.accent-text {
+  color: var(--accent-color);
+}
+
+.accent-bg {
+  background-color: var(--accent-color);
+}
+
+.accent-bg:hover {
+  background-color: var(--accent-gradient-to);
+}
+
+.accent-border {
+  border-color: var(--accent-color);
+}
+
+.accent-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+/* Selected pill/tab: tinted fill, accent text, tinted border.
+   Replaces the long inline rgba(var(--accent-color-rgb), …) triples. */
+.accent-chip {
+  background-color: rgba(var(--accent-color-rgb), 0.15);
+  color: var(--accent-color);
+  border: 1px solid rgba(var(--accent-color-rgb), 0.3);
+}
+
+/* Progress/scrubber fill */
+.accent-fill {
+  background-color: var(--accent-color);
+}
+
 /* Reusable neutral action styles */
 .theme-btn-primary {
   background: var(--btn-primary-bg);

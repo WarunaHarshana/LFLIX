@@ -295,7 +295,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                         <div className="flex items-center gap-1 flex-shrink-0">
                                             {/* Pause / Resume */}
                                             {(dl.status === 'metadata' || dl.status === 'downloading') && (
-                                                <button
+                                                <button aria-label="Pause"
                                                     onClick={() => pauseDownload(dl.id)}
                                                     className="p-1.5 hover:bg-yellow-600/20 text-neutral-500 hover:text-yellow-400 rounded-lg transition"
                                                     title="Pause"
@@ -304,7 +304,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                                 </button>
                                             )}
                                             {(dl.status === 'paused' || dl.status === 'error' || dl.status === 'stalled') && (
-                                                <button
+                                                <button aria-label={dl.status === 'error' || dl.status === 'stalled' ? 'Retry' : 'Resume'}
                                                     onClick={() => resumeDownload(dl.id)}
                                                     className="p-1.5 hover:bg-green-600/20 text-neutral-500 hover:text-green-400 rounded-lg transition"
                                                     title={dl.status === 'error' || dl.status === 'stalled' ? 'Retry' : 'Resume'}
@@ -314,7 +314,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                             )}
 
                                             {/* Delete */}
-                                            <button
+                                            <button aria-label="Remove"
                                                 onClick={() => setConfirmDelete(dl)}
                                                 disabled={removingIds.has(dl.id)}
                                                 className="p-1.5 hover:bg-red-600/20 text-neutral-500 hover:text-red-400 rounded-lg transition disabled:opacity-30"

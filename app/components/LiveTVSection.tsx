@@ -159,7 +159,7 @@ export default function LiveTVSection({
                       <span className="text-white text-xs sm:text-sm font-medium">LIVE</span>
                     </div>
                     {/* Close button overlay */}
-                    <button
+                    <button aria-label="Close Player"
                       onClick={() => setSelectedIPTVChannel(null)}
                       className="absolute top-2 right-2 sm:top-4 sm:right-4 z-10 p-2 bg-black/60 hover:bg-black/80 text-white hover:text-red-500 backdrop-blur-md rounded-full transition-all cursor-pointer shadow-lg border border-white/10"
                       title="Close Player"
@@ -174,7 +174,7 @@ export default function LiveTVSection({
                   <div className="bg-gradient-to-br from-neutral-900/90 to-neutral-950/90 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-neutral-800/50 p-4 sm:p-6 h-full">
                     <div className="flex items-center justify-between mb-3 sm:mb-4">
                       <p className="text-xs sm:text-sm text-neutral-500 uppercase tracking-wider">Now Playing</p>
-                      <button
+                      <button aria-label="Close Player"
                         onClick={() => setSelectedIPTVChannel(null)}
                         className="p-1.5 text-neutral-500 hover:text-white hover:bg-neutral-800 rounded-full transition-all cursor-pointer"
                         title="Close Player"
@@ -458,7 +458,7 @@ export default function LiveTVSection({
                           </div>
                           {/* Delete button */}
                           {channel.id >= 0 && (
-                            <button
+                            <button aria-label="Delete channel"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onDeleteChannel(channel.id);

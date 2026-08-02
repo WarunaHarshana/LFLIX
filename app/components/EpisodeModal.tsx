@@ -277,7 +277,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                 </div>
                                 <div className="h-1.5 w-full bg-neutral-800 rounded-full overflow-hidden">
                                     <div
-                                        className="h-full bg-red-600 rounded-full transition-all"
+                                        className="h-full accent-fill rounded-full transition-all"
                                         style={{ width: `${Math.min((selectedEpisode.watchProgress.progress / selectedEpisode.watchProgress.duration) * 100, 100)}%` }}
                                     />
                                 </div>
@@ -477,7 +477,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                 </h3>
                                 {show.tmdbId && (
                                     <div className="flex items-center gap-2">
-                                        <button
+                                        <button aria-label={`Download next episode globally across all seasons`}
                                             onClick={handleDownloadNext}
                                             disabled={isDownloadingNext}
                                             className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs font-semibold text-neutral-300 rounded-lg transition border border-neutral-700"
@@ -486,7 +486,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                             <Download className={`w-3.5 h-3.5 ${isDownloadingNext ? 'animate-bounce text-blue-400' : ''}`} />
                                             {isDownloadingNext ? 'Resolving...' : 'Download Next Episode'}
                                         </button>
-                                        <button
+                                        <button aria-label={`Download missing episodes in Season ${activeSeason}`}
                                             onClick={handleDownloadMissing}
                                             disabled={isDownloadingMissing}
                                             className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs font-semibold text-neutral-300 rounded-lg transition border border-neutral-700"
@@ -585,7 +585,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                     {progressPercent > 0 && progressPercent < 95 && (
                                                         <div className="mt-2 h-1 w-full max-w-xs bg-neutral-700 rounded overflow-hidden">
                                                             <div
-                                                                className="h-full bg-red-600"
+                                                                className="h-full accent-fill"
                                                                 style={{ width: `${progressPercent}%` }}
                                                             />
                                                         </div>

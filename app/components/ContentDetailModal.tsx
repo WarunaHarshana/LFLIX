@@ -531,7 +531,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                             {/* Auto-Track Toggle (TV Shows only) */}
                             {item.type === 'show' && item.tmdbId && (
                                 <div className="flex items-center gap-2 mt-3">
-                                    <button
+                                    <button aria-label={isTracking ? 'Stop tracking new episodes' : 'Auto-track new episodes & download'}
                                         onClick={toggleTracking}
                                         disabled={trackLoading}
                                         className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-semibold transition-all ${

@@ -745,7 +745,7 @@ export default function DiscoverDetailPage() {
                   <Play className="w-4 h-4 fill-black" /> Watch Now
                 </button>
 
-                <button
+                <button aria-label="Watch trailer"
                   onClick={() => setTrailerModal({ title: pageTitle })}
                   className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-black/45 border border-neutral-500/60 hover:bg-black/70 inline-flex items-center justify-center backdrop-blur-md"
                   title="Watch trailer"
@@ -753,7 +753,7 @@ export default function DiscoverDetailPage() {
                   <Play className="w-4 h-4" />
                 </button>
 
-                <button
+                <button aria-label={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
                   onClick={handleWatchlistToggle}
                   className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl border inline-flex items-center justify-center backdrop-blur-md transition ${
                     isInWatchlist
@@ -790,14 +790,14 @@ export default function DiscoverDetailPage() {
         </div>
 
         <div className="absolute right-3 md:right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2">
-          <button
+          <button aria-label={heroPaused ? 'Play background' : 'Pause background'}
             onClick={() => setHeroPaused((prev) => !prev)}
             className="w-11 h-11 rounded-full bg-black/50 hover:bg-black/75 border border-neutral-500/60 inline-flex items-center justify-center backdrop-blur-md"
             title={heroPaused ? 'Play background' : 'Pause background'}
           >
             {heroPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
           </button>
-          <button
+          <button aria-label={heroMuted ? 'Unmute background' : 'Mute background'}
             onClick={() => setHeroMuted((prev) => !prev)}
             className="w-11 h-11 rounded-full bg-black/50 hover:bg-black/75 border border-neutral-500/60 inline-flex items-center justify-center backdrop-blur-md"
             title={heroMuted ? 'Unmute background' : 'Mute background'}
@@ -814,7 +814,7 @@ export default function DiscoverDetailPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-bold">Seasons & Episodes</h2>
               {isTrailerVideo(selectedSeasonTrailer) && (
-                <button
+                <button aria-label={`Watch ${pageTitle} season ${selectedSeason} trailer`}
                   onClick={() => setTrailerModal({
                     title: `${pageTitle} - Season ${selectedSeason} Trailer`,
                     season: selectedSeason || undefined,
@@ -891,7 +891,7 @@ export default function DiscoverDetailPage() {
                             <Play className="w-3 h-3 fill-black" /> Watch
                           </button>
                           {hasEpisodeTrailer && (
-                            <button
+                            <button aria-label={`Watch ${ep.title} trailer`}
                               onClick={() => setTrailerModal({
                                 title: `${pageTitle} - S${seasonNumber}E${ep.episodeNumber} · ${ep.title}`,
                                 season: seasonNumber,

@@ -304,14 +304,14 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
 
                                     {/* Action */}
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                                        <button
+                                        <button aria-label="Open Details"
                                             onClick={() => onOpenOnline?.(result)}
                                             className="p-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition"
                                             title="Open Details"
                                         >
                                             <Globe className="w-3.5 h-3.5" />
                                         </button>
-                                        <button
+                                        <button aria-label="Watch Trailer"
                                             onClick={() => setTrailerItem({ tmdbId: result.tmdbId, mediaType: result.mediaType, title: result.title })}
                                             className="p-2 bg-neutral-700/80 hover:bg-neutral-600 text-white rounded-lg transition border border-neutral-600"
                                             title="Watch Trailer"

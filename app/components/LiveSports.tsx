@@ -558,7 +558,7 @@ export default function LiveSports({ onClose }: Props) {
                         </div>
                       )}
                       {/* Fullscreen button overlay */}
-                      <button
+                      <button aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
                         onClick={toggleFullscreen}
                         style={{
                           position: 'absolute',
@@ -574,7 +574,7 @@ export default function LiveSports({ onClose }: Props) {
                         {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
                       </button>
                       {/* Close button overlay */}
-                      <button
+                      <button aria-label="Close Player"
                         onClick={() => {
                           setSelectedMatch(null);
                           setSelectedStream(null);
@@ -613,7 +613,7 @@ export default function LiveSports({ onClose }: Props) {
                     <div className="bg-gradient-to-br from-neutral-900/90 to-neutral-950/90 backdrop-blur-xl rounded-2xl border border-neutral-800/50 p-6 h-full">
                       <div className="flex items-center justify-between mb-4">
                         <p className="text-sm text-neutral-500 uppercase tracking-wider">Now Watching</p>
-                        <button
+                        <button aria-label="Close Player"
                           onClick={() => {
                             setSelectedMatch(null);
                             setSelectedStream(null);

@@ -399,14 +399,14 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
         </div>
 
         <div className="flex items-center gap-2">
-          <button
+          <button aria-label="Show or hide source list"
             onClick={() => setShowSources((prev) => !prev)}
             className="px-3 py-1.5 rounded-full text-xs font-medium transition bg-neutral-800 hover:bg-neutral-700 text-neutral-200"
             title="Show or hide source list"
           >
             {showSources ? 'Hide Sources' : 'Show Sources'}
           </button>
-          <button
+          <button aria-label="VPN mode refreshes probes and gives slow VPN routes more time"
             onClick={() => {
               setVpnMode((prev) => !prev);
               setIframeLoading(true);
@@ -423,7 +423,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
           >
             <ShieldCheck className="w-3.5 h-3.5" /> VPN
           </button>
-          <button
+          <button aria-label={sandboxEnabled ? "Sandbox is enabled (safer, blocks redirects)" : "Sandbox is disabled (better compatibility for VidLink/Flux)"}
             onClick={() => {
               setSandboxEnabled((prev) => !prev);
               setIframeLoading(true);
@@ -440,14 +440,14 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
           >
             {sandboxEnabled ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />} Sandbox: {sandboxEnabled ? 'On' : 'Off'}
           </button>
-          <button
+          <button aria-label="Refresh server checks"
             onClick={() => void fetchServers({ refresh: true })}
             className="p-2 hover:bg-neutral-800 rounded-full transition text-neutral-400 hover:text-white"
             title="Refresh server checks"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button
+          <button aria-label={hasAlternateServer ? 'Try next server' : 'No alternate server available'}
             onClick={() => {
               const switched = tryNextServer(activeServer, 'manual');
               if (!switched) {
@@ -477,7 +477,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               <ExternalLink className="w-4 h-4" />
             </a>
           )}
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             className="p-2 hover:bg-neutral-800 rounded-full transition"
             title="Close"

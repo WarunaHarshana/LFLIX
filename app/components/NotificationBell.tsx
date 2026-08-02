@@ -173,7 +173,7 @@ export default function NotificationBell() {
             </h3>
             <div className="flex items-center gap-1">
               {unreadCount > 0 && (
-                <button
+                <button aria-label="Mark all as read"
                   onClick={handleMarkAllRead}
                   className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white/90"
                   title="Mark all as read"
@@ -182,7 +182,7 @@ export default function NotificationBell() {
                 </button>
               )}
               {notifications.length > 0 && (
-                <button
+                <button aria-label="Clear all"
                   onClick={clearAll}
                   className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-red-400"
                   title="Clear all"

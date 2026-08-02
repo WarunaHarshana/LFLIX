@@ -565,7 +565,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                     {/* Poster */}
                                     <div className="aspect-[2/3] relative bg-neutral-800">
                                         {onOpenOnline && (
-                                            <button
+                                            <button aria-label="Open details"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     onOpenOnline(item);

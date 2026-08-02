@@ -104,7 +104,7 @@ export default function FileBrowser({ onSelect, onCancel, initialPath = '' }: Pr
 
                 {/* Breadcrumb / Current Path */}
                 <div className="px-4 py-3 bg-neutral-800/50 border-b border-neutral-800 flex items-center gap-2">
-                    <button
+                    <button aria-label="Go up"
                         onClick={handleGoUp}
                         disabled={parentPath === null}
                         className="p-1.5 hover:bg-neutral-700 rounded disabled:opacity-30 disabled:cursor-not-allowed transition"
@@ -112,7 +112,7 @@ export default function FileBrowser({ onSelect, onCancel, initialPath = '' }: Pr
                     >
                         <ArrowUp className="w-4 h-4" />
                     </button>
-                    <button
+                    <button aria-label="Refresh"
                         onClick={() => fetchDirectory(currentPath)}
                         className="p-1.5 hover:bg-neutral-700 rounded transition"
                         title="Refresh"

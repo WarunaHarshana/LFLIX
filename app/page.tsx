@@ -384,7 +384,7 @@ export default function Home() {
   if (setupComplete === null) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-pulse"><h1 className="text-4xl font-bold text-red-600 tracking-tighter">LFLIX</h1></div>
+        <div className="animate-pulse"><h1 className="text-4xl font-bold accent-text tracking-tighter">LFLIX</h1></div>
       </div>
     );
   }

@@ -537,7 +537,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
           )}
           {/* Settings Button - Always show, displays info about tracks */}
           <div className="relative">
-            <button
+            <button aria-label="Audio & Subtitles"
               onClick={() => setShowSettings(!showSettings)}
               className="p-2 hover:bg-neutral-800 rounded-full transition"
               title="Audio & Subtitles"
@@ -617,14 +617,14 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
             )}
           </div>
 
-          <button
+          <button aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
             onClick={toggleFullscreen}
             className="p-2 hover:bg-neutral-800 rounded-full transition"
             title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
           >
             {isFullscreen ? <Minimize className="w-6 h-6" /> : <Maximize className="w-6 h-6" />}
           </button>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             className="p-3 hover:bg-neutral-800 rounded-full transition bg-neutral-800/50"
             title="Close"

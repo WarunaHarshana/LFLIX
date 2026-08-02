@@ -128,7 +128,7 @@ export default function ContinueWatching({ items, onPlay, onOpenShow }: Props) {
                                 {/* Progress bar */}
                                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-600">
                                     <div
-                                        className="h-full bg-red-600"
+                                        className="h-full accent-fill"
                                         style={{ width: `${progressPercent}%` }}
                                     />
                                 </div>

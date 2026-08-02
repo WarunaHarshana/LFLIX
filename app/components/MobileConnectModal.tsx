@@ -108,14 +108,14 @@ export default function MobileConnectModal({ onClose }: Props) {
             <code className="flex-1 text-sm font-mono text-neutral-300 truncate">
               {fullUrl}
             </code>
-            <button 
+            <button aria-label="Refresh IP" 
               onClick={refreshIp}
               className="p-2 hover:bg-neutral-700 rounded-lg transition"
               title="Refresh IP"
             >
               <RefreshCw className="w-4 h-4" />
             </button>
-            <button 
+            <button aria-label="Copy URL" 
               onClick={copyToClipboard}
               className="p-2 hover:bg-neutral-700 rounded-lg transition"
               title="Copy URL"
@@ -123,7 +123,7 @@ export default function MobileConnectModal({ onClose }: Props) {
               {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
             </button>
             {shareSupported && (
-              <button 
+              <button aria-label="Share" 
                 onClick={shareUrl}
                 className="p-2 hover:bg-neutral-700 rounded-lg transition"
                 title="Share"

@@ -171,7 +171,7 @@ export default function DetailTabNav({
     <>
       <nav className="fixed top-0 w-full z-40 glass-nav px-8 py-6 items-center justify-between hidden md:flex">
         <div className="flex items-center gap-8">
-          <h1 className="text-3xl font-bold text-red-600 tracking-tighter">LFLIX</h1>
+          <h1 className="text-3xl font-bold accent-text tracking-tighter">LFLIX</h1>
           <div className="flex gap-2 text-base font-medium">
             {tabs.map((tab) => (
               <button
@@ -210,7 +210,7 @@ export default function DetailTabNav({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
+          <button aria-label="Search (Press /)"
             onClick={() => {
               if (onShowSearch) onShowSearch();
             }}
@@ -220,7 +220,7 @@ export default function DetailTabNav({
             <Search className="w-5 h-5" />
           </button>
 
-          <button
+          <button aria-label="Connect Mobile"
             onClick={() => {
               if (onShowMobileConnect) {
                 onShowMobileConnect();
@@ -234,7 +234,7 @@ export default function DetailTabNav({
             <Smartphone className="w-6 h-6" />
           </button>
 
-          <button
+          <button aria-label="DLNA Server (VLC)"
             onClick={() => {
               if (onShowDlna) {
                 onShowDlna();
@@ -248,7 +248,7 @@ export default function DetailTabNav({
             <Cast className="w-6 h-6" />
           </button>
 
-          <button
+          <button aria-label={forceBrowserPlayer ? 'Browser Player ON (click to use VLC)' : 'Use Browser Player (for TV)'}
             onClick={() => {
               if (onToggleBrowserPlayer) {
                 onToggleBrowserPlayer();
@@ -265,7 +265,7 @@ export default function DetailTabNav({
             <Monitor className="w-6 h-6" />
           </button>
 
-          <button
+          <button aria-label="Refresh Library (Scan for new files)"
             onClick={handleRescan}
             disabled={scanning}
             className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -274,7 +274,7 @@ export default function DetailTabNav({
             <RotateCw className={clsx('w-6 h-6', scanning && 'animate-spin')} />
           </button>
 
-          <button
+          <button aria-label="Manage Folders"
             onClick={() => {
               if (onShowFolderManager) {
                 onShowFolderManager();
@@ -288,7 +288,7 @@ export default function DetailTabNav({
             <Plus className="w-7 h-7" />
           </button>
 
-          <button
+          <button aria-label="Downloads"
             onClick={() => {
               if (onShowDownloads) {
                 onShowDownloads();
@@ -326,7 +326,7 @@ export default function DetailTabNav({
             HDR {hdrDisplaySupported ? 'ON' : 'OFF'}
           </div>
 
-          <button
+          <button aria-label="Logout"
             onClick={async () => {
               if (onLogout) {
                 await onLogout();

@@ -34,7 +34,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
         <div className="flex items-center justify-between px-4 py-3">
           <h1 className="text-xl font-bold tracking-tighter text-red-600">LFLIX</h1>
           <div className="flex items-center gap-2">
-            <button
+            <button aria-label="Search"
               onClick={onShowSearch}
               className="p-3 hover:bg-[var(--surface-hover)] rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="Search"
@@ -42,7 +42,7 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
             >
               <Search className="w-5 h-5 pointer-events-none" />
             </button>
-            <button
+            <button aria-label="Connect Mobile"
               onClick={onShowQR}
               className="p-3 hover:bg-[var(--surface-hover)] rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="Connect Mobile"

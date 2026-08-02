@@ -181,21 +181,21 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
               ))}
             </select>
           )}
-          <button 
+          <button aria-label={isMuted ? "Unmute" : "Mute"} 
             onClick={() => setIsMuted(!isMuted)}
             className="p-2 hover:bg-neutral-800 rounded-full transition"
             title={isMuted ? "Unmute" : "Mute"}
           >
             {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
           </button>
-          <button 
+          <button aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen"} 
             onClick={toggleFullscreen}
             className="p-2 hover:bg-neutral-800 rounded-full transition"
             title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
           >
             {isFullscreen ? <Minimize className="w-6 h-6" /> : <Maximize className="w-6 h-6" />}
           </button>
-          <button 
+          <button aria-label="Close" 
             onClick={onClose}
             className="p-2 hover:bg-neutral-800 rounded-full transition"
             title="Close"

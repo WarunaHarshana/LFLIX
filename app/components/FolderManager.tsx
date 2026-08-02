@@ -163,7 +163,7 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
                                 onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
                                 className="flex-1 bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-red-600 transition"
                             />
-                            <button
+                            <button aria-label="Browse folders"
                                 onClick={() => setShowBrowser(true)}
                                 className="px-4 py-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg font-medium flex items-center gap-2 transition border border-neutral-700"
                                 title="Browse folders"
@@ -206,7 +206,7 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
                                             <h4 className="font-medium text-white truncate">{folder.folderName}</h4>
                                             <p className="text-sm text-neutral-400 truncate">{folder.folderPath}</p>
                                         </div>
-                                        <button
+                                        <button aria-label="Remove folder"
                                             onClick={() => handleDelete(folder.id)}
                                             className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-900/20 rounded-lg transition"
                                             title="Remove folder"
