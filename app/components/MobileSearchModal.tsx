@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Search } from 'lucide-react';
 import type { ContentItem } from './ContentCard';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type Props = {
   isOpen: boolean;
@@ -13,6 +14,8 @@ type Props = {
 };
 
 export default function MobileSearchModal({ isOpen, onClose, library, onPlay, onOpenShow }: Props) {
+    useModalBehavior(isOpen, onClose);
+
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ContentItem[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);

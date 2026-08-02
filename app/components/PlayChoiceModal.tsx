@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Play, ExternalLink, Smartphone, Monitor, Loader2, Download, AlertCircle, MoreHorizontal } from 'lucide-react';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type Props = {
   title: string;
@@ -14,6 +15,8 @@ type Props = {
 };
 
 export default function PlayChoiceModal({ title, streamUrl, contentType, contentId, episodeId, onPlayBrowser, onClose }: Props) {
+    useModalBehavior(true, onClose);
+
   const [copied, setCopied] = useState(false);
   const [tokenUrl, setTokenUrl] = useState<string>('');
   const [loading, setLoading] = useState(true);

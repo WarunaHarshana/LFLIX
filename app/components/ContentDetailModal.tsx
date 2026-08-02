@@ -6,6 +6,7 @@ import TrailerModal from './TrailerModal';
 import StreamServerModal from './StreamServerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from './ContentCard';
 import TMDBImage from './TMDBImage';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type ContentItem = {
     id: number;
@@ -166,6 +167,8 @@ function toDiscoverContentCardItem(item: TmdbResult): DiscoverContentCardItem {
 }
 
 export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisodes, onOpenOnline }: Props) {
+    useModalBehavior(true, onClose);
+
     const [imgLoaded, setImgLoaded] = useState(false);
     const [showTrailer, setShowTrailer] = useState(false);
     const [showStreamServers, setShowStreamServers] = useState(false);

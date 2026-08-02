@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Folder, Trash2, RefreshCw, Plus, AlertCircle, FolderOpen } from 'lucide-react';
 import FileBrowser from './FileBrowser';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type ScannedFolder = {
     id: number;
@@ -20,6 +21,8 @@ type Props = {
 };
 
 export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Props) {
+    useModalBehavior(isOpen, onClose);
+
     const [folders, setFolders] = useState<ScannedFolder[]>([]);
     const [loading, setLoading] = useState(false);
     const [newPath, setNewPath] = useState('');

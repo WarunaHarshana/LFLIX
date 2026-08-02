@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { X, Download, Loader2, Trash2, CheckCircle, AlertCircle, ArrowDown, Pause, Play, HardDrive, AlertTriangle, Tv, RefreshCw } from 'lucide-react';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type DownloadItem = {
     id: number;
@@ -29,6 +30,8 @@ type Props = {
 };
 
 export default function DownloadsPanel({ isOpen, onClose }: Props) {
+    useModalBehavior(isOpen, onClose);
+
     const [downloads, setDownloads] = useState<DownloadItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [removingIds, setRemovingIds] = useState<Set<number>>(new Set());

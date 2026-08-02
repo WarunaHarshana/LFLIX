@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, BookmarkMinus, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type Episode = {
     id: number;
@@ -60,6 +61,8 @@ function formatDuration(seconds: number): string {
 }
 
 export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEpisode, onDeleteEpisode, onRemoveEpisodeFromLibrary, onMarkWatched }: Props) {
+    useModalBehavior(true, onClose);
+
     const [activeSeason, setActiveSeason] = useState(seasons[0]?.season || 1);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; episode: Episode } | null>(null);
     const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);

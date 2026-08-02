@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Trophy, Play, X, Activity, Clock, Globe, AlertCircle, ChevronLeft, ChevronDown, Check, Tv, Maximize, Minimize, SlidersHorizontal } from 'lucide-react';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type Sport = {
   id: string;
@@ -50,6 +51,8 @@ type Props = {
 };
 
 export default function LiveSports({ onClose }: Props) {
+    useModalBehavior(true, onClose);
+
   const [sports, setSports] = useState<Sport[]>([]);
   const [selectedSport, setSelectedSport] = useState<string>('all');
   const [matches, setMatches] = useState<Match[]>([]);
@@ -96,17 +99,20 @@ export default function LiveSports({ onClose }: Props) {
     const container = containerRef.current;
     
     // Listen to mouse movement and clicks on container
+    // Named so the cleanup below can actually remove it. As an inline arrow it
+    // was never removed, so a listener accumulated on every stream change.
+    const handleMouseLeave = () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      setShowControls(false);
+    };
+
     if (container) {
       container.addEventListener('mousemove', handleActivity);
       container.addEventListener('mousedown', handleActivity);
       container.addEventListener('touchstart', handleActivity);
-      // Mouse leave event
-      container.addEventListener('mouseleave', () => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-        setShowControls(false);
-      });
+      container.addEventListener('mouseleave', handleMouseLeave);
     }
 
     // Keyboard activity anywhere
@@ -120,6 +126,7 @@ export default function LiveSports({ onClose }: Props) {
         container.removeEventListener('mousemove', handleActivity);
         container.removeEventListener('mousedown', handleActivity);
         container.removeEventListener('touchstart', handleActivity);
+        container.removeEventListener('mouseleave', handleMouseLeave);
       }
       document.removeEventListener('keydown', handleActivity);
     };

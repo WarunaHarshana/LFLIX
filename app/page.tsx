@@ -58,7 +58,7 @@ const DownloadsPanel = dynamic(() => import('./components/DownloadsPanel'), { ss
 export default function Home() {
   // ──────────────────── Hooks ────────────────────
   const { toast, showToast } = useToast();
-  const { setupComplete, setSetupComplete, isAuthenticated, setIsAuthenticated, logout } = useAuth();
+  const { setupComplete, setSetupComplete, isAuthenticated, setIsAuthenticated, authChecked, logout } = useAuth();
   const {
     library, genres, loading, setLoading,
     selectedGenre, setSelectedGenre,
@@ -381,7 +381,9 @@ export default function Home() {
 
   // ──────────────────── Guards ────────────────────
   if (setupComplete === false) return <SetupWizard onComplete={() => setSetupComplete(true)} />;
-  if (setupComplete === null) {
+  // Hold the splash until the session probe answers too, otherwise an already
+  // signed-in user sees the login screen flash before being let through.
+  if (setupComplete === null || !authChecked) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="animate-pulse"><h1 className="text-4xl font-bold accent-text tracking-tighter">LFLIX</h1></div>

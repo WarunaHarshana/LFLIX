@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Folder, HardDrive, ChevronRight, ArrowUp, RefreshCw, FolderOpen, Check, X } from 'lucide-react';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type FileItem = {
     name: string;
@@ -17,6 +18,8 @@ type Props = {
 };
 
 export default function FileBrowser({ onSelect, onCancel, initialPath = '' }: Props) {
+    useModalBehavior(true, onCancel);
+
     const [currentPath, setCurrentPath] = useState(initialPath);
     const [parentPath, setParentPath] = useState<string | null>(null);
     const [items, setItems] = useState<FileItem[]>([]);

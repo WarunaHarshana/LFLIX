@@ -3,12 +3,15 @@
 import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, Smartphone, Wifi, Copy, Check, RefreshCw, Share2 } from 'lucide-react';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type Props = {
   onClose: () => void;
 };
 
 export default function MobileConnectModal({ onClose }: Props) {
+    useModalBehavior(true, onClose);
+
   const [localIp, setLocalIp] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);

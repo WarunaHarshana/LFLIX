@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown } from 'lucide-react';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type SortMode = 'seeds' | 'size_asc' | 'size_desc';
 
@@ -34,6 +35,8 @@ type Props = {
 };
 
 export default function DownloadModal({ isOpen, title, year, mediaType, posterPath, watchlistId, onClose, onDownloadStarted }: Props) {
+    useModalBehavior(isOpen, onClose);
+
     const [results, setResults] = useState<TorrentResult[]>([]);
     const [searching, setSearching] = useState(false);
     const [searched, setSearched] = useState(false);

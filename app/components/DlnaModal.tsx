@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { X, Wifi, Play, Square, CheckCircle, AlertCircle } from 'lucide-react';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type Props = {
   onClose: () => void;
 };
 
 export default function DlnaModal({ onClose }: Props) {
+    useModalBehavior(true, onClose);
+
   const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

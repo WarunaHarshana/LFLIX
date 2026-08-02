@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward, ShieldCheck, Crown, Lock, Unlock } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import { useTheme } from './ThemeProvider';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type StreamServer = {
   id: string;
@@ -159,6 +160,8 @@ type Props = {
 };
 
 export default function StreamServerModal({ tmdbId, type, title, season, episode, onClose }: Props) {
+    useModalBehavior(true, onClose);
+
   const [servers, setServers] = useState<StreamServer[]>([]);
   const [activeServer, setActiveServer] = useState<number>(0);
   const [attemptedServers, setAttemptedServers] = useState<number[]>([]);

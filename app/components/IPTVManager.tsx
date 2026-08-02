@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { X, Upload, Plus, Tv, Globe, Link, FileText, Trash2 } from 'lucide-react';
+import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type Props = {
   onClose: () => void;
@@ -9,6 +10,8 @@ type Props = {
 };
 
 export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
+    useModalBehavior(true, onClose);
+
   const [activeTab, setActiveTab] = useState<'add' | 'import'>('add');
   const [importTab, setImportTab] = useState<'public' | 'url' | 'file'>('public');
 
