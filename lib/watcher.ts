@@ -59,12 +59,15 @@ class FolderWatcher {
 
         let addedCount = 0;
 
+        // Hoisted out of the loop: this is the same row set for every file, and
+        // re-querying it per file made a batch of N new files do N table scans.
+        const folders = db.prepare('SELECT folderPath FROM scanned_folders').all() as { folderPath: string }[];
+
         for (const filePath of filesToScan) {
             // Skip if already indexed
             if (this.isAlreadyIndexed(filePath)) continue;
 
             // Find which folder this file belongs to
-            const folders = db.prepare('SELECT folderPath FROM scanned_folders').all() as { folderPath: string }[];
             const folder = folders.find(f => filePath.startsWith(f.folderPath));
 
             if (folder) {
@@ -321,27 +324,33 @@ class FolderWatcher {
                 this.emit({ type: 'new_file', message: 'Starting initial library scan...' });
 
                 const fs = await import('fs');
-                const { scanFile } = await import('./scanner');
+                const { scanFile, groupFilesForScan } = await import('./scanner');
+                const { mapWithConcurrency } = await import('./concurrency');
                 let totalAdded = 0;
 
                 for (const folderPath of folderPaths) {
                     if (!fs.existsSync(folderPath)) continue;
                     const videoFiles = this.getVideoFilesRecursive(folderPath, fs);
 
-                    for (const filePath of videoFiles) {
-                        try {
-                            const result = await scanFile(filePath);
-                            if (result.added) {
-                                totalAdded++;
-                                // Emit progress every 5 files so frontend can refresh incrementally
-                                if (totalAdded % 5 === 0) {
-                                    this.emit({ type: 'scan_complete', added: totalAdded });
+                    // Same grouping rule as scanFolder: episodes of one show stay
+                    // serial so the show row is only created once, unrelated
+                    // titles run in parallel.
+                    await mapWithConcurrency(groupFilesForScan(videoFiles), 4, async (group) => {
+                        for (const filePath of group) {
+                            try {
+                                const result = await scanFile(filePath);
+                                if (result.added) {
+                                    totalAdded++;
+                                    // Emit progress every 5 files so frontend can refresh incrementally
+                                    if (totalAdded % 5 === 0) {
+                                        this.emit({ type: 'scan_complete', added: totalAdded });
+                                    }
                                 }
+                            } catch (e) {
+                                console.error('[AutoScan] Error scanning', filePath, e);
                             }
-                        } catch (e) {
-                            console.error('[AutoScan] Error scanning', filePath, e);
                         }
-                    }
+                    });
                 }
 
                 if (totalAdded > 0) {

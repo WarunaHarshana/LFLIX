@@ -50,8 +50,24 @@ type WatchProgress = {
 
 export async function GET() {
   try {
-    const movies = db.prepare('SELECT * FROM movies ORDER BY addedAt DESC').all() as Movie[];
-    const shows = db.prepare('SELECT * FROM shows ORDER BY addedAt DESC').all() as Show[];
+    // Select only the columns the response actually maps. `SELECT *` pulled
+    // filePath, fileName, bitrate, duration and fileSize for every row on every
+    // page load — filePath in particular is deliberately never sent to the
+    // client, so reading it at all was wasted work.
+    const movies = db.prepare(`
+      SELECT id, title, year, tmdbId, posterPath, backdropPath, overview,
+             rating, imdbRating, genres, isHDR, resolution, videoCodec,
+             audioCodec, audioChannels, addedAt
+      FROM movies
+      ORDER BY addedAt DESC
+    `).all() as Movie[];
+
+    const shows = db.prepare(`
+      SELECT id, title, tmdbId, posterPath, backdropPath, overview,
+             rating, imdbRating, genres, firstAirDate, addedAt
+      FROM shows
+      ORDER BY addedAt DESC
+    `).all() as Show[];
 
     // Get watch progress for all content
     const movieProgress = db.prepare(`

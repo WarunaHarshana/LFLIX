@@ -3,6 +3,8 @@ import path from 'path';
 import db, { cleanupOrphanedAutoTracks } from './db';
 import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata, normalizeShowName, normalizeShowNameForMatch } from './metadata';
 import { probeFile } from './mediainfo';
+import { mapWithConcurrency } from './concurrency';
+import { getSafeErrorMessage } from './security';
 import {
   detectAudioCodec,
   detectHDR,
@@ -251,24 +253,71 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
   }
 }
 
+// How many independent titles to scan at once. The win here is local work —
+// each file spawns an ffprobe — not TMDB, whose calls are globally serialised
+// by the rate limiter in lib/metadata.ts regardless of what happens here.
+const SCAN_CONCURRENCY = 4;
+
+/**
+ * Partition files into units that must be scanned sequentially.
+ *
+ * Episodes of one show share a `shows` row that gets created on first sight, so
+ * scanning two of them at once could insert the show twice. Grouping by show
+ * keeps each series serial while letting unrelated titles proceed in parallel.
+ * Movies are independent, so each is its own group.
+ */
+export function groupFilesForScan(filePaths: readonly string[]): string[][] {
+  const showGroups = new Map<string, string[]>();
+  const standalone: string[][] = [];
+
+  for (const filePath of filePaths) {
+    const tvInfo = detectTvShow(path.basename(filePath));
+    if (!tvInfo) {
+      standalone.push([filePath]);
+      continue;
+    }
+
+    const key = normalizeShowNameForMatch(tvInfo.name) || tvInfo.name.toLowerCase();
+    const existing = showGroups.get(key);
+    if (existing) existing.push(filePath);
+    else showGroups.set(key, [filePath]);
+  }
+
+  return [...showGroups.values(), ...standalone];
+}
+
 export async function scanFolder(folderPath: string): Promise<{ added: number; errors: string[] }> {
   const errors: string[] = [];
   let added = 0;
 
-  const videoFiles = getVideoFiles(folderPath);
-  for (const filePath of videoFiles) {
-    try {
-      const result = await scanFile(filePath);
-      if (result.added) {
-        added++;
+  const groups = groupFilesForScan(getVideoFiles(folderPath));
+
+  const settled = await mapWithConcurrency(groups, SCAN_CONCURRENCY, async (group) => {
+    let groupAdded = 0;
+    const groupErrors: string[] = [];
+
+    for (const filePath of group) {
+      try {
+        const result = await scanFile(filePath);
+        if (result.added) groupAdded++;
+        if (result.error) groupErrors.push(`${filePath}: ${result.error}`);
+      } catch (e) {
+        groupErrors.push(`${filePath}: ${getSafeErrorMessage(e)}`);
       }
-      if (result.error) {
-        errors.push(`${filePath}: ${result.error}`);
-      }
-    } catch (e: any) {
-      errors.push(`${filePath}: ${e.message}`);
+    }
+
+    return { groupAdded, groupErrors };
+  });
+
+  for (const result of settled) {
+    if (result.status === 'fulfilled') {
+      added += result.value.groupAdded;
+      errors.push(...result.value.groupErrors);
+    } else {
+      errors.push(getSafeErrorMessage(result.reason));
     }
   }
+
   return { added, errors };
 }
 
