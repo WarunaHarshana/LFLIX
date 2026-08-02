@@ -1,17 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
-import Database from 'better-sqlite3';
-import path from 'path';
+import { NextResponse } from 'next/server';
+import { iptvDb } from '@/lib/db';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
-const dbPath = path.join(process.cwd(), 'localflix.db');
-
-export async function DELETE(req: NextRequest) {
+export async function DELETE() {
     try {
-        const db = new Database(dbPath);
-        const result = db.prepare('DELETE FROM iptv_channels').run();
-        db.close();
+        // Shared connection — see the note in ../route.ts about the stray
+        // ./localflix.db handle this used to open.
+        const result = iptvDb.clearAllChannels();
 
         return NextResponse.json({
             success: true,

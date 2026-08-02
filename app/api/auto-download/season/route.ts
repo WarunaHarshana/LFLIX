@@ -3,7 +3,7 @@ import db from '@/lib/db';
 import autoDownloader from '@/lib/autoDownloader';
 import { NewEpisodeInfo } from '@/lib/releaseMonitor';
 import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
-import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
+import { readJsonObject } from '@/lib/apiSecurity';
 import { parsePositiveInt } from '@/lib/security';
 
 export async function POST(req: Request) {

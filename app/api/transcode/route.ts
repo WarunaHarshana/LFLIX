@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { findFFprobe, resolveMediaFromParams, forwardAuthParams } from '@/lib/ffmpeg';
-import { getSafeErrorMessage } from '@/lib/security';
+
 import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // On-the-fly HLS transcoding for browser-incompatible files (MKV/AVI, HEVC, DTS, ...).

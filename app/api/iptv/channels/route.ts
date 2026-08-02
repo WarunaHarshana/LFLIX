@@ -1,31 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Database from 'better-sqlite3';
-import path from 'path';
+import { iptvDb } from '@/lib/db';
 import { readJsonObject } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
-const dbPath = path.join(process.cwd(), 'localflix.db');
-
 export async function GET(req: NextRequest) {
     try {
-        const db = new Database(dbPath);
-
-        // Create table if not exists
-        db.exec(`
-          CREATE TABLE IF NOT EXISTS iptv_channels (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            url TEXT NOT NULL,
-            logo TEXT,
-            category TEXT DEFAULT 'General',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          )
-        `);
-
-        const dbChannels = db.prepare('SELECT * FROM iptv_channels ORDER BY name').all();
-        db.close();
+        // Uses the shared connection in lib/db.ts. This route previously opened
+        // its own handle on ./localflix.db and declared a reduced iptv_channels
+        // table there, so imported channels landed in a file nothing else read,
+        // with none of the schema or indexes the rest of the app expects.
+        const dbChannels = iptvDb.getChannels();
 
         let timStreamsChannels: any[] = [];
         try {
@@ -73,31 +59,18 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const { name, url, logo, category } = await readJsonObject(req);
+        const body = await readJsonObject(req);
+        const name = typeof body.name === 'string' ? body.name.trim() : '';
+        const url = typeof body.url === 'string' ? body.url.trim() : '';
+        const logo = typeof body.logo === 'string' ? body.logo : undefined;
+        const category = typeof body.category === 'string' ? body.category : undefined;
 
         if (!name || !url) {
             return NextResponse.json({ error: 'Name and URL are required' }, { status: 400 });
         }
 
-        const db = new Database(dbPath);
-
-        // Create table if not exists
-        db.exec(`
-      CREATE TABLE IF NOT EXISTS iptv_channels (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        url TEXT NOT NULL,
-        logo TEXT,
-        category TEXT DEFAULT 'General',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-        const stmt = db.prepare('INSERT INTO iptv_channels (name, url, logo, category) VALUES (?, ?, ?, ?)');
-        const result = stmt.run(name, url, logo || null, category || 'General');
-
-        const channel = db.prepare('SELECT * FROM iptv_channels WHERE id = ?').get(result.lastInsertRowid);
-        db.close();
+        const result = iptvDb.addChannel({ name, url, logo, category });
+        const channel = iptvDb.getChannel(Number(result.lastInsertRowid));
 
         return NextResponse.json(channel);
     } catch (error) {

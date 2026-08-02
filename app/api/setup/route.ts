@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import db from '@/lib/db';
-import { getSafeErrorMessage, validateExistingDirectory } from '@/lib/security';
+import { validateExistingDirectory } from '@/lib/security';
 import { apiErrorResponse, rateLimit, readJsonObject } from '@/lib/apiSecurity';
 import { guardSetupRoute } from '@/lib/authGuard';
 

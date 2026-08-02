@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import { resolveMediaFromParams } from '@/lib/ffmpeg';
-import { getSafeErrorMessage } from '@/lib/security';
+
 import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility

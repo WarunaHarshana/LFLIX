@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Database from 'better-sqlite3';
-import path from 'path';
-import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
+import { iptvDb } from '@/lib/db';
+import { readJsonObject } from '@/lib/apiSecurity';
 import { validateHttpDownloadUrl } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
-
-const dbPath = path.join(process.cwd(), 'localflix.db');
 
 // Parse M3U content
 function parseM3U(content: string): Array<{ name: string; url: string; logo?: string; category?: string }> {
@@ -91,35 +88,24 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'No channels found in M3U' }, { status: 400 });
         }
 
-        // Insert into database
-        const db = new Database(dbPath);
-
-        // Create table if not exists
-        db.exec(`
-      CREATE TABLE IF NOT EXISTS iptv_channels (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        url TEXT NOT NULL,
-        logo TEXT,
-        category TEXT DEFAULT 'General',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-        const stmt = db.prepare('INSERT INTO iptv_channels (name, url, logo, category) VALUES (?, ?, ?, ?)');
-
+        // Insert via the shared connection. This previously opened its own
+        // handle on ./localflix.db, so every imported channel landed in a file
+        // the rest of the app never reads.
         let imported = 0;
         for (const channel of channels) {
             try {
-                stmt.run(channel.name, channel.url, channel.logo || null, channel.category || 'General');
+                iptvDb.addChannel({
+                    name: channel.name,
+                    url: channel.url,
+                    logo: channel.logo,
+                    category: channel.category,
+                });
                 imported++;
             } catch (error) {
                 // Skip duplicates or errors
                 console.error('Failed to import channel:', channel.name, error);
             }
         }
-
-        db.close();
 
         return NextResponse.json({
             success: true,

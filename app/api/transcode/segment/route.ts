@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import { findFFmpeg, resolveMediaFromParams } from '@/lib/ffmpeg';
-import { getSafeErrorMessage } from '@/lib/security';
+
 import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Produces a single MPEG-TS segment, transcoded on demand, for the HLS playlist
