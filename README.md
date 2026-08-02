@@ -36,6 +36,9 @@ git clone https://github.com/WarunaHarshana/LFLIX.git
 cd LFLIX
 npm install
 
+# Configure — see .env.example for every supported variable
+cp .env.example .env.local
+
 # Run
 npm run dev
 ```
@@ -44,13 +47,29 @@ Open [http://localhost:3000](http://localhost:3000) — the setup wizard guides 
 
 **Windows users:** Just double-click `Setup.bat`, then `Start LFLIX.bat`.
 
+### Configuration
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `APP_PIN` | Yes | Sign-in PIN. Unset falls back to a well-known default — set it. |
+| `TMDB_API_KEY` | Yes | Posters, ratings, Discover, episode data. [Free key](https://www.themoviedb.org/settings/api). Without it the library still scans, but titles come from filenames. |
+| `OMDB_API_KEY` | No | Adds IMDb ratings. |
+
+`TMDB_API_KEY` and `OMDB_API_KEY` can also be set in Settings, which takes precedence. See [.env.example](.env.example) for the rest.
+
 ## ✅ Quality Gates
 
 ```bash
 npm run verify
 ```
 
-This runs TypeScript checking, ESLint, and a production Next.js build. The same checks run automatically in GitHub Actions on pushes to `main` and on pull requests.
+Runs TypeScript checking, ESLint, the test suite, and a production Next.js build. The same checks run in GitHub Actions on pushes to `main` and on pull requests.
+
+```bash
+npm test
+```
+
+Vitest suite covering filename parsing, torrent matching, path/URL validation, caching, stream tokens, and the API auth boundary. `npm run test:watch` for watch mode.
 
 ## 📁 Media Structure
 

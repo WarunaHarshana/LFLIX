@@ -843,5 +843,34 @@ export const streamQualityDb = {
   },
 };
 
+/**
+ * Checkpoint the write-ahead log and close cleanly.
+ *
+ * The process is normally killed rather than shut down, so the WAL was never
+ * truncated and grew unbounded next to a much smaller database file. Idempotent
+ * and safe to call more than once.
+ */
+let closed = false;
+function shutdownDatabase(): void {
+  if (closed) return;
+  closed = true;
+  try {
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    db.close();
+  } catch (error) {
+    console.warn('[DB] Error during shutdown checkpoint:', error);
+  }
+}
+
+// `exit` must stay synchronous; the signal handlers re-raise so the default
+// termination behaviour is preserved rather than swallowed.
+process.once('exit', shutdownDatabase);
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+  process.once(signal, () => {
+    shutdownDatabase();
+    process.kill(process.pid, signal);
+  });
+}
+
 export default db;
 
