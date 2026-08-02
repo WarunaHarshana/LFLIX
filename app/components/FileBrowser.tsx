@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import { useState, useEffect } from 'react';
 import { Folder, HardDrive, ChevronRight, ArrowUp, RefreshCw, FolderOpen, Check, X } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
@@ -18,7 +19,7 @@ type Props = {
 };
 
 export default function FileBrowser({ onSelect, onCancel, initialPath = '' }: Props) {
-    useModalBehavior(true, onCancel);
+    const modalRef = useModalBehavior(true, onCancel, { trapFocus: true });
 
     const [currentPath, setCurrentPath] = useState(initialPath);
     const [parentPath, setParentPath] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export default function FileBrowser({ onSelect, onCancel, initialPath = '' }: Pr
     };
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Choose a folder" className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onClick={onCancel}>
+        <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Choose a folder" className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onClick={onCancel}>
             <div
                 className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
                 onClick={e => e.stopPropagation()}

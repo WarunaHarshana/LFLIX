@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * Shared modal behaviour: dismiss on Escape, and stop the page behind the
@@ -75,12 +75,44 @@ function releaseScrollLock() {
   }
 }
 
+const FOCUSABLE = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'video[controls]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+/**
+ * Skip controls that are hidden.
+ *
+ * Deliberately checks computed style rather than offsetWidth/offsetHeight:
+ * layout metrics also read as zero for elements inside a collapsed or
+ * transformed ancestor, which would drop perfectly focusable controls.
+ */
+function isVisible(el: HTMLElement): boolean {
+  if (el.hasAttribute('hidden')) return false;
+  if (el.getAttribute('aria-hidden') === 'true') return false;
+  const style = window.getComputedStyle(el);
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
+function focusableWithin(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(isVisible);
+}
+
 export function useModalBehavior(
   isOpen: boolean,
   onClose: (() => void) | undefined,
-  options: { closeOnEscape?: boolean; lockScroll?: boolean } = {}
+  options: { closeOnEscape?: boolean; lockScroll?: boolean; trapFocus?: boolean } = {}
 ) {
-  const { closeOnEscape = true, lockScroll = true } = options;
+  const { closeOnEscape = true, lockScroll = true, trapFocus = false } = options;
+  // Attach to the modal's root element to enable the focus trap. Opt-in,
+  // because trapping focus in a container the user cannot escape is worse than
+  // not trapping at all — only wire it up where Escape also works.
+  const containerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!isOpen || !closeOnEscape || !onClose) return;
@@ -96,4 +128,51 @@ export function useModalBehavior(
     acquireScrollLock();
     return releaseScrollLock;
   }, [isOpen, lockScroll]);
+
+  useEffect(() => {
+    if (!isOpen || !trapFocus) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Restore focus to whatever opened the modal, so keyboard and remote users
+    // land back where they were instead of at the top of the page.
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    const initial = focusableWithin(container)[0];
+    if (initial) {
+      initial.focus();
+    } else if (!container.hasAttribute('tabindex')) {
+      container.setAttribute('tabindex', '-1');
+      container.focus();
+    }
+
+    const handleTab = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const focusable = focusableWithin(container);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey && (active === first || !container.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !container.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    container.addEventListener('keydown', handleTab);
+    return () => {
+      container.removeEventListener('keydown', handleTab);
+      previouslyFocused?.focus?.();
+    };
+  }, [isOpen, trapFocus]);
+
+  return containerRef;
 }

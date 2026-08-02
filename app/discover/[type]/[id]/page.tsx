@@ -606,7 +606,7 @@ export default function DiscoverDetailPage() {
   }, [tvDetails?.seasons]);
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-[var(--background)] text-white">
       <DetailTabNav activeTab="discover" />
       <section className="relative min-h-screen overflow-hidden border-b border-neutral-900 flex flex-col">
         <div className="absolute inset-0 bg-black" />

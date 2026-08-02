@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, Smartphone, Wifi, Copy, Check, RefreshCw, Share2 } from 'lucide-react';
@@ -10,7 +11,7 @@ type Props = {
 };
 
 export default function MobileConnectModal({ onClose }: Props) {
-    useModalBehavior(true, onClose);
+    const modalRef = useModalBehavior(true, onClose, { trapFocus: true });
 
   const [localIp, setLocalIp] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -66,7 +67,7 @@ export default function MobileConnectModal({ onClose }: Props) {
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Connect a device" className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
+    <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Connect a device" className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
       <div 
         className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-md p-6"
         onClick={e => e.stopPropagation()}

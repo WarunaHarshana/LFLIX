@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import { useState, useEffect, useMemo } from 'react';
 import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
@@ -35,7 +36,7 @@ type Props = {
 };
 
 export default function DownloadModal({ isOpen, title, year, mediaType, posterPath, watchlistId, onClose, onDownloadStarted }: Props) {
-    useModalBehavior(isOpen, onClose);
+    const modalRef = useModalBehavior(isOpen, onClose, { trapFocus: true });
 
     const [results, setResults] = useState<TorrentResult[]>([]);
     const [searching, setSearching] = useState(false);
@@ -193,7 +194,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     if (!isOpen) return null;
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Download options" className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Download options" className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
             <div className="relative w-full max-w-2xl max-h-[85vh] bg-neutral-900 rounded-2xl border border-neutral-700 overflow-hidden flex flex-col">
 

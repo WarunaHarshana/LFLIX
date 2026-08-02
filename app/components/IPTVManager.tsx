@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import { useState, useRef } from 'react';
 import { X, Upload, Plus, Tv, Globe, Link, FileText, Trash2 } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
@@ -10,7 +11,7 @@ type Props = {
 };
 
 export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
-    useModalBehavior(true, onClose);
+    const modalRef = useModalBehavior(true, onClose, { trapFocus: true });
 
   const [activeTab, setActiveTab] = useState<'add' | 'import'>('add');
   const [importTab, setImportTab] = useState<'public' | 'url' | 'file'>('public');
@@ -202,7 +203,7 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Manage channels" className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4">
+    <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Manage channels" className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4">
       <div className="bg-neutral-900 w-full max-w-2xl rounded-2xl border border-neutral-800 flex flex-col max-h-[85vh]">
         <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-3">

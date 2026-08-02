@@ -77,7 +77,7 @@ export default function SetupWizard({ onComplete }: Props) {
   ];
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[var(--background)] flex items-center justify-center p-4">
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-xl overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-red-900 to-red-700 p-8 text-center">

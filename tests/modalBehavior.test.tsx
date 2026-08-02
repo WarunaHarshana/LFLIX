@@ -2,7 +2,8 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, renderHook } from '@testing-library/react';
+import React from 'react';
+import { cleanup, fireEvent, render, renderHook } from '@testing-library/react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 function pressEscape() {
@@ -97,5 +98,66 @@ describe('body scroll lock', () => {
   it('does not lock when disabled', () => {
     renderHook(() => useModalBehavior(true, vi.fn(), { lockScroll: false }));
     expect(document.body.style.overflow).not.toBe('hidden');
+  });
+});
+
+describe('focus trap', () => {
+  function Dialog({ trapFocus }: { trapFocus: boolean }) {
+    const ref = useModalBehavior(true, vi.fn(), { trapFocus }) as React.RefObject<HTMLDivElement>;
+    return (
+      <div ref={ref}>
+        <button id="a">A</button>
+        <button id="b">B</button>
+        <button id="c">C</button>
+      </div>
+    );
+  }
+
+  it('focuses the first control when it opens', () => {
+    render(<Dialog trapFocus />);
+    expect(document.activeElement?.id).toBe('a');
+  });
+
+  it('leaves focus alone when not enabled', () => {
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    outside.focus();
+
+    render(<Dialog trapFocus={false} />);
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+  });
+
+  it('wraps Tab from the last control back to the first', () => {
+    const { container } = render(<Dialog trapFocus />);
+    const dialog = container.firstElementChild as HTMLElement;
+    const last = dialog.querySelector<HTMLElement>('#c')!;
+
+    last.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement?.id).toBe('a');
+  });
+
+  it('wraps Shift+Tab from the first control to the last', () => {
+    const { container } = render(<Dialog trapFocus />);
+    const dialog = container.firstElementChild as HTMLElement;
+    const first = dialog.querySelector<HTMLElement>('#a')!;
+
+    first.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement?.id).toBe('c');
+  });
+
+  it('restores focus to the opener on close', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const view = render(<Dialog trapFocus />);
+    expect(document.activeElement?.id).toBe('a');
+
+    view.unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
   });
 });

@@ -53,7 +53,7 @@ export default function LoginScreen({ onLogin }: Props) {
     };
 
     return (
-        <div className="min-h-screen bg-black flex items-center justify-center p-4">
+        <div className="min-h-screen bg-[var(--background)] flex items-center justify-center p-4">
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-8 w-full max-w-md">
                 <div className="flex flex-col items-center mb-8">
                     <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center mb-4">

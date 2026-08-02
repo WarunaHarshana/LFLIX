@@ -1,6 +1,6 @@
 export default function DiscoverDetailLoading() {
   return (
-    <div className="min-h-screen bg-black text-white animate-pulse">
+    <div className="min-h-screen bg-[var(--background)] text-white animate-pulse">
       <div className="h-[70vh] bg-neutral-900/80" />
       <div className="px-6 md:px-12 py-8 space-y-4">
         <div className="h-8 w-64 bg-neutral-800 rounded" />

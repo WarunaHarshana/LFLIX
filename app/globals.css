@@ -107,6 +107,40 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Point Tailwind's neutral scale at the theme tokens.
+   *
+   * The token set was well built but almost nothing consumed it: the UI used
+   * ~1400 hardcoded `neutral-*` classes against ~60 token references, so
+   * switching Base Theme changed variables that nothing painted with and the
+   * setting appeared to do nothing.
+   *
+   * Remapping the scale here makes every existing class theme-aware without
+   * touching components. The text shades below already equal Tailwind's
+   * defaults, so they are visually identical today and simply become
+   * themeable.
+   */
+  --color-neutral-950: var(--background);
+  --color-neutral-900: var(--surface-1);
+  --color-neutral-800: var(--surface-2);
+  --color-neutral-700: var(--surface-3);
+  --color-neutral-600: var(--border-strong);
+  --color-neutral-500: var(--text-muted);
+  --color-neutral-400: var(--text-muted);
+  --color-neutral-300: var(--text-secondary);
+  --color-neutral-200: var(--text-secondary);
+  --color-neutral-100: var(--text-primary);
+
+  /* Brand red follows the chosen accent.
+   *
+   * Only the 600/700 shades: those are the button, logo and active-state
+   * colours (79 usages, all brand). The lighter 300/400/500 shades are what
+   * error text and failure states use, and those must stay red no matter which
+   * accent is selected — a green "Playback Error" would be worse than no
+   * theming at all.
+   */
+  --color-red-600: var(--accent-color);
+  --color-red-700: var(--accent-gradient-to);
 }
 
 body {

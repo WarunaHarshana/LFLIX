@@ -435,7 +435,7 @@ export default function DiagnosticsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="min-h-screen bg-[var(--background)] text-white">
       <header className="border-b border-neutral-800 bg-neutral-950">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-5 sm:px-8 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">

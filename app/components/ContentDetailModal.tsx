@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { X, Play, Clock, Film, Tv, Loader2, PlayCircle, Globe, User, BellRing, BellOff } from 'lucide-react';
 import TrailerModal from './TrailerModal';
@@ -167,7 +168,7 @@ function toDiscoverContentCardItem(item: TmdbResult): DiscoverContentCardItem {
 }
 
 export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisodes, onOpenOnline }: Props) {
-    useModalBehavior(true, onClose);
+    const modalRef = useModalBehavior(true, onClose, { trapFocus: true });
 
     const [imgLoaded, setImgLoaded] = useState(false);
     const [showTrailer, setShowTrailer] = useState(false);
@@ -399,7 +400,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
     };
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Title details" className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+        <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Title details" className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
             <div
                 className="relative w-full max-w-4xl max-h-[90vh] bg-neutral-900 rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col"
                 onClick={(e) => e.stopPropagation()}

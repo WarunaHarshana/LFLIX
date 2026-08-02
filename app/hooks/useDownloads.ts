@@ -23,20 +23,47 @@ export function useDownloads() {
 
   useEffect(() => {
     let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     const tick = async () => {
       if (cancelled) return;
       await fetchActiveDownloads();
     };
 
+    const start = () => {
+      if (interval !== null) return;
+      // Poll fast while the panel is open, slowly otherwise — the badge only
+      // needs to be roughly current, but an open panel shows live progress.
+      interval = setInterval(tick, showDownloads ? 3000 : 30000);
+    };
+
+    const stop = () => {
+      if (interval === null) return;
+      clearInterval(interval);
+      interval = null;
+    };
+
+    // A background tab has nobody watching, so polling there is pure waste —
+    // and on a TV or phone it kept the radio awake indefinitely.
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void tick();
+        start();
+      } else {
+        stop();
+      }
+    };
+
     void tick();
-    const interval = setInterval(tick, 8000);
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [fetchActiveDownloads]);
+  }, [fetchActiveDownloads, showDownloads]);
 
   return { activeDownloads, showDownloads, setShowDownloads, fetchDownloads: fetchActiveDownloads };
 }

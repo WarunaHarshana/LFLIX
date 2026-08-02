@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import { useState, useEffect } from 'react';
 import { X, Play, ExternalLink, Smartphone, Monitor, Loader2, Download, AlertCircle, MoreHorizontal } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
@@ -15,7 +16,7 @@ type Props = {
 };
 
 export default function PlayChoiceModal({ title, streamUrl, contentType, contentId, episodeId, onPlayBrowser, onClose }: Props) {
-    useModalBehavior(true, onClose);
+    const modalRef = useModalBehavior(true, onClose, { trapFocus: true });
 
   const [copied, setCopied] = useState(false);
   const [tokenUrl, setTokenUrl] = useState<string>('');
@@ -76,7 +77,7 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Choose how to play" className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
+    <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Choose how to play" className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
       <div 
         className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-sm p-6"
         onClick={e => e.stopPropagation()}

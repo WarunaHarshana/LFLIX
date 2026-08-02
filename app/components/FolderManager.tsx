@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import { useState, useEffect } from 'react';
 import { X, Folder, Trash2, RefreshCw, Plus, AlertCircle, FolderOpen } from 'lucide-react';
 import FileBrowser from './FileBrowser';
@@ -21,7 +22,7 @@ type Props = {
 };
 
 export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Props) {
-    useModalBehavior(isOpen, onClose);
+    const modalRef = useModalBehavior(isOpen, onClose, { trapFocus: true });
 
     const [folders, setFolders] = useState<ScannedFolder[]>([]);
     const [loading, setLoading] = useState(false);
@@ -131,7 +132,7 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
 
     return (
         <>
-            <div role="dialog" aria-modal="true" aria-label="Manage library folders" className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Manage library folders" className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
                 <div className="bg-neutral-900 rounded-2xl w-full max-w-2xl border border-neutral-800 shadow-2xl overflow-hidden">
                     {/* Header */}
                     <div className="flex items-center justify-between p-6 border-b border-neutral-800">

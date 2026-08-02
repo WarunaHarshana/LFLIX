@@ -157,14 +157,14 @@ export default function SettingsPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-black text-white flex items-center justify-center">
+            <div className="min-h-screen bg-[var(--background)] text-white flex items-center justify-center">
                 <RefreshCw className="w-8 h-8 animate-spin text-neutral-500" />
             </div>
         );
     }
 
     return (
-        <main className="min-h-screen bg-black text-white">
+        <main className="min-h-screen bg-[var(--background)] text-white">
             {/* Header */}
             <div className="bg-neutral-900 border-b border-neutral-800">
                 <div className="max-w-4xl mx-auto px-8 py-6 flex items-center gap-4">

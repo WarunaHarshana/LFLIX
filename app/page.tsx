@@ -385,7 +385,7 @@ export default function Home() {
   // signed-in user sees the login screen flash before being let through.
   if (setupComplete === null || !authChecked) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
         <div className="animate-pulse"><h1 className="text-4xl font-bold accent-text tracking-tighter">LFLIX</h1></div>
       </div>
     );
@@ -394,7 +394,7 @@ export default function Home() {
 
   // ──────────────────── Render ────────────────────
   return (
-    <main className="min-h-screen bg-black text-white font-sans selection:bg-red-900 pb-20 md:pb-0">
+    <main className="min-h-screen bg-[var(--background)] text-white font-sans selection:bg-red-900 pb-20 md:pb-0">
 
       {/* Navbar */}
       <DetailTabNav
