@@ -1,5 +1,49 @@
 # Changelog
 
+## v0.7.1
+
+Fixes for four problems found while using v0.7.0.
+
+### Fixed
+
+- **Cards and hero banners never loaded, and the first launch of the day
+  crawled.** Artwork was routed through Next's image optimizer at quality 80
+  (cards) and 90 (banners), but Next 16 only permits qualities listed in
+  `images.qualities`, which defaults to `[75]` — so the optimizer answered both
+  with HTTP 400 and everything fell back to placeholders. Optimizing was wasted
+  work anyway: TMDB already serves a correctly sized variant, so the server was
+  re-encoding artwork that was already right, at roughly 2.3s per cold poster.
+  Now served straight from TMDB — 483 ms cold, 237 ms warm.
+- **"404 This page could not be found" on most launches.** Closing the window
+  with the X button leaves the server running and holding port 3000; the next
+  launch quietly moved to 3001 while the browser still opened 3000, landing on
+  the orphan. The launcher now clears a stale server first (only ever
+  terminating `node.exe`) and waits for a real success response instead of
+  treating a 404 as ready. Stop the server with **Ctrl+C** rather than the X to
+  avoid the orphan entirely.
+- **Appearance settings did nothing.** The theme tokens were sound but almost
+  nothing consumed them — around 1400 hardcoded colour classes against 60 token
+  references — so switching Base Theme changed variables that ~4% of the UI
+  painted with. Tailwind's neutral scale now resolves through the theme tokens,
+  making the whole app theme-aware. Accent follows the brand shades only; error
+  and failure colours stay red whichever accent is chosen.
+- **The session was discarded on every reload**, so a refresh demanded the PIN
+  again despite a valid 7-day cookie. Nothing checked for an existing session on
+  load, and `GET /api/auth/login` could not be used for it because that path is
+  public and always reported success.
+
+### Accessibility
+
+- `Escape` now closes modals — it was advertised in the shortcuts overlay but
+  wired into only 2 of 15. Opening a modal also locks background scrolling.
+- Focus traps on the eight dialog-style modals: focus moves to the first control
+  on open and returns to whatever opened it on close.
+
+### Performance
+
+- Downloads polling no longer runs every 8s regardless of state: 3s with the
+  panel open, 30s otherwise, and suspended entirely in a background tab.
+
 ## v0.7.0
 
 Security, correctness and a first test suite. **Everyone is signed out once on
