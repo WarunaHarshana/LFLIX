@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
   // Images must be unoptimized for static export
   images: {
     unoptimized: isExport,
+    // Next 16 rejects any quality not listed here with HTTP 400, and the
+    // default is [75] alone. TMDB artwork now bypasses the optimizer entirely,
+    // but declaring these keeps any other optimized image from failing the
+    // same way if a component asks for a nicer quality.
+    qualities: [75, 80, 90],
     remotePatterns: isExport ? [] : [
       {
         protocol: 'https',
