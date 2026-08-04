@@ -31,6 +31,11 @@ const AUTO_FAILOVER_TIMEOUT_MS = 15000;
 const VPN_AUTO_FAILOVER_TIMEOUT_MS = 60000;
 const IFRAME_BOOTSTRAP_MS = 2500;
 const PLAYBACK_GRACE_MS = 18000;
+// How long an embed may sit unacknowledged before we offer an alternative.
+// Deliberately well past the point a working stream would have started, since
+// the prompt is noise over content that is already playing.
+const STALL_PROMPT_MS = 45000;
+const STALL_PROMPT_VISIBLE_MS = 12000;
 const VPN_PLAYBACK_GRACE_MS = 90000;
 
 function getServerLabel(server: StreamServer | undefined, index: number): string {
@@ -165,12 +170,42 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
   }, [sandboxEnabled]);
 
   const attemptedServersRef = useRef<number[]>([0]);
+  // Guards against probing twice for the same title. Observed firing twice 2ms
+  // apart from a single click, which probes six third-party hosts all over
+  // again for nothing.
+  const inFlightProbeRef = useRef<string | null>(null);
+  // Clicking into a cross-origin iframe moves focus to it and blurs the parent
+  // window. It is the only evidence available that the embed is being used, so
+  // it doubles as "this stream is fine, stop offering alternatives".
+  const engagedRef = useRef(false);
+
+  useEffect(() => {
+    const onBlur = () => {
+      if (document.activeElement?.tagName === 'IFRAME') {
+        engagedRef.current = true;
+        setMaybeStalled(false);
+      }
+    };
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, []);
+
+  // Never let the prompt sit on top of content indefinitely.
+  useEffect(() => {
+    if (!maybeStalled) return;
+    const hide = window.setTimeout(() => setMaybeStalled(false), STALL_PROMPT_VISIBLE_MS);
+    return () => window.clearTimeout(hide);
+  }, [maybeStalled]);
 
   useEffect(() => {
     attemptedServersRef.current = attemptedServers;
   }, [attemptedServers]);
 
   const fetchServers = useCallback(async (options: { refresh?: boolean; showLoading?: boolean } = {}) => {
+    const probeKey = `${tmdbId}:${type}:${season ?? ''}:${episode ?? ''}:${vpnMode}:${options.refresh ? 'r' : ''}`;
+    if (inFlightProbeRef.current === probeKey) return;
+    inFlightProbeRef.current = probeKey;
+
     if (options.showLoading !== false) {
       setLoading(true);
     }
@@ -213,6 +248,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     } catch (e) {
       console.error('Failed to fetch servers:', e);
     } finally {
+      inFlightProbeRef.current = null;
       setLoading(false);
     }
   }, [tmdbId, type, season, episode, vpnMode]);
@@ -346,8 +382,10 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     // switching away from a stream the viewer is watching would be worse than
     // the stall, so offer the switch instead of taking it.
     const stalledPrompt = window.setTimeout(() => {
-      setMaybeStalled(true);
-    }, playbackGraceTimeout);
+      // Suppressed once the viewer has clicked into the player: that is the one
+      // signal a cross-origin iframe does leak, and it means they are watching.
+      if (!engagedRef.current) setMaybeStalled(true);
+    }, vpnMode ? STALL_PROMPT_MS * 2 : STALL_PROMPT_MS);
 
     // Hide the overlay so the embed is usable, but do NOT call this "ready":
     // the grace watchdog below must stay armed in case nothing ever plays.
@@ -375,7 +413,16 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
   }, [activeServer, currentServer]);
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Stream servers" className="fixed inset-0 z-[90] bg-black flex flex-col">
+    // Rendered as a sibling of the detail modal's content wrapper, so without
+    // stopPropagation every click in here bubbles up to that backdrop handler
+    // and tears down the whole modal stack.
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Stream servers"
+      className="fixed inset-0 z-[90] bg-black flex flex-col"
+      onClick={(e) => e.stopPropagation()}
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-neutral-900/95 backdrop-blur-xl border-b border-neutral-800 shrink-0">
         <div className="flex items-center gap-3 min-w-0">

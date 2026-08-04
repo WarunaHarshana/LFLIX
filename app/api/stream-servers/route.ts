@@ -99,7 +99,7 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://vidsrc.wtf/1/movie/${tmdbId}`
-        : `https://vidsrc.wtf/1/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+        : `https://vidsrc.wtf/1/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`,
   },
   {
     id: 'flux',
@@ -110,7 +110,7 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://beta.player.fluxtv.cc/player?type=movie&id=${tmdbId}`
-        : `https://beta.player.fluxtv.cc/player?type=tv&id=${tmdbId}&season=${season || 1}&episode=${episode || 1}`,
+        : `https://beta.player.fluxtv.cc/player?type=tv&id=${tmdbId}&season=${season ?? 1}&episode=${episode ?? 1}`,
   },
   {
     id: 'vidlink',
@@ -121,7 +121,7 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://vidlink.pro/movie/${tmdbId}`
-        : `https://vidlink.pro/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+        : `https://vidlink.pro/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`,
   },
   {
     id: 'vidsrc-to',
@@ -132,7 +132,7 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://vidsrc.to/embed/movie/${tmdbId}`
-        : `https://vidsrc.to/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+        : `https://vidsrc.to/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`,
   },
   {
     id: 'autoembed',
@@ -143,7 +143,7 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
     buildUrl: (tmdbId, type, season, episode) =>
       type === 'movie'
         ? `https://autoembed.cc/embed/movie/${tmdbId}`
-        : `https://autoembed.cc/embed/tv/${tmdbId}/${season || 1}/${episode || 1}`,
+        : `https://autoembed.cc/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`,
   },
 ];
 
@@ -533,12 +533,16 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Invalid tmdbId' }, { status: 400 });
     }
 
-    const servers = await buildServerUrls(
-      parsedTmdbId,
-      type,
-      season ? parseInt(season, 10) : undefined,
-      episode ? parseInt(episode, 10) : undefined
-    );
+    // Season/episode were passed through with only `season ?? 1` downstream,
+    // which lets a negative straight into the embed URL — /tv/94997/-1/1 builds
+    // a player that can never load. Season 0 is legitimate (specials), episode 0
+    // is not.
+    const parsedSeason = season !== null ? Number.parseInt(season, 10) : NaN;
+    const parsedEpisode = episode !== null ? Number.parseInt(episode, 10) : NaN;
+    const safeSeason = Number.isInteger(parsedSeason) && parsedSeason >= 0 ? parsedSeason : undefined;
+    const safeEpisode = Number.isInteger(parsedEpisode) && parsedEpisode > 0 ? parsedEpisode : undefined;
+
+    const servers = await buildServerUrls(parsedTmdbId, type, safeSeason, safeEpisode);
 
     const checks = vpnMode
       ? servers.map((server) => ({
@@ -628,147 +632,156 @@ export async function GET(req: Request) {
       });
     }
 
-    const coorenApiUrl = process.env.COOREN_API_URL;
-    if (coorenApiUrl) {
-      try {
-        const coorenType = type === 'movie' ? 'movie' : 'tv';
-        const url = coorenType === 'movie'
-          ? `${coorenApiUrl}/movie-tv/primesrc/movie/${parsedTmdbId}`
-          : `${coorenApiUrl}/movie-tv/primesrc/tv/${parsedTmdbId}/${season || 1}/${episode || 1}`;
+    // The two direct-stream providers were awaited one after the other, so a
+    // slow or unreachable host added its full timeout to every online-watch
+    // request before the modal could show anything — up to 7.5s combined.
+    // They are independent, so run them together and pay only the slower one.
+    await Promise.allSettled([
+      (async () => {
+      const coorenApiUrl = process.env.COOREN_API_URL;
+      if (coorenApiUrl) {
+        try {
+          const coorenType = type === 'movie' ? 'movie' : 'tv';
+          const url = coorenType === 'movie'
+            ? `${coorenApiUrl}/movie-tv/primesrc/movie/${parsedTmdbId}`
+            : `${coorenApiUrl}/movie-tv/primesrc/tv/${parsedTmdbId}/${season ?? 1}/${episode ?? 1}`;
 
-        console.info(`[stream-servers] Querying PrimeSrc: ${url}`);
-        const primeSrcRes = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-          signal: AbortSignal.timeout(3500),
-        });
+          console.info(`[stream-servers] Querying PrimeSrc: ${url}`);
+          const primeSrcRes = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+            signal: AbortSignal.timeout(3500),
+          });
 
-        if (primeSrcRes.ok) {
-          const result = await primeSrcRes.json();
-          if (result.success && Array.isArray(result.data)) {
-            for (const host of result.data) {
-              if (Array.isArray(host.sources) && host.sources.length > 0) {
-                const sourceItem = host.sources.find((s: any) => typeof s.url === 'string' || typeof s.file === 'string');
-                if (sourceItem) {
-                  const videoUrl = sourceItem.url || sourceItem.file;
-                  const label = sourceItem.label || sourceItem.quality || '1080p';
-                  let qualityHint: StreamQualityValue = '1080p';
-                  if (/2160|4k|uhd/i.test(label)) {
-                    qualityHint = '2160p';
-                  } else if (/720|hd/i.test(label)) {
-                    qualityHint = '720p';
-                  }
+          if (primeSrcRes.ok) {
+            const result = await primeSrcRes.json();
+            if (result.success && Array.isArray(result.data)) {
+              for (const host of result.data) {
+                if (Array.isArray(host.sources) && host.sources.length > 0) {
+                  const sourceItem = host.sources.find((s: any) => typeof s.url === 'string' || typeof s.file === 'string');
+                  if (sourceItem) {
+                    const videoUrl = sourceItem.url || sourceItem.file;
+                    const label = sourceItem.label || sourceItem.quality || '1080p';
+                    let qualityHint: StreamQualityValue = '1080p';
+                    if (/2160|4k|uhd/i.test(label)) {
+                      qualityHint = '2160p';
+                    } else if (/720|hd/i.test(label)) {
+                      qualityHint = '720p';
+                    }
 
-                  const directSubtitles: { label: string; url: string; language?: string }[] = [];
-                  if (Array.isArray(host.subtitles)) {
-                    for (const sub of host.subtitles) {
-                      const subUrl = sub.url || sub.file;
-                      if (typeof subUrl === 'string') {
-                        directSubtitles.push({
-                          label: sub.label || sub.lang || sub.language || 'English',
-                          url: subUrl,
-                          language: sub.lang || sub.language || 'en',
-                        });
+                    const directSubtitles: { label: string; url: string; language?: string }[] = [];
+                    if (Array.isArray(host.subtitles)) {
+                      for (const sub of host.subtitles) {
+                        const subUrl = sub.url || sub.file;
+                        if (typeof subUrl === 'string') {
+                          directSubtitles.push({
+                            label: sub.label || sub.lang || sub.language || 'English',
+                            url: subUrl,
+                            language: sub.lang || sub.language || 'en',
+                          });
+                        }
                       }
                     }
-                  }
 
-                  responseServers.push({
-                    id: `primesrc-${host.name.toLowerCase()}`,
-                    name: `PrimeSrc (${host.name})`,
-                    url: videoUrl,
-                    color: host.name.toLowerCase() === 'primevid' ? '#3b82f6' : host.name.toLowerCase() === 'streamtape' ? '#10b981' : '#ec4899',
-                    order: -100, // Put them first
-                    baselineQuality: '1080p',
-                    isReachable: true,
-                    availabilityState: 'reachable',
-                    probeError: null,
-                    probeCheckedAt: new Date().toISOString(),
-                    qualityHint,
-                    confidence: 1.0,
-                    probeState: 'cached',
-                    lastCheckedAt: new Date().toISOString(),
-                    latencyMs: 50,
-                    isDirect: true,
-                    directSubtitles,
+                    responseServers.push({
+                      id: `primesrc-${host.name.toLowerCase()}`,
+                      name: `PrimeSrc (${host.name})`,
+                      url: videoUrl,
+                      color: host.name.toLowerCase() === 'primevid' ? '#3b82f6' : host.name.toLowerCase() === 'streamtape' ? '#10b981' : '#ec4899',
+                      order: -100, // Put them first
+                      baselineQuality: '1080p',
+                      isReachable: true,
+                      availabilityState: 'reachable',
+                      probeError: null,
+                      probeCheckedAt: new Date().toISOString(),
+                      qualityHint,
+                      confidence: 1.0,
+                      probeState: 'cached',
+                      lastCheckedAt: new Date().toISOString(),
+                      latencyMs: 50,
+                      isDirect: true,
+                      directSubtitles,
+                    });
+                  }
+                }
+              }
+            }
+          } else {
+            console.warn(`[stream-servers] PrimeSrc returned status ${primeSrcRes.status}`);
+          }
+        } catch (error: any) {
+          console.error('[stream-servers] PrimeSrc query failed:', error.message || error);
+        }
+      }
+      })(),
+      (async () => {
+      // SuperEmbed (seapi.link) — direct HLS stream source
+      try {
+        const seType = type === 'movie' ? 'movie' : 'tv';
+        const seUrl = seType === 'movie'
+          ? `https://seapi.link/?type=tmdb&id=${parsedTmdbId}&max_results=1`
+          : `https://seapi.link/?type=tmdb&id=${parsedTmdbId}&season=${season ?? 1}&episode=${episode ?? 1}&max_results=1`;
+
+        const seRes = await fetch(seUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(4000),
+        });
+
+        if (seRes.ok) {
+          const seData = await seRes.json();
+          const results = Array.isArray(seData) ? seData : (seData?.results || []);
+          for (const result of results) {
+            const videoUrl = result.url || result.file || result.link;
+            if (typeof videoUrl !== 'string') continue;
+
+            const label = result.quality || result.label || '1080p';
+            let qualityHint: StreamQualityValue = '1080p';
+            if (/2160|4k|uhd/i.test(label)) qualityHint = '2160p';
+            else if (/720/i.test(label)) qualityHint = '720p';
+
+            const directSubtitles: { label: string; url: string; language?: string }[] = [];
+            if (Array.isArray(result.subtitles)) {
+              for (const sub of result.subtitles) {
+                const subUrl = sub.url || sub.file;
+                if (typeof subUrl === 'string') {
+                  directSubtitles.push({
+                    label: sub.label || sub.lang || 'English',
+                    url: subUrl,
+                    language: sub.lang || sub.language || 'en',
                   });
                 }
               }
             }
+
+            responseServers.push({
+              id: `superembed-${results.indexOf(result)}`,
+              name: `SuperEmbed${result.server ? ` (${result.server})` : ''}`,
+              url: videoUrl,
+              color: '#22d3ee',
+              order: -90,
+              baselineQuality: '1080p',
+              isReachable: true,
+              availabilityState: 'reachable',
+              probeError: null,
+              probeCheckedAt: new Date().toISOString(),
+              qualityHint,
+              confidence: 0.9,
+              probeState: 'cached',
+              lastCheckedAt: new Date().toISOString(),
+              latencyMs: 50,
+              isDirect: true,
+              directSubtitles,
+            });
           }
-        } else {
-          console.warn(`[stream-servers] PrimeSrc returned status ${primeSrcRes.status}`);
         }
       } catch (error: any) {
-        console.error('[stream-servers] PrimeSrc query failed:', error.message || error);
+        console.error('[stream-servers] SuperEmbed query failed:', error.message || error);
       }
-    }
-
-    // SuperEmbed (seapi.link) — direct HLS stream source
-    try {
-      const seType = type === 'movie' ? 'movie' : 'tv';
-      const seUrl = seType === 'movie'
-        ? `https://seapi.link/?type=tmdb&id=${parsedTmdbId}&max_results=1`
-        : `https://seapi.link/?type=tmdb&id=${parsedTmdbId}&season=${season || 1}&episode=${episode || 1}&max_results=1`;
-
-      const seRes = await fetch(seUrl, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(4000),
-      });
-
-      if (seRes.ok) {
-        const seData = await seRes.json();
-        const results = Array.isArray(seData) ? seData : (seData?.results || []);
-        for (const result of results) {
-          const videoUrl = result.url || result.file || result.link;
-          if (typeof videoUrl !== 'string') continue;
-
-          const label = result.quality || result.label || '1080p';
-          let qualityHint: StreamQualityValue = '1080p';
-          if (/2160|4k|uhd/i.test(label)) qualityHint = '2160p';
-          else if (/720/i.test(label)) qualityHint = '720p';
-
-          const directSubtitles: { label: string; url: string; language?: string }[] = [];
-          if (Array.isArray(result.subtitles)) {
-            for (const sub of result.subtitles) {
-              const subUrl = sub.url || sub.file;
-              if (typeof subUrl === 'string') {
-                directSubtitles.push({
-                  label: sub.label || sub.lang || 'English',
-                  url: subUrl,
-                  language: sub.lang || sub.language || 'en',
-                });
-              }
-            }
-          }
-
-          responseServers.push({
-            id: `superembed-${results.indexOf(result)}`,
-            name: `SuperEmbed${result.server ? ` (${result.server})` : ''}`,
-            url: videoUrl,
-            color: '#22d3ee',
-            order: -90,
-            baselineQuality: '1080p',
-            isReachable: true,
-            availabilityState: 'reachable',
-            probeError: null,
-            probeCheckedAt: new Date().toISOString(),
-            qualityHint,
-            confidence: 0.9,
-            probeState: 'cached',
-            lastCheckedAt: new Date().toISOString(),
-            latencyMs: 50,
-            isDirect: true,
-            directSubtitles,
-          });
-        }
-      }
-    } catch (error: any) {
-      console.error('[stream-servers] SuperEmbed query failed:', error.message || error);
-    }
+      })(),
+    ]);
 
     const TIER_RANK: Record<string, number> = {
       best: 4,

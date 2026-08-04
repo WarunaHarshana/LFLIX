@@ -175,7 +175,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     };
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Episodes" className="fixed inset-0 z-50 bg-black/95 flex justify-end" onClick={onClose}>
+        <div role="dialog" aria-modal="true" aria-label="Episodes" className="fixed inset-0 z-50 bg-black/95 flex justify-end" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div
                 className="w-full max-w-2xl bg-neutral-900 h-full border-l border-neutral-800 flex flex-col animate-in slide-in-from-right duration-300"
                 onClick={(e) => e.stopPropagation()}

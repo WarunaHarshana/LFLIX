@@ -161,3 +161,41 @@ describe('focus trap', () => {
     opener.remove();
   });
 });
+
+describe('escape ordering survives re-renders', () => {
+  it('keeps the inner modal on top when the outer one re-renders', () => {
+    // The bug: onClose is an inline arrow at every call site, so its identity
+    // changes each render. Re-registering moved that modal to the top of the
+    // stack, so an outer modal re-rendering while an inner one was open put the
+    // outer on top — and Escape closed both.
+    const outer = vi.fn();
+    const inner = vi.fn();
+
+    const outerHook = renderHook<void, { cb: () => void }>(({ cb }) => useModalBehavior(true, cb), {
+      initialProps: { cb: outer },
+    });
+    renderHook(() => useModalBehavior(true, inner));
+
+    // Outer re-renders with a brand-new callback identity, as React would.
+    outerHook.rerender({ cb: () => outer() });
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(outer).not.toHaveBeenCalled();
+  });
+
+  it('always invokes the newest callback, not a stale one', () => {
+    const stale = vi.fn();
+    const fresh = vi.fn();
+    const hook = renderHook<void, { cb: () => void }>(({ cb }) => useModalBehavior(true, cb), {
+      initialProps: { cb: stale },
+    });
+
+    hook.rerender({ cb: fresh });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(fresh).toHaveBeenCalledTimes(1);
+    expect(stale).not.toHaveBeenCalled();
+  });
+});

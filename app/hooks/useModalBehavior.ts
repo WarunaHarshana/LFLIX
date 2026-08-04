@@ -114,12 +114,29 @@ export function useModalBehavior(
   // not trapping at all — only wire it up where Escape also works.
   const containerRef = useRef<HTMLElement | null>(null);
 
+  // Callers pass an inline arrow (`onClose={() => setThing(false)}`), so its
+  // identity changes on every render. Registering it directly meant the effect
+  // re-ran constantly, popping and re-pushing — which moved that modal to the
+  // top of the stack. A parent re-rendering while a child modal was open put
+  // the parent on top, so Escape closed the parent and unmounted both.
+  //
+  // Registering a stable wrapper that reads the latest callback from a ref
+  // keeps stack order tied to mount order, where it belongs.
+  const onCloseRef = useRef(onClose);
+  // Updated in an effect rather than during render: writing a ref while
+  // rendering is unsafe under concurrent rendering. The initial value comes
+  // from useRef above, so the first Escape is never stale.
   useEffect(() => {
-    if (!isOpen || !closeOnEscape || !onClose) return;
+    onCloseRef.current = onClose;
+  });
 
-    pushEscapeHandler(onClose);
-    return () => popEscapeHandler(onClose);
-  }, [isOpen, closeOnEscape, onClose]);
+  useEffect(() => {
+    if (!isOpen || !closeOnEscape) return;
+
+    const handler = () => onCloseRef.current?.();
+    pushEscapeHandler(handler);
+    return () => popEscapeHandler(handler);
+  }, [isOpen, closeOnEscape]);
 
   useEffect(() => {
     if (!isOpen || !lockScroll) return;
