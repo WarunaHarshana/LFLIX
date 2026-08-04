@@ -50,3 +50,41 @@ describe('MIN_EPISODE_VOTES', () => {
     expect(MIN_EPISODE_VOTES).toBeGreaterThan(4);
   });
 });
+
+describe('rating source preference', () => {
+  // Mirrors episodeScore() in EpisodeModal: IMDb wins where it exists, TMDB is
+  // the fallback and only once enough people have voted.
+  function episodeScore(imdb?: number | null, tmdb?: number | null, votes?: number | null) {
+    if (imdb != null && imdb > 0) return { value: imdb, source: 'IMDb' as const };
+    if (tmdb == null || tmdb <= 0) return null;
+    if (votes != null && votes < MIN_EPISODE_VOTES) return null;
+    return { value: tmdb, source: 'TMDB' as const };
+  }
+
+  it('prefers IMDb when both exist', () => {
+    expect(episodeScore(9.2, 7.6, 98)).toEqual({ value: 9.2, source: 'IMDb' });
+  });
+
+  it('shows IMDb even when TMDB is too thinly voted', () => {
+    // IMDb ratings do not carry a vote count here, and IMDb only publishes one
+    // after enough activity, so it is trustworthy on its own.
+    expect(episodeScore(8.4, 2.8, 4)).toEqual({ value: 8.4, source: 'IMDb' });
+  });
+
+  it('falls back to a well-voted TMDB score', () => {
+    expect(episodeScore(null, 6.5, 36)).toEqual({ value: 6.5, source: 'TMDB' });
+  });
+
+  it('hides a thinly-voted TMDB score when IMDb has nothing', () => {
+    expect(episodeScore(null, 2.8, 4)).toBeNull();
+  });
+
+  it('shows legacy rows that predate vote tracking', () => {
+    expect(episodeScore(null, 7.4, null)).toEqual({ value: 7.4, source: 'TMDB' });
+  });
+
+  it('returns nothing when neither source has a rating', () => {
+    expect(episodeScore(null, null, null)).toBeNull();
+    expect(episodeScore(0, 0, 50)).toBeNull();
+  });
+});

@@ -604,6 +604,73 @@ export function isPlaceholderEpisodeTitle(title: string | null | undefined): boo
 /** Below this, a TMDB episode score is too thinly voted to display. */
 export const MIN_EPISODE_VOTES = 10;
 
+/**
+ * The series IMDb id for a show, cached in the DB after the first lookup.
+ * Needed to ask OMDb for episode ratings.
+ */
+export async function fetchShowImdbId(tmdbShowId: number): Promise<string | null> {
+  try {
+    const result = await cachedTmdbCall(
+      `tmdb-tv-external-${tmdbShowId}`,
+      () => getTmdbClient().tvExternalIds({ id: tmdbShowId }),
+      24 * 60
+    );
+    const imdbId = (result as { imdb_id?: string | null }).imdb_id;
+    return imdbId && /^tt\d+$/i.test(imdbId) ? imdbId : null;
+  } catch {
+    return null;
+  }
+}
+
+type OmdbSeasonResponse = {
+  Response?: string;
+  Episodes?: { Episode?: string; Title?: string; imdbRating?: string; imdbID?: string }[];
+};
+
+/**
+ * IMDb ratings for a whole season, keyed by episode number.
+ *
+ * OMDb returns the entire season in a single request, so this costs one call
+ * per season rather than one per episode. Episodes IMDb has not rated yet come
+ * back as "N/A" and are omitted rather than stored as 0.
+ */
+export async function fetchSeasonImdbRatings(
+  seriesImdbId: string,
+  seasonNumber: number
+): Promise<Map<number, number>> {
+  const ratings = new Map<number, number>();
+  const apiKey = getOmdbApiKey();
+  if (!apiKey || !seriesImdbId) return ratings;
+
+  const cacheKey = `omdb-season-${seriesImdbId}-${seasonNumber}`;
+  const cached = tmdbCache.get(cacheKey) as Map<number, number> | null;
+  if (cached) return cached;
+
+  try {
+    const url = `https://www.omdbapi.com/?i=${encodeURIComponent(seriesImdbId)}&Season=${seasonNumber}&apikey=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!response.ok) return ratings;
+
+    const data = (await response.json()) as OmdbSeasonResponse;
+    if (data.Response === 'False' || !Array.isArray(data.Episodes)) return ratings;
+
+    for (const episode of data.Episodes) {
+      const number = Number.parseInt(episode.Episode || '', 10);
+      const rating = Number.parseFloat(episode.imdbRating || '');
+      if (Number.isInteger(number) && Number.isFinite(rating) && rating > 0) {
+        ratings.set(number, rating);
+      }
+    }
+
+    // Short TTL while a season is still airing so new ratings appear promptly.
+    tmdbCache.set(cacheKey, ratings, 6 * 60 * 60 * 1000);
+  } catch (e) {
+    console.warn(`OMDb season rating fetch failed for ${seriesImdbId} S${seasonNumber}:`, e);
+  }
+
+  return ratings;
+}
+
 // Cache season data within a scan session to avoid redundant API calls
 const seasonCache = new Map<string, EpisodeMetadata[]>();
 

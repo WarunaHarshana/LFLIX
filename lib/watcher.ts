@@ -321,15 +321,55 @@ class FolderWatcher {
     }
 
     /**
+     * Look up IMDb episode ratings a season at a time, resolving (and caching)
+     * each show's series IMDb id on first use.
+     */
+    private async buildImdbResolver(
+        rows: { showId: number; seasonNumber: number; episodeNumber: number; tmdbId: number; imdbId: string | null }[],
+        seasonCache: Map<string, Map<number, number>>
+    ) {
+        const { fetchShowImdbId } = await import('./metadata');
+        const seriesIds = new Map<number, string | null>();
+
+        for (const row of rows) {
+            if (seriesIds.has(row.showId)) continue;
+            if (row.imdbId) {
+                seriesIds.set(row.showId, row.imdbId);
+                continue;
+            }
+            const resolved = await fetchShowImdbId(row.tmdbId);
+            if (resolved) {
+                db.prepare('UPDATE shows SET imdbId = ? WHERE id = ?').run(resolved, row.showId);
+            }
+            seriesIds.set(row.showId, resolved);
+        }
+
+        return async (
+            row: { showId: number; seasonNumber: number; episodeNumber: number },
+            fetchSeason: (seriesImdbId: string, season: number) => Promise<Map<number, number>>
+        ): Promise<number | null> => {
+            const seriesId = seriesIds.get(row.showId);
+            if (!seriesId) return null;
+
+            const key = `${seriesId}-${row.seasonNumber}`;
+            if (!seasonCache.has(key)) {
+                seasonCache.set(key, await fetchSeason(seriesId, row.seasonNumber));
+            }
+            return seasonCache.get(key)?.get(row.episodeNumber) ?? null;
+        };
+    }
+
+    /**
      * Re-fetch episodes whose TMDB data is still provisional: a placeholder
      * title, missing artwork/overview, or a rating backed by too few votes.
      * Capped per cycle so a large library does not hammer TMDB.
      */
     private async refreshProvisionalEpisodes(limit = 60): Promise<number> {
-        const { fetchEpisodeMetadata, isPlaceholderEpisodeTitle, MIN_EPISODE_VOTES } = await import('./metadata');
+        const { fetchEpisodeMetadata, fetchSeasonImdbRatings, isPlaceholderEpisodeTitle, MIN_EPISODE_VOTES } =
+            await import('./metadata');
 
         const stale = db.prepare(`
-            SELECT e.id, e.seasonNumber, e.episodeNumber, e.title, s.tmdbId
+            SELECT e.id, e.showId, e.seasonNumber, e.episodeNumber, e.title, s.tmdbId, s.imdbId
             FROM episodes e
             JOIN shows s ON s.id = e.showId
             WHERE s.tmdbId IS NOT NULL AND s.tmdbId > 0
@@ -340,15 +380,21 @@ class FolderWatcher {
                 OR e.stillPath IS NULL
                 OR e.overview IS NULL
                 OR e.rating IS NULL
+                OR e.imdbRating IS NULL
                 OR e.voteCount IS NULL
                 OR e.voteCount < ?
               )
             LIMIT ?
         `).all(MIN_EPISODE_VOTES, limit) as {
-            id: number; seasonNumber: number; episodeNumber: number; title: string | null; tmdbId: number;
+            id: number; showId: number; seasonNumber: number; episodeNumber: number;
+            title: string | null; tmdbId: number; imdbId: string | null;
         }[];
 
         if (stale.length === 0) return 0;
+
+        // One OMDb call per season covers every episode in it.
+        const imdbBySeason = new Map<string, Map<number, number>>();
+        const resolveImdb = await this.buildImdbResolver(stale, imdbBySeason);
 
         let updated = 0;
         for (const ep of stale) {
@@ -360,13 +406,15 @@ class FolderWatcher {
                     ? ep.title
                     : meta.title;
 
-                if (meta.stillPath || meta.rating !== null || !isPlaceholderEpisodeTitle(meta.title)) {
+                const imdbRating = await resolveImdb(ep, fetchSeasonImdbRatings);
+
+                if (meta.stillPath || meta.rating !== null || imdbRating !== null || !isPlaceholderEpisodeTitle(meta.title)) {
                     db.prepare(`
                         UPDATE episodes
                         SET title = ?, overview = COALESCE(?, overview), stillPath = COALESCE(?, stillPath),
-                            rating = ?, voteCount = ?
+                            rating = ?, voteCount = ?, imdbRating = COALESCE(?, imdbRating)
                         WHERE id = ?
-                    `).run(title, meta.overview, meta.stillPath, meta.rating, meta.voteCount, ep.id);
+                    `).run(title, meta.overview, meta.stillPath, meta.rating, meta.voteCount, imdbRating, ep.id);
                     updated++;
                 }
             } catch { /* skip */ }

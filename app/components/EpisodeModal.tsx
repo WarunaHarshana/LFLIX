@@ -15,6 +15,7 @@ type Episode = {
     stillPath?: string | null;
     rating?: number | null;
     voteCount?: number | null;
+    imdbRating?: number | null;
     isHDR?: boolean;
     resolution?: string | null;
     videoCodec?: string | null;
@@ -69,11 +70,23 @@ function formatDuration(seconds: number): string {
  */
 const MIN_EPISODE_VOTES = 10;
 
-function hasTrustworthyRating(rating?: number | null, voteCount?: number | null): boolean {
-    if (rating == null || rating <= 0) return false;
+type EpisodeScore = { value: number; source: 'IMDb' | 'TMDB' };
+
+/**
+ * IMDb is preferred wherever it exists — it is what people actually quote, and
+ * it matches how show and movie ratings are already displayed. TMDB is the
+ * fallback, and only once enough people have voted.
+ */
+function episodeScore(
+    imdbRating?: number | null,
+    rating?: number | null,
+    voteCount?: number | null
+): EpisodeScore | null {
+    if (imdbRating != null && imdbRating > 0) return { value: imdbRating, source: 'IMDb' };
+    if (rating == null || rating <= 0) return null;
     // Older rows predate vote tracking; show those rather than blank the UI.
-    if (voteCount == null) return true;
-    return voteCount >= MIN_EPISODE_VOTES;
+    if (voteCount != null && voteCount < MIN_EPISODE_VOTES) return null;
+    return { value: rating, source: 'TMDB' };
 }
 
 export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEpisode, onDeleteEpisode, onRemoveEpisodeFromLibrary, onMarkWatched }: Props) {
@@ -84,7 +97,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
     const [showStreamServers, setShowStreamServers] = useState(false);
     const [showRatingGrid, setShowRatingGrid] = useState(true);
-    const [hoveredRating, setHoveredRating] = useState<{ season: number; episode: number; rating: number | null; voteCount: number | null; x: number; y: number } | null>(null);
+    const [hoveredRating, setHoveredRating] = useState<{ season: number; episode: number; rating: number | null; voteCount: number | null; imdbRating: number | null; x: number; y: number } | null>(null);
     const [isDownloadingMissing, setIsDownloadingMissing] = useState(false);
     
     const [isDownloadingNext, setIsDownloadingNext] = useState(false);
@@ -206,15 +219,20 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                     <span>{show.title}</span>
                                     <span>•</span>
                                     <span>S{selectedEpisode.seasonNumber} E{selectedEpisode.episodeNumber}</span>
-                                    {hasTrustworthyRating(selectedEpisode.rating, selectedEpisode.voteCount) && (
-                                        <>
-                                            <span>•</span>
-                                            <span className="inline-flex items-center gap-1 text-amber-400">
-                                                <Star className="w-3.5 h-3.5 fill-amber-400" />
-                                                {selectedEpisode.rating?.toFixed(1)}
-                                            </span>
-                                        </>
-                                    )}
+                                    {(() => {
+                                        const score = episodeScore(selectedEpisode.imdbRating, selectedEpisode.rating, selectedEpisode.voteCount);
+                                        if (!score) return null;
+                                        return (
+                                            <>
+                                                <span>•</span>
+                                                <span className="inline-flex items-center gap-1 text-amber-400" title={`${score.source} rating`}>
+                                                    <Star className="w-3.5 h-3.5 fill-amber-400" />
+                                                    {score.value.toFixed(1)}
+                                                    <span className="text-[10px] text-neutral-400">{score.source}</span>
+                                                </span>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                                 <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                                     {selectedEpisode.resolution && (
@@ -460,6 +478,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                                         episode: ep.episodeNumber,
                                                                         rating: ep.rating ?? null,
                                                                         voteCount: ep.voteCount ?? null,
+                                                                        imdbRating: ep.imdbRating ?? null,
                                                                         x: rect.left + rect.width / 2,
                                                                         y: rect.top - 8
                                                                     });
@@ -565,12 +584,19 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                         <h4 className="font-medium text-neutral-200 group-hover:text-red-500 transition truncate">
                                                             {ep.title}
                                                         </h4>
-                                                        {hasTrustworthyRating(ep.rating, ep.voteCount) && (
-                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] rounded font-semibold">
-                                                                <Star className="w-2.5 h-2.5 fill-amber-300" />
-                                                                {ep.rating?.toFixed(1)}
-                                                            </span>
-                                                        )}
+                                                        {(() => {
+                                                            const score = episodeScore(ep.imdbRating, ep.rating, ep.voteCount);
+                                                            if (!score) return null;
+                                                            return (
+                                                                <span
+                                                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] rounded font-semibold"
+                                                                    title={`${score.source} rating`}
+                                                                >
+                                                                    <Star className="w-2.5 h-2.5 fill-amber-300" />
+                                                                    {score.value.toFixed(1)}
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </div>
 
                                                     {ep.overview && (
@@ -702,9 +728,13 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                     className="fixed z-[70] -translate-x-1/2 -translate-y-full px-2 py-1 rounded bg-black/90 border border-neutral-700 text-[11px] text-neutral-200 pointer-events-none"
                     style={{ left: hoveredRating.x, top: hoveredRating.y }}
                 >
-                    {hasTrustworthyRating(hoveredRating.rating, hoveredRating.voteCount)
-                        ? `S${hoveredRating.season}E${hoveredRating.episode} - ${hoveredRating.rating?.toFixed(1)}★`
-                        : `S${hoveredRating.season}E${hoveredRating.episode} - Not rated yet`}
+                    {(() => {
+                        const score = episodeScore(hoveredRating.imdbRating, hoveredRating.rating, hoveredRating.voteCount);
+                        const label = `S${hoveredRating.season}E${hoveredRating.episode}`;
+                        return score
+                            ? `${label} - ${score.value.toFixed(1)}★ ${score.source}`
+                            : `${label} - Not rated yet`;
+                    })()}
                 </div>
             )}
         </div>

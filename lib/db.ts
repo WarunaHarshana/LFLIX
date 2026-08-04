@@ -402,8 +402,8 @@ initializeFullTextSearch();
 const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads', 'auto_track', 'notifications', 'episode_releases', 'movie_releases'];
 const VALID_COLUMNS: Record<string, string[]> = {
   movies: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
-  shows: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating'],
-  episodes: ['stillPath', 'overview', 'rating', 'voteCount', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
+  shows: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating', 'imdbId'],
+  episodes: ['stillPath', 'overview', 'rating', 'voteCount', 'imdbRating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
   watchlist: ['trackRelease', 'imdbRating'],
@@ -445,6 +445,12 @@ addColumnIfNotExists('episodes', 'rating', 'REAL');
 // How many TMDB votes back an episode rating. A just-aired episode can sit at
 // 1.0 off three votes, which is noise; the UI hides scores below a threshold.
 addColumnIfNotExists('episodes', 'voteCount', 'INTEGER');
+// IMDb episode scores, sourced from OMDb. Preferred over the TMDB score in the
+// UI, matching how shows and movies already work.
+addColumnIfNotExists('episodes', 'imdbRating', 'REAL');
+// The series IMDb id, so per-season OMDb lookups need one TMDB call per show
+// rather than one per refresh.
+addColumnIfNotExists('shows', 'imdbId', 'TEXT');
 
 // Add HDR detection column
 addColumnIfNotExists('movies', 'isHDR', 'INTEGER DEFAULT 0');
