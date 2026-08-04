@@ -5,6 +5,7 @@ import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward,
 import VideoPlayer from './VideoPlayer';
 import { useTheme } from './ThemeProvider';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
+import { rankServersByQuality } from '@/lib/streamServerRanking';
 
 type StreamServer = {
   id: string;
@@ -31,58 +32,6 @@ const VPN_AUTO_FAILOVER_TIMEOUT_MS = 60000;
 const IFRAME_BOOTSTRAP_MS = 2500;
 const PLAYBACK_GRACE_MS = 18000;
 const VPN_PLAYBACK_GRACE_MS = 90000;
-
-const QUALITY_RANK: Record<StreamServer['qualityHint'], number> = {
-  unknown: 0,
-  '720p': 1,
-  '1080p': 2,
-  '2160p': 3,
-};
-
-const TIER_RANK: Record<string, number> = {
-  best: 4,
-  great: 3,
-  good: 2,
-  ok: 1,
-};
-
-function rankServersByQuality(servers: StreamServer[]): StreamServer[] {
-  return [...servers].sort((a, b) => {
-    // 1. Quality Resolution (highest quality first)
-    const rankDiff = QUALITY_RANK[b.qualityHint] - QUALITY_RANK[a.qualityHint];
-    if (rankDiff !== 0) {
-      return rankDiff;
-    }
-
-    // 2. Reachability (reachable first)
-    const reachableDiff = Number(b.isReachable) - Number(a.isReachable);
-    if (reachableDiff !== 0) {
-      return reachableDiff;
-    }
-
-    // 3. Direct Streams (direct first)
-    if (a.isDirect !== b.isDirect) {
-      if (a.isDirect && a.isReachable) return -1;
-      if (b.isDirect && b.isReachable) return 1;
-    }
-
-    // 4. Source Tier (best > great > good > ok)
-    const tierRankA = a.tier ? (TIER_RANK[a.tier] ?? 1) : 1;
-    const tierRankB = b.tier ? (TIER_RANK[b.tier] ?? 1) : 1;
-    if (tierRankB !== tierRankA) {
-      return tierRankB - tierRankA;
-    }
-
-    // 5. Latency (lower latency first)
-    const latencyA = Number.isFinite(a.latencyMs) ? a.latencyMs : Number.MAX_SAFE_INTEGER;
-    const latencyB = Number.isFinite(b.latencyMs) ? b.latencyMs : Number.MAX_SAFE_INTEGER;
-    if (latencyA !== latencyB) {
-      return latencyA - latencyB;
-    }
-
-    return a.order - b.order;
-  });
-}
 
 function getServerLabel(server: StreamServer | undefined, index: number): string {
   if (!server) {
@@ -159,6 +108,34 @@ type Props = {
   onClose: () => void;
 };
 
+/**
+ * Insert <link rel="preconnect"> for each server origin so the DNS lookup and
+ * TLS handshake happen while the user is still choosing, rather than in front
+ * of the first byte of video. Idempotent, and the tags are left in place for
+ * the lifetime of the page since failover may return to any of them.
+ */
+function preconnectToServers(servers: { url: string }[]): void {
+    if (typeof document === 'undefined') return;
+
+    for (const server of servers) {
+        let origin: string;
+        try {
+            origin = new URL(server.url).origin;
+        } catch {
+            continue;
+        }
+        if (document.querySelector(`link[rel="preconnect"][href="${origin}"]`)) continue;
+
+        const link = document.createElement('link');
+        link.rel = 'preconnect';
+        link.href = origin;
+        // Third-party players are cross-origin; without this the handshake is
+        // repeated for the credentialed connection.
+        link.crossOrigin = 'anonymous';
+        document.head.appendChild(link);
+    }
+}
+
 export default function StreamServerModal({ tmdbId, type, title, season, episode, onClose }: Props) {
     useModalBehavior(true, onClose);
 
@@ -210,6 +187,12 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
         const rankedServers = rankServersByQuality(data.servers as StreamServer[]);
         const bestServerIndex = typeof data.bestServerIndex === 'number' ? data.bestServerIndex : 0;
         const firstIndex = rankedServers.length > 0 ? Math.max(0, Math.min(bestServerIndex, rankedServers.length - 1)) : -1;
+
+        // Warm the connections to the top candidates before anything is played.
+        // DNS + TLS to a third-party host is dead time at the front of every
+        // start, and the same cost is paid again on each failover — doing it
+        // during the probe hides it. Only the leaders, so this stays cheap.
+        preconnectToServers(rankedServers.slice(0, 3));
 
         setServers(rankedServers);
         setActiveServer(Math.max(firstIndex, 0));

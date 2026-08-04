@@ -1,13 +1,112 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import { X, AlertCircle, Maximize, Minimize, Settings2, Subtitles, AudioLines, Check } from 'lucide-react';
+import { X, AlertCircle, Maximize, Minimize, Settings2, Subtitles, AudioLines, Check, Gauge } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorVideoPlayer } from 'capacitor-video-player';
 import { getServerUrl } from '@/lib/mobileConfig';
 
 // HLS sources are played via hls.js (or natively on Safari). The on-the-fly
 // transcode endpoint also returns an HLS playlist, so it matches here too.
+/**
+ * Whether a source is served by this machine (the on-demand transcoder or the
+ * raw file endpoint) rather than fetched across the internet from a third-party
+ * streaming server. The two need opposite tuning, so everything below keys off
+ * this.
+ */
+function isLocalSource(url: string): boolean {
+  if (!url) return true;
+  if (url.startsWith('/')) return true;
+  try {
+    const { hostname } = new URL(url, typeof window !== 'undefined' ? window.location.href : 'http://localhost');
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      /^192\.168\./.test(hostname) ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * hls.js settings differ sharply by where the media comes from.
+ *
+ * Local: the bottleneck is ffmpeg, not the network. Buffer far ahead to give it
+ * a runway and wait patiently on a slow segment, because a slow segment means
+ * the encoder is still working rather than that anything is broken.
+ *
+ * Remote: the bottleneck is bandwidth, and a stalled third-party server should
+ * fail fast so the caller can switch to another one. Quality also has to be
+ * chased deliberately — with stock settings hls.js starts at the lowest
+ * rendition and edges up, so the opening of every episode looks soft.
+ */
+function buildHlsConfig(src: string): Record<string, unknown> {
+  const local = isLocalSource(src);
+
+  if (local) {
+    return {
+      enableWorker: true,
+      maxBufferLength: 120,
+      maxMaxBufferLength: 240,
+      maxBufferSize: 120 * 1000 * 1000,
+      backBufferLength: 60,
+      fragLoadPolicy: {
+        default: {
+          maxTimeToFirstByteMs: 30_000,
+          maxLoadTimeMs: 120_000,
+          timeoutRetry: { maxNumRetry: 4, retryDelayMs: 500, maxRetryDelayMs: 4000 },
+          errorRetry: { maxNumRetry: 6, retryDelayMs: 500, maxRetryDelayMs: 4000 },
+        },
+      },
+    };
+  }
+
+  return {
+    enableWorker: true,
+    // A minute of runway absorbs jitter on a public route without hoarding
+    // memory on a TV or phone.
+    maxBufferLength: 60,
+    maxMaxBufferLength: 120,
+    maxBufferSize: 60 * 1000 * 1000,
+    backBufferLength: 30,
+
+    // Start high instead of climbing. Seeding the bandwidth estimate well above
+    // hls.js's cautious default means the first segments are already at a good
+    // rendition; ABR still drops if the link cannot sustain it.
+    startLevel: -1,
+    abrEwmaDefaultEstimate: 8_000_000,
+    // Never cap the rendition to the size of the video element — a windowed
+    // player should still be free to pull 1080p/4K.
+    capLevelToPlayerSize: false,
+    // Use more of the measured bandwidth, and be quicker to move up.
+    abrBandWidthFactor: 0.95,
+    abrBandWidthUpFactor: 0.8,
+
+    // Fail fast: a wedged third-party host should surface quickly so the modal
+    // can move to the next server rather than sitting on a spinner.
+    fragLoadPolicy: {
+      default: {
+        maxTimeToFirstByteMs: 10_000,
+        maxLoadTimeMs: 30_000,
+        timeoutRetry: { maxNumRetry: 2, retryDelayMs: 500, maxRetryDelayMs: 2000 },
+        errorRetry: { maxNumRetry: 3, retryDelayMs: 500, maxRetryDelayMs: 2000 },
+      },
+    },
+    manifestLoadPolicy: {
+      default: {
+        maxTimeToFirstByteMs: 8_000,
+        maxLoadTimeMs: 15_000,
+        timeoutRetry: { maxNumRetry: 2, retryDelayMs: 500, maxRetryDelayMs: 2000 },
+        errorRetry: { maxNumRetry: 2, retryDelayMs: 500, maxRetryDelayMs: 2000 },
+      },
+    },
+  };
+}
+
 function isHlsSource(url: string): boolean {
   return /\.m3u8(\?|$)/i.test(url) || /\/api\/transcode(\?|$)/i.test(url);
 }
@@ -61,6 +160,12 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(0);
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState<number>(-1);
   const [hdrSupported, setHdrSupported] = useState<boolean | null>(null);
+  // Rendition ladder from the HLS manifest, plus the level currently playing.
+  // -1 means ABR is choosing.
+  const [qualityLevels, setQualityLevels] = useState<{ index: number; label: string; height: number; bitrate: number }[]>([]);
+  const [activeLevel, setActiveLevel] = useState<number>(-1);
+  const [preferredLevel, setPreferredLevel] = useState<number>(-1);
+  const hlsRef = useRef<any>(null);
   const isNative = Capacitor.isNativePlatform();
 
   // Build an API URL that forwards the same auth params present on the stream src
@@ -156,6 +261,8 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     const video = videoRef.current;
     if (!video) return;
     if (!isHlsSource(activeSrc)) return;
+    setQualityLevels([]);
+    setActiveLevel(-1);
 
     // Safari / iOS can play HLS natively.
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -176,27 +283,26 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
         // transcoded on demand, so the cost to avoid is ffmpeg starting late —
         // not bandwidth. Buffering further ahead than the defaults keeps the
         // encoder working steadily and absorbs a slow segment without a stall.
-        hls = new Hls({
-          enableWorker: true,
-          // ~2 min ahead: on a LAN the bytes are cheap, and it gives the
-          // on-demand transcoder a wide runway.
-          maxBufferLength: 120,
-          maxMaxBufferLength: 240,
-          // Cap by size too, so 4K segments cannot balloon memory on a TV.
-          maxBufferSize: 120 * 1000 * 1000,
-          // Keep some behind for instant short seeks backwards.
-          backBufferLength: 60,
-          // Segments come from localhost or the LAN; a slow one means ffmpeg is
-          // still working, so retry rather than giving up quickly.
-          fragLoadPolicy: {
-            default: {
-              maxTimeToFirstByteMs: 30_000,
-              maxLoadTimeMs: 120_000,
-              timeoutRetry: { maxNumRetry: 4, retryDelayMs: 500, maxRetryDelayMs: 4000 },
-              errorRetry: { maxNumRetry: 6, retryDelayMs: 500, maxRetryDelayMs: 4000 },
-            },
-          },
+        hls = new Hls(buildHlsConfig(activeSrc));
+        hlsRef.current = hls;
+
+        // Expose the rendition ladder so the viewer can pin a quality instead
+        // of leaving it to ABR.
+        hls.on(Hls.Events.MANIFEST_PARSED, (_e: any, data: any) => {
+          const levels = (data?.levels || []).map((lvl: any, index: number) => ({
+            index,
+            label: lvl.height ? `${lvl.height}p` : `${Math.round((lvl.bitrate || 0) / 1000)}k`,
+            height: lvl.height || 0,
+            bitrate: lvl.bitrate || 0,
+          }));
+          // Highest first, so the quality menu reads best-to-worst.
+          levels.sort((a: any, b: any) => b.height - a.height || b.bitrate - a.bitrate);
+          setQualityLevels(levels);
         });
+        hls.on(Hls.Events.LEVEL_SWITCHED, (_e: any, data: any) => {
+          setActiveLevel(typeof data?.level === 'number' ? data.level : -1);
+        });
+
         hls.loadSource(activeSrc);
         hls.attachMedia(videoRef.current);
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
@@ -497,6 +603,19 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     }
   };
 
+  /**
+   * Pin a rendition, or hand control back to ABR with -1.
+   * `nextLevel` applies from the next fragment rather than flushing what is
+   * already buffered, so switching does not stall playback.
+   */
+  const changeQuality = (levelIndex: number) => {
+    setPreferredLevel(levelIndex);
+    const hls = hlsRef.current;
+    if (!hls) return;
+    hls.nextLevel = levelIndex;
+    if (levelIndex === -1) hls.currentLevel = -1;
+  };
+
   // Change subtitle track
   const changeSubtitleTrack = (index: number) => {
     const video = videoRef.current;
@@ -518,7 +637,8 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
   const hasAudioTracks = audioTracks.length > 1;
   const hasSubtitleTracks = subtitleTracks.length > 0;
-  const hasSettings = hasAudioTracks || hasSubtitleTracks;
+  const hasQualityLevels = qualityLevels.length > 1;
+  const hasSettings = hasAudioTracks || hasSubtitleTracks || hasQualityLevels;
 
   // Debug log to see what's detected
   useEffect(() => {
@@ -571,7 +691,48 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
             {/* Settings Menu */}
             {showSettings && (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl overflow-hidden z-50">
+              <div className="absolute right-0 top-full mt-2 w-72 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
+                {/* Quality — only meaningful when the source offers a ladder */}
+                {hasQualityLevels && (
+                  <div className="border-b border-neutral-700">
+                    <div className="px-4 py-2 bg-neutral-900/50 flex items-center gap-2">
+                      <Gauge className="w-4 h-4" />
+                      <span className="text-sm font-medium">Quality</span>
+                    </div>
+                    <button
+                      onClick={() => changeQuality(-1)}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center justify-between hover:bg-neutral-700 transition ${preferredLevel === -1 ? 'text-red-400' : 'text-neutral-300'}`}
+                    >
+                      <span>
+                        Auto
+                        {preferredLevel === -1 && activeLevel >= 0 && (
+                          <span className="text-neutral-500 ml-1.5">
+                            ({qualityLevels.find((l) => l.index === activeLevel)?.label ?? '—'})
+                          </span>
+                        )}
+                      </span>
+                      {preferredLevel === -1 && <Check className="w-4 h-4" />}
+                    </button>
+                    {qualityLevels.map((level) => (
+                      <button
+                        key={level.index}
+                        onClick={() => changeQuality(level.index)}
+                        className={`w-full px-4 py-2 text-left text-sm flex items-center justify-between hover:bg-neutral-700 transition ${preferredLevel === level.index ? 'text-red-400' : 'text-neutral-300'}`}
+                      >
+                        <span>
+                          {level.label}
+                          {level.bitrate > 0 && (
+                            <span className="text-neutral-500 ml-1.5">
+                              {(level.bitrate / 1_000_000).toFixed(1)} Mbps
+                            </span>
+                          )}
+                        </span>
+                        {preferredLevel === level.index && <Check className="w-4 h-4" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Audio Tracks */}
                 <div className="border-b border-neutral-700">
                   <div className="px-4 py-2 bg-neutral-900/50 flex items-center gap-2">
