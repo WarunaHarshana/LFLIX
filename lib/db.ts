@@ -403,7 +403,7 @@ const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_f
 const VALID_COLUMNS: Record<string, string[]> = {
   movies: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   shows: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating'],
-  episodes: ['stillPath', 'overview', 'rating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
+  episodes: ['stillPath', 'overview', 'rating', 'voteCount', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
   watchlist: ['trackRelease', 'imdbRating'],
@@ -442,6 +442,9 @@ addColumnIfNotExists('shows', 'genres', 'TEXT');
 addColumnIfNotExists('movies', 'imdbRating', 'REAL');
 addColumnIfNotExists('shows', 'imdbRating', 'REAL');
 addColumnIfNotExists('episodes', 'rating', 'REAL');
+// How many TMDB votes back an episode rating. A just-aired episode can sit at
+// 1.0 off three votes, which is noise; the UI hides scores below a threshold.
+addColumnIfNotExists('episodes', 'voteCount', 'INTEGER');
 
 // Add HDR detection column
 addColumnIfNotExists('movies', 'isHDR', 'INTEGER DEFAULT 0');

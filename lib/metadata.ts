@@ -582,7 +582,27 @@ export interface EpisodeMetadata {
   overview: string | null;
   stillPath: string | null;
   rating: number | null;
+  /**
+   * How many TMDB votes the rating is based on. A just-aired episode routinely
+   * sits at 1.0 or 2.8 off three or four votes, which is noise rather than a
+   * rating, so callers need this to decide whether the score is worth showing.
+   */
+  voteCount: number | null;
 }
+
+/**
+ * TMDB names an episode "Episode 7" until someone fills the real title in.
+ * Combined with our own `S3 E7` fallback, these are the two shapes that mean
+ * "no real title yet" and should be re-fetched later rather than kept forever.
+ */
+export function isPlaceholderEpisodeTitle(title: string | null | undefined): boolean {
+  const trimmed = title?.trim();
+  if (!trimmed) return true;
+  return /^(episode\s*\d+|s\d+\s*e\d+)$/i.test(trimmed);
+}
+
+/** Below this, a TMDB episode score is too thinly voted to display. */
+export const MIN_EPISODE_VOTES = 10;
 
 // Cache season data within a scan session to avoid redundant API calls
 const seasonCache = new Map<string, EpisodeMetadata[]>();
@@ -597,6 +617,7 @@ export async function fetchEpisodeMetadata(
     overview: null,
     stillPath: null,
     rating: null,
+    voteCount: null,
   };
 
   if (!tmdbShowId || tmdbShowId <= 0) return fallback;
@@ -619,6 +640,7 @@ export async function fetchEpisodeMetadata(
           overview: ep.overview || null,
           stillPath: ep.still_path || null,
           rating: ep.vote_average ?? null,
+          voteCount: ep.vote_count ?? null,
         }));
         seasonCache.set(cacheKey, episodes);
       } else {
@@ -636,6 +658,7 @@ export async function fetchEpisodeMetadata(
         overview: episode.overview,
         stillPath: episode.stillPath,
         rating: episode.rating,
+        voteCount: episode.voteCount,
       };
     }
   } catch (e) {

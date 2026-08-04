@@ -14,6 +14,7 @@ type Episode = {
     overview?: string | null;
     stillPath?: string | null;
     rating?: number | null;
+    voteCount?: number | null;
     isHDR?: boolean;
     resolution?: string | null;
     videoCodec?: string | null;
@@ -60,6 +61,21 @@ function formatDuration(seconds: number): string {
     return `${m}m`;
 }
 
+/**
+ * A TMDB episode score is only meaningful once enough people have voted. A
+ * just-aired episode routinely reads 1.0 or 2.8 off three or four votes, which
+ * looks like a damning review rather than the noise it is — so hide it until
+ * the sample is large enough.
+ */
+const MIN_EPISODE_VOTES = 10;
+
+function hasTrustworthyRating(rating?: number | null, voteCount?: number | null): boolean {
+    if (rating == null || rating <= 0) return false;
+    // Older rows predate vote tracking; show those rather than blank the UI.
+    if (voteCount == null) return true;
+    return voteCount >= MIN_EPISODE_VOTES;
+}
+
 export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEpisode, onDeleteEpisode, onRemoveEpisodeFromLibrary, onMarkWatched }: Props) {
     useModalBehavior(true, onClose);
 
@@ -68,7 +84,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
     const [showStreamServers, setShowStreamServers] = useState(false);
     const [showRatingGrid, setShowRatingGrid] = useState(true);
-    const [hoveredRating, setHoveredRating] = useState<{ season: number; episode: number; rating: number | null; x: number; y: number } | null>(null);
+    const [hoveredRating, setHoveredRating] = useState<{ season: number; episode: number; rating: number | null; voteCount: number | null; x: number; y: number } | null>(null);
     const [isDownloadingMissing, setIsDownloadingMissing] = useState(false);
     
     const [isDownloadingNext, setIsDownloadingNext] = useState(false);
@@ -190,12 +206,12 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                     <span>{show.title}</span>
                                     <span>•</span>
                                     <span>S{selectedEpisode.seasonNumber} E{selectedEpisode.episodeNumber}</span>
-                                    {selectedEpisode.rating != null && selectedEpisode.rating > 0 && (
+                                    {hasTrustworthyRating(selectedEpisode.rating, selectedEpisode.voteCount) && (
                                         <>
                                             <span>•</span>
                                             <span className="inline-flex items-center gap-1 text-amber-400">
                                                 <Star className="w-3.5 h-3.5 fill-amber-400" />
-                                                {selectedEpisode.rating.toFixed(1)}
+                                                {selectedEpisode.rating?.toFixed(1)}
                                             </span>
                                         </>
                                     )}
@@ -443,6 +459,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                                         season,
                                                                         episode: ep.episodeNumber,
                                                                         rating: ep.rating ?? null,
+                                                                        voteCount: ep.voteCount ?? null,
                                                                         x: rect.left + rect.width / 2,
                                                                         y: rect.top - 8
                                                                     });
@@ -548,10 +565,10 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                         <h4 className="font-medium text-neutral-200 group-hover:text-red-500 transition truncate">
                                                             {ep.title}
                                                         </h4>
-                                                        {ep.rating != null && ep.rating > 0 && (
+                                                        {hasTrustworthyRating(ep.rating, ep.voteCount) && (
                                                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] rounded font-semibold">
                                                                 <Star className="w-2.5 h-2.5 fill-amber-300" />
-                                                                {ep.rating.toFixed(1)}
+                                                                {ep.rating?.toFixed(1)}
                                                             </span>
                                                         )}
                                                     </div>
@@ -685,9 +702,9 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                     className="fixed z-[70] -translate-x-1/2 -translate-y-full px-2 py-1 rounded bg-black/90 border border-neutral-700 text-[11px] text-neutral-200 pointer-events-none"
                     style={{ left: hoveredRating.x, top: hoveredRating.y }}
                 >
-                    {hoveredRating.rating != null && hoveredRating.rating > 0
-                        ? `S${hoveredRating.season}E${hoveredRating.episode} - ${hoveredRating.rating.toFixed(1)}★`
-                        : `S${hoveredRating.season}E${hoveredRating.episode} - No rating`}
+                    {hasTrustworthyRating(hoveredRating.rating, hoveredRating.voteCount)
+                        ? `S${hoveredRating.season}E${hoveredRating.episode} - ${hoveredRating.rating?.toFixed(1)}★`
+                        : `S${hoveredRating.season}E${hoveredRating.episode} - Not rated yet`}
                 </div>
             )}
         </div>

@@ -302,6 +302,13 @@ class FolderWatcher {
                 await new Promise(r => setTimeout(r, 200));
             }
 
+            // Episodes of a currently-airing show land with TMDB's own
+            // "Episode 7" placeholder and a rating off three or four votes.
+            // TMDB fills both in over the following days, and nothing else ever
+            // revisits them, so an episode scanned on air night kept a bogus
+            // title and score forever. Re-fetch the provisional ones.
+            refreshed += await this.refreshProvisionalEpisodes();
+
             if (refreshed > 0) {
                 console.log(`[BackgroundRefresh] Refreshed ${refreshed}/${totalItems} items`);
                 this.emit({ type: 'scan_complete', added: 0 }); // Trigger UI refresh
@@ -311,6 +318,65 @@ class FolderWatcher {
         } finally {
             this.isRefreshing = false;
         }
+    }
+
+    /**
+     * Re-fetch episodes whose TMDB data is still provisional: a placeholder
+     * title, missing artwork/overview, or a rating backed by too few votes.
+     * Capped per cycle so a large library does not hammer TMDB.
+     */
+    private async refreshProvisionalEpisodes(limit = 60): Promise<number> {
+        const { fetchEpisodeMetadata, isPlaceholderEpisodeTitle, MIN_EPISODE_VOTES } = await import('./metadata');
+
+        const stale = db.prepare(`
+            SELECT e.id, e.seasonNumber, e.episodeNumber, e.title, s.tmdbId
+            FROM episodes e
+            JOIN shows s ON s.id = e.showId
+            WHERE s.tmdbId IS NOT NULL AND s.tmdbId > 0
+              AND (
+                e.title IS NULL
+                OR e.title LIKE 'S% E%'
+                OR e.title LIKE 'Episode %'
+                OR e.stillPath IS NULL
+                OR e.overview IS NULL
+                OR e.rating IS NULL
+                OR e.voteCount IS NULL
+                OR e.voteCount < ?
+              )
+            LIMIT ?
+        `).all(MIN_EPISODE_VOTES, limit) as {
+            id: number; seasonNumber: number; episodeNumber: number; title: string | null; tmdbId: number;
+        }[];
+
+        if (stale.length === 0) return 0;
+
+        let updated = 0;
+        for (const ep of stale) {
+            try {
+                const meta = await fetchEpisodeMetadata(ep.tmdbId, ep.seasonNumber, ep.episodeNumber);
+
+                // Never trade a real title for a placeholder.
+                const title = isPlaceholderEpisodeTitle(meta.title) && !isPlaceholderEpisodeTitle(ep.title)
+                    ? ep.title
+                    : meta.title;
+
+                if (meta.stillPath || meta.rating !== null || !isPlaceholderEpisodeTitle(meta.title)) {
+                    db.prepare(`
+                        UPDATE episodes
+                        SET title = ?, overview = COALESCE(?, overview), stillPath = COALESCE(?, stillPath),
+                            rating = ?, voteCount = ?
+                        WHERE id = ?
+                    `).run(title, meta.overview, meta.stillPath, meta.rating, meta.voteCount, ep.id);
+                    updated++;
+                }
+            } catch { /* skip */ }
+            await new Promise(r => setTimeout(r, 200));
+        }
+
+        if (updated > 0) {
+            console.log(`[BackgroundRefresh] Updated ${updated} provisional episode(s)`);
+        }
+        return updated;
     }
 
     // Check if library is empty and trigger a background rescan

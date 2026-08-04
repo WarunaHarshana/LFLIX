@@ -16,6 +16,7 @@ type Episode = {
   overview: string | null;
   stillPath: string | null;
   rating: number | null;
+  voteCount: number | null;
   isHDR: number;
   resolution: string | null;
   videoCodec: string | null;
@@ -39,6 +40,7 @@ type EpisodeResponse = {
   overview: string | null;
   stillPath: string | null;
   rating: number | null;
+  voteCount: number | null;
   isHDR: boolean;
   resolution: string | null;
   videoCodec: string | null;
@@ -102,6 +104,7 @@ export async function GET(req: Request) {
         overview: ep.overview,
         stillPath: ep.stillPath,
         rating: ep.rating,
+        voteCount: ep.voteCount,
         isHDR: !!ep.isHDR,
         resolution: ep.resolution,
         videoCodec: ep.videoCodec,

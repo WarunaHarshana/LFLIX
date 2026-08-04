@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import db, { cleanupOrphanedAutoTracks } from './db';
-import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata, normalizeShowName, normalizeShowNameForMatch } from './metadata';
+import { fetchMovieMetadata, fetchShowMetadata, fetchEpisodeMetadata, isPlaceholderEpisodeTitle, normalizeShowName, normalizeShowNameForMatch } from './metadata';
 import { probeFile } from './mediainfo';
 import { mapWithConcurrency } from './concurrency';
 import { getSafeErrorMessage } from './security';
@@ -64,8 +64,9 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
       // Check if media info or episode metadata needs updating
       const needsMediaUpdate = (movieExists && !movieExists.resolution) || (epExists && !epExists.resolution);
       const needsMovieMetadata = movieExists && (!movieExists.tmdbId || !movieExists.posterPath || /^(?:www[\s.]|\[)/i.test(movieExists.title || fileName));
-      // Episode needs metadata refresh if title is fallback pattern (e.g., "S1 E1") or stillPath is null
-      const needsEpMetadata = epExists && (!epExists.stillPath || epExists.rating === null || /^S\d+ E\d+$/.test(epExists.title || ''));
+      // Episode needs a metadata refresh while its title is still a placeholder
+      // — ours ("S1 E1") or TMDB's own ("Episode 6") — or artwork/rating is missing.
+      const needsEpMetadata = epExists && (!epExists.stillPath || epExists.rating === null || isPlaceholderEpisodeTitle(epExists.title));
 
       if (!needsMediaUpdate && !needsMovieMetadata && !needsEpMetadata) {
         return { added: false };
@@ -102,9 +103,9 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
           if (show?.tmdbId && show.tmdbId > 0) {
             const epMeta = await fetchEpisodeMetadata(show.tmdbId, epExists.seasonNumber, epExists.episodeNumber);
             // Only update if we got real data (not fallback)
-            if (epMeta.stillPath || epMeta.rating !== null || (epMeta.title && !/^S\d+ E\d+$/.test(epMeta.title))) {
-              db.prepare(`UPDATE episodes SET title = ?, overview = ?, stillPath = ?, rating = ? WHERE id = ?`)
-                .run(epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, epExists.id);
+            if (epMeta.stillPath || epMeta.rating !== null || !isPlaceholderEpisodeTitle(epMeta.title)) {
+              db.prepare(`UPDATE episodes SET title = ?, overview = ?, stillPath = ?, rating = ?, voteCount = ? WHERE id = ?`)
+                .run(epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, epMeta.voteCount, epExists.id);
               console.log(`[Scanner] Updated episode metadata for ${fileName}: "${epMeta.title}" still=${!!epMeta.stillPath}`);
             }
           }
@@ -211,11 +212,11 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
 
       // Insert episode with TMDB metadata and media info
       db.prepare(`INSERT OR IGNORE INTO episodes 
-        (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath, rating, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        (showId, filePath, fileName, seasonNumber, episodeNumber, title, overview, stillPath, rating, voteCount, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           showId, filePath, fileName, tvInfo.season, tvInfo.episode,
-          epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, isHDR,
+          epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, epMeta.voteCount, isHDR,
           resolution || null, videoCodec || null,
           audioCodec || null, audioChannels || null,
           mediaInfo?.bitrate || null, mediaInfo?.duration || null,

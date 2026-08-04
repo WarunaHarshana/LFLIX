@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { fetchEpisodeMetadata, fetchMovieMetadata, fetchShowMetadata } from '@/lib/metadata';
+import { fetchEpisodeMetadata, fetchMovieMetadata, fetchShowMetadata, isPlaceholderEpisodeTitle, MIN_EPISODE_VOTES } from '@/lib/metadata';
 import { apiErrorResponse, getSqliteErrorCode, isSqliteConstraintError, readJsonObject } from '@/lib/apiSecurity';
 import { parsePositiveInt } from '@/lib/security';
 
@@ -121,23 +121,48 @@ export async function POST(req: Request) {
             await new Promise(resolve => setTimeout(resolve, 50));
         }
 
-        // Refresh episodes missing metadata (thumbnails, proper titles)
+        // Refresh episodes whose metadata is missing or provisional.
+        //
+        // The old filter only caught our own `S3 E6` fallback, so an episode
+        // scanned just after airing kept TMDB's *own* "Episode 6" placeholder
+        // and its three-vote rating forever. Recently-aired episodes are also
+        // re-fetched: TMDB fills in the title and the score settles over the
+        // following days, and nothing else ever revisits them.
         const episodesNeedingMeta = db.prepare(`
-            SELECT e.id, e.showId, e.seasonNumber, e.episodeNumber, e.title, e.stillPath, s.tmdbId
+            SELECT e.id, e.showId, e.seasonNumber, e.episodeNumber, e.title, e.rating, e.voteCount, e.stillPath, s.tmdbId
             FROM episodes e
             JOIN shows s ON s.id = e.showId
             WHERE s.tmdbId IS NOT NULL AND s.tmdbId > 0
-            AND (e.stillPath IS NULL OR e.rating IS NULL OR e.title LIKE 'S% E%')
-        `).all() as { id: number; showId: number; seasonNumber: number; episodeNumber: number; title: string; stillPath: string | null; tmdbId: number }[];
+            AND (
+                e.stillPath IS NULL
+                OR e.overview IS NULL
+                OR e.rating IS NULL
+                OR e.title IS NULL
+                OR e.title LIKE 'S% E%'
+                OR e.title LIKE 'Episode %'
+                OR e.voteCount IS NULL
+                OR e.voteCount < ${MIN_EPISODE_VOTES}
+            )
+        `).all() as { id: number; showId: number; seasonNumber: number; episodeNumber: number; title: string; rating: number | null; voteCount: number | null; stillPath: string | null; tmdbId: number }[];
 
         let episodesRefreshed = 0;
         for (const ep of episodesNeedingMeta) {
             try {
                 const epMeta = await fetchEpisodeMetadata(ep.tmdbId, ep.seasonNumber, ep.episodeNumber);
-                // Only update if we got real data (not fallback)
-                if (epMeta.stillPath || epMeta.rating !== null || (epMeta.title && !/^S\d+ E\d+$/.test(epMeta.title))) {
-                    db.prepare(`UPDATE episodes SET title = ?, overview = ?, stillPath = ?, rating = ? WHERE id = ?`)
-                        .run(epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, ep.id);
+
+                // Never overwrite a real title with a placeholder: TMDB can be
+                // briefly inconsistent, and losing a good title is worse than
+                // keeping it one refresh longer.
+                const keepExistingTitle =
+                    isPlaceholderEpisodeTitle(epMeta.title) && !isPlaceholderEpisodeTitle(ep.title);
+                const nextTitle = keepExistingTitle ? ep.title : epMeta.title;
+
+                const gotSomething =
+                    epMeta.stillPath || epMeta.rating !== null || !isPlaceholderEpisodeTitle(epMeta.title);
+
+                if (gotSomething) {
+                    db.prepare(`UPDATE episodes SET title = ?, overview = COALESCE(?, overview), stillPath = COALESCE(?, stillPath), rating = ?, voteCount = ? WHERE id = ?`)
+                        .run(nextTitle, epMeta.overview, epMeta.stillPath, epMeta.rating, epMeta.voteCount, ep.id);
                     episodesRefreshed++;
                 }
             } catch (e) {
