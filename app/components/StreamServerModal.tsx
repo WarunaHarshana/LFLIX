@@ -150,6 +150,9 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
   const [iframeBootstrapped, setIframeBootstrapped] = useState(false);
   const [playbackReady, setPlaybackReady] = useState(false);
   const [vpnMode, setVpnMode] = useState(false);
+  // Set once an embed has been on screen past the grace period without any sign
+  // of life. Only ever surfaces a prompt — never switches on its own.
+  const [maybeStalled, setMaybeStalled] = useState(false);
   const [sandboxEnabled, setSandboxEnabled] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('lflix-sandbox-enabled') === 'true';
@@ -205,6 +208,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
         setShowSources(vpnMode);
         setIframeBootstrapped(false);
         setPlaybackReady(false);
+        setMaybeStalled(false);
       }
     } catch (e) {
       console.error('Failed to fetch servers:', e);
@@ -223,6 +227,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     setIframeError(false);
     setIframeBootstrapped(false);
     setPlaybackReady(false);
+    setMaybeStalled(false);
     setShowSources(true);
     setAttemptedServers([index]);
     attemptedServersRef.current = [index];
@@ -249,7 +254,15 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       }
     }
 
-
+    // Everything has been tried once. Rather than dead-ending, start the list
+    // over from the next reachable server — hosts recover, and the alternative
+    // is an error screen the viewer can do nothing with.
+    for (let step = 1; step < servers.length; step += 1) {
+      const candidate = (currentIndex + step) % servers.length;
+      if (servers[candidate]?.isReachable) {
+        return candidate;
+      }
+    }
 
     return -1;
   };
@@ -271,6 +284,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     setIframeError(false);
     setIframeBootstrapped(false);
     setPlaybackReady(false);
+    setMaybeStalled(false);
     setShowSources((prev) => prev || mode === 'auto');
     setAutoSwitching(mode === 'auto');
     return true;
@@ -298,14 +312,6 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
   if (currentServer?.id === 'vidking' && displayUrl) {
     displayUrl = displayUrl.replace(/color=e11d48/g, `color=${currentAccentHex}`);
   }
-
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
 
   useEffect(() => {
     if (loading || servers.length === 0 || playbackReady || iframeError) {
@@ -335,28 +341,28 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       setAutoSwitching(false);
     }, IFRAME_BOOTSTRAP_MS);
 
-    const playbackWatchdog = window.setTimeout(() => {
-      const switched = tryNextServer(activeServer, 'auto');
-      if (!switched) {
-        setIframeLoading(false);
-        setPlaybackReady(true);
-        setIframeError(true);
-      }
+    // Past this point the embed is on screen and may well be playing — we
+    // cannot tell, because a cross-origin iframe exposes nothing. Silently
+    // switching away from a stream the viewer is watching would be worse than
+    // the stall, so offer the switch instead of taking it.
+    const stalledPrompt = window.setTimeout(() => {
+      setMaybeStalled(true);
     }, playbackGraceTimeout);
 
+    // Hide the overlay so the embed is usable, but do NOT call this "ready":
+    // the grace watchdog below must stay armed in case nothing ever plays.
     const overlayReleaseMs = vpnMode ? IFRAME_BOOTSTRAP_MS + 9000 : IFRAME_BOOTSTRAP_MS + 4500;
     const releaseOverlayTimer = window.setTimeout(() => {
       setIframeLoading(false);
-      setPlaybackReady(true);
       setAutoSwitching(false);
     }, Math.min(playbackGraceTimeout - 1000, overlayReleaseMs));
 
     return () => {
       window.clearTimeout(bootstrapTimer);
-      window.clearTimeout(playbackWatchdog);
+      window.clearTimeout(stalledPrompt);
       window.clearTimeout(releaseOverlayTimer);
     };
-  }, [activeServer, iframeBootstrapped, iframeError, loading, playbackReady, servers.length, vpnMode]);
+  }, [activeServer, iframeBootstrapped, iframeError, loading, playbackReady, servers, vpnMode]);
 
   useEffect(() => {
     if (currentServer?.isDirect) {
@@ -627,10 +633,18 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
             {/* Playback Source */}
             {currentServer?.isDirect ? (
               <VideoPlayer
+                key={`${activeServer}-${displayUrl}`}
                 src={displayUrl}
                 title={title}
                 subtitles={currentServer.directSubtitles}
                 onClose={onClose}
+                onFatalError={() => {
+                  // A direct source that dies used to leave the viewer on the
+                  // player's error screen with no route to the other servers.
+                  if (!tryNextServer(activeServer, 'auto')) {
+                    setIframeError(true);
+                  }
+                }}
               />
             ) : (
               <iframe
@@ -655,6 +669,31 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               />
             )}
           </>
+        )}
+
+        {/* Stalled hint.
+            An embed is opaque, so we cannot tell a wedged player from one the
+            viewer is happily watching. Offering the switch is right where
+            taking it automatically would risk yanking a working stream. */}
+        {maybeStalled && !iframeError && hasAlternateServer && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-4 py-2.5 rounded-full bg-neutral-900/95 border border-neutral-700 shadow-2xl backdrop-blur">
+            <span className="text-xs text-neutral-300">Nothing playing yet?</span>
+            <button
+              onClick={() => {
+                if (!tryNextServer(activeServer, 'manual')) setIframeError(true);
+              }}
+              className="px-3 py-1 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition flex items-center gap-1.5"
+            >
+              <SkipForward className="w-3.5 h-3.5" /> Next source
+            </button>
+            <button
+              onClick={() => setMaybeStalled(false)}
+              aria-label="Dismiss"
+              className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400 transition"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         )}
       </div>
 

@@ -126,6 +126,12 @@ type Props = {
   videoCodec?: string | null;
   audioCodec?: string | null;
   fileName?: string | null;
+  /**
+   * Called when playback fails and cannot be recovered in place. Lets a caller
+   * that has other sources (the stream-server modal) move to the next one
+   * instead of leaving the viewer on an error screen with no way forward.
+   */
+  onFatalError?: (reason: string) => void;
 };
 
 // Extended HTMLVideoElement with non-standard audioTracks API
@@ -146,7 +152,7 @@ interface AudioTrack {
   language: string;
 }
 
-export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false, subtitles, videoCodec, audioCodec, fileName }: Props) {
+export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false, subtitles, videoCodec, audioCodec, fileName, onFatalError }: Props) {
   const videoRef = useRef<ExtendedHTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -314,6 +320,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
           } else {
             setError('Playback failed during streaming.');
             try { hls.destroy(); } catch { /* ignore */ }
+            onFatalError?.('hls-fatal');
           }
         });
       })

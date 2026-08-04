@@ -51,6 +51,28 @@ type ProbeCacheEntry = {
 
 const probeCache = new Map<string, ProbeCacheEntry>();
 
+// Keyed by server + title + season + episode, so this grows with every item
+// browsed. Entries expired logically but were never removed, so the map only
+// ever got bigger for the life of the process.
+const PROBE_CACHE_MAX_ENTRIES = 500;
+
+function pruneProbeCache(now: number): void {
+  for (const [key, entry] of probeCache) {
+    if (entry.expiresAt <= now) probeCache.delete(key);
+  }
+
+  // Still oversized after dropping the expired ones: evict oldest-first.
+  // Map preserves insertion order, so the head is the least recently written.
+  if (probeCache.size > PROBE_CACHE_MAX_ENTRIES) {
+    const excess = probeCache.size - PROBE_CACHE_MAX_ENTRIES;
+    let removed = 0;
+    for (const key of probeCache.keys()) {
+      probeCache.delete(key);
+      if (++removed >= excess) break;
+    }
+  }
+}
+
 const QUALITY_RANK: Record<StreamQualityValue, number> = {
   unknown: 0,
   '720p': 1,
@@ -136,23 +158,33 @@ const EMBED_ALLOW_MARKERS = [
   'hls',
 ];
 
-const EMBED_BLOCK_MARKERS = [
-  'cloudflare',
-  'captcha',
+/**
+ * Phrases that only appear on an actual interstitial — a challenge, captcha or
+ * block page — never in a working player.
+ *
+ * The previous list matched bare substrings anywhere in the HTML and included
+ * 'cloudflare' and 'waf'. Every one of these providers loads Font Awesome or
+ * similar from cdnjs.cloudflare.com, so the word appears in a stylesheet URL on
+ * a perfectly healthy page: every working server was classified unreachable.
+ * 'forbidden' was its own hazard in a media app — a title like "Forbidden
+ * Planet" in an embed would have tripped it. HTTP 403 already covers the real
+ * case.
+ */
+export const EMBED_BLOCK_MARKERS = [
   'attention required',
-  'access denied',
   'just a moment',
-  'forbidden',
-  'verify you are human',
   'checking your browser',
   'checking connection security',
-  'request blocked',
+  'verify you are human',
   'enable javascript and cookies',
-  'waf',
   'cf-browser-verification',
+  '__cf_chl_',
+  'access denied',
+  'request blocked',
+  'ddos protection by',
 ];
 
-function looksLikeEmbeddablePage(contentType: string | null, html: string): boolean {
+export function looksLikeEmbeddablePage(contentType: string | null, html: string): boolean {
   const normalizedContentType = (contentType || '').toLowerCase();
   const isHtmlLike =
     normalizedContentType === '' ||
@@ -181,7 +213,7 @@ function looksLikeEmbeddablePage(contentType: string | null, html: string): bool
   return (hasHtmlStructure && hasEmbedMarker) || hasReasonableHtmlPayload;
 }
 
-function hasBlockedMarker(html: string): boolean {
+export function hasBlockedMarker(html: string): boolean {
   return EMBED_BLOCK_MARKERS.some((marker) => html.includes(marker));
 }
 
@@ -306,6 +338,8 @@ async function isServerWorking(
   if (!options.refresh && cached && cached.expiresAt > now) {
     return cached;
   }
+
+  pruneProbeCache(now);
 
   const baseTimeoutMs = options.vpnMode ? VPN_SERVER_CHECK_TIMEOUT_MS : BASE_SERVER_CHECK_TIMEOUT_MS;
   const maxTimeoutMs = options.vpnMode ? MAX_VPN_SERVER_CHECK_TIMEOUT_MS : MAX_SERVER_CHECK_TIMEOUT_MS;
