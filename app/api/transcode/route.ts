@@ -61,6 +61,26 @@ export async function GET(req: Request) {
     for (let i = 0; i < segmentCount; i++) {
       const segLen =
         i === segmentCount - 1 ? duration - i * SEGMENT_DURATION : SEGMENT_DURATION;
+
+      // Every segment is produced by its own ffmpeg process that seeks into the
+      // source independently, so each carries its own timeline — that is what
+      // EXT-X-DISCONTINUITY is for.
+      //
+      // Without it the browser appends these to one buffer and compares decode
+      // timestamps across the join. Seeking lands on the keyframe at or before
+      // the boundary, so a segment can begin a frame or two *before* the
+      // previous one ended, and Chrome aborts with
+      // "CHUNK_DEMUXER_ERROR_APPEND_FAILED: Parsed buffers not in DTS sequence".
+      // Measured on a real 2160p file: segment 1 started 0.048s before segment 0
+      // finished, breaking playback at the very first boundary.
+      //
+      // The tag tells the demuxer to reset its baseline per segment instead of
+      // comparing across it. EXTINF still drives the timeline, so seeking and
+      // duration are unaffected.
+      if (i > 0) {
+        lines.push('#EXT-X-DISCONTINUITY');
+      }
+
       lines.push(`#EXTINF:${segLen.toFixed(3)},`);
       lines.push(`/api/transcode/segment?${authQuery}&seg=${i}${audioSuffix}`);
     }
