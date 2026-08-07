@@ -171,6 +171,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
   const [qualityLevels, setQualityLevels] = useState<{ index: number; label: string; height: number; bitrate: number }[]>([]);
   const [activeLevel, setActiveLevel] = useState<number>(-1);
   const [preferredLevel, setPreferredLevel] = useState<number>(-1);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const hlsRef = useRef<any>(null);
   const isNative = Capacitor.isNativePlatform();
 
@@ -623,6 +624,12 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     if (levelIndex === -1) hls.currentLevel = -1;
   };
 
+  /** Playback speed. Applied to the element directly so it survives level switches. */
+  const changePlaybackRate = (rate: number) => {
+    setPlaybackRate(rate);
+    if (videoRef.current) videoRef.current.playbackRate = rate;
+  };
+
   // Change subtitle track
   const changeSubtitleTrack = (index: number) => {
     const video = videoRef.current;
@@ -645,6 +652,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
   const hasAudioTracks = audioTracks.length > 1;
   const hasSubtitleTracks = subtitleTracks.length > 0;
   const hasQualityLevels = qualityLevels.length > 1;
+  const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const hasSettings = hasAudioTracks || hasSubtitleTracks || hasQualityLevels;
 
   // Debug log to see what's detected
@@ -739,6 +747,30 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
                     ))}
                   </div>
                 )}
+
+                {/* Playback speed */}
+                <div className="border-b border-neutral-700">
+                  <div className="px-4 py-2 bg-neutral-900/50 flex items-center gap-2">
+                    <Gauge className="w-4 h-4" />
+                    <span className="text-sm font-medium">Speed</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 px-4 py-2.5">
+                    {PLAYBACK_RATES.map((rate) => (
+                      <button
+                        key={rate}
+                        onClick={() => changePlaybackRate(rate)}
+                        aria-label={`Playback speed ${rate}x`}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${
+                          playbackRate === rate
+                            ? 'bg-red-600 text-white'
+                            : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                        }`}
+                      >
+                        {rate === 1 ? 'Normal' : `${rate}x`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 {/* Audio Tracks */}
                 <div className="border-b border-neutral-700">

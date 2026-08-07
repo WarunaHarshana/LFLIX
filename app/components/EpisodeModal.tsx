@@ -110,6 +110,17 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     }, [seasons]);
 
     const currentSeason = seasons.find(s => s.season === activeSeason);
+
+    // Neighbouring episodes within the loaded season, so the online player can
+    // step through a season without closing and reopening.
+    const adjacentEpisodes = (() => {
+        const list = currentSeason?.episodes ?? [];
+        if (!selectedEpisode) return { prev: null as Episode | null, next: null as Episode | null };
+        const ordered = [...list].sort((a, b) => a.episodeNumber - b.episodeNumber);
+        const at = ordered.findIndex(e => e.id === selectedEpisode.id);
+        if (at === -1) return { prev: null as Episode | null, next: null as Episode | null };
+        return { prev: ordered[at - 1] ?? null, next: ordered[at + 1] ?? null };
+    })();
     const displayRating = show.imdbRating ?? show.rating;
     const displayRatingSource = show.imdbRating != null ? 'IMDb' : 'TMDB';
 
@@ -720,6 +731,12 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                     season={selectedEpisode.seasonNumber}
                     episode={selectedEpisode.episodeNumber}
                     onClose={() => setShowStreamServers(false)}
+                    canGoPrevEpisode={!!adjacentEpisodes.prev}
+                    canGoNextEpisode={!!adjacentEpisodes.next}
+                    onNavigateEpisode={(direction) => {
+                        const target = direction === 'prev' ? adjacentEpisodes.prev : adjacentEpisodes.next;
+                        if (target) setSelectedEpisode(target);
+                    }}
                 />
             )}
 

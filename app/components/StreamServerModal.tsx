@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward, ShieldCheck, Crown, Lock, Unlock } from 'lucide-react';
+import { X, Globe, Loader2, AlertTriangle, RefreshCw, ExternalLink, SkipForward, ShieldCheck, Crown, Lock, Unlock, ChevronLeft, ChevronRight } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import { useTheme } from './ThemeProvider';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
@@ -111,6 +111,14 @@ type Props = {
   season?: number;
   episode?: number;
   onClose: () => void;
+  /**
+   * Episode stepping, supplied by the caller because it owns the episode list.
+   * Works for embeds as well as direct sources: this is our own chrome around
+   * the player, not something inside the third-party iframe.
+   */
+  onNavigateEpisode?: (direction: 'prev' | 'next') => void;
+  canGoPrevEpisode?: boolean;
+  canGoNextEpisode?: boolean;
 };
 
 /**
@@ -141,7 +149,7 @@ function preconnectToServers(servers: { url: string }[]): void {
     }
 }
 
-export default function StreamServerModal({ tmdbId, type, title, season, episode, onClose }: Props) {
+export default function StreamServerModal({ tmdbId, type, title, season, episode, onClose, onNavigateEpisode, canGoPrevEpisode, canGoNextEpisode }: Props) {
     useModalBehavior(true, onClose);
 
   const [servers, setServers] = useState<StreamServer[]>([]);
@@ -438,6 +446,32 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
         </div>
 
         <div className="flex items-center gap-2">
+          {type === 'tv' && onNavigateEpisode && (
+            <div className="flex items-center rounded-full bg-neutral-800 overflow-hidden mr-1">
+              <button
+                aria-label="Previous episode"
+                title="Previous episode"
+                disabled={!canGoPrevEpisode}
+                onClick={() => onNavigateEpisode('prev')}
+                className="px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-transparent transition"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="px-1 text-[11px] text-neutral-400 select-none">
+                S{season ?? 1} E{episode ?? 1}
+              </span>
+              <button
+                aria-label="Next episode"
+                title="Next episode"
+                disabled={!canGoNextEpisode}
+                onClick={() => onNavigateEpisode('next')}
+                className="px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-transparent transition"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <button aria-label="Show or hide source list"
             onClick={() => setShowSources((prev) => !prev)}
             className="px-3 py-1.5 rounded-full text-xs font-medium transition bg-neutral-800 hover:bg-neutral-700 text-neutral-200"
