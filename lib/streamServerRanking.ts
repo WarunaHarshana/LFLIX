@@ -13,6 +13,8 @@ export type RankableServer = {
   latencyMs: number;
   isDirect?: boolean;
   tier?: 'best' | 'great' | 'good' | 'ok';
+  /** True when the host is client-rendered and its probe proves nothing. */
+  unverifiableAvailability?: boolean;
 };
 
 const QUALITY_RANK: Record<RankableServer['qualityHint'], number> = {
@@ -42,7 +44,18 @@ export function rankServersByQuality<T extends RankableServer>(servers: T[]): T[
       return reachableDiff;
     }
 
-    // 2. Quality Resolution (highest quality first)
+    // 2. Confirmed availability beats merely-assumed availability.
+    //    A client-rendered host returns the same shell whether or not it has
+    //    the title, so its "reachable" is an assumption, not evidence. Ranking
+    //    it level with a host whose response actually varied would auto-start
+    //    playback on something that may have nothing to play.
+    const aAssumed = Number(Boolean(a.unverifiableAvailability));
+    const bAssumed = Number(Boolean(b.unverifiableAvailability));
+    if (aAssumed !== bAssumed) {
+      return aAssumed - bAssumed;
+    }
+
+    // 3. Quality Resolution (highest quality first)
     const rankDiff = QUALITY_RANK[b.qualityHint] - QUALITY_RANK[a.qualityHint];
     if (rankDiff !== 0) {
       return rankDiff;

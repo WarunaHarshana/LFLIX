@@ -13,6 +13,7 @@ type StreamServer = {
   order: number;
   baselineQuality: Exclude<StreamQualityValue, 'unknown'>;
   tier?: 'best' | 'great' | 'good' | 'ok';
+  unverifiableAvailability?: boolean;
 };
 
 type ProbeState = 'cached' | 'fast' | 'deep-pending';
@@ -29,6 +30,7 @@ type StreamServerResponse = StreamServer & {
   latencyMs: number;
   isDirect?: boolean;
   directSubtitles?: { label: string; url: string; language?: string }[];
+  unverifiableAvailability?: boolean;
 };
 
 const BASE_SERVER_CHECK_TIMEOUT_MS = 4500;
@@ -86,6 +88,14 @@ type ServerRegistryEntry = {
   color: string;
   baselineQuality: Exclude<StreamQualityValue, 'unknown'>;
   tier?: 'best' | 'great' | 'good' | 'ok';
+  /**
+   * Set when the host renders its player entirely client-side, so a server-side
+   * probe cannot tell an available title from a missing one — the same shell
+   * comes back either way. Such a server always looks "reachable", which is not
+   * evidence of anything, so it must not outrank a host whose response actually
+   * varied with the title.
+   */
+  unverifiableAvailability?: boolean;
   buildUrl: (tmdbId: number, type: 'movie' | 'tv', season?: number, episode?: number) => string;
 };
 
@@ -133,6 +143,23 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
       type === 'movie'
         ? `https://vidsrc.to/embed/movie/${tmdbId}`
         : `https://vidsrc.to/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`,
+  },
+  {
+    id: 'vidking',
+    name: 'VIDKING',
+    color: '#e11d48',
+    baselineQuality: '1080p',
+    // Deliberately not 'best' or 'great': its availability cannot be verified,
+    // so it should sit behind hosts we can actually confirm.
+    tier: 'good',
+    unverifiableAvailability: true,
+    // `color` tints the player chrome. StreamServerModal rewrites this value to
+    // the user's accent — that code already existed but had nothing to act on,
+    // because this server was never registered.
+    buildUrl: (tmdbId, type, season, episode) =>
+      type === 'movie'
+        ? `https://www.vidking.net/embed/movie/${tmdbId}?color=e11d48`
+        : `https://www.vidking.net/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}?color=e11d48`,
   },
   {
     id: 'autoembed',
@@ -475,6 +502,9 @@ async function buildServerUrls(
     order: index,
     baselineQuality: entry.baselineQuality,
     tier: entry.tier || 'ok',
+    // Must be carried through: dropping it here would silently re-promote a
+    // host whose reachability cannot actually be confirmed.
+    unverifiableAvailability: entry.unverifiableAvailability,
   }));
 }
 
@@ -629,6 +659,7 @@ export async function GET(req: Request) {
         probeState: qualityDecision.probeState,
         lastCheckedAt: qualityDecision.lastCheckedAt,
         latencyMs: check.probe.latencyMs,
+        unverifiableAvailability: check.server.unverifiableAvailability,
       });
     }
 

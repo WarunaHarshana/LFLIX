@@ -89,3 +89,33 @@ describe('rankServersByQuality', () => {
     expect(list.map((s) => s.id)).toEqual(before);
   });
 });
+
+describe('unverifiable availability', () => {
+  // vidking renders its player client-side and returns the same shell whether
+  // or not it holds the title, so "reachable" is an assumption rather than
+  // evidence. It must not be auto-selected ahead of a host we confirmed.
+  it('ranks a confirmed server above an unverifiable one at equal quality', () => {
+    const list = [
+      server({ id: 'vidking', unverifiableAvailability: true, qualityHint: '1080p' }),
+      server({ id: 'confirmed', qualityHint: '1080p' }),
+    ];
+    expect(order(list)[0]).toBe('confirmed');
+  });
+
+  it('still ranks an unverifiable server above anything unreachable', () => {
+    const list = [
+      server({ id: 'dead', isReachable: false, qualityHint: '2160p' }),
+      server({ id: 'vidking', unverifiableAvailability: true, qualityHint: '720p' }),
+    ];
+    expect(order(list)[0]).toBe('vidking');
+  });
+
+  it('does not let a higher baseline quality override the confirmation gap', () => {
+    // A confirmed 720p is still a better bet than an assumed 4K.
+    const list = [
+      server({ id: 'assumed-4k', unverifiableAvailability: true, qualityHint: '2160p' }),
+      server({ id: 'confirmed-720', qualityHint: '720p' }),
+    ];
+    expect(order(list)[0]).toBe('confirmed-720');
+  });
+});
