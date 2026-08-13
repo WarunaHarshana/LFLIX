@@ -42,6 +42,10 @@ export async function POST(req: Request) {
       }
       files = [file.path];
     } else {
+      try {
+        const { organizeLooseTvShowsInDownloads } = await import('@/lib/mediaOrganizer');
+        await organizeLooseTvShowsInDownloads(folder.path);
+      } catch { /* ignore */ }
       files = getVideoFiles(folder.path);
     }
 

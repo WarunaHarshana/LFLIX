@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowUpDown } from 'lucide-react';
 import clsx from 'clsx';
 import ContentCard from './ContentCard';
@@ -41,7 +41,28 @@ export default function LibraryGrid({
   onCardClick,
   onContextMenu,
 }: LibraryGridProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const sortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Date Added';
 
@@ -65,18 +86,30 @@ export default function LibraryGrid({
             ({filteredLibrary.length} items)
           </span>
         </h3>
-        <div className="relative group/sort">
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 rounded-lg text-sm text-neutral-300 hover:text-white transition-colors border border-neutral-700/50">
+        <div ref={dropdownRef} className="relative group/sort">
+          <button
+            onClick={() => setIsOpen(prev => !prev)}
+            aria-expanded={isOpen}
+            className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 active:bg-neutral-600 rounded-lg text-sm text-neutral-300 hover:text-white transition-colors border border-neutral-700/50"
+          >
             <ArrowUpDown className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">
               {sortLabel}
             </span>
           </button>
-          <div className="absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden opacity-0 invisible group-hover/sort:opacity-100 group-hover/sort:visible transition-all duration-200 z-30">
+          <div
+            className={clsx(
+              "absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden transition-all duration-200 z-30",
+              isOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/sort:opacity-100 group-hover/sort:visible"
+            )}
+          >
             {SORT_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => onSortChange(opt.value)}
+                onClick={() => {
+                  onSortChange(opt.value);
+                  setIsOpen(false);
+                }}
                 className={clsx(
                   'w-full text-left px-4 py-2.5 text-sm transition-colors',
                   sortBy === opt.value

@@ -53,6 +53,18 @@ export function useLibrary(showToast: (message: string, type: 'success' | 'error
     await fetchLibrary();
   };
 
+  // Helper to get reliable year number for both movies and TV shows
+  const getItemYear = (item: ContentItem): number => {
+    if (typeof item.year === 'number' && !isNaN(item.year) && item.year > 0) {
+      return item.year;
+    }
+    if (item.firstAirDate) {
+      const parsed = parseInt(item.firstAirDate.substring(0, 4), 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return 0;
+  };
+
   // Filter + sort library based on active tab
   const getFilteredLibrary = useCallback((activeTab: string) => {
     return library.filter(item => {
@@ -62,18 +74,34 @@ export function useLibrary(showToast: (message: string, type: 'success' | 'error
     }).sort((a, b) => {
       switch (sortBy) {
         case 'title-asc':
-          return a.title.localeCompare(b.title);
+          return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
         case 'title-desc':
-          return b.title.localeCompare(a.title);
-        case 'year-new':
-          return (b.year || 0) - (a.year || 0);
-        case 'year-old':
-          return (a.year || 0) - (b.year || 0);
-        case 'rating':
-          return ((b.imdbRating ?? b.rating) || 0) - ((a.imdbRating ?? a.rating) || 0);
+          return b.title.localeCompare(a.title, undefined, { sensitivity: 'base', numeric: true });
+        case 'year-new': {
+          const yearDiff = getItemYear(b) - getItemYear(a);
+          if (yearDiff !== 0) return yearDiff;
+          return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+        }
+        case 'year-old': {
+          const yearDiff = getItemYear(a) - getItemYear(b);
+          if (yearDiff !== 0) return yearDiff;
+          return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+        }
+        case 'rating': {
+          const ratingA = (a.imdbRating ?? a.rating) || 0;
+          const ratingB = (b.imdbRating ?? b.rating) || 0;
+          const ratingDiff = ratingB - ratingA;
+          if (ratingDiff !== 0) return ratingDiff;
+          return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+        }
         case 'added':
-        default:
-          return new Date(b.addedAt || 0).getTime() - new Date(a.addedAt || 0).getTime();
+        default: {
+          const timeA = new Date(a.addedAt || 0).getTime();
+          const timeB = new Date(b.addedAt || 0).getTime();
+          const timeDiff = timeB - timeA;
+          if (timeDiff !== 0) return timeDiff;
+          return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+        }
       }
     });
   }, [library, selectedGenre, sortBy]);

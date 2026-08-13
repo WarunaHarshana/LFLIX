@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.8.0
+
+Automatic TV show folder structure organization, loose episode auto-sorting, missing episode tracking across all seasons, robust deletion with directory cleanup, and library sorting fixes.
+
+### Added
+
+- **Automatic TV Shows Folder Organization**: TV show downloads automatically organize into `TV Shows/<Show Name>/Season <N>/<Episode.ext>`. Extraneous torrent files (`.nfo`, `.txt`, sample clips, empty directories) are automatically purged upon download completion to keep local drives clean.
+- **Loose Episode Auto-Sorting**: Automatically detects and moves loose TV series episodes placed in the downloads folder into their respective `TV Shows/<Show Name>/Season <N>/` directories on startup and library scan.
+- **Full-Season Missing Episode Tracking**: Auto-tracking now scans all past seasons to automatically identify and download missing episodes in addition to newly aired releases.
+- **Empty Directory Cleanup on Deletion**: Deleting movies removes their dedicated movie folder; deleting the last episode of a TV show season or show cleanly removes the empty `Season <N>/` and `<Show Name>/` directories.
+- **In-Progress Download Deletion**: Active torrent downloads can be deleted directly with file cleanup without being blocked by Windows file locks.
+
+### Fixed
+
+- **Library Year & Rating Sorting**: Resolved an issue where TV shows lacked direct year properties, enabling accurate "Year (Newest)" and "Year (Oldest)" sorting across mixed libraries.
+- **Interactive Sort Menu**: Replaced hover-only CSS dropdown in `LibraryGrid` with a fully interactive, keyboard-navigable, touch-friendly dropdown.
+- **Keyboard Navigation Alignment**: Arrow-key navigation now tracks the active filtered and sorted order.
+- **Discover Top Rated**: Calibrated vote count thresholds for TV shows in TMDB Discover.
+
 ## v0.7.1
 
 Fixes for four problems found while using v0.7.0.

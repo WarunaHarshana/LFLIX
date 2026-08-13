@@ -356,6 +356,12 @@ export function removeFile(filePath: string): { removed: boolean } {
       cleanupOrphanedAutoTracks();
     }
 
+    // Clean up empty movie folders or empty TV Season / Show folders
+    try {
+      const { cleanupEmptyMediaDirectories } = require('./mediaOrganizer');
+      cleanupEmptyMediaDirectories(filePath);
+    } catch { /* ignore */ }
+
     console.log('[Scanner] Removal result:', { movieChanges: movieResult.changes, epChanges: epResult.changes });
     return { removed: movieResult.changes > 0 || epResult.changes > 0 };
   } catch (e: any) {

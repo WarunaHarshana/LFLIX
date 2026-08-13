@@ -24,9 +24,9 @@ export async function GET(req: Request) {
         if (with_original_language) queryParams.with_original_language = with_original_language;
         if (sort_by) {
             queryParams.sort_by = sort_by;
-            // When sorting by vote average, ensure there's a minimum number of votes, otherwise obscure 1-vote movies top the list
+            // When sorting by vote average, ensure there's a minimum number of votes, otherwise obscure 1-vote items top the list
             if (sort_by.includes('vote_average')) {
-                queryParams['vote_count.gte'] = 200;
+                queryParams['vote_count.gte'] = type === 'tv' ? 20 : 200;
             }
         }
         if (with_companies) queryParams.with_companies = with_companies;

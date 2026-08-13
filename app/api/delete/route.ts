@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
+import path from 'path';
 import db, { removeAutoTrackingForShow } from '@/lib/db';
 import { getSafeErrorMessage, isPathInsideAny, parsePositiveInt, validateExistingFile } from '@/lib/security';
 import { apiErrorResponse } from '@/lib/apiSecurity';
@@ -22,6 +23,11 @@ export async function DELETE(req: Request) {
         const fileErrors: string[] = [];
         const libraryRoots = (db.prepare('SELECT folderPath FROM scanned_folders').all() as { folderPath: string }[])
             .map((folder) => folder.folderPath);
+        libraryRoots.push(path.join(process.cwd(), 'downloads'));
+        try {
+            const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('downloadPath') as { value: string } | undefined;
+            if (setting?.value) libraryRoots.push(setting.value);
+        } catch { /* ignore */ }
 
         const tryDeleteFile = (filePath: string | null | undefined) => {
             if (!deleteFile || !filePath) return;
@@ -39,6 +45,12 @@ export async function DELETE(req: Request) {
                 }
                 fs.unlinkSync(file.path);
                 filesDeleted++;
+
+                // Clean up empty movie folders or empty TV Season / Show folders
+                try {
+                    const { cleanupEmptyMediaDirectories } = require('@/lib/mediaOrganizer');
+                    cleanupEmptyMediaDirectories(file.path);
+                } catch { /* ignore */ }
             } catch (e) {
                 fileErrors.push(`${filePath}: ${getSafeErrorMessage(e)}`);
             }

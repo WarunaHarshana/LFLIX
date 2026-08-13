@@ -554,7 +554,17 @@ class DownloadManager {
                                 WHERE id = ? AND status = 'downloading'
                             `).run(downloadedBytes, totalBytes || downloadedBytes, downloadId);
                         } catch { /* ignore */ }
-                        this.triggerRescan();
+
+                        // Automatically organize TV show episode into TV Shows/<Show Name>/Season <N>/
+                        (async () => {
+                            try {
+                                const { organizeDownloadedItem } = await import('./mediaOrganizer');
+                                await organizeDownloadedItem(downloadPath, filename);
+                            } catch (orgErr) {
+                                console.warn('[DownloadManager] Auto-organize failed for HTTP download:', orgErr);
+                            }
+                            this.triggerRescan();
+                        })();
                     });
 
                     response.pipe(activeFileStream);
@@ -711,16 +721,17 @@ class DownloadManager {
     }
 
     // Delete downloaded files from disk
-    private deleteFilesFromDisk(record: DownloadRecord): void {
+    private async deleteFilesFromDisk(record: DownloadRecord, extraCandidatePaths: string[] = []): Promise<void> {
         console.log('[Download] Attempting file deletion for:', {
             id: record.id,
             name: record.name,
             downloadPath: record.downloadPath,
             infoHash: record.infoHash,
+            extraCandidatePaths,
         });
 
         // Build list of candidate paths to try
-        const candidates: string[] = [];
+        const candidates: string[] = [...extraCandidatePaths];
 
         if (record.downloadPath && record.name) {
             candidates.push(path.join(record.downloadPath, record.name));
@@ -731,6 +742,35 @@ class DownloadManager {
         // Fallback: project downloads folder
         if (record.name) {
             candidates.push(path.join(process.cwd(), 'downloads', record.name));
+        }
+        if (record.infoHash) {
+            candidates.push(path.join(process.cwd(), 'downloads', record.infoHash));
+        }
+
+        // Also check if any files were organized into TV Shows
+        const rootDownload = record.downloadPath || path.join(process.cwd(), 'downloads');
+        if (record.name && fs.existsSync(path.join(rootDownload, 'TV Shows'))) {
+            const tvShowsRoot = path.join(rootDownload, 'TV Shows');
+            try {
+                const shows = fs.readdirSync(tvShowsRoot);
+                for (const show of shows) {
+                    const showDir = path.join(tvShowsRoot, show);
+                    if (fs.statSync(showDir).isDirectory()) {
+                        const seasons = fs.readdirSync(showDir);
+                        for (const season of seasons) {
+                            const seasonDir = path.join(showDir, season);
+                            if (fs.statSync(seasonDir).isDirectory()) {
+                                const files = fs.readdirSync(seasonDir);
+                                for (const file of files) {
+                                    if (file === record.name || file.toLowerCase().includes(record.name.toLowerCase())) {
+                                        candidates.push(path.join(seasonDir, file));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
         }
 
         const allowedRoots = [path.join(process.cwd(), 'downloads')];
@@ -743,7 +783,10 @@ class DownloadManager {
             allowedRoots.push(...folders.map((folder) => folder.folderPath));
         } catch { /* ignore */ }
 
+        let deletedAny = false;
+
         for (const candidate of candidates) {
+            if (!candidate) continue;
             try {
                 if (fs.existsSync(candidate)) {
                     if (!isPathInsideAny(candidate, allowedRoots)) {
@@ -751,16 +794,40 @@ class DownloadManager {
                         continue;
                     }
                     console.log('[Download] Deleting:', candidate);
-                    fs.rmSync(candidate, { recursive: true, force: true });
-                    console.log('[Download] Deleted successfully:', candidate);
-                    return; // Done
+
+                    // Try removing with retry if Windows holds a lock
+                    let attempts = 0;
+                    while (attempts < 3) {
+                        try {
+                            fs.rmSync(candidate, { recursive: true, force: true });
+                            deletedAny = true;
+                            console.log('[Download] Deleted successfully:', candidate);
+
+                            // Clean up empty parent directories if it was inside TV Shows or Movie folders
+                            try {
+                                const { cleanupEmptyMediaDirectories } = require('./mediaOrganizer');
+                                cleanupEmptyMediaDirectories(candidate);
+                            } catch { /* ignore */ }
+
+                            break;
+                        } catch (err: any) {
+                            attempts++;
+                            if (attempts >= 3) {
+                                console.error(`[Download] Failed to delete ${candidate} after 3 attempts:`, err?.message);
+                            } else {
+                                await new Promise(r => setTimeout(r, 150));
+                            }
+                        }
+                    }
                 }
             } catch (e) {
-                console.error('[Download] Failed to delete:', candidate, e);
+                console.error('[Download] Failed to inspect candidate:', candidate, e);
             }
         }
 
-        console.warn('[Download] No matching files found on disk. Candidates tried:', candidates);
+        if (!deletedAny) {
+            console.warn('[Download] No matching files deleted on disk. Candidates tried:', candidates);
+        }
     }
 
     // Remove/cancel a download
@@ -784,7 +851,7 @@ class DownloadManager {
                 this.httpAbortControllers.delete(downloadId);
             }
             if (deleteFiles) {
-                this.deleteFilesFromDisk(record);
+                await this.deleteFilesFromDisk(record);
             }
             try {
                 db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
@@ -796,30 +863,43 @@ class DownloadManager {
         }
 
         // Remove from WebTorrent if active
+        const extraCandidatePaths: string[] = [];
+
         if (this.client) {
             try {
                 const torrent = this.findTorrent(record.infoHash || record.magnetUri);
 
                 if (torrent) {
+                    // Extract file paths from torrent before destroying it
+                    if (torrent.path && torrent.name) {
+                        extraCandidatePaths.push(path.join(torrent.path, torrent.name));
+                    }
+                    if (torrent.files && Array.isArray(torrent.files)) {
+                        for (const file of torrent.files) {
+                            if (file.path && torrent.path) {
+                                extraCandidatePaths.push(path.join(torrent.path, file.path));
+                            }
+                        }
+                    }
+
                     await new Promise<void>((resolve) => {
                         try {
-                            torrent.destroy({ destroyStore: deleteFiles }, () => resolve());
+                            torrent.destroy({ destroyStore: false }, () => resolve());
                         } catch {
                             resolve();
                         }
                     });
-                    // If destroyStore was used, files should be gone. But double-check:
-                    if (deleteFiles) {
-                        this.deleteFilesFromDisk(record);
-                    }
-                } else if (deleteFiles) {
-                    this.deleteFilesFromDisk(record);
+
+                    // Give Windows a brief moment to release open file handles
+                    await new Promise(r => setTimeout(r, 100));
                 }
-            } catch {
-                if (deleteFiles) this.deleteFilesFromDisk(record);
+            } catch (e) {
+                console.warn('[Download] Error destroying torrent handle:', e);
             }
-        } else if (deleteFiles) {
-            this.deleteFilesFromDisk(record);
+        }
+
+        if (deleteFiles) {
+            await this.deleteFilesFromDisk(record, extraCandidatePaths);
         }
 
         // Remove from DB
@@ -948,7 +1028,7 @@ class DownloadManager {
 
         if (alreadyBound) return;
 
-        torrent.on('done', () => {
+        torrent.on('done', async () => {
             this.clearTimer(downloadId);
             try {
                 db.prepare(`
@@ -957,6 +1037,26 @@ class DownloadManager {
             WHERE id = ?
           `).run(downloadId);
             } catch { /* ignore */ }
+
+            const torrentName = torrent.name;
+            const torrentPath = torrent.path || this.getDownloadPath();
+
+            // Destroy WebTorrent handle cleanly so Windows doesn't keep file locks on the downloaded files
+            try {
+                await new Promise<void>((resolve) => {
+                    torrent.destroy({ destroyStore: false }, () => resolve());
+                });
+            } catch { /* ignore */ }
+
+            // Automatically move TV show video files into TV Shows/<Show Name>/Season <N>/
+            // and delete the extra directory that came with torrent download
+            try {
+                const { organizeDownloadedItem } = await import('./mediaOrganizer');
+                await organizeDownloadedItem(torrentPath, torrentName);
+            } catch (orgErr) {
+                console.warn('[DownloadManager] Auto-organize failed for torrent download:', orgErr);
+            }
+
             this.triggerRescan();
         });
 
@@ -1028,6 +1128,12 @@ setImmediate(async () => {
         console.log('[DownloadManager] Running startup recovery...');
         setTimeout(async () => {
             try { await downloadManager.recoverAll(); } catch (e) { console.error('[DownloadManager] Recovery failed:', e); }
+            try {
+                const { organizeLooseTvShowsInDownloads } = await import('./mediaOrganizer');
+                await organizeLooseTvShowsInDownloads();
+            } catch (e) {
+                console.error('[DownloadManager] Startup TV show organization error:', e);
+            }
         }, 1500);
 
         // Start Release Monitor & Auto Downloader after a delay to let the server fully boot

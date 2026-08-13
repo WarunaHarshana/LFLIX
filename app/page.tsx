@@ -98,16 +98,18 @@ export default function Home() {
 
   // ──────────────────── Refs ────────────────────
   const libraryRef = useRef(library);
+  const filteredLibraryRef = useRef(filteredLibrary);
   const activeTabRef = useRef(activeTab);
   const selectedGenreRef = useRef(selectedGenre);
   const focusedIndexRef = useRef(focusedIndex);
 
   useEffect(() => {
     libraryRef.current = library;
+    filteredLibraryRef.current = filteredLibrary;
     activeTabRef.current = activeTab;
     selectedGenreRef.current = selectedGenre;
     focusedIndexRef.current = focusedIndex;
-  }, [library, activeTab, selectedGenre, focusedIndex]);
+  }, [library, filteredLibrary, activeTab, selectedGenre, focusedIndex]);
 
   // ──────────────────── Tab Switching ────────────────────
   const switchTab = (tab: TabId) => {
@@ -229,14 +231,7 @@ export default function Home() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const cols = getGridColumns();
-      const currentLibrary = libraryRef.current;
-      const currentTab = activeTabRef.current;
-      const currentGenre = selectedGenreRef.current;
-      const filtered = currentLibrary.filter(item => {
-        const matchesTab = currentTab === 'all' || item.type === currentTab;
-        const matchesGenre = !currentGenre || (item.genres && item.genres.includes(currentGenre));
-        return matchesTab && matchesGenre;
-      });
+      const filtered = filteredLibraryRef.current;
       switch (e.key) {
         case '/': e.preventDefault(); setShowSearchModal(true); break;
         case 'f': case 'F': e.preventDefault(); setShowFolderManager(true); break;

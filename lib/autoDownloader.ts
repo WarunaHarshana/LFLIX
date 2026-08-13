@@ -308,14 +308,12 @@ class AutoDownloader {
    * Called on server startup and periodically by the release monitor.
    */
   async retryPendingEpisodes(): Promise<void> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - MAX_RETRY_DAYS);
-    const cutoff = cutoffDate.toISOString().split('T')[0];
-
     // Find episodes that:
-    // 1. Haven't been downloaded yet (downloadAttempted = 0 OR downloadId is null with no completed download)
-    // 2. Were aired within the retry window
-    // 3. Belong to enabled tracked shows
+    // 1. Belong to enabled tracked shows
+    // 2. Have aired (airDate <= today)
+    // 3. Are missing from the local episodes table
+    // 4. Haven't been successfully downloaded yet (downloadAttempted = 0 OR download status is error/null)
+    // 5. Haven't been attempted in the last 15 minutes
     const pendingEpisodes = db.prepare(`
       SELECT er.*, at.showId, at.title as showTitle, at.qualityPreference,
              (SELECT posterPath FROM shows WHERE id = at.showId) as posterPath
@@ -323,16 +321,22 @@ class AutoDownloader {
       JOIN auto_track at ON er.tmdbId = at.tmdbId AND at.enabled = 1
       JOIN shows s ON s.id = at.showId
       LEFT JOIN downloads d ON er.downloadId = d.id
-      WHERE er.airDate >= ?
-        AND er.airDate <= date('now')
+      WHERE er.airDate <= date('now')
         AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
-        AND (er.downloadAttempted = 0 OR d.status IN ('error') OR er.downloadId IS NULL)
-        AND (er.lastAttemptAt IS NULL OR er.lastAttemptAt < datetime('now', '-30 minutes'))
-    `).all(cutoff) as any[];
+        AND NOT EXISTS (
+          SELECT 1 FROM episodes e 
+          WHERE e.showId = at.showId 
+            AND e.seasonNumber = er.seasonNumber 
+            AND e.episodeNumber = er.episodeNumber
+        )
+        AND (er.downloadAttempted = 0 OR d.status IN ('error') OR (er.downloadId IS NULL AND er.downloadAttempted = 1))
+        AND (er.lastAttemptAt IS NULL OR er.lastAttemptAt < datetime('now', '-15 minutes'))
+      ORDER BY er.seasonNumber ASC, er.episodeNumber ASC
+    `).all() as any[];
 
     if (pendingEpisodes.length === 0) return;
 
-    console.log(`[AutoDownloader] Retrying ${pendingEpisodes.length} pending episodes...`);
+    console.log(`[AutoDownloader] Retrying/downloading ${pendingEpisodes.length} missing episode(s)...`);
 
     const episodes: NewEpisodeInfo[] = pendingEpisodes.map(ep => ({
       tmdbId: ep.tmdbId,
@@ -353,17 +357,19 @@ class AutoDownloader {
    * Get status of auto-download queue.
    */
   getStatus(): AutoDownloadStatus {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - MAX_RETRY_DAYS);
-    const cutoff = cutoffDate.toISOString().split('T')[0];
-
     const pending = db.prepare(`
       SELECT COUNT(*) as count FROM episode_releases er
       JOIN auto_track at ON er.tmdbId = at.tmdbId AND at.enabled = 1
       JOIN shows s ON s.id = at.showId
-      WHERE er.downloadAttempted = 0 AND er.airDate >= ? AND er.airDate <= date('now')
+      WHERE er.downloadAttempted = 0 AND er.airDate <= date('now')
         AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
-    `).get(cutoff) as { count: number };
+        AND NOT EXISTS (
+          SELECT 1 FROM episodes e 
+          WHERE e.showId = at.showId 
+            AND e.seasonNumber = er.seasonNumber 
+            AND e.episodeNumber = er.episodeNumber
+        )
+    `).get() as { count: number };
 
     const retrying = db.prepare(`
       SELECT COUNT(*) as count FROM episode_releases er
@@ -371,9 +377,15 @@ class AutoDownloader {
       JOIN shows s ON s.id = at.showId
       LEFT JOIN downloads d ON er.downloadId = d.id
       WHERE er.downloadAttempted = 1 AND (d.status = 'error' OR er.downloadId IS NULL)
-        AND er.airDate >= ?
+        AND er.airDate <= date('now')
         AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
-    `).get(cutoff) as { count: number };
+        AND NOT EXISTS (
+          SELECT 1 FROM episodes e 
+          WHERE e.showId = at.showId 
+            AND e.seasonNumber = er.seasonNumber 
+            AND e.episodeNumber = er.episodeNumber
+        )
+    `).get() as { count: number };
 
     const completed = db.prepare(`
       SELECT COUNT(*) as count FROM episode_releases er
@@ -385,9 +397,10 @@ class AutoDownloader {
       SELECT COUNT(*) as count FROM episode_releases er
       JOIN auto_track at ON er.tmdbId = at.tmdbId AND at.enabled = 1
       JOIN shows s ON s.id = at.showId
-      WHERE er.airDate < ? AND er.downloadAttempted = 0
+      JOIN downloads d ON er.downloadId = d.id
+      WHERE d.status = 'error'
         AND EXISTS (SELECT 1 FROM episodes e WHERE e.showId = at.showId)
-    `).get(cutoff) as { count: number };
+    `).get() as { count: number };
 
     return {
       pending: pending?.count || 0,

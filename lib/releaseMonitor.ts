@@ -187,8 +187,8 @@ class ReleaseMonitor {
 
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-    // Check the last 2 seasons (most relevant for new releases)
-    const startSeason = Math.max(1, showInfo.number_of_seasons - 1);
+    // Check all seasons to find any missing episodes (as well as new upcoming/aired releases)
+    const startSeason = 1;
 
     for (let seasonNum = startSeason; seasonNum <= showInfo.number_of_seasons; seasonNum++) {
       try {
@@ -203,12 +203,11 @@ class ReleaseMonitor {
           const key = `${seasonNum}x${ep.episode_number}`;
           const airDate = ep.air_date || null;
 
-          // Skip if: already in local library, already notified, or not yet aired
+          // Skip if: already in local library, or not yet aired
           if (localEpisodeSet.has(key)) continue;
-          if (trackedReleaseSet.has(key)) continue;
           if (!airDate || airDate > today) continue;
 
-          // This is a new episode that has aired but isn't in the library!
+          // This is an episode that has aired but is missing from the local library
           const episodeInfo: NewEpisodeInfo = {
             tmdbId: show.tmdbId,
             showId: show.showId,
@@ -227,34 +226,34 @@ class ReleaseMonitor {
             VALUES (?, ?, ?, ?, ?)
           `).run(show.tmdbId, seasonNum, ep.episode_number, ep.name || null, airDate);
 
-          if (isInitialSync) {
-            // First-time tracking should establish a baseline, not notify old aired episodes.
-            db.prepare(
-              'UPDATE episode_releases SET notified = 1 WHERE tmdbId = ? AND seasonNumber = ? AND episodeNumber = ?'
-            ).run(show.tmdbId, seasonNum, ep.episode_number);
-            baselineMarked++;
-            continue;
+          const alreadyNotified = trackedReleaseSet.has(key);
+
+          if (!alreadyNotified && !isInitialSync) {
+            // Create notification for newly aired episodes
+            const notifMessage = `${show.title} — S${String(seasonNum).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}: ${ep.name || 'New Episode'}`;
+
+            this.createNotification({
+              type: 'new_episode',
+              title: 'New Episode Available',
+              message: notifMessage,
+              showId: show.showId,
+              tmdbId: show.tmdbId,
+              seasonNumber: seasonNum,
+              episodeNumber: ep.episode_number,
+              posterPath,
+            });
           }
 
-          // Create notification
-          const notifMessage = `${show.title} — S${String(seasonNum).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}: ${ep.name || 'New Episode'}`;
+          if (isInitialSync) {
+            baselineMarked++;
+          }
 
-          this.createNotification({
-            type: 'new_episode',
-            title: 'New Episode Available',
-            message: notifMessage,
-            showId: show.showId,
-            tmdbId: show.tmdbId,
-            seasonNumber: seasonNum,
-            episodeNumber: ep.episode_number,
-            posterPath,
-          });
-
-          // Mark as notified
+          // Mark as notified so we don't spam notifications
           db.prepare(
             'UPDATE episode_releases SET notified = 1 WHERE tmdbId = ? AND seasonNumber = ? AND episodeNumber = ?'
           ).run(show.tmdbId, seasonNum, ep.episode_number);
 
+          // Queue missing/new episode for auto-download
           newEpisodes.push(episodeInfo);
         }
       } catch (e) {
@@ -263,7 +262,7 @@ class ReleaseMonitor {
     }
 
     if (isInitialSync && baselineMarked > 0) {
-      console.log(`[ReleaseMonitor] Baseline sync for "${show.title}": marked ${baselineMarked} aired episodes as already seen`);
+      console.log(`[ReleaseMonitor] Baseline sync for "${show.title}": found ${baselineMarked} missing aired episode(s)`);
     }
 
     return newEpisodes;

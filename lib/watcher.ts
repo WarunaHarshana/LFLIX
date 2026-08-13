@@ -72,9 +72,23 @@ class FolderWatcher {
 
             if (folder) {
                 try {
-                    // Scan just this file using direct API call
+                    // Check if loose TV show episode needs organization
+                    let targetPath = filePath;
+                    const { detectTvShow } = await import('./mediaNaming');
+                    if (detectTvShow(path.basename(filePath))) {
+                        const { organizeTvEpisodeFile } = await import('./mediaOrganizer');
+                        const orgResult = await organizeTvEpisodeFile(filePath, {
+                            baseDownloadPath: folder.folderPath,
+                            deleteSourceFolderIfEmpty: true,
+                        });
+                        if (orgResult.moved && orgResult.newPath) {
+                            targetPath = orgResult.newPath;
+                        }
+                    }
+
+                    // Scan file using direct API call
                     const { scanFile } = await import('./scanner');
-                    const result = await scanFile(filePath);
+                    const result = await scanFile(targetPath);
                     if (result.added) {
                         addedCount++;
                     }
@@ -436,6 +450,14 @@ class FolderWatcher {
             if (movieCount === 0 && showCount === 0) {
                 console.log('[AutoScan] Library is empty — starting initial scan...');
                 this.emit({ type: 'new_file', message: 'Starting initial library scan...' });
+
+                // First organize any loose TV shows in download directories
+                try {
+                    const { organizeLooseTvShowsInDownloads } = await import('./mediaOrganizer');
+                    await organizeLooseTvShowsInDownloads();
+                } catch (e) {
+                    console.warn('[AutoScan] Loose TV show organization warning:', e);
+                }
 
                 const fs = await import('fs');
                 const { scanFile, groupFilesForScan } = await import('./scanner');

@@ -112,6 +112,7 @@ export async function GET() {
       ...shows.map((s) => ({
         id: s.id,
         title: s.title,
+        year: s.firstAirDate ? parseInt(s.firstAirDate.substring(0, 4), 10) || null : null,
         tmdbId: s.tmdbId,
         posterPath: s.posterPath,
         backdropPath: s.backdropPath,
