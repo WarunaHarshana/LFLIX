@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchStreamiEventById, getStreamiStreams } from '@/lib/streami';
 import { fetchXyzStreams } from '@/lib/xyzstreams';
+import { fetchTimStreamsWatch } from '@/lib/timstreams';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -52,42 +53,16 @@ export async function GET(request: Request) {
 
   if (source === 'timstreams') {
     try {
-      // Fetch watch details which returns all available qualities/sources for the event
-      const response = await fetch(`https://api.nuevasantino.xyz/api/watch/${encodeURIComponent(id)}`, {
-        headers: {
-          'Accept': 'application/json',
-        },
-        next: { revalidate: 30 } // Cache for 30 seconds
-      });
-      
-      let event = null;
-      if (response.ok) {
-        const data = await response.json();
-        event = data.item;
-      }
-      
-      // Fallback to live-upcoming if watch API fails or has no streams
-      if (!event || !event.streams || event.streams.length === 0) {
-        const fallbackResponse = await fetch('https://api.nuevasantino.xyz/api/live-upcoming', {
-          headers: {
-            'Accept': 'application/json',
-          },
-          next: { revalidate: 30 }
-        });
-        if (fallbackResponse.ok) {
-          const fallbackData = await fallbackResponse.json();
-          event = fallbackData.events?.find((e: any) => e.url === id);
-        }
-      }
+      const event = await fetchTimStreamsWatch(id);
 
-      if (!event || !event.streams) {
+      if (!event || !event.streams || event.streams.length === 0) {
         return NextResponse.json({ streams: [] });
       }
 
       const transformedStreams = event.streams.map((stream: any, index: number) => {
         const label = (stream.name || '').toUpperCase();
         const is4k = label.includes('4K') || label.includes('UHD');
-        const isHd = is4k || label.includes('FHD') || label.includes('720P') || label.includes('MAX') || label.includes('HEVC');
+        const isHd = is4k || label.includes('FHD') || label.includes('720P') || label.includes('1080P') || label.includes('MAX') || label.includes('HEVC');
         return {
           id: `${id}-${index}`,
           streamNo: index + 1,

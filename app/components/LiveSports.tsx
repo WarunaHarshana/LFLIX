@@ -182,9 +182,13 @@ export default function LiveSports({ onClose }: Props) {
     if (!embedUrl) return;
 
     const isIframe = embedUrl.includes('embed') || 
+                     embedUrl.includes('play/') ||
                      embedUrl.includes('pages.dev') || 
                      embedUrl.includes('html') ||
-                     selectedStream.source === 'streami';
+                     embedUrl.includes('cdx-') ||
+                     selectedStream.source === 'streami' ||
+                     selectedStream.source === 'timstreams' ||
+                     selectedStream.source === 'xyzstreams';
 
     if (isIframe) return;
 
@@ -528,9 +532,13 @@ export default function LiveSports({ onClose }: Props) {
                           <p className="text-neutral-400 text-sm max-w-md">The source did not provide a valid streaming URL. Please try another feed.</p>
                         </div>
                       ) : selectedStream.embedUrl.includes('embed') || 
+                       selectedStream.embedUrl.includes('play/') ||
                        selectedStream.embedUrl.includes('pages.dev') || 
                        selectedStream.embedUrl.includes('html') ||
-                       selectedStream.source === 'streami' ? (
+                       selectedStream.embedUrl.includes('cdx-') ||
+                       selectedStream.source === 'streami' ||
+                       selectedStream.source === 'timstreams' ||
+                       selectedStream.source === 'xyzstreams' ? (
                         <iframe
                           key={selectedStream.id}
                           src={selectedStream.embedUrl}

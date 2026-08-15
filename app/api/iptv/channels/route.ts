@@ -1,49 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { iptvDb } from '@/lib/db';
 import { readJsonObject } from '@/lib/apiSecurity';
+import { fetchTimStreamsChannels } from '@/lib/timstreams';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
     try {
-        // Uses the shared connection in lib/db.ts. This route previously opened
-        // its own handle on ./localflix.db and declared a reduced iptv_channels
-        // table there, so imported channels landed in a file nothing else read,
-        // with none of the schema or indexes the rest of the app expects.
+        // Uses the shared connection in lib/db.ts.
         const dbChannels = iptvDb.getChannels();
 
         let timStreamsChannels: any[] = [];
         try {
-            const response = await fetch('https://api.nuevasantino.xyz/api/channels', {
-                headers: {
-                    'Accept': 'application/json',
-                },
-                next: { revalidate: 300 } // Cache for 5 minutes
-            });
-            if (response.ok) {
-                const data = await response.json();
-                if (data.channels && Array.isArray(data.channels)) {
-                    const genres = data.genres || {};
-                    timStreamsChannels = data.channels.map((ch: any, index: number) => {
-                        let streamUrl = ch.streams && ch.streams[0] ? ch.streams[0].url : '';
-                        if (streamUrl && (streamUrl.includes('junkieembeds.pages.dev') || streamUrl.includes('vivocdn'))) {
-                            const match = streamUrl.match(/\/embed\/([^\/?#]+)/);
-                            const streamId = match ? match[1] : streamUrl.split('/').pop();
-                            if (streamId) {
-                                streamUrl = `/api/sports/streams/resolve?id=${streamId}&ext=.m3u8`;
-                            }
+            const { channels: tsChannels, genres: tsGenres } = await fetchTimStreamsChannels();
+            if (tsChannels && Array.isArray(tsChannels)) {
+                timStreamsChannels = tsChannels.map((ch: any, index: number) => {
+                    let streamUrl = ch.streams && ch.streams[0] ? ch.streams[0].url : '';
+                    if (streamUrl && (streamUrl.includes('junkieembeds.pages.dev') || streamUrl.includes('vivocdn'))) {
+                        const match = streamUrl.match(/\/embed\/([^\/?#]+)/);
+                        const streamId = match ? match[1] : streamUrl.split('/').pop();
+                        if (streamId) {
+                            streamUrl = `/api/sports/streams/resolve?id=${streamId}&ext=.m3u8`;
                         }
-                        return {
-                            id: -1000 - index,
-                            name: ch.name || 'Unknown Channel',
-                            url: streamUrl,
-                            logo: ch.logo || null,
-                            category: genres[ch.genre] || 'TimStreams',
-                            country: 'Global'
-                        };
-                    });
-                }
+                    }
+                    return {
+                        id: -1000 - index,
+                        name: ch.name || 'Unknown Channel',
+                        url: streamUrl,
+                        logo: ch.logo || null,
+                        category: tsGenres[ch.genre] || 'TimStreams',
+                        country: 'Global'
+                    };
+                });
             }
         } catch (error) {
             console.error('Failed to fetch TimStreams channels:', error);
