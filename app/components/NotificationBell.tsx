@@ -30,6 +30,8 @@ function NotificationIcon({ type }: { type: string }) {
       return <Tv size={16} className="text-blue-400" />;
     case 'download_started':
       return <Download size={16} className="text-amber-400" />;
+    case 'download_failed':
+      return <AlertCircle size={16} className="text-red-400" />;
     case 'download_complete':
       return <Check size={16} className="text-emerald-400" />;
     case 'movie_available':

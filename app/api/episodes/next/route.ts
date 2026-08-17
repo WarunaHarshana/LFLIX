@@ -96,11 +96,21 @@ export async function GET(request: Request) {
                 episodeTitle: episodeMeta.name || `Episode ${nextEpisode}`,
                 airDate: episodeMeta.air_date || new Date().toISOString().split('T')[0],
                 posterPath: show.posterPath,
-                qualityPreference: qualityPref
+                qualityPreference: qualityPref,
+                isManual: true
             };
 
             autoDownloader.processNewEpisodes([newRelease]).catch(e => console.error(e));
-            return NextResponse.json({ message: 'Next episode download queued', queued: true });
+            const epTag = `S${String(nextSeason).padStart(2, '0')}E${String(nextEpisode).padStart(2, '0')}`;
+            return NextResponse.json({
+                message: `Searching and downloading ${show.title} ${epTag}`,
+                queued: true,
+                nextEpisode: {
+                    season: nextSeason,
+                    episode: nextEpisode,
+                    title: episodeMeta.name || `Episode ${nextEpisode}`
+                }
+            });
         }
 
         return NextResponse.json({

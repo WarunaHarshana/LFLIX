@@ -68,7 +68,8 @@ export async function POST(req: Request) {
                         episodeTitle: ep.name || `Episode ${epNum}`,
                         airDate: ep.air_date,
                         posterPath: showData?.posterPath || null,
-                        qualityPreference: qualityPref
+                        qualityPreference: qualityPref,
+                        isManual: true
                     });
                 }
             }

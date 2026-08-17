@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, BookmarkMinus, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
+import ToastNotification from './ToastNotification';
+import { useToast } from '@/app/hooks/useToast';
 
 type Episode = {
     id: number;
@@ -102,6 +104,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     
     const [isDownloadingNext, setIsDownloadingNext] = useState(false);
     const [downloadNextQuery, setDownloadNextQuery] = useState<string | null>(null);
+    const { toast, showToast } = useToast();
 
     // Reset active season when seasons change (new show opened)
     useEffect(() => {
@@ -158,13 +161,15 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
             });
             const data = await res.json();
             if (res.ok) {
-                // Could toast here if we had a toast system
-                console.log(data.message);
+                showToast(data.message || 'Queued missing episodes for download', 'success');
+            } else {
+                showToast(data.error || 'Failed to fetch missing episodes', 'error');
             }
-        } catch { /* ignore */ }
-        
-        // Brief timeout so button doesn't flash immediately on quick resolves
-        setTimeout(() => setIsDownloadingMissing(false), 1000);
+        } catch (e: any) {
+            showToast(e?.message || 'Network error fetching missing episodes', 'error');
+        } finally {
+            setTimeout(() => setIsDownloadingMissing(false), 1000);
+        }
     };
 
     const handleDownloadNext = async () => {
@@ -174,15 +179,15 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
             const res = await fetch(`/api/episodes/next?showId=${show.id}&autoDownload=true`);
             const data = await res.json();
             if (res.ok && data.queued) {
-                // Success: autoDownloader will handle it and add it to downloads tab
-                console.log('Download queued automatically');
+                showToast(data.message || 'Next episode download queued', 'success');
             } else {
-                console.error('Failed to queue next episode download', data.error);
+                showToast(data.error || 'Failed to queue next episode download', 'error');
             }
-        } catch(e) {
-            console.error('Network error queueing next episode', e);
+        } catch (e: any) {
+            showToast(e?.message || 'Network error queueing next episode', 'error');
+        } finally {
+            setIsDownloadingNext(false);
         }
-        setIsDownloadingNext(false);
     };
 
     return (
@@ -754,6 +759,8 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                     })()}
                 </div>
             )}
+
+            {toast && <ToastNotification toast={toast} />}
         </div>
     );
 }

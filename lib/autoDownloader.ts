@@ -167,8 +167,20 @@ function filterForEpisode(results: TorrentResult[], showTitle: string, season: n
 
 class AutoDownloader {
   private processing = false;
+  private queue: NewEpisodeInfo[] = [];
 
   private isEpisodeStillEligible(ep: NewEpisodeInfo): boolean {
+    if (ep.isManual) {
+      // Manual requests: only verify the show exists in library
+      const row = db.prepare(`
+        SELECT 1
+        FROM shows s
+        WHERE s.id = ?
+        LIMIT 1
+      `).get(ep.showId);
+      return !!row;
+    }
+
     const row = db.prepare(`
       SELECT 1
       FROM auto_track at
@@ -184,28 +196,32 @@ class AutoDownloader {
   }
 
   /**
-   * Process a list of new episodes from the release monitor.
+   * Process a list of new episodes from the release monitor or manual actions.
    * Finds and downloads the best available torrent for each.
    */
   async processNewEpisodes(episodes: NewEpisodeInfo[]): Promise<void> {
+    this.queue.push(...episodes);
     if (this.processing) {
-      console.log('[AutoDownloader] Already processing, queuing for next cycle');
+      console.log(`[AutoDownloader] Already processing, queued ${episodes.length} episode(s) (total queued: ${this.queue.length})`);
       return;
     }
 
     this.processing = true;
 
     try {
-      for (const ep of episodes) {
+      while (this.queue.length > 0) {
+        const ep = this.queue.shift()!;
         try {
           if (!this.isEpisodeStillEligible(ep)) {
-            console.log(`[AutoDownloader] Skipping ${ep.showTitle} S${ep.seasonNumber}E${ep.episodeNumber}: show is no longer tracked`);
+            console.log(`[AutoDownloader] Skipping ${ep.showTitle} S${ep.seasonNumber}E${ep.episodeNumber}: show is not tracked or eligible`);
             continue;
           }
 
           await this.findAndDownload(ep);
           // Small delay between searches to avoid rate limiting
-          await new Promise(r => setTimeout(r, 2000));
+          if (this.queue.length > 0) {
+            await new Promise(r => setTimeout(r, 2000));
+          }
         } catch (e) {
           console.error(`[AutoDownloader] Error processing ${ep.showTitle} S${ep.seasonNumber}E${ep.episodeNumber}:`, e);
         }
@@ -220,11 +236,12 @@ class AutoDownloader {
    */
   async findAndDownload(ep: NewEpisodeInfo): Promise<boolean> {
     if (!this.isEpisodeStillEligible(ep)) {
-      console.log(`[AutoDownloader] Skipping ${ep.showTitle} S${ep.seasonNumber}E${ep.episodeNumber}: show is no longer tracked`);
+      console.log(`[AutoDownloader] Skipping ${ep.showTitle} S${ep.seasonNumber}E${ep.episodeNumber}: show is not tracked or eligible`);
       return false;
     }
 
     const query = buildEpisodeQuery(ep.showTitle, ep.seasonNumber, ep.episodeNumber);
+    const epLabel = `S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
     console.log(`[AutoDownloader] Searching for: "${query}"`);
 
     try {
@@ -233,6 +250,18 @@ class AutoDownloader {
       if (!results || results.length === 0) {
         console.log(`[AutoDownloader] No results found for "${query}"`);
         this.markRetry(ep);
+        if (ep.isManual) {
+          releaseMonitor.createNotification({
+            type: 'download_failed',
+            title: 'Download Failed',
+            message: `No suitable torrent found for ${ep.showTitle} ${epLabel}`,
+            showId: ep.showId,
+            tmdbId: ep.tmdbId,
+            seasonNumber: ep.seasonNumber,
+            episodeNumber: ep.episodeNumber,
+            posterPath: ep.posterPath,
+          });
+        }
         return false;
       }
 
@@ -242,6 +271,18 @@ class AutoDownloader {
       if (episodeResults.length === 0) {
         console.log(`[AutoDownloader] No episode-specific results for "${query}" (${results.length} general results)`);
         this.markRetry(ep);
+        if (ep.isManual) {
+          releaseMonitor.createNotification({
+            type: 'download_failed',
+            title: 'Download Failed',
+            message: `No episode-specific results for ${ep.showTitle} ${epLabel}`,
+            showId: ep.showId,
+            tmdbId: ep.tmdbId,
+            seasonNumber: ep.seasonNumber,
+            episodeNumber: ep.episodeNumber,
+            posterPath: ep.posterPath,
+          });
+        }
         return false;
       }
 
@@ -263,24 +304,38 @@ class AutoDownloader {
       if (best._score < 30) {
         console.log(`[AutoDownloader] Best result score too low (${best._score}), marking for retry`);
         this.markRetry(ep);
+        if (ep.isManual) {
+          releaseMonitor.createNotification({
+            type: 'download_failed',
+            title: 'Download Failed',
+            message: `Best source quality too low for ${ep.showTitle} ${epLabel}`,
+            showId: ep.showId,
+            tmdbId: ep.tmdbId,
+            seasonNumber: ep.seasonNumber,
+            episodeNumber: ep.episodeNumber,
+            posterPath: ep.posterPath,
+          });
+        }
         return false;
       }
 
       // Start the download
       const download = await downloadManager.addDownload(best.magnet);
 
-      // Update episode_releases
+      // Upsert into episode_releases
       db.prepare(`
-        UPDATE episode_releases 
-        SET downloadAttempted = 1, downloadId = ?, lastAttemptAt = CURRENT_TIMESTAMP 
-        WHERE tmdbId = ? AND seasonNumber = ? AND episodeNumber = ?
-      `).run(download.id, ep.tmdbId, ep.seasonNumber, ep.episodeNumber);
+        INSERT INTO episode_releases (tmdbId, seasonNumber, episodeNumber, episodeTitle, airDate, downloadAttempted, downloadId, lastAttemptAt)
+        VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(tmdbId, seasonNumber, episodeNumber) DO UPDATE SET
+          downloadAttempted = 1,
+          downloadId = excluded.downloadId,
+          lastAttemptAt = CURRENT_TIMESTAMP
+      `).run(ep.tmdbId, ep.seasonNumber, ep.episodeNumber, ep.episodeTitle, ep.airDate, download.id);
 
       // Create notification
-      const epLabel = `S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
       releaseMonitor.createNotification({
         type: 'download_started',
-        title: 'Auto-Download Started',
+        title: ep.isManual ? 'Download Started' : 'Auto-Download Started',
         message: `${ep.showTitle} ${epLabel} — ${best.quality} (${best.size})`,
         showId: ep.showId,
         tmdbId: ep.tmdbId,
@@ -294,6 +349,18 @@ class AutoDownloader {
     } catch (e) {
       console.error(`[AutoDownloader] Search/download error for "${query}":`, e);
       this.markRetry(ep);
+      if (ep.isManual) {
+        releaseMonitor.createNotification({
+          type: 'download_failed',
+          title: 'Download Failed',
+          message: `Error searching for ${ep.showTitle} ${epLabel}`,
+          showId: ep.showId,
+          tmdbId: ep.tmdbId,
+          seasonNumber: ep.seasonNumber,
+          episodeNumber: ep.episodeNumber,
+          posterPath: ep.posterPath,
+        });
+      }
       return false;
     }
   }
@@ -303,9 +370,11 @@ class AutoDownloader {
    */
   private markRetry(ep: NewEpisodeInfo): void {
     db.prepare(`
-      UPDATE episode_releases SET lastAttemptAt = CURRENT_TIMESTAMP 
-      WHERE tmdbId = ? AND seasonNumber = ? AND episodeNumber = ?
-    `).run(ep.tmdbId, ep.seasonNumber, ep.episodeNumber);
+      INSERT INTO episode_releases (tmdbId, seasonNumber, episodeNumber, episodeTitle, airDate, lastAttemptAt)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(tmdbId, seasonNumber, episodeNumber) DO UPDATE SET
+        lastAttemptAt = CURRENT_TIMESTAMP
+    `).run(ep.tmdbId, ep.seasonNumber, ep.episodeNumber, ep.episodeTitle, ep.airDate);
   }
 
   /**

@@ -28,6 +28,7 @@ export interface NewEpisodeInfo {
   airDate: string;
   posterPath: string | null;
   qualityPreference: string;
+  isManual?: boolean;
 }
 
 export interface AppNotification {
