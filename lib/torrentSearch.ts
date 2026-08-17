@@ -17,7 +17,19 @@ export interface TorrentResult {
     uploadTimestamp?: number;
 }
 
-export type TorrentSourceName = 'PSA' | 'TPB' | 'YTS' | 'Knaben' | 'Nyaa' | 'DDL';
+export type TorrentSourceName = 'PSA' | 'TPB' | 'YTS' | 'TorrentsCSV' | 'EZTV' | '1337x' | 'Knaben' | 'Nyaa' | 'DDL';
+
+export const DEFAULT_TORRENT_SOURCES: TorrentSourceName[] = [
+    'PSA',
+    'TPB',
+    'YTS',
+    'TorrentsCSV',
+    'EZTV',
+    '1337x',
+    'Knaben',
+    'Nyaa',
+    'DDL',
+];
 
 export type TorrentSourceStatus = {
     name: TorrentSourceName;
@@ -256,8 +268,8 @@ export function isGoodMovieReleaseQuality(result: Pick<TorrentResult, 'title' | 
         return true;
     }
 
-    // YTS only publishes finished movie encodes, so a resolution-tagged YTS result is acceptable.
-    if (result.source === 'YTS' && /\b(?:720p|1080p|2160p|4k|uhd)\b/i.test(haystack)) {
+    // YTS, TorrentsCSV, 1337x, EZTV only publish finished movie encodes, so a resolution-tagged result is acceptable.
+    if ((result.source === 'YTS' || result.source === 'TorrentsCSV' || result.source === '1337x' || result.source === 'EZTV') && /\b(?:720p|1080p|2160p|4k|uhd)\b/i.test(haystack)) {
         return true;
     }
 
@@ -592,7 +604,7 @@ async function searchTPB(query: string, category: string = '200'): Promise<Torre
 // --- YTS API (movies only, small high-quality encodes) ---
 
 async function searchYTS(query: string, year?: string): Promise<TorrentResult[]> {
-    const domains = ['yts.mx', 'yts.am', 'yts.lt', 'yts.do'];
+    const domains = ['yts.lt', 'yts.do', 'yts.bz', 'yts.mx', 'yts.am'];
 
     for (const domain of domains) {
         try {
@@ -636,6 +648,243 @@ async function searchYTS(query: string, year?: string): Promise<TorrentResult[]>
             if (results.length > 0) return results;
         } catch {
             // Try next mirror.
+        }
+    }
+
+    return [];
+}
+
+// --- Torrents-CSV API (high quality, decentralized index) ---
+
+type TorrentsCsvItem = {
+    name?: string;
+    infohash?: string;
+    size_bytes?: number;
+    created_unix?: number;
+    seeders?: number;
+    leechers?: number;
+};
+
+type TorrentsCsvResponse = {
+    torrents?: TorrentsCsvItem[];
+};
+
+async function searchTorrentsCSV(query: string, options?: SearchOptions): Promise<TorrentResult[]> {
+    const apiBases = [
+        'https://torrents-csv.com/service/search',
+        'https://torrents-csv.ml/service/search',
+    ];
+
+    for (const base of apiBases) {
+        try {
+            const url = `${base}?q=${encodeURIComponent(query)}&size=40`;
+            const res = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                signal: AbortSignal.timeout(9000),
+            });
+            if (!res.ok) continue;
+
+            const data = await res.json() as TorrentsCsvResponse;
+            if (!data?.torrents || !Array.isArray(data.torrents)) continue;
+
+            return data.torrents
+                .filter(item => item.name && item.infohash && (item.seeders ?? 0) > 0)
+                .slice(0, 30)
+                .map(item => {
+                    const title = item.name || 'Unknown';
+                    const sizeBytes = item.size_bytes || 0;
+                    const uploadTimestamp = item.created_unix ? item.created_unix * 1000 : undefined;
+                    return {
+                        title,
+                        magnet: buildMagnet(item.infohash || '', title),
+                        size: formatBytes(sizeBytes),
+                        sizeBytes,
+                        seeds: item.seeders || 0,
+                        leeches: item.leechers || 0,
+                        quality: extractQuality(title),
+                        source: 'TorrentsCSV',
+                        uploadDate: uploadTimestamp ? new Date(uploadTimestamp).toISOString().split('T')[0] : undefined,
+                        uploadTimestamp,
+                    };
+                });
+        } catch {
+            // Try next mirror
+        }
+    }
+
+    return [];
+}
+
+// --- EZTV API (TV shows and episodes) ---
+
+type EztvItem = {
+    title?: string;
+    filename?: string;
+    torrent_handle?: string;
+    magnet_url?: string;
+    hash?: string;
+    size_bytes?: string | number;
+    seeds?: number;
+    peers?: number;
+    date_released_unix?: number;
+    season?: string | number;
+    episode?: string | number;
+    imdb_id?: string;
+};
+
+type EztvResponse = {
+    torrents?: EztvItem[];
+    torrents_count?: number;
+};
+
+async function searchEZTV(query: string, options?: SearchOptions): Promise<TorrentResult[]> {
+    const apiBases = [
+        'https://eztv.re',
+        'https://eztvx.to',
+        'https://eztv.wf',
+        'https://eztv.tf',
+    ];
+
+    const episodeQuery = extractEpisodeQuery(query);
+    const significantWords = getSignificantTvQueryWords(query);
+    const searchSlug = significantWords.join(' ') || query;
+
+    for (const base of apiBases) {
+        try {
+            const url = `${base}/api/get-torrents?limit=100`;
+            const res = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                signal: AbortSignal.timeout(10000),
+            });
+            if (!res.ok) continue;
+
+            const data = await res.json() as EztvResponse;
+            if (!data?.torrents || !Array.isArray(data.torrents)) continue;
+
+            const results = data.torrents
+                .filter(item => {
+                    const title = item.title || item.filename || '';
+                    if (!title) return false;
+                    const matchesTitle = significantWords.length === 0 || titleMatches(title, searchSlug, 'tv');
+                    if (!matchesTitle) return false;
+                    if (episodeQuery && !titleMatchesEpisode(title, episodeQuery)) return false;
+                    return true;
+                })
+                .slice(0, 25)
+                .map(item => {
+                    const title = item.title || item.filename || 'Unknown';
+                    const sizeBytes = typeof item.size_bytes === 'number' ? item.size_bytes : parseInt(String(item.size_bytes || '0'), 10) || 0;
+                    const uploadTimestamp = item.date_released_unix ? item.date_released_unix * 1000 : undefined;
+                    const magnet = item.magnet_url || (item.hash ? buildMagnet(item.hash, title) : '');
+                    return {
+                        title,
+                        magnet,
+                        size: formatBytes(sizeBytes),
+                        sizeBytes,
+                        seeds: item.seeds || 0,
+                        leeches: item.peers || 0,
+                        quality: extractQuality(title),
+                        source: 'EZTV',
+                        uploadDate: uploadTimestamp ? new Date(uploadTimestamp).toISOString().split('T')[0] : undefined,
+                        uploadTimestamp,
+                    };
+                })
+                .filter(item => Boolean(item.magnet));
+
+            if (results.length > 0) return results;
+        } catch {
+            // Try next mirror
+        }
+    }
+
+    return [];
+}
+
+// --- 1337x (high quality scene & P2P releases) ---
+
+async function search1337x(query: string, options?: SearchOptions): Promise<TorrentResult[]> {
+    const mirrors = [
+        'https://1337xx.to',
+        'https://1337x.to',
+        'https://1337x.st',
+        'https://1337x.ws',
+    ];
+
+    for (const mirror of mirrors) {
+        try {
+            const searchUrl = `${mirror}/search/${encodeURIComponent(query)}/1/`;
+            const res = await fetch(searchUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                signal: AbortSignal.timeout(9000),
+            });
+            if (!res.ok) continue;
+
+            const html = await res.text();
+            if (html.includes('Cloudflare') && !html.includes('coll-1 name')) continue;
+
+            const rowRegex = /<tr>([\s\S]*?)<\/tr>/gi;
+            let match;
+            const parsedItems: { title: string; seeds: number; leeches: number; size: string; detailPath: string }[] = [];
+
+            while ((match = rowRegex.exec(html)) !== null) {
+                const row = match[1];
+                const titleMatch = row.match(/<a href="\/torrent\/(\d+\/[^/"]+\/)"[^>]*>([\s\S]*?)<\/a>/i);
+                const seedsMatch = row.match(/<td class="coll-2 seeds">(\d+)<\/td>/i);
+                const leechesMatch = row.match(/<td class="coll-3 leeches">(\d+)<\/td>/i);
+                const sizeMatch = row.match(/<td class="coll-4 size[^"]*">([\d.]+\s*[KMGT]?B)[\s\S]*?<\/td>/i);
+
+                if (titleMatch) {
+                    const detailPath = `/torrent/${titleMatch[1]}`;
+                    const rawTitle = titleMatch[2].replace(/<[^>]+>/g, '').trim();
+                    const title = decodeHtmlEntities(rawTitle);
+                    const seeds = seedsMatch ? parseInt(seedsMatch[1], 10) : 0;
+                    const leeches = leechesMatch ? parseInt(leechesMatch[1], 10) : 0;
+                    const size = sizeMatch ? sizeMatch[1].trim() : 'Unknown';
+
+                    if (seeds > 0 && title) {
+                        parsedItems.push({ title, seeds, leeches, size, detailPath });
+                    }
+                }
+            }
+
+            if (parsedItems.length === 0) continue;
+
+            // Fetch detail pages in parallel for top 6 items to extract infohash/magnet
+            const topItems = parsedItems.slice(0, 6);
+            const resolved = await Promise.allSettled(
+                topItems.map(async (item) => {
+                    const detailRes = await fetch(`${mirror}${item.detailPath}`, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                        signal: AbortSignal.timeout(6000),
+                    });
+                    if (!detailRes.ok) return null;
+                    const detailHtml = await detailRes.text();
+                    const magnetMatch = detailHtml.match(/href="(magnet:[^"]+)"/i);
+                    const infoHashMatch = detailHtml.match(/<div class="infohash-box">[\s\S]*?<span>([a-fA-F0-9]{40})<\/span>/i) || detailHtml.match(/([a-fA-F0-9]{40})/);
+                    const magnet = magnetMatch ? decodeHtmlEntities(magnetMatch[1]) : (infoHashMatch ? buildMagnet(infoHashMatch[1], item.title) : null);
+                    if (!magnet) return null;
+
+                    const sizeBytes = parseSizeToBytes(item.size);
+                    return {
+                        title: item.title,
+                        magnet,
+                        size: item.size,
+                        sizeBytes,
+                        seeds: item.seeds,
+                        leeches: item.leeches,
+                        quality: extractQuality(item.title),
+                        source: '1337x',
+                    } as TorrentResult;
+                })
+            );
+
+            const results = resolved
+                .filter((r): r is PromiseFulfilledResult<TorrentResult> => r.status === 'fulfilled' && r.value !== null)
+                .map(r => r.value);
+
+            if (results.length > 0) return results;
+        } catch {
+            // Try next mirror
         }
     }
 
@@ -1635,10 +1884,26 @@ export async function searchTorrentsWithDiagnostics(
     // Always use 200 (All Video) for TPB to ensure we don't filter out HD categories (207, 208)
     const tpbCategory = '200';
 
-    const [psaSource, tpbSource, ytsSource, knabenSource, nyaaSource, ddlSource] = await Promise.all([
+    const isTv = options?.type === 'tv';
+    const isMovie = options?.type === 'movie';
+
+    const [
+        psaSource,
+        tpbSource,
+        ytsSource,
+        csvSource,
+        eztvSource,
+        leetSource,
+        knabenSource,
+        nyaaSource,
+        ddlSource
+    ] = await Promise.all([
         runSource('PSA', 14000, () => searchOriginalPsa(query, options), { query }),
         runSource('TPB', 12000, () => searchTPB(query, tpbCategory), { query }),
-        runSource('YTS', 12000, () => options?.type !== 'tv' ? searchYTS(title, options?.year) : Promise.resolve([]), { query: title, record: options?.type !== 'tv' }),
+        runSource('YTS', 10000, () => !isTv ? searchYTS(title, options?.year) : Promise.resolve([]), { query: title, record: !isTv }),
+        runSource('TorrentsCSV', 9000, () => searchTorrentsCSV(query, options), { query }),
+        runSource('EZTV', 10000, () => !isMovie ? searchEZTV(query, options) : Promise.resolve([]), { query, record: !isMovie }),
+        runSource('1337x', 11000, () => search1337x(query, options), { query }),
         runSource('Knaben', 9000, () => searchKnaben(query), { query }),
         runSource('Nyaa', 10000, () => searchNyaa(query), { query }),
         runSource('DDL', 14000, () => searchDirectDownloads(title, options?.type), { query: title }),
@@ -1647,15 +1912,31 @@ export async function searchTorrentsWithDiagnostics(
     const psaResults = psaSource.results;
     const tpbResults = tpbSource.results;
     const ytsResults = ytsSource.results;
+    const csvResults = csvSource.results;
+    const eztvResults = eztvSource.results;
+    const leetResults = leetSource.results;
     const knabenResults = knabenSource.results;
     const nyaaResults = nyaaSource.results;
     const ddlResults = ddlSource.results;
-    const sources = [psaSource, tpbSource, ytsSource, knabenSource, nyaaSource, ddlSource].map(source => source.status);
+    const sources = [
+        psaSource,
+        tpbSource,
+        ytsSource,
+        csvSource,
+        eztvSource,
+        leetSource,
+        knabenSource,
+        nyaaSource,
+        ddlSource
+    ].map(source => source.status);
 
     const torrentResults: TorrentResult[] = [
         ...psaResults,
         ...tpbResults,
         ...ytsResults,
+        ...csvResults,
+        ...eztvResults,
+        ...leetResults,
         ...knabenResults,
         ...nyaaResults,
     ];

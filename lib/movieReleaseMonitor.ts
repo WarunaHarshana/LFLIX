@@ -94,7 +94,7 @@ function scoreMovieTorrent(result: TorrentResult, maxQualityScore?: number): num
   // Source bonuses
   const titleLower = result.title.toLowerCase();
   const sourceBonuses: [string, number][] = [
-    ['remux', 15], ['bluray', 10], ['web-dl', 5], ['hevc', 3], ['x265', 3], ['10bit', 2],
+    ['remux', 15], ['bluray', 10], ['web-dl', 5], ['dv', 4], ['dolby vision', 4], ['hdr10+', 4], ['hdr', 3], ['hevc', 3], ['x265', 3], ['av1', 3], ['10bit', 2],
   ];
   for (const [tag, bonus] of sourceBonuses) {
     if (titleLower.includes(tag)) score += bonus;

@@ -25,8 +25,13 @@ const SOURCE_BONUS: Record<string, number> = {
   'Remux': 15,
   'BluRay': 10,
   'WEB-DL': 5,
+  'DV': 4,
+  'Dolby Vision': 4,
+  'HDR10+': 4,
+  'HDR': 3,
   'HEVC': 3,
   'x265': 3,
+  'AV1': 3,
   '10bit': 2,
 };
 

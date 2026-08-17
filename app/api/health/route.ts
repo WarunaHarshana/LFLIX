@@ -3,10 +3,11 @@ import { rateLimit } from '@/lib/apiSecurity';
 import db from '@/lib/db';
 import { getSafeErrorMessage } from '@/lib/security';
 import { getSourceHealthSnapshot } from '@/lib/sourceHealth';
+import { DEFAULT_TORRENT_SOURCES } from '@/lib/torrentSearch';
 
 export const dynamic = 'force-dynamic';
 
-const TORRENT_SOURCES = ['PSA', 'TPB', 'YTS', 'Knaben', 'Nyaa', 'DDL'];
+const TORRENT_SOURCES = DEFAULT_TORRENT_SOURCES;
 
 type CountRow = { count: number };
 type DownloadStatusRow = { status: string; count: number };
