@@ -86,7 +86,8 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
                 overview = @overview,
                 rating = @rating,
                 imdbRating = @imdbRating,
-                genres = @genres
+                genres = @genres,
+                language = @language
               WHERE id = @id
             `).run({ ...movieMeta, id: movieExists.id });
             console.log(`[Scanner] Updated movie metadata for ${fileName}: "${movieMeta.title}"`);
@@ -197,8 +198,8 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
         showId = existingShow.id;
       } else {
         const result = db.prepare(`
-            INSERT INTO shows (title, tmdbId, posterPath, backdropPath, overview, rating, imdbRating, firstAirDate, genres) 
-            VALUES (@title, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @imdbRating, @firstAirDate, @genres)
+            INSERT INTO shows (title, tmdbId, posterPath, backdropPath, overview, rating, imdbRating, firstAirDate, genres, language) 
+            VALUES (@title, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @imdbRating, @firstAirDate, @genres, @language)
         `).run(showMeta);
         showId = result.lastInsertRowid;
       }
@@ -230,8 +231,8 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
       const movieMeta = await fetchMovieMetadata(fileName);
 
       db.prepare(`
-        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, imdbRating, genres, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
-        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @imdbRating, @genres, @isHDR, @resolution, @videoCodec, @audioCodec, @audioChannels, @bitrate, @duration, @fileSize)
+        INSERT OR IGNORE INTO movies (filePath, fileName, title, year, tmdbId, posterPath, backdropPath, overview, rating, imdbRating, genres, language, isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize) 
+        VALUES (@filePath, @fileName, @title, @year, @tmdbId, @posterPath, @backdropPath, @overview, @rating, @imdbRating, @genres, @language, @isHDR, @resolution, @videoCodec, @audioCodec, @audioChannels, @bitrate, @duration, @fileSize)
       `).run({
         filePath,
         fileName,

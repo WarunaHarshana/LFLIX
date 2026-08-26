@@ -43,6 +43,7 @@ export async function POST(req: Request) {
                           rating = @rating,
                           imdbRating = @imdbRating,
                           genres = @genres,
+                          language = @language,
                           year = COALESCE(@year, year)
                         WHERE id = @id
                     `).run({
@@ -98,7 +99,8 @@ export async function POST(req: Request) {
                           overview = @overview,
                           rating = @rating,
                           imdbRating = @imdbRating,
-                          genres = @genres
+                          genres = @genres,
+                          language = @language
                         WHERE id = @id
                     `).run({
                         ...metadata,
@@ -203,6 +205,7 @@ async function refreshSingle(id: number, type: 'movie' | 'show') {
                       rating = @rating,
                       imdbRating = @imdbRating,
                       genres = @genres,
+                      language = @language,
                       year = COALESCE(@year, year)
                     WHERE id = @id
                 `).run({ ...metadata, id });
@@ -239,7 +242,8 @@ async function refreshSingle(id: number, type: 'movie' | 'show') {
                       overview = @overview,
                       rating = @rating,
                       imdbRating = @imdbRating,
-                      genres = @genres
+                      genres = @genres,
+                      language = @language
                     WHERE id = @id
                 `).run({ ...metadata, id });
                 return NextResponse.json({ success: true, title: metadata.title });

@@ -18,6 +18,7 @@ type ContentItem = {
     backdropPath: string | null;
     overview: string | null;
     genres?: string | null;
+    language?: string | null;
     year?: number;
     firstAirDate?: string | null;
     rating: number | null;
@@ -493,6 +494,8 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                         tags.push({ label: item.audioCodec.toUpperCase(), cls: 'bg-teal-500/20 text-teal-300 border border-teal-500/40' });
                                     if (item.audioChannels)
                                         tags.push({ label: item.audioChannels, cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/40' });
+                                    if (item.language)
+                                        tags.push({ label: item.language, cls: 'bg-blue-500/20 text-blue-300 border border-blue-500/40' });
                                     return tags.map((t, i) => (
                                         <span key={i} className={`px-1.5 py-0.5 text-xs rounded font-bold tracking-wide ${t.cls}`}>{t.label}</span>
                                     ));

@@ -61,8 +61,9 @@ export default function Home() {
   const { toast, showToast } = useToast();
   const { setupComplete, setSetupComplete, isAuthenticated, setIsAuthenticated, authChecked, logout } = useAuth();
   const {
-    library, genres, loading, setLoading,
+    library, genres, languages, loading, setLoading,
     selectedGenre, setSelectedGenre,
+    selectedLanguage, setSelectedLanguage,
     sortBy, setSortBy,
     displayPrefs, updateDisplayPref,
     fetchLibrary, handleScan, getFilteredLibrary,
@@ -469,6 +470,9 @@ export default function Home() {
             filteredLibrary={filteredLibrary}
             activeTab={activeTab}
             selectedGenre={selectedGenre}
+            languages={languages}
+            selectedLanguage={selectedLanguage}
+            onLanguageSelect={setSelectedLanguage}
             sortBy={sortBy}
             onSortChange={setSortBy}
             onGenreClear={() => setSelectedGenre(null)}

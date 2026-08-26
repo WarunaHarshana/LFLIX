@@ -221,6 +221,134 @@ export function normalizeShowNameForMatch(name: string): string {
   return normalizeShowName(name).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+const LANGUAGE_KEYWORD_MAP: Record<string, string> = {
+  en: 'English',
+  eng: 'English',
+  english: 'English',
+  ta: 'Tamil',
+  tam: 'Tamil',
+  tamil: 'Tamil',
+  te: 'Telugu',
+  tel: 'Telugu',
+  telugu: 'Telugu',
+  hi: 'Hindi',
+  hin: 'Hindi',
+  hindi: 'Hindi',
+  ml: 'Malayalam',
+  mal: 'Malayalam',
+  malayalam: 'Malayalam',
+  kn: 'Kannada',
+  kan: 'Kannada',
+  kannada: 'Kannada',
+  ja: 'Japanese',
+  jap: 'Japanese',
+  jpn: 'Japanese',
+  japanese: 'Japanese',
+  ko: 'Korean',
+  kor: 'Korean',
+  korean: 'Korean',
+  es: 'Spanish',
+  spa: 'Spanish',
+  spanish: 'Spanish',
+  fr: 'French',
+  fre: 'French',
+  fra: 'French',
+  french: 'French',
+  de: 'German',
+  ger: 'German',
+  deu: 'German',
+  german: 'German',
+  it: 'Italian',
+  ita: 'Italian',
+  italian: 'Italian',
+  ru: 'Russian',
+  rus: 'Russian',
+  russian: 'Russian',
+  zh: 'Chinese',
+  zho: 'Chinese',
+  chi: 'Chinese',
+  chinese: 'Chinese',
+  mandarin: 'Chinese',
+  cantonese: 'Cantonese',
+  bn: 'Bengali',
+  ben: 'Bengali',
+  bengali: 'Bengali',
+  pa: 'Punjabi',
+  pan: 'Punjabi',
+  punjabi: 'Punjabi',
+  mr: 'Marathi',
+  mar: 'Marathi',
+  marathi: 'Marathi',
+  ar: 'Arabic',
+  ara: 'Arabic',
+  arabic: 'Arabic',
+  pt: 'Portuguese',
+  por: 'Portuguese',
+  portuguese: 'Portuguese',
+  tr: 'Turkish',
+  tur: 'Turkish',
+  turkish: 'Turkish',
+  th: 'Thai',
+  tha: 'Thai',
+  thai: 'Thai',
+  id: 'Indonesian',
+  ind: 'Indonesian',
+  indonesian: 'Indonesian',
+  sv: 'Swedish',
+  swe: 'Swedish',
+  swedish: 'Swedish',
+  da: 'Danish',
+  dan: 'Danish',
+  danish: 'Danish',
+  no: 'Norwegian',
+  nor: 'Norwegian',
+  norwegian: 'Norwegian',
+  nl: 'Dutch',
+  nld: 'Dutch',
+  dutch: 'Dutch',
+  pl: 'Polish',
+  pol: 'Polish',
+  polish: 'Polish',
+};
+
+export function resolveLanguageName(
+  codeOrName?: string | null,
+  filenameOrTitle?: string | null,
+  defaultLanguage: string | null = 'English'
+): string | null {
+  if (codeOrName && typeof codeOrName === 'string') {
+    const trimmed = codeOrName.trim();
+    if (trimmed.length > 0) {
+      const lower = trimmed.toLowerCase();
+      if (LANGUAGE_KEYWORD_MAP[lower]) {
+        return LANGUAGE_KEYWORD_MAP[lower];
+      }
+
+      try {
+        const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
+        const name = displayNames.of(lower);
+        if (name && name !== lower && !/^[a-z]{2,3}$/i.test(name)) {
+          return name.charAt(0).toUpperCase() + name.slice(1);
+        }
+      } catch {}
+
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    }
+  }
+
+  if (filenameOrTitle && typeof filenameOrTitle === 'string') {
+    const match = filenameOrTitle.match(/\b(Tamil|Telugu|Hindi|Malayalam|Kannada|Japanese|Korean|Spanish|French|German|Italian|Russian|Chinese|Cantonese|Mandarin|English|Bengali|Punjabi|Marathi|Arabic|Portuguese|Turkish|Thai|Indonesian|Swedish|Danish|Norwegian|Dutch|Polish|TAM|TEL|HIN|MAL|KAN|JAP|JPN|KOR|SPA|FRE|FRA|GER|DEU|ITA|RUS|ZHO|CHI|ENG|ARA|POR|TUR|THA|IND|SWE|DAN|NOR|NLD|POL)\b/i);
+    if (match) {
+      const key = match[1].toLowerCase();
+      if (LANGUAGE_KEYWORD_MAP[key]) {
+        return LANGUAGE_KEYWORD_MAP[key];
+      }
+    }
+  }
+
+  return defaultLanguage;
+}
+
 // --- Metadata Fetching ---
 
 export interface MediaMetadata {
@@ -232,6 +360,7 @@ export interface MediaMetadata {
   rating: number | null;
   imdbRating: number | null;
   genres: string | null;
+  language?: string | null;
   year?: number | null; // For movies
   firstAirDate?: string | null; // For shows
 }
@@ -248,6 +377,7 @@ type OmdbMovieResponse = OmdbRatingResponse & {
   Plot?: string;
   Poster?: string;
   Genre?: string;
+  Language?: string;
 };
 
 type ImdbSuggestionItem = {
@@ -323,6 +453,7 @@ async function fetchOmdbMovieMetadata(imdbId: string): Promise<Partial<MediaMeta
       overview: data.Plot && data.Plot !== 'N/A' ? data.Plot : undefined,
       imdbRating: imdbRating && Number.isFinite(imdbRating) ? imdbRating : null,
       genres: data.Genre && data.Genre !== 'N/A' ? data.Genre : undefined,
+      language: data.Language && data.Language !== 'N/A' ? resolveLanguageName(data.Language.split(',')[0]) : undefined,
     };
 
     tmdbCache.set(cacheKey, metadata, 24 * 60 * 60 * 1000);
@@ -386,6 +517,7 @@ async function fetchImdbSuggestionMovie(fileName: string, title: string, year?: 
       rating: null,
       imdbRating: omdbMeta?.imdbRating ?? null,
       genres: omdbMeta?.genres || null,
+      language: omdbMeta?.language || resolveLanguageName(null, fileName),
     };
 
     tmdbCache.set(cacheKey, metadata, 24 * 60 * 60 * 1000);
@@ -451,20 +583,30 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
     overview: null,
     rating: null,
     imdbRating: null,
-    genres: null
+    genres: null,
+    language: resolveLanguageName(null, fileName)
   };
 
   try {
-    // Inside the try so a missing TMDB key degrades to filename-derived data
-    // rather than aborting the scan for this file.
     const moviedb = getTmdbClient();
+    const imdbId = extractImdbId(fileName);
 
-    let res = await cachedTmdbCall(`tmdb-movie-search-${rawName.toLowerCase()}-${year || ''}`, () =>
-      moviedb.searchMovie({ query: rawName, primary_release_year: year }),
-      24 * 60
-    );
+    let res: any = { results: [] };
 
-    // Fallback 1: Year might actually be part of the title (e.g., Blade Runner 2049, 2001 A Space Odyssey)
+    // Primary: Query TMDB by extracted title + release year if present
+    if (year) {
+      res = await cachedTmdbCall(`tmdb-movie-search-${rawName.toLowerCase()}-${year}`, () =>
+        moviedb.searchMovie({ query: rawName, primary_release_year: year }),
+        24 * 60
+      );
+    } else {
+      res = await cachedTmdbCall(`tmdb-movie-search-${rawName.toLowerCase()}`, () =>
+        moviedb.searchMovie({ query: rawName }),
+        24 * 60
+      );
+    }
+
+    // Fallback 1: Year was extracted, but primary_release_year might be slightly off (e.g. festival vs theatrical). Try free-text query with year
     if ((!res.results || res.results.length === 0) && year) {
       const fallbackQuery = `${rawName} ${year}`.trim();
       res = await cachedTmdbCall(`tmdb-movie-search-${fallbackQuery.toLowerCase()}`, () =>
@@ -510,6 +652,7 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
       const hit = scored[0];
       const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'movie') : '';
       const imdbRating = await fetchMovieImdbRating(moviedb, hit.id || null);
+      const language = resolveLanguageName(hit.original_language, fileName);
 
       return {
         title: hit.title || rawName,
@@ -520,7 +663,8 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
         overview: hit.overview || null,
         rating: hit.vote_average || null,
         imdbRating,
-        genres
+        genres,
+        language
       };
     }
   } catch (e) {
@@ -549,6 +693,7 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
     rating: null,
     imdbRating: null,
     genres: null,
+    language: resolveLanguageName(null, showName),
     firstAirDate: null
   };
 
@@ -595,6 +740,7 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
       const hit = scored[0];
       const genres = hit.genre_ids ? await fetchGenres(moviedb, hit.genre_ids, 'tv') : '';
       const imdbRating = await fetchShowImdbRating(moviedb, hit.id || null);
+      const language = resolveLanguageName(hit.original_language, showName);
 
       return {
         title: hit.name || normalizedInput || showName,
@@ -605,6 +751,7 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
         rating: hit.vote_average || null,
         imdbRating,
         genres,
+        language,
         firstAirDate: hit.first_air_date || null
       };
     }
@@ -778,4 +925,65 @@ export async function fetchEpisodeMetadata(
 // Clear season cache (call after a full scan session)
 export function clearEpisodeCache() {
   seasonCache.clear();
+}
+
+export async function syncMediaLanguageFromTmdb(tmdbId: number, type: 'movie' | 'tv'): Promise<string | null> {
+  try {
+    const moviedb = getTmdbClient();
+    if (type === 'movie') {
+      const data = await cachedTmdbCall(`tmdb-movie-info-lang-${tmdbId}`, () =>
+        moviedb.movieInfo({ id: tmdbId }),
+        30 * 24 * 60
+      ) as any;
+      if (data?.original_language) {
+        return resolveLanguageName(data.original_language, data.title || null);
+      }
+    } else {
+      const data = await cachedTmdbCall(`tmdb-tv-info-lang-${tmdbId}`, () =>
+        moviedb.tvInfo({ id: tmdbId }),
+        30 * 24 * 60
+      ) as any;
+      if (data?.original_language) {
+        return resolveLanguageName(data.original_language, data.name || null);
+      }
+    }
+  } catch (e) {
+    console.warn(`[Metadata] Failed to fetch TMDB language for ${type} ${tmdbId}:`, e);
+  }
+  return null;
+}
+
+let hasSyncedLanguages = false;
+
+export async function syncAllLibraryLanguages(): Promise<void> {
+  if (hasSyncedLanguages) return;
+  hasSyncedLanguages = true;
+
+  try {
+    const movies = db.prepare('SELECT id, tmdbId, title, fileName, language FROM movies WHERE tmdbId IS NOT NULL AND tmdbId > 0').all() as { id: number; tmdbId: number; title: string; fileName: string; language: string | null }[];
+    for (const m of movies) {
+      try {
+        const lang = await syncMediaLanguageFromTmdb(m.tmdbId, 'movie');
+        if (lang && lang !== m.language) {
+          db.prepare('UPDATE movies SET language = ? WHERE id = ?').run(lang, m.id);
+          console.log(`[Metadata] Synced TMDB language for movie "${m.title}": ${lang}`);
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 20));
+    }
+
+    const shows = db.prepare('SELECT id, tmdbId, title, language FROM shows WHERE tmdbId IS NOT NULL AND tmdbId > 0').all() as { id: number; tmdbId: number; title: string; language: string | null }[];
+    for (const s of shows) {
+      try {
+        const lang = await syncMediaLanguageFromTmdb(s.tmdbId, 'tv');
+        if (lang && lang !== s.language) {
+          db.prepare('UPDATE shows SET language = ? WHERE id = ?').run(lang, s.id);
+          console.log(`[Metadata] Synced TMDB language for show "${s.title}": ${lang}`);
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 20));
+    }
+  } catch (e) {
+    console.warn('[Metadata] Language sync error:', e);
+  }
 }

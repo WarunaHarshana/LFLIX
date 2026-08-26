@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.0
+
+Comprehensive local library sorting and filtering by language, TMDB original language detection, automated metadata sync, and UI badges.
+
+### Added
+
+- **Library Sorting by Language**: Added **Language (A–Z)** and **Language (Z–A)** sorting modes to the library grid sort dropdown to easily group and navigate movies and TV shows alphabetically by language.
+- **Library Filtering by Language**: Added a dedicated **Language Filter** selector in the library header toolbar alongside genre filtering, with active language badges and quick dismiss (`×`) buttons.
+- **Language Detection & Metadata Persistence**: Extracted official `original_language` from TMDB and `Language` from OMDb/IMDb into SQLite `movies` and `shows` tables with dedicated indexes (`idx_movies_language`, `idx_shows_language`).
+- **Automated Language Metadata Sync**: Added background TMDB language synchronization (`syncAllLibraryLanguages`) that automatically retrieves official language metadata for all library items without requiring manual rescans.
+- **Language Tag Badges**: Displayed language badges on media detail modals alongside video and audio codec information.
+- **ISO-639-1 Internationalization Support**: Integrated ECMAScript `Intl.DisplayNames` mapping all standard ISO language codes (`en`, `ta`, `hi`, `te`, `ml`, `kn`, `ja`, `ko`, `es`, `fr`, `de`, `it`, `ru`, `zh`, etc.) to full readable English names, with fallback token detection for offline releases.
+
 ## v0.9.0
 
 Configurable library grid density / tiles per row, metadata parsing overhaul (tracker prefixes, `A K A` titles, year/number title disambiguation), and new interactive "Fix Match" search tool.

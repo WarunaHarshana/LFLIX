@@ -5,9 +5,11 @@ import type { ContentItem } from '@/app/types';
 export function useLibrary(showToast: (message: string, type: 'success' | 'error') => void) {
   const [library, setLibrary] = useState<ContentItem[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
+  const [languages, setLanguages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'added' | 'title-asc' | 'title-desc' | 'year-new' | 'year-old' | 'rating'>('added');
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'added' | 'title-asc' | 'title-desc' | 'year-new' | 'year-old' | 'rating' | 'language-asc' | 'language-desc'>('added');
 
   // Display preferences from localStorage
   const [displayPrefs, setDisplayPrefs] = useState<{
@@ -44,6 +46,7 @@ export function useLibrary(showToast: (message: string, type: 'success' | 'error
       if (data.content) {
         setLibrary(data.content);
         setGenres(data.genres || []);
+        setLanguages(data.languages || []);
       } else if (Array.isArray(data)) {
         setLibrary(data);
       }
@@ -89,7 +92,8 @@ export function useLibrary(showToast: (message: string, type: 'success' | 'error
     return library.filter(item => {
       const matchesTab = activeTab === 'all' || item.type === activeTab;
       const matchesGenre = !selectedGenre || (item.genres && item.genres.includes(selectedGenre));
-      return matchesTab && matchesGenre;
+      const matchesLanguage = !selectedLanguage || item.language === selectedLanguage;
+      return matchesTab && matchesGenre && matchesLanguage;
     }).sort((a, b) => {
       switch (sortBy) {
         case 'title-asc':
@@ -113,6 +117,20 @@ export function useLibrary(showToast: (message: string, type: 'success' | 'error
           if (ratingDiff !== 0) return ratingDiff;
           return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
         }
+        case 'language-asc': {
+          const langA = a.language || 'Unknown';
+          const langB = b.language || 'Unknown';
+          const langDiff = langA.localeCompare(langB, undefined, { sensitivity: 'base' });
+          if (langDiff !== 0) return langDiff;
+          return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+        }
+        case 'language-desc': {
+          const langA = a.language || 'Unknown';
+          const langB = b.language || 'Unknown';
+          const langDiff = langB.localeCompare(langA, undefined, { sensitivity: 'base' });
+          if (langDiff !== 0) return langDiff;
+          return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+        }
         case 'added':
         default: {
           const timeA = new Date(a.addedAt || 0).getTime();
@@ -123,11 +141,12 @@ export function useLibrary(showToast: (message: string, type: 'success' | 'error
         }
       }
     });
-  }, [library, selectedGenre, sortBy]);
+  }, [library, selectedGenre, selectedLanguage, sortBy]);
 
   return {
-    library, genres, loading, setLoading,
+    library, genres, languages, loading, setLoading,
     selectedGenre, setSelectedGenre,
+    selectedLanguage, setSelectedLanguage,
     sortBy, setSortBy,
     displayPrefs, updateDisplayPref,
     fetchLibrary, handleScan, getFilteredLibrary,

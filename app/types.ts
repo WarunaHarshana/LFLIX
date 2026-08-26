@@ -19,6 +19,7 @@ export type ContentItem = {
   audioCodec?: string | null;
   audioChannels?: string | null;
   genres?: string | null;
+  language?: string | null;
   tmdbId?: number | null;
   addedAt?: string;
   watchProgress?: {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { getTmdbClient, fetchImdbRatingById, fetchEpisodeMetadata } from '@/lib/metadata';
+import { getTmdbClient, fetchImdbRatingById, fetchEpisodeMetadata, resolveLanguageName } from '@/lib/metadata';
 import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
 import { parsePositiveInt } from '@/lib/security';
 
@@ -30,6 +30,7 @@ export async function POST(req: Request) {
             const imdbRating = externalIds.imdb_id ? await fetchImdbRatingById(externalIds.imdb_id) : null;
             const genres = tmdbData.genres?.map((g: any) => g.name).filter(Boolean).join(', ') || null;
             const year = tmdbData.release_date ? parseInt(tmdbData.release_date.substring(0, 4), 10) : null;
+            const language = resolveLanguageName(tmdbData.original_language, movie.fileName);
 
             db.prepare(`
                 UPDATE movies SET
@@ -41,7 +42,8 @@ export async function POST(req: Request) {
                     overview = @overview,
                     rating = @rating,
                     imdbRating = @imdbRating,
-                    genres = @genres
+                    genres = @genres,
+                    language = @language
                 WHERE id = @id
             `).run({
                 id,
@@ -54,6 +56,7 @@ export async function POST(req: Request) {
                 rating: tmdbData.vote_average || null,
                 imdbRating,
                 genres,
+                language,
             });
 
             const updated = db.prepare('SELECT * FROM movies WHERE id = ?').get(id);
@@ -68,6 +71,7 @@ export async function POST(req: Request) {
             const externalIds = await moviedb.tvExternalIds({ id: tmdbId }).catch(() => ({} as any));
             const imdbRating = externalIds.imdb_id ? await fetchImdbRatingById(externalIds.imdb_id) : null;
             const genres = tmdbData.genres?.map((g: any) => g.name).filter(Boolean).join(', ') || null;
+            const language = resolveLanguageName(tmdbData.original_language, show.title);
 
             db.prepare(`
                 UPDATE shows SET
@@ -79,6 +83,7 @@ export async function POST(req: Request) {
                     rating = @rating,
                     imdbRating = @imdbRating,
                     genres = @genres,
+                    language = @language,
                     firstAirDate = @firstAirDate
                 WHERE id = @id
             `).run({
@@ -91,6 +96,7 @@ export async function POST(req: Request) {
                 rating: tmdbData.vote_average || null,
                 imdbRating,
                 genres,
+                language,
                 firstAirDate: tmdbData.first_air_date || null,
             });
 

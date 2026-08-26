@@ -54,6 +54,7 @@ db.exec(`
     rating REAL,
     imdbRating REAL,
     genres TEXT,
+    language TEXT,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -67,6 +68,7 @@ db.exec(`
     rating REAL,
     imdbRating REAL,
     genres TEXT,
+    language TEXT,
     firstAirDate TEXT,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -269,16 +271,153 @@ db.exec(`
   );
 `);
 
+// Run migrations for existing databases (add columns if they don't exist)
+// WHITELIST of valid tables and columns to prevent SQL injection
+const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads', 'auto_track', 'notifications', 'episode_releases', 'movie_releases'];
+const VALID_COLUMNS: Record<string, string[]> = {
+  movies: ['genres', 'language', 'backdropPath', 'overview', 'rating', 'imdbRating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
+  shows: ['genres', 'language', 'backdropPath', 'overview', 'rating', 'imdbRating', 'imdbId'],
+  episodes: ['stillPath', 'overview', 'rating', 'voteCount', 'imdbRating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
+  watch_history: ['completed'],
+  scanned_folders: ['contentType'],
+  watchlist: ['trackRelease', 'imdbRating'],
+  downloads: ['retryCount', 'lastProgressAt', 'stateUpdatedAt'],
+  settings: []
+};
+
+function addColumnIfNotExists(table: string, column: string, type: string) {
+  // Validate table name
+  if (!VALID_TABLES.includes(table)) {
+    console.error(`Invalid table name: ${table}`);
+    return;
+  }
+
+  // Validate column name
+  if (!VALID_COLUMNS[table]?.includes(column)) {
+    console.error(`Invalid column name: ${column} for table ${table}`);
+    return;
+  }
+
+  const tableInfo = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  const columnExists = tableInfo.some(col => col.name === column);
+  if (!columnExists) {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+      console.log(`Added column ${column} to ${table}`);
+    } catch {
+      // Column might already exist
+    }
+  }
+}
+
+// Add genres and language column to movies and shows if missing (for existing databases)
+addColumnIfNotExists('movies', 'genres', 'TEXT');
+addColumnIfNotExists('shows', 'genres', 'TEXT');
+addColumnIfNotExists('movies', 'language', 'TEXT');
+addColumnIfNotExists('shows', 'language', 'TEXT');
+addColumnIfNotExists('movies', 'imdbRating', 'REAL');
+addColumnIfNotExists('shows', 'imdbRating', 'REAL');
+addColumnIfNotExists('episodes', 'rating', 'REAL');
+// How many TMDB votes back an episode rating. A just-aired episode can sit at
+// 1.0 off three votes, which is noise; the UI hides scores below a threshold.
+addColumnIfNotExists('episodes', 'voteCount', 'INTEGER');
+// IMDb episode scores, sourced from OMDb. Preferred over the TMDB score in the
+// UI, matching how shows and movies already work.
+addColumnIfNotExists('episodes', 'imdbRating', 'REAL');
+// The series IMDb id, so per-season OMDb lookups need one TMDB call per show
+// rather than one per refresh.
+addColumnIfNotExists('shows', 'imdbId', 'TEXT');
+
+// Add HDR detection column
+addColumnIfNotExists('movies', 'isHDR', 'INTEGER DEFAULT 0');
+addColumnIfNotExists('episodes', 'isHDR', 'INTEGER DEFAULT 0');
+
+// Add media info columns (FFprobe)
+const MEDIA_INFO_COLS: [string, string][] = [
+  ['resolution', 'TEXT'],
+  ['videoCodec', 'TEXT'],
+  ['audioCodec', 'TEXT'],
+  ['audioChannels', 'TEXT'],
+  ['bitrate', 'REAL'],
+  ['duration', 'REAL'],
+  ['fileSize', 'INTEGER'],
+];
+for (const [col, type] of MEDIA_INFO_COLS) {
+  addColumnIfNotExists('movies', col, type);
+  addColumnIfNotExists('episodes', col, type);
+}
+
+// Add trackRelease column to watchlist (for movie availability tracking)
+addColumnIfNotExists('watchlist', 'trackRelease', 'INTEGER DEFAULT 1');
+addColumnIfNotExists('watchlist', 'imdbRating', 'REAL');
+addColumnIfNotExists('downloads', 'retryCount', 'INTEGER DEFAULT 0');
+addColumnIfNotExists('downloads', 'lastProgressAt', 'DATETIME');
+addColumnIfNotExists('downloads', 'stateUpdatedAt', 'DATETIME');
+
+try {
+  db.prepare(`
+    UPDATE downloads
+    SET lastProgressAt = COALESCE(lastProgressAt, startedAt, CURRENT_TIMESTAMP),
+        stateUpdatedAt = COALESCE(stateUpdatedAt, startedAt, CURRENT_TIMESTAMP)
+    WHERE lastProgressAt IS NULL OR stateUpdatedAt IS NULL
+  `).run();
+} catch { /* ignore */ }
+
+// Backfill language for existing movies and shows (detect keywords, avoid blindly overwriting non-English)
+try {
+  db.prepare(`
+    UPDATE movies
+    SET language = CASE
+      WHEN fileName LIKE '%Tamil%' OR fileName LIKE '%TAM%' OR title LIKE '%Tamil%' THEN 'Tamil'
+      WHEN fileName LIKE '%Telugu%' OR fileName LIKE '%TEL%' OR title LIKE '%Telugu%' THEN 'Telugu'
+      WHEN fileName LIKE '%Hindi%' OR fileName LIKE '%HIN%' OR title LIKE '%Hindi%' THEN 'Hindi'
+      WHEN fileName LIKE '%Malayalam%' OR fileName LIKE '%MAL%' OR title LIKE '%Malayalam%' THEN 'Malayalam'
+      WHEN fileName LIKE '%Kannada%' OR fileName LIKE '%KAN%' OR title LIKE '%Kannada%' THEN 'Kannada'
+      WHEN fileName LIKE '%Japanese%' OR fileName LIKE '%JPN%' OR fileName LIKE '%JAP%' OR title LIKE '%Japanese%' THEN 'Japanese'
+      WHEN fileName LIKE '%Korean%' OR fileName LIKE '%KOR%' OR title LIKE '%Korean%' THEN 'Korean'
+      WHEN fileName LIKE '%Spanish%' OR fileName LIKE '%SPA%' OR title LIKE '%Spanish%' THEN 'Spanish'
+      WHEN fileName LIKE '%French%' OR fileName LIKE '%FRE%' OR fileName LIKE '%FRA%' OR title LIKE '%French%' THEN 'French'
+      WHEN fileName LIKE '%German%' OR fileName LIKE '%GER%' OR fileName LIKE '%DEU%' OR title LIKE '%German%' THEN 'German'
+      WHEN fileName LIKE '%Italian%' OR fileName LIKE '%ITA%' OR title LIKE '%Italian%' THEN 'Italian'
+      WHEN fileName LIKE '%Russian%' OR fileName LIKE '%RUS%' OR title LIKE '%Russian%' THEN 'Russian'
+      WHEN fileName LIKE '%Chinese%' OR fileName LIKE '%CHI%' OR fileName LIKE '%ZHO%' OR title LIKE '%Chinese%' THEN 'Chinese'
+      ELSE language
+    END
+  `).run();
+
+  db.prepare(`
+    UPDATE shows
+    SET language = CASE
+      WHEN title LIKE '%Tamil%' OR title LIKE '%TAM%' THEN 'Tamil'
+      WHEN title LIKE '%Telugu%' OR title LIKE '%TEL%' THEN 'Telugu'
+      WHEN title LIKE '%Hindi%' OR title LIKE '%HIN%' THEN 'Hindi'
+      WHEN title LIKE '%Malayalam%' OR title LIKE '%MAL%' THEN 'Malayalam'
+      WHEN title LIKE '%Kannada%' OR title LIKE '%KAN%' THEN 'Kannada'
+      WHEN title LIKE '%Japanese%' OR title LIKE '%JPN%' OR title LIKE '%JAP%' THEN 'Japanese'
+      WHEN title LIKE '%Korean%' OR title LIKE '%KOR%' THEN 'Korean'
+      WHEN title LIKE '%Spanish%' OR title LIKE '%SPA%' THEN 'Spanish'
+      WHEN title LIKE '%French%' OR title LIKE '%FRE%' OR title LIKE '%FRA%' THEN 'French'
+      WHEN title LIKE '%German%' OR title LIKE '%GER%' OR title LIKE '%DEU%' THEN 'German'
+      WHEN title LIKE '%Italian%' OR title LIKE '%ITA%' THEN 'Italian'
+      WHEN title LIKE '%Russian%' OR title LIKE '%RUS%' THEN 'Russian'
+      WHEN title LIKE '%Chinese%' OR title LIKE '%CHI%' OR title LIKE '%ZHO%' THEN 'Chinese'
+      ELSE language
+    END
+  `).run();
+} catch { /* ignore */ }
+
 // Create indexes for frequently queried columns
 db.exec(`
   -- Movies: looked up by tmdbId during scan/refresh, sorted by addedAt on content page
   CREATE INDEX IF NOT EXISTS idx_movies_tmdbId ON movies(tmdbId);
   CREATE INDEX IF NOT EXISTS idx_movies_title ON movies(title);
+  CREATE INDEX IF NOT EXISTS idx_movies_language ON movies(language);
   CREATE INDEX IF NOT EXISTS idx_movies_addedAt ON movies(addedAt DESC);
 
   -- Shows: looked up by tmdbId and title during scan, refresh, and dedup
   CREATE INDEX IF NOT EXISTS idx_shows_tmdbId ON shows(tmdbId);
   CREATE INDEX IF NOT EXISTS idx_shows_title ON shows(title);
+  CREATE INDEX IF NOT EXISTS idx_shows_language ON shows(language);
   CREATE INDEX IF NOT EXISTS idx_shows_addedAt ON shows(addedAt DESC);
 
   -- Episodes: constantly joined/filtered by showId, checked by filePath during scan
@@ -396,96 +535,6 @@ function initializeFullTextSearch(): void {
 }
 
 initializeFullTextSearch();
-
-// Run migrations for existing databases (add columns if they don't exist)
-// WHITELIST of valid tables and columns to prevent SQL injection
-const VALID_TABLES = ['movies', 'shows', 'episodes', 'watch_history', 'scanned_folders', 'settings', 'watchlist', 'downloads', 'auto_track', 'notifications', 'episode_releases', 'movie_releases'];
-const VALID_COLUMNS: Record<string, string[]> = {
-  movies: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
-  shows: ['genres', 'backdropPath', 'overview', 'rating', 'imdbRating', 'imdbId'],
-  episodes: ['stillPath', 'overview', 'rating', 'voteCount', 'imdbRating', 'isHDR', 'resolution', 'videoCodec', 'audioCodec', 'audioChannels', 'bitrate', 'duration', 'fileSize'],
-  watch_history: ['completed'],
-  scanned_folders: ['contentType'],
-  watchlist: ['trackRelease', 'imdbRating'],
-  downloads: ['retryCount', 'lastProgressAt', 'stateUpdatedAt'],
-  settings: []
-};
-
-function addColumnIfNotExists(table: string, column: string, type: string) {
-  // Validate table name
-  if (!VALID_TABLES.includes(table)) {
-    console.error(`Invalid table name: ${table}`);
-    return;
-  }
-
-  // Validate column name
-  if (!VALID_COLUMNS[table]?.includes(column)) {
-    console.error(`Invalid column name: ${column} for table ${table}`);
-    return;
-  }
-
-  const tableInfo = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  const columnExists = tableInfo.some(col => col.name === column);
-  if (!columnExists) {
-    try {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
-      console.log(`Added column ${column} to ${table}`);
-    } catch {
-      // Column might already exist
-    }
-  }
-}
-
-// Add genres column to movies and shows if missing (for existing databases)
-addColumnIfNotExists('movies', 'genres', 'TEXT');
-addColumnIfNotExists('shows', 'genres', 'TEXT');
-addColumnIfNotExists('movies', 'imdbRating', 'REAL');
-addColumnIfNotExists('shows', 'imdbRating', 'REAL');
-addColumnIfNotExists('episodes', 'rating', 'REAL');
-// How many TMDB votes back an episode rating. A just-aired episode can sit at
-// 1.0 off three votes, which is noise; the UI hides scores below a threshold.
-addColumnIfNotExists('episodes', 'voteCount', 'INTEGER');
-// IMDb episode scores, sourced from OMDb. Preferred over the TMDB score in the
-// UI, matching how shows and movies already work.
-addColumnIfNotExists('episodes', 'imdbRating', 'REAL');
-// The series IMDb id, so per-season OMDb lookups need one TMDB call per show
-// rather than one per refresh.
-addColumnIfNotExists('shows', 'imdbId', 'TEXT');
-
-// Add HDR detection column
-addColumnIfNotExists('movies', 'isHDR', 'INTEGER DEFAULT 0');
-addColumnIfNotExists('episodes', 'isHDR', 'INTEGER DEFAULT 0');
-
-// Add media info columns (FFprobe)
-const MEDIA_INFO_COLS: [string, string][] = [
-  ['resolution', 'TEXT'],
-  ['videoCodec', 'TEXT'],
-  ['audioCodec', 'TEXT'],
-  ['audioChannels', 'TEXT'],
-  ['bitrate', 'REAL'],
-  ['duration', 'REAL'],
-  ['fileSize', 'INTEGER'],
-];
-for (const [col, type] of MEDIA_INFO_COLS) {
-  addColumnIfNotExists('movies', col, type);
-  addColumnIfNotExists('episodes', col, type);
-}
-
-// Add trackRelease column to watchlist (for movie availability tracking)
-addColumnIfNotExists('watchlist', 'trackRelease', 'INTEGER DEFAULT 1');
-addColumnIfNotExists('watchlist', 'imdbRating', 'REAL');
-addColumnIfNotExists('downloads', 'retryCount', 'INTEGER DEFAULT 0');
-addColumnIfNotExists('downloads', 'lastProgressAt', 'DATETIME');
-addColumnIfNotExists('downloads', 'stateUpdatedAt', 'DATETIME');
-
-try {
-  db.prepare(`
-    UPDATE downloads
-    SET lastProgressAt = COALESCE(lastProgressAt, startedAt, CURRENT_TIMESTAMP),
-        stateUpdatedAt = COALESCE(stateUpdatedAt, startedAt, CURRENT_TIMESTAMP)
-    WHERE lastProgressAt IS NULL OR stateUpdatedAt IS NULL
-  `).run();
-} catch { /* ignore */ }
 
 type ShowDedupRow = {
   id: number;
