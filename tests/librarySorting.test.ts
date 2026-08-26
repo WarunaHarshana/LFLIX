@@ -128,4 +128,22 @@ describe('Library Sorting Logic', () => {
       'Breaking Bad',   // 2023-12-01
     ]);
   });
+
+  it('calculates grid navigation step based on preferred gridColumns and viewport width', () => {
+    const calculateGridColumns = (width: number, preferredColumns: number = 8): number => {
+      if (width >= 1536) return preferredColumns;
+      if (width >= 1280) return Math.min(preferredColumns, 6);
+      if (width >= 1024) return Math.min(preferredColumns, 6);
+      if (width >= 768) return Math.min(preferredColumns, 4);
+      return 2;
+    };
+
+    expect(calculateGridColumns(1920, 4)).toBe(4);
+    expect(calculateGridColumns(1920, 8)).toBe(8);
+    expect(calculateGridColumns(1920, 10)).toBe(10);
+    expect(calculateGridColumns(1300, 8)).toBe(6);
+    expect(calculateGridColumns(1100, 4)).toBe(4);
+    expect(calculateGridColumns(800, 8)).toBe(4);
+    expect(calculateGridColumns(500, 8)).toBe(2);
+  });
 });

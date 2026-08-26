@@ -63,7 +63,7 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
     if (movieExists || epExists) {
       // Check if media info or episode metadata needs updating
       const needsMediaUpdate = (movieExists && !movieExists.resolution) || (epExists && !epExists.resolution);
-      const needsMovieMetadata = movieExists && (!movieExists.tmdbId || !movieExists.posterPath || /^(?:www[\s.]|\[)/i.test(movieExists.title || fileName));
+      const needsMovieMetadata = movieExists && (!movieExists.tmdbId || !movieExists.posterPath || /^(?:www[\s._]|\[|\d*tamilmv|\d*tamilblasters)/i.test(movieExists.title || fileName) || /\b(?:A[\s._]*K[\s._]*A|AKA)\b/i.test(movieExists.title || ''));
       // Episode needs a metadata refresh while its title is still a placeholder
       // — ours ("S1 E1") or TMDB's own ("Episode 6") — or artwork/rating is missing.
       const needsEpMetadata = epExists && (!epExists.stillPath || epExists.rating === null || isPlaceholderEpisodeTitle(epExists.title));

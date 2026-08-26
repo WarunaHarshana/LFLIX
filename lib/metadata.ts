@@ -104,13 +104,25 @@ export async function cachedTmdbCall<T>(cacheKey: string, fn: () => Promise<T>, 
 
 // --- Filename Cleaning ---
 
-function stripReleaseSitePrefix(name: string): string {
+export function stripReleaseSitePrefix(name: string): string {
   let clean = name.trim();
 
-  // Handles release-site prefixes like:
-  // "www.UIndex.org - Movie", "www 1TamilMV.center - Movie", "1TamilMV.center - Movie"
-  clean = clean.replace(/^(?:www[\s.]*)?(?:\d+)?[a-z0-9][a-z0-9-]*(?:[\s.]+[a-z0-9][a-z0-9-]*)*\s*\.(?:com|org|net|in|io|to|tv|cc|me|co|center|xyz|site|info|link)[\s._-]*[-–—:]+[\s._-]*/i, "");
-  clean = clean.replace(/^www\s+[a-z0-9][a-z0-9-]*(?:\s+[a-z0-9][a-z0-9-]*)*\s*\.(?:com|org|net|in|io|to|tv|cc|me|co|center|xyz|site|info|link)[\s._-]*[-–—:]+[\s._-]*/i, "");
+  // 1. Release sites starting with www (e.g., "www.1TamilMV.report - Peddi", "www.1TamilMV.durban - Blast", "www.site.com - Movie")
+  clean = clean.replace(/^www\.[a-z0-9.-]+\.[a-z]{2,12}\s*[-–—:]+\s*/i, "");
+
+  // 2. Release sites with known TLDs and separated by hyphen/colon (e.g. "1TamilMV.report - Peddi", "UIndex.org - Movie", "1TamilMV.pm - Movie")
+  // Must have letters in domain and require space around separator (so "1080p.WEB-DL" is never matched)
+  clean = clean.replace(/^[a-z0-9-]*[a-z][a-z0-9-]*\.[a-z]{2,12}\s+[-–—:]+\s*/i, "");
+  clean = clean.replace(/^[a-z0-9-]*[a-z][a-z0-9-]*\.[a-z]{2,12}\s*[-–—:]\s+/i, "");
+
+  // 3. Dot-replaced or space-separated tracker names without dot TLD (e.g., "Www 1Tamilmv Report - Peddi", "1Tamilmv - Peddi", "Tamilblasters - Movie")
+  clean = clean.replace(/^(?:www[\s._]+)?[0-9]*[a-z0-9_-]*(?:tamilmv|tamilblasters|tamilrockers|moviesda|isaimini|bolly4u|worldfree4u|9xmovies|extramovies|uhdmovies|yts|yify|rarbg|cinevood|telugupalaka|ibomma|todaypk)[a-z0-9_ -]*\s*[-–—:]+\s*/i, "");
+
+  // 4. Generic "www [words] - [title]"
+  clean = clean.replace(/^www[\s._]+[a-z0-9._ -]+?\s+[-–—:]+\s*/i, "");
+
+  // 5. Leading group brackets (e.g., "[1TamilMV.org] " or "(1TamilMV) ")
+  clean = clean.replace(/^(?:\[[^\]]+\]|\([^\)]+\))[\s._-]*/, "");
 
   return clean;
 }
@@ -127,11 +139,14 @@ export function cleanFilename(name: string): string {
   // characters, so tokens like "_TRUE_WEB-DL" otherwise do not match cleanly.
   clean = clean.replace(/[._]+/g, " ");
 
-  // Remove A.K.A and everything after
-  clean = clean.replace(/\bA\.?K\.?A\.?\b.*/i, "");
+  // Remove A.K.A, AKA, A K A, A.K.A. and everything after
+  clean = clean.replace(/\b(?:A[\s._]*K[\s._]*A|AKA)\b.*/i, "");
 
   // Remove common scene tags, release-quality labels & languages
   clean = clean.replace(/\b(HC|HDCAM|CAMRip|CAM|HDTS|TS|TELESYNC|TC|TELECINE|DVDSCR|SCR|PREHD|1080p|720p|480p|2160p|4k|UHD|BluRay|Blu-Ray|BDRip|WEBRip|WEB-DL|DVDRip|HDTV|x264|x265|H\.?264|H\.?265|AAC|AC3|EAC3|DDP|DTS|HDR|HDR10|HDR10Plus|DV|Dolby|Atmos|HEVC|HQ|HDRip|TRUE|PROPER|REMASTERED|EXTENDED|UNCUT|DIRECTORS|CUT|DUAL|MULTI|HIN\d*x?|Hindi|Telugu|Tamil|TAM|TEL|Malayalam|Kannada|English|EngSub|ESub|AMZN|NF|DSNP|HMAX|IMAX|REPACK|Remux|10bit|6CH|8CH|PSA|YTS|YIFY|RARBG)\b.*/i, "");
+
+  // Check if there was a year in brackets (e.g. "Blade Runner 2049 (2017)")
+  const hadBracketedYear = /[\(\[\{]\s*(19|20)\d{2}\s*[\)\]\}]/.test(clean);
 
   // Remove year in brackets/parentheses
   clean = clean.replace(/[\(\[\{]\s*(19|20)\d{2}\s*[\)\]\}]/g, "");
@@ -139,8 +154,10 @@ export function cleanFilename(name: string): string {
   // Remove other bracketed content
   clean = clean.replace(/[\(\[\{].*?[\)\]\}]/g, "");
 
-  // Remove trailing standalone year
-  clean = clean.replace(/\s+(19|20)\d{2}\s*$/g, "");
+  // Remove trailing standalone year only when preceded by other words and not already having a bracketed year (e.g. "Inception 2010" -> "Inception", "1992 2024" -> "1992")
+  if (!hadBracketedYear && /\S+\s+(19|20)\d{2}\s*$/.test(clean)) {
+    clean = clean.replace(/\s+(19|20)\d{2}\s*$/g, "");
+  }
 
   // Remove trailing junk and hyphens
   clean = clean.replace(/[-–—]+\s*$/, "").trim();
@@ -152,8 +169,27 @@ export function cleanFilename(name: string): string {
 }
 
 export function extractYear(name: string): number | undefined {
-  const match = name.match(/\b(19|20)\d{2}\b/);
-  return match ? parseInt(match[0]) : undefined;
+  // 1. Prefer parenthesized / bracketed 4-digit years: (2024), [2019], {1992}
+  const bracketMatch = name.match(/[\(\[\{]\s*(19\d{2}|20\d{2})\s*[\)\]\}]/);
+  if (bracketMatch) {
+    return parseInt(bracketMatch[1], 10);
+  }
+
+  // 2. Remove file extension and normalize separators
+  const withoutExt = name.replace(/\.[^/.]+$/, '');
+  const normalized = withoutExt.replace(/[._]/g, ' ');
+
+  // 3. Find all 4-digit year matches (1900–2099)
+  const matches = Array.from(normalized.matchAll(/\b(19\d{2}|20\d{2})\b/g));
+  if (matches.length === 0) return undefined;
+  if (matches.length === 1) {
+    return parseInt(matches[0][1], 10);
+  }
+
+  // 4. When multiple years exist (e.g., "1992.2024.1080p", "Blade.Runner.2049.2017"):
+  // The release year is the last year token!
+  const lastMatch = matches[matches.length - 1];
+  return parseInt(lastMatch[1], 10);
 }
 
 function extractImdbId(name: string): string | null {
@@ -453,17 +489,19 @@ export async function fetchMovieMetadata(fileName: string): Promise<MediaMetadat
         const bTitle = (b.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const bOrigTitle = (b.original_title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-        const aNameScore = (aTitle === targetKey || aOrigTitle === targetKey) ? 2 : 0;
-        const bNameScore = (bTitle === targetKey || bOrigTitle === targetKey) ? 2 : 0;
+        // Title score: 10 points for exact title match, 3 points if starting with query
+        const aExact = (aTitle === targetKey || aOrigTitle === targetKey) ? 10 : ((aTitle.startsWith(targetKey) || aOrigTitle.startsWith(targetKey)) ? 3 : 0);
+        const bExact = (bTitle === targetKey || bOrigTitle === targetKey) ? 10 : ((bTitle.startsWith(targetKey) || bOrigTitle.startsWith(targetKey)) ? 3 : 0);
 
         const aYear = a.release_date ? parseInt(a.release_date.substring(0, 4), 10) : undefined;
         const bYear = b.release_date ? parseInt(b.release_date.substring(0, 4), 10) : undefined;
 
-        const aYearScore = year && aYear === year ? 1 : 0;
-        const bYearScore = year && bYear === year ? 1 : 0;
+        // Year score: 4 points if exact year, 2 points if within 1 year
+        const aYearScore = year && aYear ? (aYear === year ? 4 : Math.abs(aYear - year) <= 1 ? 2 : 0) : 0;
+        const bYearScore = year && bYear ? (bYear === year ? 4 : Math.abs(bYear - year) <= 1 ? 2 : 0) : 0;
 
-        const aScore = aNameScore + aYearScore;
-        const bScore = bNameScore + bYearScore;
+        const aScore = aExact + aYearScore;
+        const bScore = bExact + bYearScore;
 
         if (bScore !== aScore) return bScore - aScore;
         return (b.popularity || 0) - (a.popularity || 0);
@@ -535,15 +573,17 @@ export async function fetchShowMetadata(showName: string): Promise<MediaMetadata
       const scored = [...res.results].sort((a, b) => {
         const aKey = normalizeShowNameForMatch(a.name || '');
         const bKey = normalizeShowNameForMatch(b.name || '');
+        const aOrigKey = normalizeShowNameForMatch(a.original_name || '');
+        const bOrigKey = normalizeShowNameForMatch(b.original_name || '');
 
-        const aNameScore = aKey === targetKey ? 2 : 0;
-        const bNameScore = bKey === targetKey ? 2 : 0;
+        const aNameScore = (aKey === targetKey || aOrigKey === targetKey) ? 10 : ((aKey.startsWith(targetKey) || aOrigKey.startsWith(targetKey)) ? 3 : 0);
+        const bNameScore = (bKey === targetKey || bOrigKey === targetKey) ? 10 : ((bKey.startsWith(targetKey) || bOrigKey.startsWith(targetKey)) ? 3 : 0);
 
         const aYear = a.first_air_date ? parseInt(a.first_air_date.substring(0, 4), 10) : undefined;
         const bYear = b.first_air_date ? parseInt(b.first_air_date.substring(0, 4), 10) : undefined;
 
-        const aYearScore = hintedYear && aYear === hintedYear ? 1 : 0;
-        const bYearScore = hintedYear && bYear === hintedYear ? 1 : 0;
+        const aYearScore = hintedYear && aYear ? (aYear === hintedYear ? 4 : Math.abs(aYear - hintedYear) <= 1 ? 2 : 0) : 0;
+        const bYearScore = hintedYear && bYear ? (bYear === hintedYear ? 4 : Math.abs(bYear - hintedYear) <= 1 ? 2 : 0) : 0;
 
         const aScore = aNameScore + aYearScore;
         const bScore = bNameScore + bYearScore;

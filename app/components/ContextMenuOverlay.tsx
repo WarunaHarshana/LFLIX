@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, EyeOff, Trash2, BookmarkMinus } from 'lucide-react';
+import { Eye, EyeOff, Trash2, BookmarkMinus, Sparkles } from 'lucide-react';
 import type { ContentItem } from '@/app/types';
 
 type ContextMenuOverlayProps = {
@@ -9,6 +9,7 @@ type ContextMenuOverlayProps = {
   onMarkWatched: (item: ContentItem, watched: boolean) => void;
   onRemoveFromLibrary: (item: ContentItem) => void;
   onDelete: (item: ContentItem) => void;
+  onFixMatch?: (item: ContentItem) => void;
 };
 
 export default function ContextMenuOverlay({
@@ -17,6 +18,7 @@ export default function ContextMenuOverlay({
   onMarkWatched,
   onRemoveFromLibrary,
   onDelete,
+  onFixMatch,
 }: ContextMenuOverlayProps) {
   return (
     <>
@@ -25,12 +27,24 @@ export default function ContextMenuOverlay({
         className="fixed z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-48"
         style={{
           left: Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1920) - 200),
-          top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 1080) - 160)
+          top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 1080) - 180)
         }}
       >
         <div className="px-4 py-2 border-b border-neutral-700">
           <p className="text-sm font-medium truncate max-w-48">{contextMenu.item.title}</p>
         </div>
+        {onFixMatch && (
+          <button
+            onClick={() => {
+              onFixMatch(contextMenu.item);
+              onClose();
+            }}
+            className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-amber-400 font-medium"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            Fix Match / Metadata
+          </button>
+        )}
         {contextMenu.item.watchProgress?.completed ? (
           <button
             onClick={() => onMarkWatched(contextMenu.item, false)}

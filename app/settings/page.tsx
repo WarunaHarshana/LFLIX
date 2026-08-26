@@ -103,14 +103,24 @@ export default function SettingsPage() {
     const { theme, setTheme, accent, setAccent, isMounted } = useTheme();
 
     // Display preferences (localStorage only)
-    const [displayPrefs, setDisplayPrefs] = useState({ showTitles: true, showRatings: true, cinematicMode: false });
+    const [displayPrefs, setDisplayPrefs] = useState<{
+        showTitles: boolean;
+        showRatings: boolean;
+        cinematicMode: boolean;
+        gridColumns?: number;
+    }>({ showTitles: true, showRatings: true, cinematicMode: false, gridColumns: 8 });
+
     useEffect(() => {
         try {
             const saved = localStorage.getItem('lflix-display-prefs');
-            if (saved) setDisplayPrefs(JSON.parse(saved));
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                setDisplayPrefs(prev => ({ ...prev, ...parsed, gridColumns: parsed.gridColumns || 8 }));
+            }
         } catch {}
     }, []);
-    const updateDisplayPref = (key: string, value: boolean) => {
+
+    const updateDisplayPref = (key: string, value: any) => {
         const updated = { ...displayPrefs, [key]: value };
         setDisplayPrefs(updated);
         localStorage.setItem('lflix-display-prefs', JSON.stringify(updated));
@@ -348,6 +358,41 @@ export default function SettingsPage() {
                                 }`} />
                             </button>
                         </label>
+
+                        {/* Tiles per row setting */}
+                        <div className="pt-4 border-t border-neutral-800">
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <div className="text-neutral-300 font-medium">Tiles per row</div>
+                                    <div className="text-xs text-neutral-500">Number of poster columns displayed across the library grid</div>
+                                </div>
+                                <span className="text-sm font-semibold text-neutral-200">
+                                    {displayPrefs.gridColumns || 8} columns
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                                {[
+                                    { value: 4, label: '4 (Large)' },
+                                    { value: 5, label: '5' },
+                                    { value: 6, label: '6 (Medium)' },
+                                    { value: 7, label: '7' },
+                                    { value: 8, label: '8 (Default)' },
+                                    { value: 10, label: '10 (Compact)' },
+                                ].map((col) => (
+                                    <button
+                                        key={col.value}
+                                        onClick={() => updateDisplayPref('gridColumns', col.value)}
+                                        className={`py-2 px-3 rounded-lg border text-sm font-medium transition ${
+                                            (displayPrefs.gridColumns || 8) === col.value
+                                                ? 'border-white bg-neutral-800 text-white shadow-sm'
+                                                : 'border-neutral-800 bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
+                                        }`}
+                                    >
+                                        {col.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 </section>
 

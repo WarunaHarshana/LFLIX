@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.9.0
+
+Configurable library grid density / tiles per row, metadata parsing overhaul (tracker prefixes, `A K A` titles, year/number title disambiguation), and new interactive "Fix Match" search tool.
+
+### Added
+
+- **Configurable Grid Density / Tiles Per Row**: Users can now select how many movie/show tiles to display per row across desktop and TV screens (options for 4, 5, 6, 7, 8, or 10 tiles per row). Accessible directly from the library grid toolbar and Settings &rarr; Display Preferences, with persistent storage in localStorage.
+- **Interactive "Fix Match" Tool**: New search modal allowing users to search TMDB for any movie or TV show title and re-assign metadata with a single click. Available from both the right-click context menu and the media details modal.
+- **Match API (`POST /api/match`)**: Dedicated backend route to match and update TMDB metadata (artwork, overview, rating, IMDb score, genres, release year) and auto-sync TV show episode metadata.
+
+### Fixed
+
+- **Year/Number Title Matching ("1992")**: Resolved an issue where filenames with 4-digit numeric titles (e.g., `1992.2024.1080p.mkv`) wrongly matched older films (*Stripper 1992*). Year extraction now prioritizes bracketed release years and last year tokens before quality tags, while scoring now gives heavy priority to exact title matches.
+- **Tracker Prefixes Cleaning**: Extended `stripReleaseSitePrefix` to support all top-level domains (`.report`, `.durban`, `.pm`, `.top`, etc.) and space-separated tracker patterns (`Www 1Tamilmv Report - `, `Tamilblasters - `).
+- **`A K A` Alias Handling**: Cleanly strips all variations of `A K A`, `AKA`, `A.K.A.` on releases like *Godzilla Minus One*, *Thunderbolts*, and *The Furious* so queries match accurately on TMDB.
+
 ## v0.8.0
 
 Automatic TV show folder structure organization, loose episode auto-sorting, missing episode tracking across all seasons, robust deletion with directory cleanup, and library sorting fixes.

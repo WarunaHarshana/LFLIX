@@ -2,7 +2,7 @@
 
 import type React from 'react';
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { X, Play, Clock, Film, Tv, Loader2, PlayCircle, Globe, User, BellRing, BellOff } from 'lucide-react';
+import { X, Play, Clock, Film, Tv, Loader2, PlayCircle, Globe, User, BellRing, BellOff, Sparkles } from 'lucide-react';
 import TrailerModal from './TrailerModal';
 import StreamServerModal from './StreamServerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from './ContentCard';
@@ -40,6 +40,7 @@ type Props = {
     onClose: () => void;
     onPlay: () => void;
     onViewEpisodes?: () => void;
+    onFixMatch?: () => void;
     onOpenOnline?: (item: {
         tmdbId: number;
         mediaType: 'movie' | 'tv';
@@ -167,7 +168,7 @@ function toDiscoverContentCardItem(item: TmdbResult): DiscoverContentCardItem {
     };
 }
 
-export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisodes, onOpenOnline }: Props) {
+export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisodes, onOpenOnline, onFixMatch }: Props) {
     const modalRef = useModalBehavior(true, onClose, { trapFocus: true });
 
     const [imgLoaded, setImgLoaded] = useState(false);
@@ -528,6 +529,15 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                         className="px-4 py-2 sm:px-5 sm:py-2.5 bg-white text-black font-semibold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
                                     >
                                         <Globe className="w-4 h-4" /> Watch Online
+                                    </button>
+                                )}
+                                {onFixMatch && (
+                                    <button
+                                        onClick={onFixMatch}
+                                        className="px-4 py-2 sm:px-4 sm:py-2.5 bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-semibold rounded-lg flex items-center gap-2 transition text-sm border border-neutral-700"
+                                        title="Fix incorrect movie info or search TMDB"
+                                    >
+                                        <Sparkles className="w-4 h-4 text-amber-400" /> Fix Match
                                     </button>
                                 )}
                             </div>

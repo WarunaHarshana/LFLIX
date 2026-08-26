@@ -54,6 +54,7 @@ const IPTVManager = dynamic(() => import('./components/IPTVManager'), { ssr: fal
 const DlnaModal = dynamic(() => import('./components/DlnaModal'), { ssr: false });
 const MobileConnectModal = dynamic(() => import('./components/MobileConnectModal'), { ssr: false });
 const DownloadsPanel = dynamic(() => import('./components/DownloadsPanel'), { ssr: false });
+const FixMatchModal = dynamic(() => import('./components/FixMatchModal'), { ssr: false });
 
 export default function Home() {
   // ──────────────────── Hooks ────────────────────
@@ -63,7 +64,7 @@ export default function Home() {
     library, genres, loading, setLoading,
     selectedGenre, setSelectedGenre,
     sortBy, setSortBy,
-    displayPrefs,
+    displayPrefs, updateDisplayPref,
     fetchLibrary, handleScan, getFilteredLibrary,
   } = useLibrary(showToast);
   const { continueWatching, fetchContinueWatching } = useContinueWatching();
@@ -91,6 +92,8 @@ export default function Home() {
     discoverMode, setDiscoverMode,
     torrentInitialQuery, setTorrentInitialQuery
   } = useAppStore();
+
+  const [fixMatchItem, setFixMatchItem] = useState<ContentItem | null>(null);
 
   // ──────────────────── Computed ────────────────────
   const filteredLibrary = getFilteredLibrary(activeTab);
@@ -217,14 +220,15 @@ export default function Home() {
 
   // ──────────────────── Keyboard Navigation ────────────────────
   const getGridColumns = useCallback(() => {
-    if (typeof window === 'undefined') return 8;
+    if (typeof window === 'undefined') return displayPrefs.gridColumns || 8;
     const width = window.innerWidth;
-    if (width >= 1536) return 8;
-    if (width >= 1280) return 6;
-    if (width >= 1024) return 6;
-    if (width >= 768) return 4;
+    const pref = displayPrefs.gridColumns || 8;
+    if (width >= 1536) return pref;
+    if (width >= 1280) return Math.min(pref, 6);
+    if (width >= 1024) return Math.min(pref, 6);
+    if (width >= 768) return Math.min(pref, 4);
     return 2;
-  }, []);
+  }, [displayPrefs.gridColumns]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -470,6 +474,7 @@ export default function Home() {
             onGenreClear={() => setSelectedGenre(null)}
             focusedIndex={focusedIndex}
             displayPrefs={displayPrefs}
+            onDisplayPrefChange={updateDisplayPref}
             onCardClick={(item) => setSelectedDetail(item)}
             onContextMenu={(e, item) => setContextMenu({ x: e.clientX, y: e.clientY, item })}
           />
@@ -528,6 +533,7 @@ export default function Home() {
           onPlay={() => { playback.playFile('movie', selectedDetail.id, undefined, selectedDetail.watchProgress?.progress); setSelectedDetail(null); }}
           onViewEpisodes={() => { openShow(selectedDetail); setSelectedDetail(null); }}
           onOpenOnline={(item) => { openOnlineInDiscover(item); setSelectedDetail(null); }}
+          onFixMatch={() => setFixMatchItem(selectedDetail)}
         />
       )}
 
@@ -564,6 +570,24 @@ export default function Home() {
           onMarkWatched={(item, watched) => handleMarkWatched(item, watched)}
           onRemoveFromLibrary={handleRemoveFromLibrary}
           onDelete={handleDelete}
+          onFixMatch={(item) => setFixMatchItem(item)}
+        />
+      )}
+
+      {/* Fix Match Modal */}
+      {fixMatchItem && (
+        <FixMatchModal
+          item={fixMatchItem}
+          isOpen={!!fixMatchItem}
+          onClose={() => setFixMatchItem(null)}
+          onMatched={async () => {
+            await fetchLibrary();
+            await fetchContinueWatching();
+            if (selectedDetail && fixMatchItem && selectedDetail.id === fixMatchItem.id) {
+              setSelectedDetail(null);
+            }
+          }}
+          onShowToast={showToast}
         />
       )}
 

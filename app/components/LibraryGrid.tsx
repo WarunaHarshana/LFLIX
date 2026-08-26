@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, LayoutGrid } from 'lucide-react';
 import clsx from 'clsx';
 import ContentCard from './ContentCard';
 import EmptyState from './EmptyState';
@@ -15,7 +15,13 @@ type LibraryGridProps = {
   onSortChange: (sort: any) => void;
   onGenreClear: () => void;
   focusedIndex: number;
-  displayPrefs: { showTitles: boolean; showRatings: boolean; cinematicMode: boolean };
+  displayPrefs: {
+    showTitles: boolean;
+    showRatings: boolean;
+    cinematicMode: boolean;
+    gridColumns?: number;
+  };
+  onDisplayPrefChange?: (key: string, value: any) => void;
   onCardClick: (item: ContentItem) => void;
   onContextMenu: (e: React.MouseEvent, item: ContentItem) => void;
 };
@@ -29,6 +35,24 @@ const SORT_OPTIONS = [
   { value: 'rating', label: 'Rating' },
 ];
 
+const GRID_COLUMNS_OPTIONS = [
+  { value: 4, label: '4 (Large)' },
+  { value: 5, label: '5' },
+  { value: 6, label: '6 (Medium)' },
+  { value: 7, label: '7' },
+  { value: 8, label: '8 (Default)' },
+  { value: 10, label: '10 (Compact)' },
+];
+
+const GRID_CLASS_MAP: Record<number, string> = {
+  4: 'grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4',
+  5: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5',
+  6: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-6',
+  7: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-7',
+  8: 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8',
+  10: 'grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10',
+};
+
 export default function LibraryGrid({
   filteredLibrary,
   activeTab,
@@ -38,11 +62,14 @@ export default function LibraryGrid({
   onGenreClear,
   focusedIndex,
   displayPrefs,
+  onDisplayPrefChange,
   onCardClick,
   onContextMenu,
 }: LibraryGridProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isGridOpen, setIsGridOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const gridDropdownRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,10 +77,14 @@ export default function LibraryGrid({
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
+      if (gridDropdownRef.current && !gridDropdownRef.current.contains(event.target as Node)) {
+        setIsGridOpen(false);
+      }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
+        setIsGridOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -65,6 +96,8 @@ export default function LibraryGrid({
   }, []);
 
   const sortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Date Added';
+  const currentColumns = displayPrefs.gridColumns || 8;
+  const gridColumnsClass = GRID_CLASS_MAP[currentColumns] || GRID_CLASS_MAP[8];
 
   return (
     <div className="px-4 md:px-12 pb-20 relative z-20">
@@ -86,40 +119,86 @@ export default function LibraryGrid({
             ({filteredLibrary.length} items)
           </span>
         </h3>
-        <div ref={dropdownRef} className="relative group/sort">
-          <button
-            onClick={() => setIsOpen(prev => !prev)}
-            aria-expanded={isOpen}
-            className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 active:bg-neutral-600 rounded-lg text-sm text-neutral-300 hover:text-white transition-colors border border-neutral-700/50"
-          >
-            <ArrowUpDown className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">
-              {sortLabel}
-            </span>
-          </button>
-          <div
-            className={clsx(
-              "absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden transition-all duration-200 z-30",
-              isOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/sort:opacity-100 group-hover/sort:visible"
-            )}
-          >
-            {SORT_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  onSortChange(opt.value);
-                  setIsOpen(false);
-                }}
-                className={clsx(
-                  'w-full text-left px-4 py-2.5 text-sm transition-colors',
-                  sortBy === opt.value
-                    ? 'bg-red-600/20 text-red-400 font-medium'
-                    : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
+        <div className="flex items-center gap-2">
+          {/* Tiles per row / Grid columns dropdown */}
+          <div ref={gridDropdownRef} className="relative group/grid">
+            <button
+              onClick={() => setIsGridOpen(prev => !prev)}
+              aria-expanded={isGridOpen}
+              title="Tiles per row"
+              className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 active:bg-neutral-600 rounded-lg text-sm text-neutral-300 hover:text-white transition-colors border border-neutral-700/50"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">
+                {currentColumns} tiles
+              </span>
+            </button>
+            <div
+              className={clsx(
+                "absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden transition-all duration-200 z-30",
+                isGridOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/grid:opacity-100 group-hover/grid:visible"
+              )}
+            >
+              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 border-b border-neutral-800">
+                Tiles Per Row
+              </div>
+              {GRID_COLUMNS_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    onDisplayPrefChange?.('gridColumns', opt.value);
+                    setIsGridOpen(false);
+                  }}
+                  className={clsx(
+                    'w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between',
+                    currentColumns === opt.value
+                      ? 'bg-red-600/20 text-red-400 font-medium'
+                      : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                  )}
+                >
+                  <span>{opt.label}</span>
+                  {currentColumns === opt.value && <span className="text-xs">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sort dropdown */}
+          <div ref={dropdownRef} className="relative group/sort">
+            <button
+              onClick={() => setIsOpen(prev => !prev)}
+              aria-expanded={isOpen}
+              className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 active:bg-neutral-600 rounded-lg text-sm text-neutral-300 hover:text-white transition-colors border border-neutral-700/50"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">
+                {sortLabel}
+              </span>
+            </button>
+            <div
+              className={clsx(
+                "absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden transition-all duration-200 z-30",
+                isOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/sort:opacity-100 group-hover/sort:visible"
+              )}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    onSortChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={clsx(
+                    'w-full text-left px-4 py-2.5 text-sm transition-colors',
+                    sortBy === opt.value
+                      ? 'bg-red-600/20 text-red-400 font-medium'
+                      : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -129,7 +208,7 @@ export default function LibraryGrid({
       ) : (
         <div
           ref={gridRef}
-          className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
+          className={clsx("grid gap-4", gridColumnsClass)}
         >
           {filteredLibrary.map((item, index) => (
             <div

@@ -10,12 +10,31 @@ export function useLibrary(showToast: (message: string, type: 'success' | 'error
   const [sortBy, setSortBy] = useState<'added' | 'title-asc' | 'title-desc' | 'year-new' | 'year-old' | 'rating'>('added');
 
   // Display preferences from localStorage
-  const [displayPrefs, setDisplayPrefs] = useState({ showTitles: true, showRatings: true, cinematicMode: false });
+  const [displayPrefs, setDisplayPrefs] = useState<{
+    showTitles: boolean;
+    showRatings: boolean;
+    cinematicMode: boolean;
+    gridColumns?: number;
+  }>({ showTitles: true, showRatings: true, cinematicMode: false, gridColumns: 8 });
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem('lflix-display-prefs');
-      if (saved) setDisplayPrefs(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setDisplayPrefs(prev => ({ ...prev, ...parsed, gridColumns: parsed.gridColumns || 8 }));
+      }
     } catch {}
+  }, []);
+
+  const updateDisplayPref = useCallback((key: string, value: any) => {
+    setDisplayPrefs(prev => {
+      const updated = { ...prev, [key]: value };
+      try {
+        localStorage.setItem('lflix-display-prefs', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   }, []);
 
   const fetchLibrary = useCallback(async () => {
@@ -110,7 +129,7 @@ export function useLibrary(showToast: (message: string, type: 'success' | 'error
     library, genres, loading, setLoading,
     selectedGenre, setSelectedGenre,
     sortBy, setSortBy,
-    displayPrefs,
+    displayPrefs, updateDisplayPref,
     fetchLibrary, handleScan, getFilteredLibrary,
   };
 }
