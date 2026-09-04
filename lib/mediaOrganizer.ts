@@ -2,8 +2,99 @@ import fs from 'fs';
 import path from 'path';
 import db from './db';
 import { detectTvShow, isExtrasContent, isSampleClip, isVideoFile } from './mediaNaming';
-import { normalizeShowName } from './metadata';
+import { cleanFilename, extractYear, normalizeShowName } from './metadata';
 import { isPathInsideAny } from './security';
+
+const SUBTITLE_EXTENSIONS = ['.srt', '.vtt', '.sub', '.idx', '.ass', '.ssa'];
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
+
+const STANDARD_ARTWORK_NAMES = [
+  'folder',
+  'poster',
+  'cover',
+  'backdrop',
+  'fanart',
+  'landscape',
+  'logo',
+  'clearart',
+  'banner',
+  'disc',
+  'keyart',
+  'thumb',
+];
+
+function isSubtitleFile(file: string): boolean {
+  const ext = path.extname(file).toLowerCase();
+  return SUBTITLE_EXTENSIONS.includes(ext);
+}
+
+function isAdOrJunkFile(fileName: string): boolean {
+  return (
+    /www\./i.test(fileName) ||
+    /\.(?:com|net|org|cn|cc|me|top|xyz|site|vip)\b/i.test(fileName) ||
+    /http[s]?:\/\//i.test(fileName) ||
+    /【.*?(?:发布|访问|网址|电影|高清|水印).*?】/i.test(fileName) ||
+    /qrcode|扫码|关注|广告|promo|sample/i.test(fileName)
+  );
+}
+
+function isArtworkFile(fileName: string): boolean {
+  const ext = path.extname(fileName).toLowerCase();
+  if (!IMAGE_EXTENSIONS.includes(ext)) return false;
+  if (isAdOrJunkFile(fileName)) return false;
+
+  const baseName = path.basename(fileName, ext).toLowerCase();
+  if (STANDARD_ARTWORK_NAMES.includes(baseName)) return true;
+  if (STANDARD_ARTWORK_NAMES.some(art => baseName.endsWith(`-${art}`) || baseName.endsWith(`_${art}`))) return true;
+
+  return false;
+}
+
+export function moveCompanionFiles(sourceDir: string, targetDir: string, baseTargetName?: string): void {
+  if (!fs.existsSync(sourceDir) || !fs.existsSync(targetDir)) return;
+  if (path.resolve(sourceDir) === path.resolve(targetDir)) return;
+
+  try {
+    const entries = fs.readdirSync(sourceDir);
+    for (const entry of entries) {
+      const entryPath = path.join(sourceDir, entry);
+      try {
+        const stat = fs.statSync(entryPath);
+        if (stat.isFile()) {
+          if (isSubtitleFile(entry)) {
+            const ext = path.extname(entry).toLowerCase();
+            const langMatch = entry.match(/\.([a-z]{2,3})\.(?:srt|vtt|sub|idx|ass|ssa)$/i);
+            const langSuffix = langMatch ? `.${langMatch[1].toLowerCase()}` : '';
+            const targetSubName = baseTargetName ? `${baseTargetName}${langSuffix}${ext}` : entry;
+            const destPath = path.join(targetDir, targetSubName);
+            moveFileSafe(entryPath, destPath);
+          } else if (isArtworkFile(entry)) {
+            const destPath = path.join(targetDir, entry);
+            moveFileSafe(entryPath, destPath);
+          }
+        } else if (stat.isDirectory() && /^(subs|subtitles)$/i.test(entry)) {
+          const subFiles = fs.readdirSync(entryPath);
+          for (const subFile of subFiles) {
+            const subFilePath = path.join(entryPath, subFile);
+            if (isSubtitleFile(subFile)) {
+              const ext = path.extname(subFile).toLowerCase();
+              const langMatch = subFile.match(/\.([a-z]{2,3})\.(?:srt|vtt|sub|idx|ass|ssa)$/i);
+              const langSuffix = langMatch ? `.${langMatch[1].toLowerCase()}` : '';
+              const targetSubName = baseTargetName ? `${baseTargetName}${langSuffix}${ext}` : subFile;
+              const destSubDir = path.join(targetDir, entry);
+              if (!fs.existsSync(destSubDir)) fs.mkdirSync(destSubDir, { recursive: true });
+              moveFileSafe(subFilePath, path.join(destSubDir, targetSubName));
+            }
+          }
+        }
+      } catch { /* ignore single entry errors */ }
+    }
+  } catch { /* ignore read errors */ }
+}
+
+export function moveCompanionSubtitles(sourceDir: string, targetDir: string, baseTargetName?: string): void {
+  moveCompanionFiles(sourceDir, targetDir, baseTargetName);
+}
 
 /**
  * Move a file across filesystems/drives safely.
@@ -34,23 +125,46 @@ export function moveFileSafe(srcPath: string, destPath: string): void {
 }
 
 /**
+ * Resolves the root download directory:
+ * 1. Explicit baseDownloadPath if passed
+ * 2. settings.downloadPath from database
+ * 3. Default cwd/downloads
+ */
+export function getDownloadRootDir(baseDownloadPath?: string): string {
+  if (baseDownloadPath) return path.resolve(baseDownloadPath);
+  try {
+    const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('downloadPath') as { value: string } | undefined;
+    if (setting?.value && fs.existsSync(setting.value)) {
+      return path.resolve(setting.value);
+    }
+  } catch { /* ignore */ }
+  return path.resolve(process.cwd(), 'downloads');
+}
+
+/**
+ * Check if automatic media organization is enabled in database settings.
+ * Defaults to true if not explicitly set to 'false' or '0'.
+ */
+export function isAutoOrganizeEnabled(): boolean {
+  try {
+    const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('autoOrganize') as { value: string } | undefined;
+    if (setting?.value) {
+      return setting.value !== 'false' && setting.value !== '0';
+    }
+  } catch { /* ignore */ }
+  return true;
+}
+
+/**
  * Get or create the TV Shows directory inside the base download directory.
  * If 'TV Shows' or 'TV shows' or 'tv shows' exists, uses that. Otherwise creates 'TV Shows'.
  */
 export function getTvShowsDirectory(baseDownloadPath?: string): string {
-  let downloadRoot = baseDownloadPath;
+  const downloadRoot = getDownloadRootDir(baseDownloadPath);
 
-  if (!downloadRoot) {
-    try {
-      const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('downloadPath') as { value: string } | undefined;
-      if (setting?.value && fs.existsSync(setting.value)) {
-        downloadRoot = setting.value;
-      }
-    } catch { /* ignore */ }
-  }
-
-  if (!downloadRoot) {
-    downloadRoot = path.join(process.cwd(), 'downloads');
+  const baseName = path.basename(downloadRoot).toLowerCase();
+  if (baseName === 'tv shows' || baseName === 'shows' || baseName === 'tv') {
+    return downloadRoot;
   }
 
   if (!fs.existsSync(downloadRoot)) {
@@ -64,7 +178,7 @@ export function getTvShowsDirectory(baseDownloadPath?: string): string {
       const lower = e.toLowerCase();
       if (lower === 'tv shows' || lower === 'shows' || lower === 'tv') {
         try {
-          return fs.statSync(path.join(downloadRoot!, e)).isDirectory();
+          return fs.statSync(path.join(downloadRoot, e)).isDirectory();
         } catch {
           return false;
         }
@@ -83,6 +197,50 @@ export function getTvShowsDirectory(baseDownloadPath?: string): string {
   }
 
   return defaultTvShowsPath;
+}
+
+/**
+ * Get or create the Movies directory inside the base download directory.
+ * If 'Movies' or 'movies' exists, uses that. Otherwise creates 'Movies'.
+ */
+export function getMoviesDirectory(baseDownloadPath?: string): string {
+  const downloadRoot = getDownloadRootDir(baseDownloadPath);
+
+  const baseName = path.basename(downloadRoot).toLowerCase();
+  if (baseName === 'movies' || baseName === 'movie') {
+    return downloadRoot;
+  }
+
+  if (!fs.existsSync(downloadRoot)) {
+    fs.mkdirSync(downloadRoot, { recursive: true });
+  }
+
+  // Check actual filesystem entries to preserve existing casing/names (e.g. "movies", "Movies", etc.)
+  try {
+    const entries = fs.readdirSync(downloadRoot);
+    const existing = entries.find(e => {
+      const lower = e.toLowerCase();
+      if (lower === 'movies' || lower === 'movie') {
+        try {
+          return fs.statSync(path.join(downloadRoot, e)).isDirectory();
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    });
+
+    if (existing) {
+      return path.join(downloadRoot, existing);
+    }
+  } catch { /* ignore */ }
+
+  const defaultMoviesPath = path.join(downloadRoot, 'Movies');
+  if (!fs.existsSync(defaultMoviesPath)) {
+    fs.mkdirSync(defaultMoviesPath, { recursive: true });
+  }
+
+  return defaultMoviesPath;
 }
 
 /**
@@ -117,6 +275,8 @@ export function formatSeasonFolderName(showDir: string, seasonNumber: number): s
 export function sanitizeFolderName(name: string): string {
   return name
     .replace(/[<>:"/\\|?*]+/g, '') // remove invalid filesystem characters
+    .replace(/^[-–—._\s]+/, '') // strip leading dashes, underscores, dots, spaces
+    .replace(/[-–—._\s]+$/, '') // strip trailing dashes, underscores, dots, spaces
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -139,9 +299,14 @@ export async function organizeTvEpisodeFile(
     baseDownloadPath?: string;
     showTitleHint?: string;
     deleteSourceFolderIfEmpty?: boolean;
+    disableAutoOrganizeCheck?: boolean;
   }
 ): Promise<OrganizeResult> {
   try {
+    if (!options?.disableAutoOrganizeCheck && !isAutoOrganizeEnabled()) {
+      return { moved: false, error: 'Auto-organization is disabled in settings' };
+    }
+
     if (!fs.existsSync(filePath)) {
       return { moved: false, error: 'File does not exist' };
     }
@@ -215,10 +380,128 @@ export async function organizeTvEpisodeFile(
   }
 }
 
+export interface MovieOrganizeResult {
+  moved: boolean;
+  oldPath?: string;
+  newPath?: string;
+  movieTitle?: string;
+  year?: number;
+  error?: string;
+}
+
+/**
+ * Organize a single movie video file into the proper Movies/<Movie Title (Year)>/ structure.
+ */
+export async function organizeMovieFile(
+  filePath: string,
+  options?: {
+    baseDownloadPath?: string;
+    movieTitleHint?: string;
+    yearHint?: number;
+    deleteSourceFolderIfEmpty?: boolean;
+    keepOriginalFileName?: boolean;
+    disableAutoOrganizeCheck?: boolean;
+  }
+): Promise<MovieOrganizeResult> {
+  try {
+    if (!options?.disableAutoOrganizeCheck && !isAutoOrganizeEnabled()) {
+      return { moved: false, error: 'Auto-organization is disabled in settings' };
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return { moved: false, error: 'File does not exist' };
+    }
+
+    if (!isVideoFile(filePath) || isSampleClip(filePath) || isExtrasContent(filePath)) {
+      return { moved: false, error: 'Not a valid media file' };
+    }
+
+    const fileName = path.basename(filePath);
+
+    // If it's detected as a TV show, do not treat as a movie
+    if (detectTvShow(fileName)) {
+      return { moved: false, error: 'File is recognized as a TV show episode' };
+    }
+
+    const rawTitle = options?.movieTitleHint || cleanFilename(fileName);
+    const cleanTitle = sanitizeFolderName(rawTitle) || sanitizeFolderName(path.basename(fileName, path.extname(fileName)));
+    const year = options?.yearHint ?? extractYear(fileName);
+
+    if (!cleanTitle) {
+      return { moved: false, error: 'Could not determine movie title' };
+    }
+
+    const folderName = year ? `${cleanTitle} (${year})` : cleanTitle;
+    const moviesDir = getMoviesDirectory(options?.baseDownloadPath);
+
+    const ext = path.extname(fileName);
+    const targetFileName = options?.keepOriginalFileName ? fileName : `${folderName}${ext}`;
+    const targetMovieDir = path.join(moviesDir, folderName);
+    const targetFilePath = path.join(targetMovieDir, targetFileName);
+
+    // If already in target location, nothing to move
+    if (path.resolve(filePath) === path.resolve(targetFilePath)) {
+      return { moved: false, newPath: targetFilePath, movieTitle: cleanTitle, year };
+    }
+
+    // Check if the file is already inside its properly formatted movie folder inside moviesDir
+    const currentParentDir = path.dirname(filePath);
+    const currentGrandParentDir = path.dirname(currentParentDir);
+    const isInsideMoviesDir = path.resolve(currentGrandParentDir) === path.resolve(moviesDir);
+    const parentMatchesFolderName = path.basename(currentParentDir).toLowerCase() === folderName.toLowerCase();
+    const parentMatchesTitle = path.basename(currentParentDir).toLowerCase() === cleanTitle.toLowerCase();
+
+    if (isInsideMoviesDir && (parentMatchesFolderName || parentMatchesTitle)) {
+      return { moved: false, newPath: filePath, movieTitle: cleanTitle, year };
+    }
+
+    if (!fs.existsSync(targetMovieDir)) {
+      fs.mkdirSync(targetMovieDir, { recursive: true });
+    }
+
+    const originalParentDir = path.dirname(filePath);
+
+    // Move companion files (subtitles, artwork) first if coming from a dedicated folder
+    if (path.resolve(originalParentDir) !== path.resolve(targetMovieDir) && path.resolve(originalParentDir) !== path.resolve(moviesDir)) {
+      moveCompanionFiles(originalParentDir, targetMovieDir, folderName);
+    }
+
+    // Move the video file
+    moveFileSafe(filePath, targetFilePath);
+    console.log(`[MediaOrganizer] Moved movie "${fileName}" to "${targetFilePath}"`);
+
+    // Update database records for this file path
+    try {
+      db.prepare('UPDATE movies SET filePath = ?, fileName = ? WHERE filePath = ? OR filePath = ?')
+        .run(targetFilePath, targetFileName, filePath, filePath.replace(/\\/g, '/'));
+      db.prepare('DELETE FROM episodes WHERE filePath = ? OR filePath = ?')
+        .run(filePath, filePath.replace(/\\/g, '/'));
+    } catch (e) {
+      console.warn('[MediaOrganizer] Failed to update DB path for moved movie:', e);
+    }
+
+    // Clean up empty or junk source folder if requested
+    if (options?.deleteSourceFolderIfEmpty && path.resolve(originalParentDir) !== path.resolve(targetMovieDir) && path.resolve(originalParentDir) !== path.resolve(moviesDir)) {
+      cleanupJunkDirectory(originalParentDir, options.baseDownloadPath);
+    }
+
+    return {
+      moved: true,
+      oldPath: filePath,
+      newPath: targetFilePath,
+      movieTitle: cleanTitle,
+      year,
+    };
+  } catch (e: any) {
+    console.error(`[MediaOrganizer] Error organizing movie ${filePath}:`, e);
+    return { moved: false, error: e?.message || String(e) };
+  }
+}
+
 /**
  * Safely delete a directory if it only contains junk files (nfo, txt, url, sample, empty dirs)
  * and is inside the downloads directory. Never delete the root downloads folder, TV Shows folder,
- * or user library folders.
+ * Movies folder, or user library folders.
  */
 export function cleanupJunkDirectory(dirPath: string, baseDownloadPath?: string): boolean {
   try {
@@ -228,11 +511,12 @@ export function cleanupJunkDirectory(dirPath: string, baseDownloadPath?: string)
     if (!stat.isDirectory()) return false;
 
     const resolved = path.resolve(dirPath);
-    const downloadRoot = path.resolve(baseDownloadPath || getTvShowsDirectory(baseDownloadPath).replace(/[/\\]TV Shows$/i, ''));
+    const downloadRoot = path.resolve(baseDownloadPath || getDownloadRootDir(baseDownloadPath));
     const tvShowsRoot = path.resolve(getTvShowsDirectory(baseDownloadPath));
+    const moviesRoot = path.resolve(getMoviesDirectory(baseDownloadPath));
 
-    // Never delete download root or TV Shows root
-    if (resolved === downloadRoot || resolved === tvShowsRoot) {
+    // Never delete download root, TV Shows root, or Movies root
+    if (resolved === downloadRoot || resolved === tvShowsRoot || resolved === moviesRoot) {
       return false;
     }
 
@@ -256,7 +540,7 @@ export function cleanupJunkDirectory(dirPath: string, baseDownloadPath?: string)
     }
 
     console.log(`[MediaOrganizer] Deleting junk/empty torrent directory: "${resolved}"`);
-    fs.rmSync(resolved, { recursive: true, force: true });
+    fs.rmSync(resolved, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     return true;
   } catch (e) {
     console.warn(`[MediaOrganizer] Failed to cleanup directory "${dirPath}":`, e);
@@ -287,12 +571,17 @@ function getFilesRecursive(dir: string, list: string[] = []): string[] {
  */
 export async function organizeDownloadedItem(
   downloadPath: string,
-  torrentNameOrFilename?: string | null
+  torrentNameOrFilename?: string | null,
+  options?: { disableAutoOrganizeCheck?: boolean }
 ): Promise<{ organizedFiles: string[]; deletedFolders: string[] }> {
   const organizedFiles: string[] = [];
   const deletedFolders: string[] = [];
 
   try {
+    if (!options?.disableAutoOrganizeCheck && !isAutoOrganizeEnabled()) {
+      return { organizedFiles, deletedFolders };
+    }
+
     const targetDir = torrentNameOrFilename
       ? path.join(downloadPath, torrentNameOrFilename)
       : downloadPath;
@@ -305,10 +594,23 @@ export async function organizeDownloadedItem(
 
     if (stat.isFile()) {
       // Single file download
-      if (isVideoFile(targetDir) && detectTvShow(path.basename(targetDir))) {
-        const result = await organizeTvEpisodeFile(targetDir, { baseDownloadPath: downloadPath });
-        if (result.moved && result.newPath) {
-          organizedFiles.push(result.newPath);
+      if (isVideoFile(targetDir) && !isSampleClip(targetDir) && !isExtrasContent(targetDir)) {
+        if (detectTvShow(path.basename(targetDir))) {
+          const result = await organizeTvEpisodeFile(targetDir, {
+            baseDownloadPath: downloadPath,
+            disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+          });
+          if (result.moved && result.newPath) {
+            organizedFiles.push(result.newPath);
+          }
+        } else {
+          const result = await organizeMovieFile(targetDir, {
+            baseDownloadPath: downloadPath,
+            disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+          });
+          if (result.moved && result.newPath) {
+            organizedFiles.push(result.newPath);
+          }
         }
       }
     } else if (stat.isDirectory()) {
@@ -321,6 +623,16 @@ export async function organizeDownloadedItem(
           const result = await organizeTvEpisodeFile(videoFile, {
             baseDownloadPath: downloadPath,
             deleteSourceFolderIfEmpty: false,
+            disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+          });
+          if (result.moved && result.newPath) {
+            organizedFiles.push(result.newPath);
+          }
+        } else {
+          const result = await organizeMovieFile(videoFile, {
+            baseDownloadPath: downloadPath,
+            deleteSourceFolderIfEmpty: false,
+            disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
           });
           if (result.moved && result.newPath) {
             organizedFiles.push(result.newPath);
@@ -348,14 +660,18 @@ export async function organizeDownloadedItem(
  * or into loose torrent subfolders) and organize them into TV Shows/<Show Name>/Season <N>/.
  */
 export async function organizeLooseTvShowsInDownloads(
-  baseDownloadPath?: string
+  baseDownloadPath?: string,
+  options?: { disableAutoOrganizeCheck?: boolean }
 ): Promise<{ organized: number; errors: string[] }> {
   let organized = 0;
   const errors: string[] = [];
 
   try {
-    const tvShowsDir = getTvShowsDirectory(baseDownloadPath);
-    const downloadRoot = path.dirname(tvShowsDir);
+    if (!options?.disableAutoOrganizeCheck && !isAutoOrganizeEnabled()) {
+      return { organized: 0, errors: [] };
+    }
+
+    const downloadRoot = getDownloadRootDir(baseDownloadPath);
 
     if (!fs.existsSync(downloadRoot)) {
       return { organized: 0, errors: [] };
@@ -371,10 +687,10 @@ export async function organizeLooseTvShowsInDownloads(
         // Skip the TV Shows folder itself and Movies folder
         if (stat.isDirectory()) {
           const normName = entry.toLowerCase();
-          if (normName === 'tv shows' || normName === 'tv' || normName === 'shows') {
+          if (normName === 'tv shows' || normName === 'tv' || normName === 'shows' || normName === 'movies' || normName === 'movie') {
             continue;
           }
-          if (normName.startsWith('.') || normName === 'node_modules' || normName === 'data') {
+          if (normName.startsWith('.') || normName === 'node_modules' || normName === 'data' || normName === '$recycle.bin' || normName === 'system volume information') {
             continue;
           }
 
@@ -383,18 +699,28 @@ export async function organizeLooseTvShowsInDownloads(
           const tvFiles = files.filter(f => isVideoFile(f) && !isSampleClip(f) && !isExtrasContent(f) && detectTvShow(path.basename(f)));
 
           if (tvFiles.length > 0) {
+            let anyMoved = false;
             for (const file of tvFiles) {
-              const res = await organizeTvEpisodeFile(file, { baseDownloadPath: downloadRoot });
+              const res = await organizeTvEpisodeFile(file, {
+                baseDownloadPath: downloadRoot,
+                disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+              });
               if (res.moved) {
                 organized++;
+                anyMoved = true;
               }
             }
-            cleanupJunkDirectory(fullPath, downloadRoot);
+            if (anyMoved) {
+              cleanupJunkDirectory(fullPath, downloadRoot);
+            }
           }
         } else if (stat.isFile() && isVideoFile(fullPath)) {
           // File directly in root download folder
           if (detectTvShow(entry)) {
-            const res = await organizeTvEpisodeFile(fullPath, { baseDownloadPath: downloadRoot });
+            const res = await organizeTvEpisodeFile(fullPath, {
+              baseDownloadPath: downloadRoot,
+              disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+            });
             if (res.moved) {
               organized++;
             }
@@ -416,6 +742,137 @@ export async function organizeLooseTvShowsInDownloads(
 }
 
 /**
+ * Scan the download directory for loose movies (e.g. dropped directly into downloads root
+ * or into loose torrent subfolders) and organize them into Movies/<Movie Title (Year)>/.
+ */
+export async function organizeLooseMoviesInDownloads(
+  baseDownloadPath?: string,
+  options?: { disableAutoOrganizeCheck?: boolean }
+): Promise<{ organized: number; errors: string[] }> {
+  let organized = 0;
+  const errors: string[] = [];
+
+  try {
+    if (!options?.disableAutoOrganizeCheck && !isAutoOrganizeEnabled()) {
+      return { organized: 0, errors: [] };
+    }
+
+    const downloadRoot = getDownloadRootDir(baseDownloadPath);
+    const moviesDir = getMoviesDirectory(baseDownloadPath);
+
+    if (!fs.existsSync(downloadRoot)) {
+      return { organized: 0, errors: [] };
+    }
+
+    // Clean up empty duplicate "Movies" folder if downloadRoot is already named Movies
+    const nestedMovies = path.join(downloadRoot, 'Movies');
+    if (path.resolve(downloadRoot) === path.resolve(moviesDir) && fs.existsSync(nestedMovies)) {
+      try {
+        const nestedEntries = fs.readdirSync(nestedMovies);
+        if (nestedEntries.length === 0) {
+          fs.rmdirSync(nestedMovies);
+          console.log(`[MediaOrganizer] Removed empty duplicate Movies directory: "${nestedMovies}"`);
+        }
+      } catch { /* ignore */ }
+    }
+
+    const searchDirs = new Set<string>([downloadRoot]);
+    if (fs.existsSync(moviesDir)) {
+      searchDirs.add(path.resolve(moviesDir));
+    }
+
+    for (const searchDir of searchDirs) {
+      const entries = fs.readdirSync(searchDir);
+
+      for (const entry of entries) {
+        const fullPath = path.join(searchDir, entry);
+        try {
+          const stat = fs.statSync(fullPath);
+
+          if (stat.isDirectory()) {
+            const normName = entry.toLowerCase();
+            // Skip TV Shows folder and system/hidden dirs
+            if (normName === 'tv shows' || normName === 'tv' || normName === 'shows') {
+              continue;
+            }
+            if (normName.startsWith('.') || normName === 'node_modules' || normName === 'data' || normName === '$recycle.bin' || normName === 'system volume information') {
+              continue;
+            }
+            // Skip the moviesDir folder itself if it is a child of searchDir
+            if (searchDir === downloadRoot && path.resolve(fullPath) === path.resolve(moviesDir)) {
+              continue;
+            }
+
+            // Check if this subfolder has movie files (and not TV show files)
+            const files = getFilesRecursive(fullPath);
+            const movieFiles = files.filter(f => isVideoFile(f) && !isSampleClip(f) && !isExtrasContent(f) && !detectTvShow(path.basename(f)));
+
+            if (movieFiles.length > 0) {
+              let anyMoved = false;
+              for (const file of movieFiles) {
+                const res = await organizeMovieFile(file, {
+                  baseDownloadPath: downloadRoot,
+                  deleteSourceFolderIfEmpty: true,
+                  disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+                });
+                if (res.moved) {
+                  organized++;
+                  anyMoved = true;
+                }
+              }
+              if (anyMoved) {
+                cleanupJunkDirectory(fullPath, downloadRoot);
+              }
+            }
+          } else if (stat.isFile() && isVideoFile(fullPath) && !isSampleClip(fullPath) && !isExtrasContent(fullPath)) {
+            // File directly in root download folder or movies directory
+            if (!detectTvShow(entry)) {
+              const res = await organizeMovieFile(fullPath, {
+                baseDownloadPath: downloadRoot,
+                deleteSourceFolderIfEmpty: true,
+                disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+              });
+              if (res.moved) {
+                organized++;
+              }
+            }
+          }
+        } catch (e: any) {
+          errors.push(`${entry}: ${e?.message || String(e)}`);
+        }
+      }
+    }
+  } catch (e: any) {
+    errors.push(`Loose movie organization error: ${e?.message || String(e)}`);
+  }
+
+  if (organized > 0) {
+    console.log(`[MediaOrganizer] Auto-organized ${organized} loose movie(s) in downloads`);
+  }
+
+  return { organized, errors };
+}
+
+/**
+ * Convenience helper to organize both loose TV shows and loose movies in download directories.
+ */
+export async function organizeLooseMediaInDownloads(
+  baseDownloadPath?: string,
+  options?: { disableAutoOrganizeCheck?: boolean }
+): Promise<{ organizedShows: number; organizedMovies: number; errors: string[] }> {
+  if (!options?.disableAutoOrganizeCheck && !isAutoOrganizeEnabled()) {
+    return { organizedShows: 0, organizedMovies: 0, errors: [] };
+  }
+  const tvRes = await organizeLooseTvShowsInDownloads(baseDownloadPath, options);
+  const movieRes = await organizeLooseMoviesInDownloads(baseDownloadPath, options);
+  return {
+    organizedShows: tvRes.organized,
+    organizedMovies: movieRes.organized,
+    errors: [...tvRes.errors, ...movieRes.errors],
+  };
+}
+
+/**
  * Clean up empty parent directories after a media file is deleted.
  * - For movies: deletes the movie folder if it only contained that movie and has no other video files.
  * - For TV shows: deletes the Season folder if no episodes remain, and deletes the Show folder if no episodes/seasons remain.
@@ -434,6 +891,11 @@ export function cleanupEmptyMediaDirectories(filePath: string): { cleanedDirs: s
     try {
       const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('downloadPath') as { value: string } | undefined;
       if (setting?.value) protectedRoots.add(path.resolve(setting.value));
+    } catch { /* ignore */ }
+
+    try {
+      protectedRoots.add(path.resolve(getTvShowsDirectory()));
+      protectedRoots.add(path.resolve(getMoviesDirectory()));
     } catch { /* ignore */ }
 
     try {

@@ -42,7 +42,7 @@ function searchWithLike(query: string): LocalSearchResult[] {
     const shows = db.prepare(`
       SELECT id, 'show' as type, title, posterPath, firstAirDate, rating, imdbRating
       FROM shows 
-      WHERE title LIKE ?
+      WHERE title LIKE ? AND id IN (SELECT DISTINCT showId FROM episodes)
       ORDER BY COALESCE(imdbRating, rating) DESC
       LIMIT 10
     `).all(searchTerm) as LocalSearchResult[];
@@ -64,7 +64,7 @@ function searchWithFts(ftsQuery: string): LocalSearchResult[] {
       SELECT s.id, 'show' as type, s.title, s.posterPath, s.firstAirDate, s.rating, s.imdbRating
       FROM show_search_fts fts
       JOIN shows s ON s.id = fts.rowid
-      WHERE show_search_fts MATCH ?
+      WHERE show_search_fts MATCH ? AND s.id IN (SELECT DISTINCT showId FROM episodes)
       ORDER BY bm25(show_search_fts), COALESCE(s.imdbRating, s.rating) DESC
       LIMIT 10
     `).all(ftsQuery) as LocalSearchResult[];

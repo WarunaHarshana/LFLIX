@@ -8,7 +8,7 @@ import { isTmdbConfigured } from '@/lib/metadata';
 export const dynamic = 'force-dynamic';
 
 // Valid setting keys to prevent injection
-const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey', 'omdbApiKey', 'downloadPath'];
+const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey', 'omdbApiKey', 'downloadPath', 'autoOrganize'];
 
 // Validate the configured player path points at a real, recognised player binary
 const validateVlcPath = validatePlayerExecutable;
@@ -21,6 +21,11 @@ export async function GET() {
         const settingsObj: Record<string, string> = {};
         for (const s of settings) {
             settingsObj[s.key] = s.value;
+        }
+
+        // Default autoOrganize to 'true' if not set
+        if (settingsObj.autoOrganize === undefined) {
+            settingsObj.autoOrganize = 'true';
         }
 
         // Validate current VLC path and add warning if invalid
@@ -73,6 +78,8 @@ export async function POST(req: Request) {
         for (const [key, value] of Object.entries(settings)) {
             if (typeof value === 'string') {
                 updateSetting.run(key, value);
+            } else if (typeof value === 'boolean') {
+                updateSetting.run(key, value ? 'true' : 'false');
             }
         }
 

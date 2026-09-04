@@ -1129,10 +1129,17 @@ setImmediate(async () => {
         setTimeout(async () => {
             try { await downloadManager.recoverAll(); } catch (e) { console.error('[DownloadManager] Recovery failed:', e); }
             try {
-                const { organizeLooseTvShowsInDownloads } = await import('./mediaOrganizer');
-                await organizeLooseTvShowsInDownloads();
+                const { organizeLooseMediaInDownloads } = await import('./mediaOrganizer');
+                await organizeLooseMediaInDownloads();
             } catch (e) {
-                console.error('[DownloadManager] Startup TV show organization error:', e);
+                console.error('[DownloadManager] Startup media organization error:', e);
+            }
+            try {
+                db.prepare('DELETE FROM shows WHERE id NOT IN (SELECT DISTINCT showId FROM episodes)').run();
+                const { cleanupOrphanedAutoTracks } = await import('./db');
+                cleanupOrphanedAutoTracks();
+            } catch (e) {
+                console.warn('[DownloadManager] Startup orphan shows cleanup error:', e);
             }
         }, 1500);
 

@@ -10,6 +10,7 @@ type Settings = {
     tmdbApiKey: string;
     omdbApiKey: string;
     downloadPath: string;
+    autoOrganize?: string;
 };
 
 // Component for refresh metadata button
@@ -93,7 +94,8 @@ export default function SettingsPage() {
         vlcPath: 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe',
         tmdbApiKey: '',
         omdbApiKey: '',
-        downloadPath: ''
+        downloadPath: '',
+        autoOrganize: 'true',
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -138,7 +140,8 @@ export default function SettingsPage() {
                 vlcPath: data.vlcPath || 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe',
                 tmdbApiKey: data.tmdbApiKey || '',
                 omdbApiKey: data.omdbApiKey || '',
-                downloadPath: data.downloadPath || ''
+                downloadPath: data.downloadPath || '',
+                autoOrganize: data.autoOrganize !== undefined ? String(data.autoOrganize) : 'true',
             });
             setTmdbConfigured(data.tmdbConfigured !== false);
         } catch (e) {
@@ -232,24 +235,50 @@ export default function SettingsPage() {
                     </div>
                 </section>
 
-                {/* Download Path */}
+                {/* Download Path & Organization */}
                 <section className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
                     <div className="p-6 border-b border-neutral-800 flex items-center gap-3">
                         <Download className="w-5 h-5 text-[var(--text-secondary)]" />
-                        <h2 className="text-lg font-semibold">Download Path</h2>
+                        <h2 className="text-lg font-semibold">Downloads & Media Organization</h2>
                     </div>
-                    <div className="p-6">
-                        <label className="block text-sm text-neutral-400 mb-2">Torrent Download Folder</label>
-                        <input
-                            type="text"
-                            value={settings.downloadPath}
-                            onChange={(e) => setSettings(prev => ({ ...prev, downloadPath: e.target.value }))}
-                            className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-white/70 transition font-mono text-sm"
-                            placeholder="C:\Users\you\Downloads\Movies"
-                        />
-                        <p className="text-xs text-neutral-500 mt-2">
-                            Where torrent downloads will be saved. Use a folder that is also in your library for auto-import.
-                        </p>
+                    <div className="p-6 space-y-6">
+                        <div>
+                            <label className="block text-sm text-neutral-400 mb-2">Torrent Download Folder</label>
+                            <input
+                                type="text"
+                                value={settings.downloadPath}
+                                onChange={(e) => setSettings(prev => ({ ...prev, downloadPath: e.target.value }))}
+                                className="w-full bg-black border border-neutral-700 rounded-lg px-4 py-3 outline-none focus:border-white/70 transition font-mono text-sm"
+                                placeholder="C:\Users\you\Downloads\Movies"
+                            />
+                            <p className="text-xs text-neutral-500 mt-2">
+                                Where torrent downloads will be saved. Use a folder that is also in your library for auto-import.
+                            </p>
+                        </div>
+
+                        <div className="pt-4 border-t border-neutral-800">
+                            <label className="flex items-center justify-between cursor-pointer group">
+                                <div className="pr-4">
+                                    <div className="text-neutral-300 group-hover:text-white transition font-medium">
+                                        Auto-Organize Downloaded Media
+                                    </div>
+                                    <div className="text-xs text-neutral-500 mt-1">
+                                        Automatically organize downloaded movies and TV shows into clean folders (e.g. <span className="text-neutral-400">Movie Title (Year)</span> and <span className="text-neutral-400">TV Shows/Show Name/Season N/</span>) and clean up promotional ads, sample clips, and temporary torrent folders.
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSettings(prev => ({ ...prev, autoOrganize: prev.autoOrganize === 'false' ? 'true' : 'false' }))}
+                                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${
+                                        settings.autoOrganize !== 'false' ? 'bg-white' : 'bg-neutral-700'
+                                    }`}
+                                >
+                                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform ${
+                                        settings.autoOrganize !== 'false' ? 'translate-x-5 bg-black' : 'bg-white'
+                                    }`} />
+                                </button>
+                            </label>
+                        </div>
                     </div>
                 </section>
 

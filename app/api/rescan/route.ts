@@ -49,12 +49,12 @@ export async function POST() {
     let totalRemoved = 0;
     const errors: string[] = [];
 
-    // Auto-organize loose TV episodes in watched folders
+    // Auto-organize loose media (TV episodes & movies) in watched folders
     for (const { folderPath } of folders) {
       if (fs.existsSync(folderPath)) {
         try {
-          const { organizeLooseTvShowsInDownloads } = await import('@/lib/mediaOrganizer');
-          await organizeLooseTvShowsInDownloads(folderPath);
+          const { organizeLooseMediaInDownloads } = await import('@/lib/mediaOrganizer');
+          await organizeLooseMediaInDownloads(folderPath);
         } catch { /* ignore */ }
       }
     }

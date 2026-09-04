@@ -72,6 +72,7 @@ export async function GET() {
       SELECT id, title, tmdbId, posterPath, backdropPath, overview,
              rating, imdbRating, genres, language, firstAirDate, addedAt
       FROM shows
+      WHERE id IN (SELECT DISTINCT showId FROM episodes)
       ORDER BY addedAt DESC
     `).all() as Show[];
 

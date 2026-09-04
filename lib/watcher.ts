@@ -72,12 +72,21 @@ class FolderWatcher {
 
             if (folder) {
                 try {
-                    // Check if loose TV show episode needs organization
+                    // Check if loose TV show episode or movie needs organization
                     let targetPath = filePath;
-                    const { detectTvShow } = await import('./mediaNaming');
+                    const { detectTvShow, isVideoFile, isSampleClip, isExtrasContent } = await import('./mediaNaming');
                     if (detectTvShow(path.basename(filePath))) {
                         const { organizeTvEpisodeFile } = await import('./mediaOrganizer');
                         const orgResult = await organizeTvEpisodeFile(filePath, {
+                            baseDownloadPath: folder.folderPath,
+                            deleteSourceFolderIfEmpty: true,
+                        });
+                        if (orgResult.moved && orgResult.newPath) {
+                            targetPath = orgResult.newPath;
+                        }
+                    } else if (isVideoFile(filePath) && !isSampleClip(filePath) && !isExtrasContent(filePath)) {
+                        const { organizeMovieFile } = await import('./mediaOrganizer');
+                        const orgResult = await organizeMovieFile(filePath, {
                             baseDownloadPath: folder.folderPath,
                             deleteSourceFolderIfEmpty: true,
                         });
@@ -451,12 +460,12 @@ class FolderWatcher {
                 console.log('[AutoScan] Library is empty — starting initial scan...');
                 this.emit({ type: 'new_file', message: 'Starting initial library scan...' });
 
-                // First organize any loose TV shows in download directories
+                // First organize any loose TV shows or movies in download directories
                 try {
-                    const { organizeLooseTvShowsInDownloads } = await import('./mediaOrganizer');
-                    await organizeLooseTvShowsInDownloads();
+                    const { organizeLooseMediaInDownloads } = await import('./mediaOrganizer');
+                    await organizeLooseMediaInDownloads();
                 } catch (e) {
-                    console.warn('[AutoScan] Loose TV show organization warning:', e);
+                    console.warn('[AutoScan] Loose media organization warning:', e);
                 }
 
                 const fs = await import('fs');

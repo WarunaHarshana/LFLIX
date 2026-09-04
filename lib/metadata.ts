@@ -159,8 +159,8 @@ export function cleanFilename(name: string): string {
     clean = clean.replace(/\s+(19|20)\d{2}\s*$/g, "");
   }
 
-  // Remove trailing junk and hyphens
-  clean = clean.replace(/[-–—]+\s*$/, "").trim();
+  // Remove leading and trailing junk, hyphens, dashes
+  clean = clean.replace(/^[-–—\s._]+/, "").replace(/[-–—\s._]+$/, "").trim();
 
   // Remove extra spaces
   clean = clean.replace(/\s+/g, " ").trim();

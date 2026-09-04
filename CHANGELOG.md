@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.11.0
+
+Automatic local movie folder organization, companion artwork/subtitle preservation, settings auto-organize toggle, and library ghost card fixes.
+
+### Added
+
+- **Automatic Movie Folder Organization**: Movies are now automatically organized into standard `Movies/<Movie Title (Year)>/<Movie Title (Year)>.<ext>` folder structures, matching the existing organization for TV shows. Enables Windows Explorer video poster/thumbnail previews on folder icons.
+- **Companion Artwork & Subtitle Preservation**: Automatically detects and relocates local companion artwork (`folder.jpg`, `poster.jpg`, `backdrop.jpg`, `logo.png`, `landscape.jpg`, `fanart.jpg`) and subtitles (`.srt`, `.vtt`, `.sub`, etc.) with language tags intact into the destination movie folder.
+- **Ad & Junk Cleanup**: Filters out promotional URLs, `.nfo` files, advertisements, and sample clips, and automatically deletes temporary release directories once video and companion assets are organized.
+- **Auto-Organize Settings Toggle**: Added a user-facing toggle in **Settings** &rarr; **Downloads & Media Organization** allowing users to enable or disable automatic media organization at any time.
+- **Startup & Rescan Loose Media Sorting**: Added automatic loose media sorting for movies and TV shows during library scan and startup recovery.
+
+### Fixed
+
+- **Ghost / Blank Show Card on Startup**: Resolved an issue where running test suites could insert uncleaned mock show rows with 0 episodes into SQLite. Hardened `GET /api/content` and `GET /api/search` with episode existence checks to guarantee orphan shows without files never appear in "My Library", added an `afterEach` test cleanup hook, and added startup orphan show cleanup.
+
 ## v0.10.0
 
 Comprehensive local library sorting and filtering by language, TMDB original language detection, automated metadata sync, and UI badges.
