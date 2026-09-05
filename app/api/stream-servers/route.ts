@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { streamQualityDb, type StreamQualityValue } from '@/lib/db';
 import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 import { apiErrorResponse } from '@/lib/apiSecurity';
+import { resolveCinejoyStream } from '@/lib/cinejoy';
 
 export const dynamic = 'force-dynamic';
 
@@ -160,17 +161,6 @@ const SERVER_REGISTRY: ServerRegistryEntry[] = [
       type === 'movie'
         ? `https://www.vidking.net/embed/movie/${tmdbId}?color=e11d48`
         : `https://www.vidking.net/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}?color=e11d48`,
-  },
-  {
-    id: 'autoembed',
-    name: 'AUTOEMBED',
-    color: '#f43f5e',
-    baselineQuality: '1080p',
-    tier: 'great',
-    buildUrl: (tmdbId, type, season, episode) =>
-      type === 'movie'
-        ? `https://autoembed.cc/embed/movie/${tmdbId}`
-        : `https://autoembed.cc/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`,
   },
 ];
 
@@ -441,31 +431,54 @@ async function isServerWorking(
   }
 }
 
-// IMDB ID cache for SmashyStream (TMDB ID -> IMDB ID)
-const imdbIdCache = new Map<string, { imdbId: string | null; expiresAt: number }>();
-const IMDB_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+type MediaMeta = {
+  title: string;
+  year?: string;
+  imdbId?: string | null;
+};
 
-async function resolveImdbId(tmdbId: number, type: 'movie' | 'tv'): Promise<string | null> {
+const mediaMetaCache = new Map<string, { meta: MediaMeta; expiresAt: number }>();
+const META_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+async function resolveMediaMeta(tmdbId: number, type: 'movie' | 'tv'): Promise<MediaMeta> {
   const cacheKey = `${type}-${tmdbId}`;
-  const cached = imdbIdCache.get(cacheKey);
+  const cached = mediaMetaCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.imdbId;
+    return cached.meta;
   }
 
   try {
     const moviedb = getTmdbClient();
-    const externalIds = await cachedTmdbCall(`${type}-external-ids-${tmdbId}`, () =>
-      type === 'movie'
-        ? moviedb.movieExternalIds({ id: tmdbId })
-        : moviedb.tvExternalIds({ id: tmdbId })
-    );
-    const imdbId = (externalIds as any).imdb_id || null;
-    imdbIdCache.set(cacheKey, { imdbId, expiresAt: Date.now() + IMDB_CACHE_TTL_MS });
-    return imdbId;
+    if (type === 'movie') {
+      const [info, external] = await Promise.all([
+        cachedTmdbCall(`movie-info-${tmdbId}`, () => moviedb.movieInfo({ id: tmdbId })),
+        cachedTmdbCall(`movie-external-ids-${tmdbId}`, () => moviedb.movieExternalIds({ id: tmdbId })).catch(() => null),
+      ]);
+      const meta: MediaMeta = {
+        title: (info as any)?.title || '',
+        year: (info as any)?.release_date ? String((info as any).release_date).slice(0, 4) : undefined,
+        imdbId: (external as any)?.imdb_id || null,
+      };
+      mediaMetaCache.set(cacheKey, { meta, expiresAt: Date.now() + META_CACHE_TTL_MS });
+      return meta;
+    } else {
+      const [info, external] = await Promise.all([
+        cachedTmdbCall(`tv-info-${tmdbId}`, () => moviedb.tvInfo({ id: tmdbId })),
+        cachedTmdbCall(`tv-external-ids-${tmdbId}`, () => moviedb.tvExternalIds({ id: tmdbId })).catch(() => null),
+      ]);
+      const meta: MediaMeta = {
+        title: (info as any)?.name || '',
+        year: (info as any)?.first_air_date ? String((info as any).first_air_date).slice(0, 4) : undefined,
+        imdbId: (external as any)?.imdb_id || null,
+      };
+      mediaMetaCache.set(cacheKey, { meta, expiresAt: Date.now() + META_CACHE_TTL_MS });
+      return meta;
+    }
   } catch (error) {
-    console.warn(`[stream-servers] Failed to resolve IMDB ID for ${type}/${tmdbId}:`, error);
-    imdbIdCache.set(cacheKey, { imdbId: null, expiresAt: Date.now() + 5 * 60 * 1000 }); // cache failure for 5 min
-    return null;
+    console.warn(`[stream-servers] Failed to resolve metadata for ${type}/${tmdbId}:`, error);
+    const fallback: MediaMeta = { title: '' };
+    mediaMetaCache.set(cacheKey, { meta: fallback, expiresAt: Date.now() + 5 * 60 * 1000 });
+    return fallback;
   }
 }
 
@@ -475,26 +488,7 @@ async function buildServerUrls(
   season?: number,
   episode?: number
 ): Promise<StreamServer[]> {
-  // Resolve IMDB ID in background for SmashyStream
-  const imdbId = await resolveImdbId(tmdbId, type).catch(() => null);
-
-  const smashyEntry: ServerRegistryEntry | null = imdbId
-    ? {
-        id: 'smashystream',
-        name: 'SMASHYSTREAM',
-        color: '#facc15',
-        baselineQuality: '1080p',
-        tier: 'great',
-        buildUrl: (_tmdbId, t, s, e) =>
-          t === 'movie'
-            ? `https://player.smashy.stream/movie/${imdbId}`
-            : `https://player.smashy.stream/tv/${imdbId}?s=${s || 1}&e=${e || 1}`,
-      }
-    : null;
-
-  const registry = smashyEntry ? [...SERVER_REGISTRY, smashyEntry] : SERVER_REGISTRY;
-
-  return registry.map((entry, index) => ({
+  return SERVER_REGISTRY.map((entry, index) => ({
     id: entry.id,
     name: entry.name,
     url: entry.buildUrl(tmdbId, type, season, episode),
@@ -502,8 +496,6 @@ async function buildServerUrls(
     order: index,
     baselineQuality: entry.baselineQuality,
     tier: entry.tier || 'ok',
-    // Must be carried through: dropping it here would silently re-promote a
-    // host whose reachability cannot actually be confirmed.
     unverifiableAvailability: entry.unverifiableAvailability,
   }));
 }
@@ -547,6 +539,7 @@ export async function GET(req: Request) {
     const type = searchParams.get('type') as 'movie' | 'tv' | null;
     const season = searchParams.get('season');
     const episode = searchParams.get('episode');
+    const titleParam = searchParams.get('title');
     const vpnMode = searchParams.get('vpn') === '1' || searchParams.get('networkMode') === 'vpn';
     const refreshProbe = searchParams.get('refresh') === '1' || vpnMode;
 
@@ -748,69 +741,54 @@ export async function GET(req: Request) {
       }
       })(),
       (async () => {
-      // SuperEmbed (seapi.link) — direct HLS stream source
-      try {
-        const seType = type === 'movie' ? 'movie' : 'tv';
-        const seUrl = seType === 'movie'
-          ? `https://seapi.link/?type=tmdb&id=${parsedTmdbId}&max_results=1`
-          : `https://seapi.link/?type=tmdb&id=${parsedTmdbId}&season=${season ?? 1}&episode=${episode ?? 1}&max_results=1`;
+        // Cinejoy API (cinejoy.to) — direct HLS stream sources
+        try {
+          const meta = await resolveMediaMeta(parsedTmdbId, type);
+          const effectiveTitle = titleParam || meta.title;
+          if (!effectiveTitle) return;
 
-        const seRes = await fetch(seUrl, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-          signal: AbortSignal.timeout(4000),
-        });
+          // Query Cinejoy Lisbon (4K UHD) and Nebula (1080p backup) in parallel
+          const cinejoyServers = ['Lisbon', 'Nebula'];
+          await Promise.all(
+            cinejoyServers.map(async (serverName, sIdx) => {
+              const stream = await resolveCinejoyStream({
+                tmdbId: parsedTmdbId,
+                imdbId: meta.imdbId,
+                title: effectiveTitle,
+                year: meta.year,
+                type,
+                season: safeSeason,
+                episode: safeEpisode,
+                server: serverName,
+              });
 
-        if (seRes.ok) {
-          const seData = await seRes.json();
-          const results = Array.isArray(seData) ? seData : (seData?.results || []);
-          for (const result of results) {
-            const videoUrl = result.url || result.file || result.link;
-            if (typeof videoUrl !== 'string') continue;
-
-            const label = result.quality || result.label || '1080p';
-            let qualityHint: StreamQualityValue = '1080p';
-            if (/2160|4k|uhd/i.test(label)) qualityHint = '2160p';
-            else if (/720/i.test(label)) qualityHint = '720p';
-
-            const directSubtitles: { label: string; url: string; language?: string }[] = [];
-            if (Array.isArray(result.subtitles)) {
-              for (const sub of result.subtitles) {
-                const subUrl = sub.url || sub.file;
-                if (typeof subUrl === 'string') {
-                  directSubtitles.push({
-                    label: sub.label || sub.lang || 'English',
-                    url: subUrl,
-                    language: sub.lang || sub.language || 'en',
-                  });
-                }
+              if (stream) {
+                responseServers.push({
+                  id: stream.id,
+                  name: stream.name,
+                  url: stream.url,
+                  color: serverName === 'Lisbon' ? '#10b981' : '#06b6d4',
+                  order: -95 + sIdx,
+                  baselineQuality: stream.qualityHint,
+                  isReachable: true,
+                  availabilityState: 'reachable',
+                  probeError: null,
+                  probeCheckedAt: new Date().toISOString(),
+                  qualityHint: stream.qualityHint,
+                  confidence: 1.0,
+                  probeState: 'cached',
+                  lastCheckedAt: new Date().toISOString(),
+                  latencyMs: 45,
+                  isDirect: true,
+                  directSubtitles: stream.subtitles,
+                  tier: 'best',
+                });
               }
-            }
-
-            responseServers.push({
-              id: `superembed-${results.indexOf(result)}`,
-              name: `SuperEmbed${result.server ? ` (${result.server})` : ''}`,
-              url: videoUrl,
-              color: '#22d3ee',
-              order: -90,
-              baselineQuality: '1080p',
-              isReachable: true,
-              availabilityState: 'reachable',
-              probeError: null,
-              probeCheckedAt: new Date().toISOString(),
-              qualityHint,
-              confidence: 0.9,
-              probeState: 'cached',
-              lastCheckedAt: new Date().toISOString(),
-              latencyMs: 50,
-              isDirect: true,
-              directSubtitles,
-            });
-          }
+            })
+          );
+        } catch (error: any) {
+          console.error('[stream-servers] Cinejoy query failed:', error.message || error);
         }
-      } catch (error: any) {
-        console.error('[stream-servers] SuperEmbed query failed:', error.message || error);
-      }
       })(),
     ]);
 

@@ -222,6 +222,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       const params = new URLSearchParams({
         tmdbId: tmdbId.toString(),
         type,
+        ...(title && { title }),
         ...(season && { season: season.toString() }),
         ...(episode && { episode: episode.toString() }),
         ...(vpnMode && { vpn: '1' }),
