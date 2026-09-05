@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { spawnSync } from 'child_process';
+import { spawnSync, execFile } from 'child_process';
 import db from '@/lib/db';
 import { verifyStreamToken } from './streamTokens';
 
@@ -66,7 +66,7 @@ const HW_ENCODER_CANDIDATES = [
 
 const SOFTWARE_ENCODER = {
   name: 'libx264',
-  args: ['-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '22', '-threads', '0'],
+  args: ['-preset', 'superfast', '-tune', 'zerolatency', '-crf', '19', '-threads', '0'],
 };
 
 type EncoderChoice = { name: string; args: string[] };
@@ -74,7 +74,7 @@ type EncoderChoice = { name: string; args: string[] };
 let cachedEncoder: EncoderChoice | null = null;
 
 /**
- * Probe an encoder by actually initialising it on a tiny synthetic clip.
+ * Probe an encoder by actually initialising it on a synthetic clip.
  *
  * Listing `ffmpeg -encoders` is not enough: builds advertise every encoder they
  * were compiled with, whether or not the machine has the driver or GPU. The
@@ -137,24 +137,53 @@ function validateId(id: unknown): id is number {
   return Number.isInteger(id) && (id as number) > 0;
 }
 
+export function getMediaInfoById(
+  contentType: 'movie' | 'episode',
+  id: number,
+): { filePath: string; videoCodec: string | null } | null {
+  try {
+    if (contentType === 'movie') {
+      const result = db
+        .prepare('SELECT filePath, videoCodec FROM movies WHERE id = ?')
+        .get(id) as { filePath: string; videoCodec: string | null } | undefined;
+      return result ? { filePath: result.filePath, videoCodec: result.videoCodec || null } : null;
+    }
+    const result = db
+      .prepare('SELECT filePath, videoCodec FROM episodes WHERE id = ?')
+      .get(id) as { filePath: string; videoCodec: string | null } | undefined;
+    return result ? { filePath: result.filePath, videoCodec: result.videoCodec || null } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getFilePathById(
   contentType: 'movie' | 'episode',
   id: number,
 ): string | null {
-  try {
-    if (contentType === 'movie') {
-      const result = db
-        .prepare('SELECT filePath FROM movies WHERE id = ?')
-        .get(id) as { filePath: string } | undefined;
-      return result?.filePath || null;
-    }
-    const result = db
-      .prepare('SELECT filePath FROM episodes WHERE id = ?')
-      .get(id) as { filePath: string } | undefined;
-    return result?.filePath || null;
-  } catch {
-    return null;
-  }
+  return getMediaInfoById(contentType, id)?.filePath || null;
+}
+
+const probedCodecCache = new Map<string, string>();
+
+export async function getVideoCodec(filePath: string, initialCodec?: string | null): Promise<string> {
+  if (initialCodec) return initialCodec.toLowerCase();
+  const cached = probedCodecCache.get(filePath);
+  if (cached) return cached;
+  return new Promise((resolve) => {
+    execFile(
+      findFFprobe(),
+      ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', filePath],
+      { timeout: 10000 },
+      (error, stdout) => {
+        const codec = (stdout || '').trim().toLowerCase();
+        if (codec) {
+          probedCodecCache.set(filePath, codec);
+        }
+        resolve(codec);
+      }
+    );
+  });
 }
 
 /** Try a few separator variants so Windows-style and POSIX paths both resolve. */
@@ -175,7 +204,7 @@ export function resolveExistingMediaPath(filePath: string): string | null {
 }
 
 export type ResolveResult =
-  | { ok: true; mediaPath: string }
+  | { ok: true; mediaPath: string; videoCodec?: string | null }
   | { ok: false; status: number; error: string };
 
 /**
@@ -218,16 +247,16 @@ export function resolveMediaFromParams(searchParams: URLSearchParams): ResolveRe
     return { ok: false, status: 400, error: 'episodeId is required for TV shows' };
   }
 
-  const filePath = info.episodeId
-    ? getFilePathById('episode', info.episodeId)
-    : getFilePathById('movie', info.contentId);
+  const mediaInfo = info.episodeId
+    ? getMediaInfoById('episode', info.episodeId)
+    : getMediaInfoById('movie', info.contentId);
 
-  if (!filePath) return { ok: false, status: 404, error: 'Content not found' };
+  if (!mediaInfo) return { ok: false, status: 404, error: 'Content not found' };
 
-  const mediaPath = resolveExistingMediaPath(filePath);
+  const mediaPath = resolveExistingMediaPath(mediaInfo.filePath);
   if (!mediaPath) return { ok: false, status: 404, error: 'File not found on disk' };
 
-  return { ok: true, mediaPath };
+  return { ok: true, mediaPath, videoCodec: mediaInfo.videoCodec };
 }
 
 /** Build a query string that carries the same auth params (token OR ids) forward. */

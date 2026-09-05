@@ -48,7 +48,9 @@ export function usePlayback(
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
     const isIPad = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
     const isTV = /SmartTV|AppleTV|HbbTV|NetCast|WebOS.+TV|Tizen.+TV|GoogleTV|PlayStation|Xbox|Nintendo/i.test(ua);
-    const isTouch = (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) || ('ontouchstart' in window);
+    // Note: Windows desktops/laptops with touchscreens or pens should NOT be identified as mobile
+    // when running locally, allowing desktop VLC / native player unless forced.
+    const isTouch = !/Windows NT/i.test(ua) && ((navigator.maxTouchPoints && navigator.maxTouchPoints > 0) || ('ontouchstart' in window));
 
     return isMobileDevice || isIPad || isTV || isTouch;
   }, [forceBrowserPlayer]);

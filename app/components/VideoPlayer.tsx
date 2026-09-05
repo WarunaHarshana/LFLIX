@@ -50,6 +50,7 @@ function buildHlsConfig(src: string): Record<string, unknown> {
   if (local) {
     return {
       enableWorker: true,
+      progressive: true,
       maxBufferLength: 30,
       maxMaxBufferLength: 60,
       maxBufferSize: 60 * 1000 * 1000,
@@ -72,6 +73,7 @@ function buildHlsConfig(src: string): Record<string, unknown> {
 
   return {
     enableWorker: true,
+    progressive: true,
     maxBufferLength: 60,
     maxMaxBufferLength: 120,
     maxBufferSize: 60 * 1000 * 1000,
