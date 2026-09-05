@@ -89,6 +89,8 @@ export async function middleware(request: NextRequest) {
     '/api/auth/login',
     '/api/auth/logout',
     '/api/ping',
+    '/api/ip',
+    '/api/dlna',
     '/api/sports/streams/resolve'
   ];
 

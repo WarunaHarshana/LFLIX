@@ -1,30 +1,32 @@
 import http from 'http';
 import dgram from 'dgram';
-import os from 'os';
+import fs from 'fs';
 import db from './db';
+import { getLocalIpAddress } from './network';
 
 // Global state to track if server is running
 let isRunning = false;
 let serverInstance: http.Server | null = null;
 let ssdpInterval: NodeJS.Timeout | null = null;
+let ssdpSearchSocket: dgram.Socket | null = null;
 
-// Get local IP
-function getLocalIp(): string {
-  const interfaces = os.networkInterfaces();
-  for (const iface of Object.values(interfaces)) {
-    for (const details of iface || []) {
-      if (details.family === 'IPv4' && !details.internal && !details.address.startsWith('169.254')) {
-        return details.address;
-      }
-    }
+export const DLNA_PORT = 3001;
+
+let currentDlnaIp: string | null = null;
+
+export function getDlnaIp(): string {
+  if (!currentDlnaIp || currentDlnaIp === '127.0.0.1' || currentDlnaIp === 'localhost') {
+    currentDlnaIp = getLocalIpAddress();
   }
-  return '127.0.0.1';
+  return currentDlnaIp;
 }
 
-const PORT = 3001;
-const IP = getLocalIp();
+export function getDlnaStatus(): boolean {
+  return isRunning;
+}
 
 function getDeviceDescription(): string {
+  const ip = getDlnaIp();
   return `<?xml version="1.0" encoding="UTF-8"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
   <specVersion>
@@ -39,7 +41,7 @@ function getDeviceDescription(): string {
     <modelNumber>1.0</modelNumber>
     <serialNumber>001</serialNumber>
     <UDN>uuid:localflix-001</UDN>
-    <presentationURL>http://${IP}:3000</presentationURL>
+    <presentationURL>http://${ip}:3000</presentationURL>
     <serviceList>
       <service>
         <serviceType>urn:schemas-upnp-org:service:ContentDirectory:1</serviceType>
@@ -62,7 +64,6 @@ function getDeviceDescription(): string {
 
 function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
   const url = req.url || '/';
-  console.log('DLNA Request:', url);
   
   res.setHeader('Access-Control-Allow-Origin', '*');
 
@@ -94,7 +95,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
   } else if (url === '/cds/control') {
     handleBrowse(req, res);
   } else if (url.startsWith('/media/')) {
-    streamMedia(url, res);
+    streamMedia(req, url, res);
   } else {
     res.writeHead(404);
     res.end('Not Found');
@@ -103,22 +104,22 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
 
 function handleBrowse(req: http.IncomingMessage, res: http.ServerResponse) {
   let body = '';
-  req.on('data', chunk => body += chunk);
+  req.on('data', chunk => { body += chunk; });
   req.on('end', () => {
     try {
-      console.log('Browse request:', body.substring(0, 200));
+      const ip = getDlnaIp();
+      const movies = db.prepare('SELECT id, title, filePath, mimeType FROM movies ORDER BY title ASC').all() as any[];
       
-      const movies = db.prepare('SELECT id, title, filePath FROM movies ORDER BY title').all() as { id: number; title: string; filePath: string }[];
-      
-      let result = '&lt;?xml version="1.0"?&gt;&lt;DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"&gt;';
+      let result = '&lt;DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"&gt;';
       
       for (const movie of movies) {
-        const ext = movie.filePath.split('.').pop()?.toLowerCase() || 'mp4';
-        const mime = ext === 'mp4' ? 'video/mp4' : 'video/mpeg';
-        result += `&lt;item id="movie_${movie.id}" parentID="0" restricted="1"&gt;`;
+        const ext = movie.filePath ? movie.filePath.split('.').pop()?.toLowerCase() : 'mp4';
+        const mime = movie.mimeType || (ext === 'mkv' ? 'video/x-matroska' : ext === 'mp4' ? 'video/mp4' : 'video/mpeg');
+        
+        result += `&lt;item id="${movie.id}" parentID="0" restricted="1"&gt;`;
         result += `&lt;dc:title&gt;${escapeXml(movie.title)}&lt;/dc:title&gt;`;
         result += `&lt;upnp:class&gt;object.item.videoItem&lt;/upnp:class&gt;`;
-        result += `&lt;res protocolInfo="http-get:*:${mime}:*"&gt;http://${IP}:${PORT}/media/${movie.id}&lt;/res&gt;`;
+        result += `&lt;res protocolInfo="http-get:*:${mime}:*"&gt;http://${ip}:${DLNA_PORT}/media/${movie.id}&lt;/res&gt;`;
         result += `&lt;/item&gt;`;
       }
       result += '&lt;/DIDL-Lite&gt;';
@@ -138,14 +139,14 @@ function handleBrowse(req: http.IncomingMessage, res: http.ServerResponse) {
       res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
       res.end(soapResponse);
     } catch (e) {
-      console.error('Browse error:', e);
+      console.error('DLNA Browse error:', e);
       res.writeHead(500);
       res.end('Error');
     }
   });
 }
 
-function streamMedia(url: string, res: http.ServerResponse) {
+function streamMedia(req: http.IncomingMessage, url: string, res: http.ServerResponse) {
   const id = parseInt(url.split('/').pop() || '0', 10);
   if (!id) {
     res.writeHead(404);
@@ -154,7 +155,6 @@ function streamMedia(url: string, res: http.ServerResponse) {
   }
 
   try {
-    const fs = require('fs');
     const movie = db.prepare('SELECT filePath FROM movies WHERE id = ?').get(id) as { filePath: string } | undefined;
     if (!movie) {
       res.writeHead(404);
@@ -162,26 +162,44 @@ function streamMedia(url: string, res: http.ServerResponse) {
       return;
     }
 
-    const path = movie.filePath.replace(/\//g, '\\');
-    if (!fs.existsSync(path)) {
+    const filePath = movie.filePath.replace(/\//g, '\\');
+    if (!fs.existsSync(filePath)) {
       res.writeHead(404);
       res.end('File not found');
       return;
     }
 
-    const stat = fs.statSync(path);
-    const ext = path.split('.').pop()?.toLowerCase() || 'mp4';
+    const stat = fs.statSync(filePath);
+    const ext = filePath.split('.').pop()?.toLowerCase() || 'mp4';
     const mimeType = ext === 'mp4' ? 'video/mp4' : ext === 'mkv' ? 'video/x-matroska' : 'video/mpeg';
+
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunkSize = end - start + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': mimeType,
+      });
+
+      fs.createReadStream(filePath, { start, end }).pipe(res);
+      return;
+    }
 
     res.writeHead(200, {
       'Content-Type': mimeType,
       'Content-Length': stat.size,
-      'Accept-Ranges': 'bytes'
+      'Accept-Ranges': 'bytes',
     });
 
-    fs.createReadStream(path).pipe(res);
+    fs.createReadStream(filePath).pipe(res);
   } catch (e) {
-    console.error('Stream error:', e);
+    console.error('DLNA Stream error:', e);
     res.writeHead(500);
     res.end('Error');
   }
@@ -194,17 +212,18 @@ function escapeXml(str: string): string {
     '&': '&amp;',
     "'": '&apos;',
     '"': '&quot;'
-  })[c] || c);
+  }[c] || c));
 }
 
 function sendSsdpNotify() {
+  const ip = getDlnaIp();
   const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
   
   const messages = [
     `NOTIFY * HTTP/1.1\r\n` +
     `HOST: 239.255.255.250:1900\r\n` +
     `CACHE-CONTROL: max-age=1800\r\n` +
-    `LOCATION: http://${IP}:${PORT}/description.xml\r\n` +
+    `LOCATION: http://${ip}:${DLNA_PORT}/description.xml\r\n` +
     `NT: urn:schemas-upnp-org:device:MediaServer:1\r\n` +
     `NTS: ssdp:alive\r\n` +
     `SERVER: LocalFlix/1.0 UPnP/1.0 DLNADOC/1.50\r\n` +
@@ -214,7 +233,7 @@ function sendSsdpNotify() {
     `NOTIFY * HTTP/1.1\r\n` +
     `HOST: 239.255.255.250:1900\r\n` +
     `CACHE-CONTROL: max-age=1800\r\n` +
-    `LOCATION: http://${IP}:${PORT}/description.xml\r\n` +
+    `LOCATION: http://${ip}:${DLNA_PORT}/description.xml\r\n` +
     `NT: uuid:localflix-001\r\n` +
     `NTS: ssdp:alive\r\n` +
     `SERVER: LocalFlix/1.0 UPnP/1.0 DLNADOC/1.50\r\n` +
@@ -224,7 +243,7 @@ function sendSsdpNotify() {
     `NOTIFY * HTTP/1.1\r\n` +
     `HOST: 239.255.255.250:1900\r\n` +
     `CACHE-CONTROL: max-age=1800\r\n` +
-    `LOCATION: http://${IP}:${PORT}/description.xml\r\n` +
+    `LOCATION: http://${ip}:${DLNA_PORT}/description.xml\r\n` +
     `NT: upnp:rootdevice\r\n` +
     `NTS: ssdp:alive\r\n` +
     `SERVER: LocalFlix/1.0 UPnP/1.0 DLNADOC/1.50\r\n` +
@@ -233,19 +252,75 @@ function sendSsdpNotify() {
   ];
 
   socket.bind(() => {
-    socket.setBroadcast(true);
-    socket.setMulticastTTL(4);
+    try {
+      socket.setBroadcast(true);
+      socket.setMulticastTTL(4);
+      
+      messages.forEach((msg, i) => {
+        setTimeout(() => {
+          try {
+            socket.send(msg, 1900, '239.255.255.250', (err: any) => {
+              if (err) console.error('SSDP error:', err);
+            });
+          } catch {}
+        }, i * 100);
+      });
+    } catch {}
     
-    messages.forEach((msg, i) => {
-      setTimeout(() => {
-        socket.send(msg, 1900, '239.255.255.250', (err: any) => {
-          if (err) console.error('SSDP error:', err);
-        });
-      }, i * 100);
-    });
-    
-    setTimeout(() => socket.close(), 1000);
+    setTimeout(() => {
+      try { socket.close(); } catch {}
+    }, 1000);
   });
+}
+
+function startSsdpListener() {
+  try {
+    const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    socket.on('error', (err) => {
+      console.warn('[dlna] SSDP listener socket error:', err.message);
+      try { socket.close(); } catch {}
+    });
+
+    socket.on('message', (msg, rinfo) => {
+      const text = msg.toString();
+      if (!text.startsWith('M-SEARCH')) return;
+
+      const ip = getDlnaIp();
+      const stMatch = text.match(/ST:\s*([^\r\n]+)/i);
+      const st = stMatch ? stMatch[1].trim() : '';
+
+      const shouldRespond =
+        st === 'ssdp:all' ||
+        st === 'upnp:rootdevice' ||
+        st === 'urn:schemas-upnp-org:device:MediaServer:1' ||
+        st === 'urn:schemas-upnp-org:service:ContentDirectory:1';
+
+      if (shouldRespond) {
+        const response =
+          `HTTP/1.1 200 OK\r\n` +
+          `CACHE-CONTROL: max-age=1800\r\n` +
+          `DATE: ${new Date().toUTCString()}\r\n` +
+          `EXT:\r\n` +
+          `LOCATION: http://${ip}:${DLNA_PORT}/description.xml\r\n` +
+          `SERVER: LocalFlix/1.0 UPnP/1.0 DLNADOC/1.50\r\n` +
+          `ST: urn:schemas-upnp-org:device:MediaServer:1\r\n` +
+          `USN: uuid:localflix-001::urn:schemas-upnp-org:device:MediaServer:1\r\n` +
+          `\r\n`;
+
+        socket.send(Buffer.from(response), rinfo.port, rinfo.address, () => {});
+      }
+    });
+
+    socket.bind(1900, () => {
+      try {
+        socket.addMembership('239.255.255.250');
+      } catch {}
+    });
+
+    ssdpSearchSocket = socket;
+  } catch (e: any) {
+    console.warn('[dlna] Could not bind M-SEARCH listener on port 1900:', e.message);
+  }
 }
 
 // Global functions
@@ -258,14 +333,17 @@ export function startDlnaServer(): Promise<void> {
     }
 
     try {
+      currentDlnaIp = getLocalIpAddress();
       serverInstance = http.createServer(handleRequest);
       
-      serverInstance.listen(PORT, () => {
-        console.log(`DLNA Server started on http://${IP}:${PORT}`);
+      serverInstance.listen(DLNA_PORT, () => {
+        const ip = getDlnaIp();
+        console.log(`DLNA Server started on http://${ip}:${DLNA_PORT}`);
         isRunning = true;
         
-        // Send SSDP broadcasts
+        // Send initial SSDP broadcasts
         sendSsdpNotify();
+        startSsdpListener();
         
         // Continue broadcasting every 10 seconds for first minute
         let count = 0;
@@ -293,17 +371,17 @@ export function startDlnaServer(): Promise<void> {
 
 export function stopDlnaServer(): void {
   if (serverInstance) {
-    serverInstance.close();
+    try { serverInstance.close(); } catch {}
     serverInstance = null;
   }
   if (ssdpInterval) {
     clearInterval(ssdpInterval);
     ssdpInterval = null;
   }
+  if (ssdpSearchSocket) {
+    try { ssdpSearchSocket.close(); } catch {}
+    ssdpSearchSocket = null;
+  }
   isRunning = false;
   console.log('DLNA Server stopped');
-}
-
-export function getDlnaStatus(): boolean {
-  return isRunning;
 }
