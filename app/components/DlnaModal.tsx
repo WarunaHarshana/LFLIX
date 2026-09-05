@@ -95,8 +95,8 @@ export default function DlnaModal({ onClose }: Props) {
               <Wifi className="w-5 h-5 text-purple-500" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">DLNA Server</h2>
-              <p className="text-neutral-400 text-sm">Stream to VLC wirelessly</p>
+              <h2 className="text-xl font-bold">Cast to Smart TV (DLNA)</h2>
+              <p className="text-neutral-400 text-sm">Stream to Smart TVs and media devices</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-neutral-800 rounded-full transition">
@@ -113,7 +113,7 @@ export default function DlnaModal({ onClose }: Props) {
               <CheckCircle className="w-6 h-6 text-green-500" />
               <div>
                 <p className="font-medium text-green-400">DLNA Server Running</p>
-                <p className="text-sm text-green-300/70">VLC can now discover your library</p>
+                <p className="text-sm text-green-300/70">Smart TVs and media players can discover your library</p>
               </div>
             </>
           ) : (
@@ -121,7 +121,7 @@ export default function DlnaModal({ onClose }: Props) {
               <AlertCircle className="w-6 h-6 text-neutral-500" />
               <div>
                 <p className="font-medium text-neutral-400">DLNA Server Stopped</p>
-                <p className="text-sm text-neutral-500">Start to enable VLC discovery</p>
+                <p className="text-sm text-neutral-500">Start to enable Smart TV and device discovery</p>
               </div>
             </>
           )}
@@ -173,21 +173,19 @@ export default function DlnaModal({ onClose }: Props) {
         {/* Instructions */}
         <div className="space-y-4 text-sm text-neutral-400">
           <div>
-            <p className="font-medium text-neutral-300 mb-2">How to use:</p>
+            <p className="font-medium text-neutral-300 mb-2">How to cast to TV:</p>
             <ol className="list-decimal list-inside space-y-1 text-xs">
-              <li>Click "Start DLNA Server" above</li>
-              <li>Open VLC on your phone</li>
-              <li>Go to "Browse" → "Network"</li>
-              <li>Look for "LFLIX Media Server"</li>
-              <li>Tap it to see your movies</li>
-              <li>Select a movie to play!</li>
+              <li>Click &quot;Start DLNA Server&quot; above</li>
+              <li>Turn on your Smart TV (Samsung, LG, Sony, Roku, Apple TV, Fire TV, etc.)</li>
+              <li>Go to &quot;Sources&quot;, &quot;Media Player&quot;, or &quot;Network Media&quot; on your TV</li>
+              <li>Select &quot;LFLIX Media Server&quot;</li>
+              <li>Browse your movies &amp; TV shows and press Play!</li>
             </ol>
           </div>
 
           <div className="p-3 bg-blue-900/20 border border-blue-800 rounded-lg">
             <p className="text-blue-300 text-xs">
-              <strong>Note:</strong> Both devices must be on the same WiFi network.
-              This works like Windows Media Server - VLC auto-discovers your library!
+              <strong>Note:</strong> Your TV and this PC must be connected to the same WiFi network.
             </p>
           </div>
         </div>

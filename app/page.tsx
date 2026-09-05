@@ -31,7 +31,6 @@ import VideoPlayer from './components/VideoPlayer';
 import MobileNav from './components/MobileNav';
 import FloatingQRButton from './components/FloatingQRButton';
 import MobileSearchModal from './components/MobileSearchModal';
-import PlayChoiceModal from './components/PlayChoiceModal';
 import DetailTabNav from './components/DetailTabNav';
 import GlobalDropzone from './components/GlobalDropzone';
 
@@ -695,19 +694,6 @@ export default function Home() {
           videoCodec={playback.videoPlayer.videoCodec}
           fileName={playback.videoPlayer.fileName}
           onClose={() => playback.setVideoPlayer(null)}
-        />
-      )}
-
-      {/* Play Choice Modal (Mobile) */}
-      {playback.playChoice && (
-        <PlayChoiceModal
-          title={playback.playChoice.title}
-          streamUrl={playback.playChoice.streamUrl}
-          contentType={playback.playChoice.contentType}
-          contentId={playback.playChoice.contentId}
-          episodeId={playback.playChoice.episodeId}
-          onPlayBrowser={playback.playChoice.onPlayBrowser}
-          onClose={() => playback.setPlayChoice(null)}
         />
       )}
 

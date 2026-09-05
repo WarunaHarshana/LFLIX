@@ -33,34 +33,33 @@ export function usePlayback(
     }
   }, []);
 
-  // Play Choice Modal (for mobile)
-  const [playChoice, setPlayChoice] = useState<{
-    title: string;
-    streamUrl: string;
-    contentType: 'movie' | 'show';
-    contentId: number;
-    episodeId?: number;
-    onPlayBrowser: () => void
-  } | null>(null);
 
-  // Detect mobile device (but not TVs!)
+  // Detect if client should use built-in browser player
+  // (Mobile, tablets, Smart TVs, consoles, touch devices, and any remote Wi-Fi connection)
   const isMobile = useCallback(() => {
     if (typeof window === 'undefined') return false;
+    if (forceBrowserPlayer) return true;
+
+    const hostname = window.location.hostname;
+    const isRemote = hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '::1';
+    if (isRemote) return true;
+
     const ua = navigator.userAgent;
-    console.log('User Agent:', ua);
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const isIPad = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
     const isTV = /SmartTV|AppleTV|HbbTV|NetCast|WebOS.+TV|Tizen.+TV|GoogleTV|PlayStation|Xbox|Nintendo/i.test(ua);
-    console.log('isMobileDevice:', isMobileDevice, 'isTV:', isTV);
-    return isMobileDevice && !isTV;
-  }, []);
+    const isTouch = (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) || ('ontouchstart' in window);
+
+    return isMobileDevice || isIPad || isTV || isTouch;
+  }, [forceBrowserPlayer]);
 
   // Play file - uses secure ID-based lookup instead of filePath
   const playFile = async (contentType: 'movie' | 'show', contentId: number, episodeId?: number, startTime?: number) => {
     console.log('playFile called:', { contentType, contentId, episodeId, startTime });
     try {
-      const mobile = isMobile();
+      const useBrowserPlayer = isMobile();
       const isNative = Capacitor.isNativePlatform();
-      console.log('isMobile result:', mobile, 'isNative:', isNative);
+      console.log('useBrowserPlayer:', useBrowserPlayer, 'isNative:', isNative);
 
       let title = 'Unknown';
       let isHDR = false;
@@ -119,8 +118,8 @@ export function usePlayback(
         return;
       }
 
-      // Mobile Browser or TV (force browser): Show browser player choice
-      if (mobile || forceBrowserPlayer) {
+      // Mobile, TV, remote Wi-Fi, or forced browser: Launch built-in player directly
+      if (useBrowserPlayer) {
         let token = '';
         try {
           const tokenRes = await fetch(apiUrl('/api/token'), {
@@ -145,21 +144,15 @@ export function usePlayback(
         });
         const streamUrl = `/api/stream?${params.toString()}`;
 
-        setPlayChoice({
+        // Directly launch the built-in video player
+        setVideoPlayer({
+          src: streamUrl,
           title,
-          streamUrl: window.location.origin + streamUrl,
-          contentType,
-          contentId,
-          episodeId,
-          onPlayBrowser: (chosenUrl?: string) => setVideoPlayer({
-            src: chosenUrl || streamUrl,
-            title,
-            initialTime: startTime,
-            isHDR,
-            audioCodec,
-            videoCodec,
-            fileName
-          })
+          initialTime: startTime,
+          isHDR,
+          audioCodec,
+          videoCodec,
+          fileName
         });
         return;
       }
@@ -188,7 +181,6 @@ export function usePlayback(
 
   return {
     videoPlayer, setVideoPlayer,
-    playChoice, setPlayChoice,
     forceBrowserPlayer, setForceBrowserPlayer,
     hdrDisplaySupported,
     isMobile,

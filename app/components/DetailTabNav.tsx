@@ -242,7 +242,7 @@ export default function DetailTabNav({
             <Smartphone className="w-6 h-6" />
           </button>
 
-          <button aria-label="DLNA Server (VLC)"
+          <button aria-label="Cast to Smart TV (DLNA)"
             onClick={() => {
               if (onShowDlna) {
                 onShowDlna();
@@ -251,7 +251,7 @@ export default function DetailTabNav({
               }
             }}
             className="p-3 hover:bg-white/10 rounded-full transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center"
-            title="DLNA Server (VLC)"
+            title="Cast to Smart TV (DLNA)"
           >
             <Cast className="w-6 h-6" />
           </button>
