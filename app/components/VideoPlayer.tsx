@@ -1,19 +1,31 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
-import { X, AlertCircle, Maximize, Minimize, Settings2, Subtitles, AudioLines, Check, Gauge } from 'lucide-react';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import {
+  X,
+  AlertCircle,
+  Maximize,
+  Minimize,
+  Settings2,
+  Subtitles,
+  AudioLines,
+  Check,
+  Gauge,
+  Play,
+  Pause,
+  RotateCcw,
+  RotateCw,
+  Volume2,
+  Volume1,
+  VolumeX,
+  PictureInPicture2,
+  RectangleHorizontal,
+  RefreshCw,
+} from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorVideoPlayer } from 'capacitor-video-player';
 import { getServerUrl } from '@/lib/mobileConfig';
 
-// HLS sources are played via hls.js (or natively on Safari). The on-the-fly
-// transcode endpoint also returns an HLS playlist, so it matches here too.
-/**
- * Whether a source is served by this machine (the on-demand transcoder or the
- * raw file endpoint) rather than fetched across the internet from a third-party
- * streaming server. The two need opposite tuning, so everything below keys off
- * this.
- */
 function isLocalSource(url: string): boolean {
   if (!url) return true;
   if (url.startsWith('/')) return true;
@@ -32,18 +44,6 @@ function isLocalSource(url: string): boolean {
   }
 }
 
-/**
- * hls.js settings differ sharply by where the media comes from.
- *
- * Local: the bottleneck is ffmpeg, not the network. Buffer far ahead to give it
- * a runway and wait patiently on a slow segment, because a slow segment means
- * the encoder is still working rather than that anything is broken.
- *
- * Remote: the bottleneck is bandwidth, and a stalled third-party server should
- * fail fast so the caller can switch to another one. Quality also has to be
- * chased deliberately — with stock settings hls.js starts at the lowest
- * rendition and edges up, so the opening of every episode looks soft.
- */
 function buildHlsConfig(src: string): Record<string, unknown> {
   const local = isLocalSource(src);
 
@@ -70,27 +70,15 @@ function buildHlsConfig(src: string): Record<string, unknown> {
 
   return {
     enableWorker: true,
-    // A minute of runway absorbs jitter on a public route without hoarding
-    // memory on a TV or phone.
     maxBufferLength: 60,
     maxMaxBufferLength: 120,
     maxBufferSize: 60 * 1000 * 1000,
     backBufferLength: 30,
-
-    // Start high instead of climbing. Seeding the bandwidth estimate well above
-    // hls.js's cautious default means the first segments are already at a good
-    // rendition; ABR still drops if the link cannot sustain it.
     startLevel: -1,
     abrEwmaDefaultEstimate: 8_000_000,
-    // Never cap the rendition to the size of the video element — a windowed
-    // player should still be free to pull 1080p/4K.
     capLevelToPlayerSize: false,
-    // Use more of the measured bandwidth, and be quicker to move up.
     abrBandWidthFactor: 0.95,
     abrBandWidthUpFactor: 0.8,
-
-    // Fail fast: a wedged third-party host should surface quickly so the modal
-    // can move to the next server rather than sitting on a spinner.
     fragLoadPolicy: {
       default: {
         maxTimeToFirstByteMs: 10_000,
@@ -114,30 +102,34 @@ function isHlsSource(url: string): boolean {
   return /\.m3u8(\?|$)/i.test(url) || /\/api\/transcode(\?|$)/i.test(url);
 }
 
+function formatTime(seconds: number): string {
+  if (isNaN(seconds) || seconds < 0) return '00:00';
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const ss = s < 10 ? `0${s}` : `${s}`;
+  if (h > 0) {
+    const mm = m < 10 ? `0${m}` : `${m}`;
+    return `${h}:${mm}:${ss}`;
+  }
+  const mm = m < 10 ? `0${m}` : `${m}`;
+  return `${mm}:${ss}`;
+}
+
 type Props = {
   src: string;
   title: string;
   onClose: () => void;
   initialTime?: number;
   isHDR?: boolean;
-  // Explicitly supplied subtitle tracks (e.g. from a streaming server). When
-  // provided these take priority; otherwise tracks are auto-discovered from
-  // /api/subtitles for local-library files.
   subtitles?: { label: string; url: string; language?: string }[];
-  // Source codecs (when known) so the player can pre-emptively transcode
-  // browser-incompatible media instead of playing it silently / not at all.
   videoCodec?: string | null;
   audioCodec?: string | null;
   fileName?: string | null;
-  /**
-   * Called when playback fails and cannot be recovered in place. Lets a caller
-   * that has other sources (the stream-server modal) move to the next one
-   * instead of leaving the viewer on an error screen with no way forward.
-   */
   onFatalError?: (reason: string) => void;
 };
 
-// Extended HTMLVideoElement with non-standard audioTracks API
 interface ExtendedHTMLVideoElement extends HTMLVideoElement {
   audioTracks?: AudioTrackList;
 }
@@ -155,54 +147,108 @@ interface AudioTrack {
   language: string;
 }
 
-export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHDR = false, subtitles, videoCodec, audioCodec, fileName, onFatalError }: Props) {
+const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+export default function VideoPlayer({
+  src,
+  title,
+  onClose,
+  initialTime = 0,
+  isHDR = false,
+  subtitles,
+  videoCodec,
+  audioCodec,
+  fileName,
+  onFatalError,
+}: Props) {
   const videoRef = useRef<ExtendedHTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState<string | null>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const hideControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTapTimeRef = useRef<number>(0);
+  const singleTapTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Playback state
+  const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [buffered, setBuffered] = useState(0);
+  const [volume, setVolumeState] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+
+  // UI state
+  const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<'contain' | 'cover'>('contain');
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubTime, setScrubTime] = useState(0);
+  const [hoverPosition, setHoverPosition] = useState<{ x: number; time: number } | null>(null);
+  const [doubleTapFeedback, setDoubleTapFeedback] = useState<{
+    type: 'forward' | 'backward';
+    key: number;
+  } | null>(null);
+
+  // Tracks & settings
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'audio' | 'subtitles' | 'quality' | 'speed'>('audio');
   const [audioTracks, setAudioTracks] = useState<{ id: number; label: string; language: string }[]>([]);
   const [subtitleTracks, setSubtitleTracks] = useState<{ id: number; label: string; language: string; url: string }[]>([]);
-  const [activeSrc, setActiveSrc] = useState(src);
-  const [didFallback, setDidFallback] = useState(false);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(0);
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState<number>(-1);
-  const [hdrSupported, setHdrSupported] = useState<boolean | null>(null);
-  // Rendition ladder from the HLS manifest, plus the level currently playing.
-  // -1 means ABR is choosing.
   const [qualityLevels, setQualityLevels] = useState<{ index: number; label: string; height: number; bitrate: number }[]>([]);
   const [activeLevel, setActiveLevel] = useState<number>(-1);
   const [preferredLevel, setPreferredLevel] = useState<number>(-1);
-  const [playbackRate, setPlaybackRate] = useState(1);
+  const [pipSupported, setPipSupported] = useState(false);
+  const [hdrSupported, setHdrSupported] = useState<boolean | null>(null);
+
+  const [activeSrc, setActiveSrc] = useState(src);
+  const [didFallback, setDidFallback] = useState(false);
   const hlsRef = useRef<any>(null);
   const isNative = Capacitor.isNativePlatform();
 
-  // Build an API URL that forwards the same auth params present on the stream src
-  // (token OR contentType/contentId/episodeId), so subtitles & transcode resolve the
-  // same underlying file.
-  const buildApiUrl = (base: string, extra?: Record<string, string>): string => {
-    try {
-      const u = new URL(src, window.location.origin);
-      const params = new URLSearchParams();
-      for (const k of ['token', 'contentType', 'contentId', 'episodeId']) {
-        const v = u.searchParams.get(k);
-        if (v) params.set(k, v);
+  // Helper to build parameterized API URLs forwarding stream tokens
+  const buildApiUrl = useCallback(
+    (base: string, extra?: Record<string, string>): string => {
+      try {
+        const u = new URL(src, window.location.origin);
+        const params = new URLSearchParams();
+        for (const k of ['token', 'contentType', 'contentId', 'episodeId']) {
+          const v = u.searchParams.get(k);
+          if (v) params.set(k, v);
+        }
+        if (extra) {
+          for (const [k, v] of Object.entries(extra)) params.set(k, v);
+        }
+        const qs = params.toString();
+        return qs ? `${base}?${qs}` : base;
+      } catch {
+        return '';
       }
-      if (extra) for (const [k, v] of Object.entries(extra)) params.set(k, v);
-      const qs = params.toString();
-      return qs ? `${base}?${qs}` : base;
-    } catch {
-      return '';
-    }
-  };
+    },
+    [src]
+  );
 
-  // Keep the active source in sync when the parent changes src. For media whose
-  // audio/video codec browsers can't decode (e.g. AC3/E-AC3/DTS/TrueHD audio or
-  // HEVC video, common in MKV/AVI files), start playback through the HLS
-  // transcoder up front: the browser would otherwise play such files silently
-  // (video only) without ever firing an error, so the error-based fallback below
-  // would never run.
+  // Auto-hide controls logic
+  const scheduleHideControls = useCallback(() => {
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    hideControlsTimerRef.current = setTimeout(() => {
+      const video = videoRef.current;
+      if (video && !video.paused && !showSettingsModal && !isScrubbing) {
+        setShowControls(false);
+      }
+    }, 3500);
+  }, [showSettingsModal, isScrubbing]);
+
+  const wakeControls = useCallback(() => {
+    setShowControls(true);
+    scheduleHideControls();
+  }, [scheduleHideControls]);
+
+  // Codec checks and initial transcode route resolution
   useEffect(() => {
     setDidFallback(false);
     const norm = (s?: string | null) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -210,8 +256,7 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     const v = norm(videoCodec);
     const badAudio = ['ac3', 'eac3', 'dts', 'dtshd', 'truehd', 'mlp', 'flac', 'pcm'];
     const badVideo = ['hevc', 'h265', 'vc1', 'mpeg2', 'wmv', 'vp6'];
-    
-    // Check if filename suggests an incompatible container format (MKV, AVI, etc.)
+
     const ext = fileName ? fileName.split('.').pop()?.toLowerCase() : '';
     const badContainers = ['mkv', 'avi', 'wmv', 'flv', 'ts', 'divx', 'xvid', 'mpg', 'mpeg'];
     const isBadContainer = badContainers.includes(ext || '');
@@ -220,61 +265,25 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
       isBadContainer ||
       (a !== '' && badAudio.some((c) => a.includes(c))) ||
       (v !== '' && badVideo.some((c) => v.includes(c)));
-      
+
     if (!isNative && incompatible) {
       const transcodeUrl = buildApiUrl('/api/transcode');
       setActiveSrc(transcodeUrl || src);
     } else {
       setActiveSrc(src);
     }
-  }, [src, isNative, audioCodec, videoCodec, fileName]);
+  }, [src, isNative, audioCodec, videoCodec, fileName, buildApiUrl]);
 
-  // Redirect video requestFullscreen to containerRef to prevent washed-out HDR colors in browser fullscreen overlay
-  useEffect(() => {
-    if (isNative) return;
-    const video = videoRef.current;
-    const container = containerRef.current;
-    if (!video || !container) return;
-
-    const originalRequestFullscreen = video.requestFullscreen || (video as any).webkitRequestFullscreen;
-    
-    const customRequestFullscreen = function (options?: FullscreenOptions) {
-      if (container.requestFullscreen) {
-        return container.requestFullscreen(options);
-      } else if ((container as any).webkitRequestFullscreen) {
-        return (container as any).webkitRequestFullscreen(options);
-      }
-      return originalRequestFullscreen.call(video, options);
-    };
-
-    (video as any).requestFullscreen = customRequestFullscreen;
-    (video as any).webkitRequestFullscreen = customRequestFullscreen;
-
-    const handleDblClick = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleFullscreen();
-    };
-
-    video.addEventListener('dblclick', handleDblClick);
-
-    return () => {
-      (video as any).requestFullscreen = originalRequestFullscreen;
-      (video as any).webkitRequestFullscreen = originalRequestFullscreen;
-      video.removeEventListener('dblclick', handleDblClick);
-    };
-  }, [activeSrc, isNative]);
-
-  // Attach hls.js for HLS sources (e.g. the on-the-fly transcode endpoint).
+  // Attach HLS engine for HLS / transcode streams
   useEffect(() => {
     if (isNative) return;
     const video = videoRef.current;
     if (!video) return;
     if (!isHlsSource(activeSrc)) return;
+
     setQualityLevels([]);
     setActiveLevel(-1);
 
-    // Safari / iOS can play HLS natively.
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = activeSrc;
       return;
@@ -282,22 +291,18 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
     let hls: any;
     let cancelled = false;
+
     import('hls.js')
       .then(({ default: Hls }) => {
         if (cancelled || !videoRef.current) return;
         if (!Hls.isSupported()) {
-          setError('This browser cannot play the converted stream.');
+          setError('This browser cannot play the stream.');
           return;
         }
-        // Tuned for a LAN media server rather than a public CDN. Segments are
-        // transcoded on demand, so the cost to avoid is ffmpeg starting late —
-        // not bandwidth. Buffering further ahead than the defaults keeps the
-        // encoder working steadily and absorbs a slow segment without a stall.
+
         hls = new Hls(buildHlsConfig(activeSrc));
         hlsRef.current = hls;
 
-        // Expose the rendition ladder so the viewer can pin a quality instead
-        // of leaving it to ABR.
         hls.on(Hls.Events.MANIFEST_PARSED, (_e: any, data: any) => {
           const levels = (data?.levels || []).map((lvl: any, index: number) => ({
             index,
@@ -305,16 +310,17 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
             height: lvl.height || 0,
             bitrate: lvl.bitrate || 0,
           }));
-          // Highest first, so the quality menu reads best-to-worst.
-          levels.sort((a: any, b: any) => b.height - a.height || b.bitrate - a.bitrate);
+          levels.sort((x: any, y: any) => y.height - x.height || y.bitrate - x.bitrate);
           setQualityLevels(levels);
         });
+
         hls.on(Hls.Events.LEVEL_SWITCHED, (_e: any, data: any) => {
           setActiveLevel(typeof data?.level === 'number' ? data.level : -1);
         });
 
         hls.loadSource(activeSrc);
         hls.attachMedia(videoRef.current);
+
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
           if (!data?.fatal) return;
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -322,8 +328,12 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             hls.recoverMediaError();
           } else {
-            setError('Playback failed during streaming.');
-            try { hls.destroy(); } catch { /* ignore */ }
+            setError('Playback encountered an error.');
+            try {
+              hls.destroy();
+            } catch {
+              /* ignore */
+            }
             onFatalError?.('hls-fatal');
           }
         });
@@ -333,17 +343,19 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     return () => {
       cancelled = true;
       if (hls) {
-        try { hls.destroy(); } catch { /* ignore */ }
+        try {
+          hls.destroy();
+        } catch {
+          /* ignore */
+        }
       }
     };
-  }, [activeSrc, isNative]);
+  }, [activeSrc, isNative, onFatalError]);
 
-  // Subtitle tracks: use explicitly provided ones (e.g. from a streaming server),
-  // otherwise auto-discover external sidecar files + embedded streams for local files.
+  // Subtitle auto-discovery / explicit track loading
   useEffect(() => {
     if (isNative) return;
 
-    // Explicitly provided subtitles take priority over auto-discovery.
     if (subtitles && subtitles.length > 0) {
       setSubtitleTracks(
         subtitles.map((t, i) => ({
@@ -351,13 +363,14 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
           label: t.label || `Subtitle ${i + 1}`,
           language: t.language || 'unknown',
           url: t.url,
-        })),
+        }))
       );
       return;
     }
 
     const listUrl = buildApiUrl('/api/subtitles', { list: '1' });
     if (!listUrl) return;
+
     let cancelled = false;
     fetch(listUrl)
       .then((r) => (r.ok ? r.json() : { tracks: [], audioTracks: [] }))
@@ -377,24 +390,119 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
               id: t.index,
               label: t.label,
               language: t.language || 'unknown',
-            })),
+            }))
           );
         }
       })
-      .catch(() => { /* subtitles are optional */ });
-    return () => { cancelled = true; };
-  }, [src, isNative, subtitles]);
+      .catch(() => {
+        /* subtitles optional */
+      });
 
-  // Detect HDR display capability
+    return () => {
+      cancelled = true;
+    };
+  }, [src, isNative, subtitles, buildApiUrl]);
+
+  // Detect PiP and HDR capability
   useEffect(() => {
-    if (!isHDR) return;
-    if (typeof window === 'undefined') return;
-    const dynamicRange = window.matchMedia('(dynamic-range: high)');
-    const videoRange = window.matchMedia('(video-dynamic-range: high)');
-    setHdrSupported(dynamicRange.matches || videoRange.matches);
+    if (typeof document !== 'undefined') {
+      setPipSupported(!!document.pictureInPictureEnabled);
+    }
+    if (isHDR && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      try {
+        const dynamicRange = window.matchMedia('(dynamic-range: high)');
+        setHdrSupported(!!dynamicRange.matches);
+      } catch {
+        /* ignore */
+      }
+    }
   }, [isHDR]);
 
-  // Handle Native Player
+  // Fullscreen state listener
+  useEffect(() => {
+    if (isNative) return;
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [isNative]);
+
+  // Initial time & metadata detection
+  useEffect(() => {
+    if (isNative) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (initialTime > 0) {
+      video.currentTime = initialTime;
+    }
+
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration || 0);
+      if (video.audioTracks && video.audioTracks.length > 0) {
+        const tracks = [];
+        for (let i = 0; i < video.audioTracks.length; i++) {
+          const track = video.audioTracks[i];
+          tracks.push({
+            id: i,
+            label: track.label || `Track ${i + 1}`,
+            language: track.language || 'unknown',
+          });
+        }
+        setAudioTracks(tracks);
+      }
+    };
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    return () => video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+  }, [initialTime, isNative]);
+
+  // Watch history sync every 10 seconds
+  useEffect(() => {
+    if (isNative) return;
+
+    const reportProgress = () => {
+      const video = videoRef.current;
+      if (!video || !video.duration || video.duration <= 0) return;
+      try {
+        const u = new URL(src, window.location.origin);
+        const contentType = u.searchParams.get('contentType');
+        const contentId = u.searchParams.get('contentId');
+        const episodeId = u.searchParams.get('episodeId');
+        if (contentType && contentId) {
+          fetch('/api/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              contentType,
+              contentId: parseInt(contentId, 10),
+              episodeId: episodeId ? parseInt(episodeId, 10) : undefined,
+              progress: Math.floor(video.currentTime),
+              duration: Math.floor(video.duration),
+            }),
+          }).catch(() => {});
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const interval = setInterval(() => {
+      const video = videoRef.current;
+      if (video && !video.paused) {
+        reportProgress();
+      }
+    }, 10000);
+
+    return () => {
+      clearInterval(interval);
+      reportProgress();
+    };
+  }, [src, isNative]);
+
+  // Native player handler
   useEffect(() => {
     if (!isNative) return;
 
@@ -402,44 +510,27 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
     const playNative = async () => {
       try {
-        // Construct absolute URL using server URL for native app
         let absoluteUrl: string;
         if (src.startsWith('http')) {
           absoluteUrl = src;
         } else {
-          // For native app, use the configured server URL
           const serverUrl = getServerUrl();
-          if (serverUrl) {
-            absoluteUrl = serverUrl + (src.startsWith('/') ? src : '/' + src);
-          } else {
-            absoluteUrl = window.location.origin + (src.startsWith('/') ? src : '/' + src);
-          }
+          absoluteUrl = serverUrl
+            ? serverUrl + (src.startsWith('/') ? src : '/' + src)
+            : window.location.origin + (src.startsWith('/') ? src : '/' + src);
         }
-        console.log('Starting native player:', absoluteUrl);
 
-        // Listen for exit
         playerHandle = await (CapacitorVideoPlayer as any).addListener('jeepCapVideoPlayerExit', () => {
-          console.log('Native player exited');
           onClose();
         });
 
-        // Initialize Native Player
         await CapacitorVideoPlayer.initPlayer({
           mode: 'fullscreen',
           url: absoluteUrl,
           playerId: 'fullscreen-player',
           componentTag: 'div',
-          headers: {
-            // If we had the cookie, we'd pass it here. But we use Token now.
-          }
         });
-
-        // Use a small timeout to ensure player is ready before seeking (if needed)
-        /* if (initialTime > 0) { ... } */
-
       } catch (e) {
-        console.error('Native player error:', e);
-        // Fallback to web player? or Show error
         setError('Native player failed to load: ' + JSON.stringify(e));
       }
     };
@@ -450,65 +541,79 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
       if (playerHandle) playerHandle.remove();
       CapacitorVideoPlayer.stopAllPlayers();
     };
-  }, [src, isNative]); // Effect dependencies
+  }, [src, isNative, onClose]);
 
-  // Track fullscreen state
-  useEffect(() => {
-    if (isNative) return;
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [isNative]);
-
-  // Set initial time and detect tracks when video loads
+  // Video element playback event bindings
   useEffect(() => {
     if (isNative) return;
     const video = videoRef.current;
     if (!video) return;
 
-    if (initialTime > 0) {
-      video.currentTime = initialTime;
-    }
-
-    // Detect audio tracks
-    const detectTracks = () => {
-      // Audio tracks
-      if (video.audioTracks) {
-        const tracks = [];
-        for (let i = 0; i < video.audioTracks.length; i++) {
-          const track = video.audioTracks[i];
-          tracks.push({
-            id: i,
-            label: track.label || `Track ${i + 1}`,
-            language: track.language || 'unknown'
-          });
-        }
-        setAudioTracks(tracks);
+    const onPlay = () => {
+      setIsPlaying(true);
+      scheduleHideControls();
+    };
+    const onPause = () => {
+      setIsPlaying(false);
+      setShowControls(true);
+    };
+    const onWaiting = () => setIsBuffering(true);
+    const onPlaying = () => {
+      setIsBuffering(false);
+      setLoading(false);
+    };
+    const onCanPlay = () => {
+      setLoading(false);
+      setIsBuffering(false);
+      setError(null);
+    };
+    const onTimeUpdate = () => {
+      if (!isScrubbing) {
+        setCurrentTime(video.currentTime);
       }
-
-      // Subtitle tracks come from /api/subtitles (external files + embedded streams),
-      // so they are loaded separately and not overwritten from the video element here.
+      if (video.buffered.length > 0) {
+        try {
+          const cur = video.currentTime;
+          let buffEnd = 0;
+          for (let i = 0; i < video.buffered.length; i++) {
+            if (video.buffered.start(i) <= cur && cur <= video.buffered.end(i)) {
+              buffEnd = video.buffered.end(i);
+              break;
+            }
+          }
+          setBuffered(buffEnd || video.buffered.end(video.buffered.length - 1));
+        } catch {
+          /* ignore */
+        }
+      }
     };
 
-    video.addEventListener('loadedmetadata', detectTracks);
-    return () => video.removeEventListener('loadedmetadata', detectTracks);
-  }, [initialTime, isNative]);
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('timeupdate', onTimeUpdate);
 
+    return () => {
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+    };
+  }, [isNative, isScrubbing, scheduleHideControls]);
+
+  // Playback error handler
   const handleError = () => {
     const video = videoRef.current;
     if (video) {
       const errorCode = video.error?.code;
-      const errorMessage = video.error?.message || 'Unknown error';
-      console.error('Video error:', errorCode, errorMessage);
 
-      // Auto-fallback: if the browser can't decode the raw file (unsupported codec or
-      // container such as MKV/AVI/HEVC), retry through the on-the-fly HLS transcoder.
       if (!didFallback && !isHlsSource(activeSrc) && (errorCode === 3 || errorCode === 4)) {
         const transcodeUrl = buildApiUrl('/api/transcode');
         if (transcodeUrl) {
-          console.log('Falling back to transcode:', transcodeUrl);
           setDidFallback(true);
           setError(null);
           setLoading(true);
@@ -520,62 +625,132 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
       let friendlyError = 'Failed to play video';
       switch (errorCode) {
         case 1:
-          friendlyError = 'Video loading aborted';
+          friendlyError = 'Playback aborted';
           break;
         case 2:
-          friendlyError = 'Network error - check connection';
+          friendlyError = 'Network error while loading video';
           break;
         case 3:
-          friendlyError = 'Video format not supported by browser';
+          friendlyError = 'Format decode error';
           break;
         case 4:
-          friendlyError = 'Video format not supported';
+          friendlyError = 'Video stream not supported';
           break;
       }
       setError(friendlyError);
     }
     setLoading(false);
+    setIsBuffering(false);
   };
 
-  const handleCanPlay = () => {
-    setLoading(false);
-    setError(null);
+  // Playback control functions
+  const togglePlayPause = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+    wakeControls();
   };
 
-  // Handle fullscreen
-  const toggleFullscreen = () => {
-    if (containerRef.current) {
+  const seekBy = (deltaSeconds: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const nextTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + deltaSeconds));
+    video.currentTime = nextTime;
+    setCurrentTime(nextTime);
+    wakeControls();
+  };
+
+  const setVolume = (val: number) => {
+    const video = videoRef.current;
+    const clamped = Math.max(0, Math.min(1, val));
+    setVolumeState(clamped);
+    if (video) {
+      video.volume = clamped;
+      video.muted = clamped === 0;
+      setIsMuted(clamped === 0);
+    }
+    wakeControls();
+  };
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (isMuted || volume === 0) {
+      const restored = volume === 0 ? 0.8 : volume;
+      video.muted = false;
+      video.volume = restored;
+      setIsMuted(false);
+      setVolumeState(restored);
+    } else {
+      video.muted = true;
+      setIsMuted(true);
+    }
+    wakeControls();
+  };
+
+  const toggleFullscreen = async () => {
+    const container = containerRef.current;
+    if (!container) return;
+    wakeControls();
+
+    try {
       if (document.fullscreenElement) {
-        document.exitFullscreen().catch(err => {
-          console.error('Exit fullscreen error:', err);
-        });
+        if (document.exitFullscreen) await document.exitFullscreen();
+        if (screen.orientation && 'unlock' in screen.orientation) {
+          try {
+            (screen.orientation as any).unlock();
+          } catch {
+            /* ignore */
+          }
+        }
       } else {
-        containerRef.current.requestFullscreen().catch(err => {
-          console.error('Fullscreen error:', err);
-        });
+        if (container.requestFullscreen) {
+          await container.requestFullscreen();
+        } else if ((container as any).webkitRequestFullscreen) {
+          await (container as any).webkitRequestFullscreen();
+        }
+        if (screen.orientation && 'lock' in screen.orientation) {
+          try {
+            await (screen.orientation as any).lock('landscape');
+          } catch {
+            /* orientation lock is optional on desktop/unsupported browsers */
+          }
+        }
       }
+    } catch (err) {
+      console.error('Fullscreen toggle error:', err);
     }
   };
 
-  // Auto-enter fullscreen on play (for TV/better experience)
-  useEffect(() => {
-    if (isNative) return;
+  const togglePiP = async () => {
     const video = videoRef.current;
     if (!video) return;
-
-    const handlePlay = () => {
-      if (!document.fullscreenElement && containerRef.current && containerRef.current.requestFullscreen) {
-        containerRef.current.requestFullscreen().catch(() => {
-          // Ignore errors
-        });
+    wakeControls();
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (document.pictureInPictureEnabled && video.requestPictureInPicture) {
+        await video.requestPictureInPicture();
       }
-    };
+    } catch (err) {
+      console.error('Picture-in-picture error:', err);
+    }
+  };
 
-    video.addEventListener('play', handlePlay);
-    return () => video.removeEventListener('play', handlePlay);
-  }, [isNative]);
+  const toggleAspectRatio = () => {
+    setAspectRatio((prev) => (prev === 'contain' ? 'cover' : 'contain'));
+    wakeControls();
+  };
 
-  // Change audio track
+  const changePlaybackRate = (rate: number) => {
+    setPlaybackRate(rate);
+    if (videoRef.current) videoRef.current.playbackRate = rate;
+  };
+
   const changeAudioTrack = (index: number) => {
     const video = videoRef.current as ExtendedHTMLVideoElement | null;
     if (!video) return;
@@ -583,9 +758,8 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     if (isHlsSource(activeSrc)) {
       const newUrl = buildApiUrl('/api/transcode', { audio: String(index) });
       if (newUrl) {
-        const currentTime = video.currentTime;
+        const t = video.currentTime;
         const wasPlaying = !video.paused;
-
         setError(null);
         setLoading(true);
         setActiveSrc(newUrl);
@@ -593,54 +767,28 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
 
         const handleSeek = () => {
           if (videoRef.current) {
-            videoRef.current.currentTime = currentTime;
-            if (wasPlaying) {
-              videoRef.current.play().catch(() => {});
-            }
+            videoRef.current.currentTime = t;
+            if (wasPlaying) videoRef.current.play().catch(() => {});
             videoRef.current.removeEventListener('canplay', handleSeek);
           }
         };
         setTimeout(() => {
-          if (videoRef.current) {
-            videoRef.current.addEventListener('canplay', handleSeek);
-          }
+          if (videoRef.current) videoRef.current.addEventListener('canplay', handleSeek);
         }, 100);
       }
     } else if (video.audioTracks) {
       for (let i = 0; i < video.audioTracks.length; i++) {
-        video.audioTracks[i].enabled = (i === index);
+        video.audioTracks[i].enabled = i === index;
       }
       setCurrentAudioTrack(index);
     }
   };
 
-  /**
-   * Pin a rendition, or hand control back to ABR with -1.
-   * `nextLevel` applies from the next fragment rather than flushing what is
-   * already buffered, so switching does not stall playback.
-   */
-  const changeQuality = (levelIndex: number) => {
-    setPreferredLevel(levelIndex);
-    const hls = hlsRef.current;
-    if (!hls) return;
-    hls.nextLevel = levelIndex;
-    if (levelIndex === -1) hls.currentLevel = -1;
-  };
-
-  /** Playback speed. Applied to the element directly so it survives level switches. */
-  const changePlaybackRate = (rate: number) => {
-    setPlaybackRate(rate);
-    if (videoRef.current) videoRef.current.playbackRate = rate;
-  };
-
-  // Change subtitle track
   const changeSubtitleTrack = (index: number) => {
     const video = videoRef.current;
     if (!video) return;
-
     const targetId = `lflix-sub-${index}`;
 
-    // Disable all tracks first, then enable the one matching the target ID
     for (let i = 0; i < video.textTracks.length; i++) {
       const track = video.textTracks[i];
       if (index >= 0 && track.id === targetId) {
@@ -652,27 +800,173 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
     setCurrentSubtitleTrack(index);
   };
 
-  const hasAudioTracks = audioTracks.length > 1;
-  const hasSubtitleTracks = subtitleTracks.length > 0;
-  const hasQualityLevels = qualityLevels.length > 1;
-  const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
-  const hasSettings = hasAudioTracks || hasSubtitleTracks || hasQualityLevels;
+  const changeQuality = (levelIndex: number) => {
+    setPreferredLevel(levelIndex);
+    const hls = hlsRef.current;
+    if (!hls) return;
+    hls.nextLevel = levelIndex;
+    if (levelIndex === -1) hls.currentLevel = -1;
+  };
 
-  // Debug log to see what's detected
+  // Keyboard navigation
   useEffect(() => {
     if (isNative) return;
-    console.log('VideoPlayer - Audio tracks:', audioTracks.length, audioTracks);
-    console.log('VideoPlayer - Subtitle tracks:', subtitleTracks.length, subtitleTracks);
-  }, [audioTracks, subtitleTracks, isNative]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const video = videoRef.current;
+      if (!video) return;
 
-  // If Native, show a placeholder (the system player covers the screen).
-  // This bails out *after* every hook so the hook count stays stable.
+      switch (e.key) {
+        case ' ':
+        case 'k':
+        case 'K':
+          e.preventDefault();
+          togglePlayPause();
+          break;
+        case 'ArrowLeft':
+        case 'j':
+        case 'J':
+          e.preventDefault();
+          seekBy(-10);
+          break;
+        case 'ArrowRight':
+        case 'l':
+        case 'L':
+          e.preventDefault();
+          seekBy(10);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setVolume(volume + 0.1);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setVolume(volume - 0.1);
+          break;
+        case 'm':
+        case 'M':
+          e.preventDefault();
+          toggleMute();
+          break;
+        case 'f':
+        case 'F':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'Escape':
+          if (!document.fullscreenElement) {
+            onClose();
+          }
+          break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isNative, onClose, volume]);
+
+  // Touch screen tap / double-tap handling on the video area
+  const handleVideoAreaTouchOrClick = (e: React.MouseEvent | React.TouchEvent) => {
+    // Don't trigger if interacting with controls overlay directly
+    if ((e.target as HTMLElement).closest('button, input, select, .controls-bar')) return;
+
+    const now = Date.now();
+    const timeDiff = now - lastTapTimeRef.current;
+    const container = containerRef.current;
+
+    if (timeDiff < 300 && container) {
+      // Double tap detected! Cancel single tap
+      if (singleTapTimerRef.current) {
+        clearTimeout(singleTapTimerRef.current);
+        singleTapTimerRef.current = null;
+      }
+
+      const rect = container.getBoundingClientRect();
+      const clientX = 'touches' in e ? e.touches[0]?.clientX || 0 : (e as React.MouseEvent).clientX;
+      const relativeX = clientX - rect.left;
+      const ratio = relativeX / rect.width;
+
+      if (ratio < 0.35) {
+        // Double tap left: seek backward 10s
+        seekBy(-10);
+        setDoubleTapFeedback({ type: 'backward', key: now });
+        setTimeout(() => setDoubleTapFeedback(null), 700);
+      } else if (ratio > 0.65) {
+        // Double tap right: seek forward 10s
+        seekBy(10);
+        setDoubleTapFeedback({ type: 'forward', key: now });
+        setTimeout(() => setDoubleTapFeedback(null), 700);
+      } else {
+        // Double tap center: toggle aspect ratio Fit vs Fill
+        toggleAspectRatio();
+      }
+
+      lastTapTimeRef.current = 0;
+    } else {
+      // Single tap candidate: wait 250ms to verify it's not a double-tap
+      lastTapTimeRef.current = now;
+      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+      singleTapTimerRef.current = setTimeout(() => {
+        setShowControls((prev) => !prev);
+        if (!showControls) scheduleHideControls();
+        singleTapTimerRef.current = null;
+      }, 250);
+    }
+  };
+
+  // Scrubber drag / pointer events
+  const calculateScrubTime = (clientX: number) => {
+    const timeline = timelineRef.current;
+    if (!timeline || !duration) return 0;
+    const rect = timeline.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return ratio * duration;
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    setIsScrubbing(true);
+    wakeControls();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const targetTime = calculateScrubTime(e.clientX);
+    setScrubTime(targetTime);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const timeline = timelineRef.current;
+    if (timeline && duration > 0) {
+      const rect = timeline.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      setHoverPosition({ x, time: (x / rect.width) * duration });
+    }
+    if (isScrubbing) {
+      const targetTime = calculateScrubTime(e.clientX);
+      setScrubTime(targetTime);
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (isScrubbing) {
+      setIsScrubbing(false);
+      const video = videoRef.current;
+      if (video) {
+        video.currentTime = scrubTime;
+        setCurrentTime(scrubTime);
+      }
+      scheduleHideControls();
+    }
+  };
+
+  const displayedTime = isScrubbing ? scrubTime : currentTime;
+  const progressPercent = duration > 0 ? (displayedTime / duration) * 100 : 0;
+  const bufferPercent = duration > 0 ? (buffered / duration) * 100 : 0;
+  const hasSettings = audioTracks.length > 1 || subtitleTracks.length > 0 || qualityLevels.length > 1;
+
   if (isNative) {
     return (
       <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-neutral-400">Opening system player...</p>
+          <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-neutral-400">Opening player...</p>
           <button
             onClick={onClose}
             className="mt-8 px-6 py-2 bg-neutral-800 rounded-lg text-white text-sm hover:bg-neutral-700"
@@ -686,223 +980,30 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Video player" ref={containerRef} className="fixed inset-0 z-[100] bg-black flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-neutral-900">
-        <h2 className="text-lg font-medium truncate flex-1">{title}</h2>
-        <div className="flex items-center gap-2">
-          {/* HDR Badge */}
-          {isHDR && (
-            <span className="px-2 py-0.5 bg-amber-500/90 text-black text-xs rounded font-bold tracking-wide">
-              HDR
-            </span>
-          )}
-          {/* Settings Button - Always show, displays info about tracks */}
-          <div className="relative">
-            <button aria-label="Audio & Subtitles"
-              onClick={() => setShowSettings(!showSettings)}
-              className="p-2 hover:bg-neutral-800 rounded-full transition"
-              title="Audio & Subtitles"
-            >
-              <Settings2 className="w-6 h-6" />
-            </button>
-
-            {/* Settings Menu */}
-            {showSettings && (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
-                {/* Quality — only meaningful when the source offers a ladder */}
-                {hasQualityLevels && (
-                  <div className="border-b border-neutral-700">
-                    <div className="px-4 py-2 bg-neutral-900/50 flex items-center gap-2">
-                      <Gauge className="w-4 h-4" />
-                      <span className="text-sm font-medium">Quality</span>
-                    </div>
-                    <button
-                      onClick={() => changeQuality(-1)}
-                      className={`w-full px-4 py-2 text-left text-sm flex items-center justify-between hover:bg-neutral-700 transition ${preferredLevel === -1 ? 'text-red-400' : 'text-neutral-300'}`}
-                    >
-                      <span>
-                        Auto
-                        {preferredLevel === -1 && activeLevel >= 0 && (
-                          <span className="text-neutral-500 ml-1.5">
-                            ({qualityLevels.find((l) => l.index === activeLevel)?.label ?? '—'})
-                          </span>
-                        )}
-                      </span>
-                      {preferredLevel === -1 && <Check className="w-4 h-4" />}
-                    </button>
-                    {qualityLevels.map((level) => (
-                      <button
-                        key={level.index}
-                        onClick={() => changeQuality(level.index)}
-                        className={`w-full px-4 py-2 text-left text-sm flex items-center justify-between hover:bg-neutral-700 transition ${preferredLevel === level.index ? 'text-red-400' : 'text-neutral-300'}`}
-                      >
-                        <span>
-                          {level.label}
-                          {level.bitrate > 0 && (
-                            <span className="text-neutral-500 ml-1.5">
-                              {(level.bitrate / 1_000_000).toFixed(1)} Mbps
-                            </span>
-                          )}
-                        </span>
-                        {preferredLevel === level.index && <Check className="w-4 h-4" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Playback speed */}
-                <div className="border-b border-neutral-700">
-                  <div className="px-4 py-2 bg-neutral-900/50 flex items-center gap-2">
-                    <Gauge className="w-4 h-4" />
-                    <span className="text-sm font-medium">Speed</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 px-4 py-2.5">
-                    {PLAYBACK_RATES.map((rate) => (
-                      <button
-                        key={rate}
-                        onClick={() => changePlaybackRate(rate)}
-                        aria-label={`Playback speed ${rate}x`}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${
-                          playbackRate === rate
-                            ? 'bg-red-600 text-white'
-                            : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
-                        }`}
-                      >
-                        {rate === 1 ? 'Normal' : `${rate}x`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Audio Tracks */}
-                <div className="border-b border-neutral-700">
-                  <div className="px-4 py-2 bg-neutral-900/50 flex items-center gap-2">
-                    <AudioLines className="w-4 h-4" />
-                    <span className="text-sm font-medium">Audio Language</span>
-                  </div>
-                  {hasAudioTracks ? (
-                    audioTracks.map((track) => (
-                      <button
-                        key={track.id}
-                        onClick={() => changeAudioTrack(track.id)}
-                        className={`w-full px-4 py-2 text-left text-sm flex items-center justify-between hover:bg-neutral-700 transition ${currentAudioTrack === track.id ? 'text-red-400' : 'text-neutral-300'
-                          }`}
-                      >
-                        <span>{track.label} {track.language !== 'unknown' && `(${track.language})`}</span>
-                        {currentAudioTrack === track.id && <Check className="w-4 h-4" />}
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-4 py-3 text-sm text-neutral-500">
-                      No audio tracks detected
-                      <p className="text-xs mt-1 text-neutral-600">
-                        MKV/AVI files may not show tracks in browser. Use VLC or DLNA for full track support.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Subtitle Tracks */}
-                <div>
-                  <div className="px-4 py-2 bg-neutral-900/50 flex items-center gap-2">
-                    <Subtitles className="w-4 h-4" />
-                    <span className="text-sm font-medium">Subtitles</span>
-                  </div>
-                  {hasSubtitleTracks ? (
-                    <>
-                      <button
-                        onClick={() => changeSubtitleTrack(-1)}
-                        className={`w-full px-4 py-2 text-left text-sm flex items-center justify-between hover:bg-neutral-700 transition ${currentSubtitleTrack === -1 ? 'text-red-400' : 'text-neutral-300'
-                          }`}
-                      >
-                        <span>Off</span>
-                        {currentSubtitleTrack === -1 && <Check className="w-4 h-4" />}
-                      </button>
-                      {subtitleTracks.map((track) => (
-                        <button
-                          key={track.id}
-                          onClick={() => changeSubtitleTrack(track.id)}
-                          className={`w-full px-4 py-2 text-left text-sm flex items-center justify-between hover:bg-neutral-700 transition ${currentSubtitleTrack === track.id ? 'text-red-400' : 'text-neutral-300'
-                            }`}
-                        >
-                          <span>{track.label} {track.language !== 'unknown' && `(${track.language})`}</span>
-                          {currentSubtitleTrack === track.id && <Check className="w-4 h-4" />}
-                        </button>
-                      ))}
-                    </>
-                  ) : (
-                    <div className="px-4 py-3 text-sm text-neutral-500">
-                      No subtitle tracks detected
-                      <p className="text-xs mt-1 text-neutral-600">
-                        MKV/AVI embedded subs not supported in browser. Use VLC or DLNA for subtitles.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <button aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-            onClick={toggleFullscreen}
-            className="p-2 hover:bg-neutral-800 rounded-full transition"
-            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-          >
-            {isFullscreen ? <Minimize className="w-6 h-6" /> : <Maximize className="w-6 h-6" />}
-          </button>
-          <button aria-label="Close"
-            onClick={onClose}
-            className="p-3 hover:bg-neutral-800 rounded-full transition bg-neutral-800/50"
-            title="Close"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-      </div>
-
-      {/* Video */}
-      <div className="flex-1 flex items-center justify-center bg-black relative">
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-neutral-400">Loading video...</p>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center p-8">
-            <div className="bg-neutral-900 border border-red-800 rounded-xl p-6 max-w-md text-center">
-              <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-red-400 mb-2">Playback Error</h3>
-              <p className="text-neutral-300 mb-4">{error}</p>
-              <p className="text-sm text-neutral-500 mb-4">
-                This usually means your browser doesn't support the video format (MKV, AVI, etc.)
-              </p>
-              <div className="space-y-2 text-left text-sm text-neutral-400">
-                <p><strong>Try:</strong></p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Use VLC app instead</li>
-                  <li>Convert video to MP4 format</li>
-                  <li>Use DLNA server on Smart TV</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Video player"
+      ref={containerRef}
+      onMouseMove={wakeControls}
+      onTouchStart={wakeControls}
+      className="fixed inset-0 z-[100] bg-black select-none overflow-hidden touch-none"
+    >
+      {/* ──────────────── Video Element (Full Bleed) ──────────────── */}
+      <div
+        className="absolute inset-0 w-full h-full flex items-center justify-center cursor-pointer"
+        onClick={handleVideoAreaTouchOrClick}
+        onTouchEnd={handleVideoAreaTouchOrClick}
+      >
         <video
           ref={videoRef}
           src={isHlsSource(activeSrc) ? undefined : activeSrc}
-          controls
-          controlsList="nofullscreen"
           autoPlay
-          className="max-w-full max-h-full"
           playsInline
+          className={`w-full h-full ${
+            aspectRatio === 'cover' ? 'object-cover' : 'object-contain'
+          } transition-[object-fit] duration-300 pointer-events-none`}
           onError={handleError}
-          onCanPlay={handleCanPlay}
         >
           {subtitleTracks.map((track) => (
             <track
@@ -914,21 +1015,543 @@ export default function VideoPlayer({ src, title, onClose, initialTime = 0, isHD
               label={track.label}
             />
           ))}
-          Your browser does not support the video tag.
         </video>
       </div>
 
-      {/* HDR Compatibility Warning */}
-      {isHDR && hdrSupported === false && !error && (
-        <div className="px-4 py-2 bg-amber-900/30 border-t border-amber-800/40 text-center text-xs text-amber-300/80">
-          ⚠ Your display may not support HDR — colors may appear washed out
+      {/* ──────────────── Double Tap Ripple Feedback ──────────────── */}
+      {doubleTapFeedback && (
+        <div
+          className={`absolute top-1/2 -translate-y-1/2 ${
+            doubleTapFeedback.type === 'backward' ? 'left-8 sm:left-16' : 'right-8 sm:right-16'
+          } flex flex-col items-center justify-center p-4 bg-black/75 rounded-full border border-white/20 backdrop-blur-md animate-bounce pointer-events-none z-40`}
+        >
+          {doubleTapFeedback.type === 'backward' ? (
+            <>
+              <RotateCcw className="w-8 h-8 text-white mb-1" />
+              <span className="text-xs font-bold text-white tracking-widest">-10s</span>
+            </>
+          ) : (
+            <>
+              <RotateCw className="w-8 h-8 text-white mb-1" />
+              <span className="text-xs font-bold text-white tracking-widest">+10s</span>
+            </>
+          )}
         </div>
       )}
 
-      {/* Hint */}
-      <div className="p-4 bg-neutral-900 text-center text-sm text-neutral-500">
-        {error ? 'See error above' : hasSettings ? 'Tap ⚙️ for audio & subtitles • Tap video for controls' : 'Tap video for controls • Works best in fullscreen'}
+      {/* ──────────────── Center Loading / Buffering Spinner ──────────────── */}
+      {(loading || isBuffering) && !error && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+          <div className="flex flex-col items-center bg-black/60 backdrop-blur-md px-6 py-5 rounded-2xl border border-white/10 shadow-2xl">
+            <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mb-2" />
+            <span className="text-xs font-medium text-neutral-300">
+              {loading ? 'Loading stream...' : 'Buffering...'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────── Error Overlay ──────────────── */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center p-4 bg-black/90 z-50">
+          <div className="bg-neutral-900 border border-red-800/80 rounded-2xl p-6 max-w-md w-full text-center shadow-2xl">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-red-400 mb-1">Playback Error</h3>
+            <p className="text-neutral-300 text-sm mb-4">{error}</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              <button
+                onClick={() => {
+                  setError(null);
+                  setLoading(true);
+                  const t = buildApiUrl('/api/transcode');
+                  if (t) setActiveSrc(t);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition"
+              >
+                Retry with Transcode
+              </button>
+              {onFatalError && (
+                <button
+                  onClick={() => onFatalError('user-next')}
+                  className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg text-sm font-medium transition"
+                >
+                  Try Next Server
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-sm transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────── Floating Controls Overlay (Auto-Hiding) ──────────────── */}
+      <div
+        className={`absolute inset-0 flex flex-col justify-between transition-opacity duration-300 pointer-events-none z-20 ${
+          showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
+        {/* ── Top Header Scrim & Actions ── */}
+        <div className="w-full bg-gradient-to-b from-black/85 via-black/40 to-transparent pt-3 pb-8 px-4 sm:px-6 flex items-center justify-between pointer-events-auto">
+          <div className="flex items-center gap-3 truncate pr-4">
+            <button
+              onClick={onClose}
+              aria-label="Back"
+              className="p-2 hover:bg-white/15 rounded-full text-neutral-200 transition active:scale-95"
+              title="Close Player"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <h2 className="text-sm sm:text-base font-semibold text-white tracking-tight truncate drop-shadow">
+              {title}
+            </h2>
+            {isHDR && (
+              <span className="hidden xs:inline-block px-2 py-0.5 bg-amber-500/90 text-black text-[10px] font-extrabold rounded tracking-wider shadow">
+                HDR
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {/* Aspect Ratio Fit / Fill Toggle */}
+            <button
+              onClick={toggleAspectRatio}
+              aria-label={`Aspect ratio: ${aspectRatio === 'cover' ? 'Fill (zoomed)' : 'Fit (contained)'}`}
+              className="p-2 hover:bg-white/15 rounded-full text-neutral-200 transition active:scale-95"
+              title={aspectRatio === 'cover' ? 'Switch to Fit (Original)' : 'Switch to Fill (Full screen)'}
+            >
+              <RectangleHorizontal
+                className={`w-5 h-5 ${aspectRatio === 'cover' ? 'text-red-500 scale-110' : 'text-neutral-300'}`}
+              />
+            </button>
+
+            {/* Audio & Subtitles Settings */}
+            <button
+              onClick={() => {
+                setShowSettingsModal(true);
+                setActiveSettingsTab('audio');
+              }}
+              aria-label="Audio and Subtitles"
+              className="p-2 hover:bg-white/15 rounded-full text-neutral-200 transition active:scale-95 relative"
+              title="Audio & Subtitles"
+            >
+              <Settings2 className="w-5 h-5" />
+              {currentSubtitleTrack >= 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+              )}
+            </button>
+
+            {/* Fullscreen Button */}
+            <button
+              onClick={toggleFullscreen}
+              aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              className="p-2 hover:bg-white/15 rounded-full text-neutral-200 transition active:scale-95"
+              title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            >
+              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Center Quick Play / Skip Controls ── */}
+        <div className="w-full flex items-center justify-center gap-6 sm:gap-10 pointer-events-auto">
+          {/* Skip -10s */}
+          <button
+            onClick={() => seekBy(-10)}
+            aria-label="Rewind 10 seconds"
+            className="p-3 sm:p-4 bg-black/40 hover:bg-black/70 active:scale-90 text-white rounded-full border border-white/15 backdrop-blur-md transition shadow-lg"
+            title="Rewind 10s"
+          >
+            <RotateCcw className="w-6 h-6 sm:w-8 sm:h-8" />
+          </button>
+
+          {/* Big Center Play / Pause */}
+          <button
+            onClick={togglePlayPause}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+            className="p-4 sm:p-5 bg-red-600/90 hover:bg-red-600 active:scale-95 text-white rounded-full border border-white/20 backdrop-blur-md shadow-2xl transition-all"
+            title={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? (
+              <Pause className="w-8 h-8 sm:w-10 sm:h-10 fill-current" />
+            ) : (
+              <Play className="w-8 h-8 sm:w-10 sm:h-10 fill-current translate-x-0.5" />
+            )}
+          </button>
+
+          {/* Skip +10s */}
+          <button
+            onClick={() => seekBy(10)}
+            aria-label="Forward 10 seconds"
+            className="p-3 sm:p-4 bg-black/40 hover:bg-black/70 active:scale-90 text-white rounded-full border border-white/15 backdrop-blur-md transition shadow-lg"
+            title="Fast Forward 10s"
+          >
+            <RotateCw className="w-6 h-6 sm:w-8 sm:h-8" />
+          </button>
+        </div>
+
+        {/* ── Bottom Controls & Timeline Bar ── */}
+        <div className="w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pb-3 pt-8 px-4 sm:px-6 pointer-events-auto controls-bar">
+          {/* Timeline Scrubber */}
+          <div
+            ref={timelineRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={() => setHoverPosition(null)}
+            className="relative w-full py-3 cursor-pointer select-none group touch-none"
+          >
+            {/* Hover Tooltip */}
+            {hoverPosition && duration > 0 && (
+              <div
+                className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 bg-neutral-900/90 text-white text-[11px] font-mono rounded shadow border border-white/15 pointer-events-none"
+                style={{ left: `${hoverPosition.x}px` }}
+              >
+                {formatTime(hoverPosition.time)}
+              </div>
+            )}
+
+            {/* Track Background */}
+            <div className="w-full h-1.5 group-hover:h-2.5 bg-white/25 rounded-full overflow-hidden relative transition-all">
+              {/* Buffer Bar */}
+              <div
+                className="absolute top-0 bottom-0 left-0 bg-white/40 transition-all duration-200"
+                style={{ width: `${bufferPercent}%` }}
+              />
+              {/* Progress Bar */}
+              <div
+                className="absolute top-0 bottom-0 left-0 bg-red-600"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+
+            {/* Thumb Knob */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 group-hover:w-4.5 group-hover:h-4.5 bg-red-500 border border-white rounded-full shadow-lg transition-transform pointer-events-none"
+              style={{ left: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Bottom Toolbar Actions */}
+          <div className="flex items-center justify-between gap-3 text-neutral-200 mt-1">
+            <div className="flex items-center gap-2 sm:gap-4">
+              {/* Mini Play / Pause */}
+              <button
+                onClick={togglePlayPause}
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+                className="p-1.5 hover:bg-white/15 rounded-lg transition"
+              >
+                {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
+              </button>
+
+              {/* Volume / Mute (desktop slider + mobile tap) */}
+              <div className="flex items-center gap-1.5 group/vol">
+                <button
+                  onClick={toggleMute}
+                  aria-label={isMuted ? 'Unmute' : 'Mute'}
+                  className="p-1.5 hover:bg-white/15 rounded-lg transition"
+                >
+                  {isMuted || volume === 0 ? (
+                    <VolumeX className="w-5 h-5 text-red-400" />
+                  ) : volume < 0.5 ? (
+                    <Volume1 className="w-5 h-5" />
+                  ) : (
+                    <Volume2 className="w-5 h-5" />
+                  )}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={isMuted ? 0 : volume}
+                  onChange={(e) => setVolume(parseFloat(e.target.value))}
+                  className="hidden sm:inline-block w-16 md:w-20 accent-red-600 h-1 cursor-pointer bg-white/20 rounded-lg"
+                  aria-label="Volume slider"
+                />
+              </div>
+
+              {/* Time Display */}
+              <div className="text-xs sm:text-sm font-mono text-neutral-300 drop-shadow select-none">
+                <span>{formatTime(displayedTime)}</span>
+                <span className="text-neutral-500 mx-1">/</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 sm:gap-2">
+              {/* Playback Speed Button */}
+              <button
+                onClick={() => {
+                  setShowSettingsModal(true);
+                  setActiveSettingsTab('speed');
+                }}
+                className="px-2 py-1 hover:bg-white/15 rounded-lg text-xs font-semibold text-neutral-300 transition"
+                title="Playback Speed"
+              >
+                {playbackRate === 1 ? '1x' : `${playbackRate}x`}
+              </button>
+
+              {/* Picture in Picture */}
+              {pipSupported && (
+                <button
+                  onClick={togglePiP}
+                  aria-label="Picture in Picture"
+                  className="p-1.5 hover:bg-white/15 rounded-lg transition"
+                  title="Picture in Picture"
+                >
+                  <PictureInPicture2 className="w-5 h-5" />
+                </button>
+              )}
+
+              {/* Fullscreen Button */}
+              <button
+                onClick={toggleFullscreen}
+                aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                className="p-1.5 hover:bg-white/15 rounded-lg transition"
+                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              >
+                {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* ──────────────── Responsive Mobile / Desktop Settings Modal ──────────────── */}
+      {showSettingsModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setShowSettingsModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-neutral-900 border border-neutral-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-neutral-800 bg-neutral-950/40">
+              <div className="flex items-center gap-2">
+                <Settings2 className="w-5 h-5 text-red-500" />
+                <h3 className="font-semibold text-white text-base">Playback Settings</h3>
+              </div>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="p-1.5 hover:bg-neutral-800 rounded-full text-neutral-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex border-b border-neutral-800 bg-neutral-900/90 overflow-x-auto no-scrollbar">
+              <button
+                onClick={() => setActiveSettingsTab('audio')}
+                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
+                  activeSettingsTab === 'audio'
+                    ? 'border-red-600 text-red-400 bg-neutral-800/40'
+                    : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <AudioLines className="w-4 h-4" />
+                <span>Audio</span>
+              </button>
+              <button
+                onClick={() => setActiveSettingsTab('subtitles')}
+                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
+                  activeSettingsTab === 'subtitles'
+                    ? 'border-red-600 text-red-400 bg-neutral-800/40'
+                    : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <Subtitles className="w-4 h-4" />
+                <span>Subtitles</span>
+              </button>
+              {qualityLevels.length > 1 && (
+                <button
+                  onClick={() => setActiveSettingsTab('quality')}
+                  className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
+                    activeSettingsTab === 'quality'
+                      ? 'border-red-600 text-red-400 bg-neutral-800/40'
+                      : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                  }`}
+                >
+                  <Gauge className="w-4 h-4" />
+                  <span>Quality</span>
+                </button>
+              )}
+              <button
+                onClick={() => setActiveSettingsTab('speed')}
+                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
+                  activeSettingsTab === 'speed'
+                    ? 'border-red-600 text-red-400 bg-neutral-800/40'
+                    : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Speed</span>
+              </button>
+            </div>
+
+            {/* Tab Contents */}
+            <div className="p-4 overflow-y-auto max-h-[50vh]">
+              {/* Audio Tab */}
+              {activeSettingsTab === 'audio' && (
+                <div className="space-y-1">
+                  {audioTracks.length > 0 ? (
+                    audioTracks.map((track) => (
+                      <button
+                        key={track.id}
+                        onClick={() => {
+                          changeAudioTrack(track.id);
+                          setShowSettingsModal(false);
+                        }}
+                        className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
+                          currentAudioTrack === track.id
+                            ? 'bg-red-950/40 text-red-400 border border-red-800/40'
+                            : 'hover:bg-neutral-800/60 text-neutral-300'
+                        }`}
+                      >
+                        <span className="font-medium">
+                          {track.label} {track.language !== 'unknown' && `(${track.language})`}
+                        </span>
+                        {currentAudioTrack === track.id && <Check className="w-4 h-4 text-red-400" />}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-center py-6 text-neutral-400 text-sm">
+                      <p>Default Audio Track active</p>
+                      <p className="text-xs text-neutral-500 mt-1">No alternate audio streams detected.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Subtitles Tab */}
+              {activeSettingsTab === 'subtitles' && (
+                <div className="space-y-1">
+                  <button
+                    onClick={() => {
+                      changeSubtitleTrack(-1);
+                      setShowSettingsModal(false);
+                    }}
+                    className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
+                      currentSubtitleTrack === -1
+                        ? 'bg-red-950/40 text-red-400 border border-red-800/40'
+                        : 'hover:bg-neutral-800/60 text-neutral-300'
+                    }`}
+                  >
+                    <span className="font-medium">Off</span>
+                    {currentSubtitleTrack === -1 && <Check className="w-4 h-4 text-red-400" />}
+                  </button>
+                  {subtitleTracks.map((track) => (
+                    <button
+                      key={track.id}
+                      onClick={() => {
+                        changeSubtitleTrack(track.id);
+                        setShowSettingsModal(false);
+                      }}
+                      className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
+                        currentSubtitleTrack === track.id
+                          ? 'bg-red-950/40 text-red-400 border border-red-800/40'
+                          : 'hover:bg-neutral-800/60 text-neutral-300'
+                      }`}
+                    >
+                      <span className="font-medium">
+                        {track.label} {track.language !== 'unknown' && `(${track.language})`}
+                      </span>
+                      {currentSubtitleTrack === track.id && <Check className="w-4 h-4 text-red-400" />}
+                    </button>
+                  ))}
+                  {subtitleTracks.length === 0 && (
+                    <p className="text-center py-4 text-xs text-neutral-500">
+                      No subtitle tracks available for this video.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Quality Tab */}
+              {activeSettingsTab === 'quality' && (
+                <div className="space-y-1">
+                  <button
+                    onClick={() => {
+                      changeQuality(-1);
+                      setShowSettingsModal(false);
+                    }}
+                    className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
+                      preferredLevel === -1
+                        ? 'bg-red-950/40 text-red-400 border border-red-800/40'
+                        : 'hover:bg-neutral-800/60 text-neutral-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-medium">Auto (Recommended)</div>
+                      {preferredLevel === -1 && activeLevel >= 0 && (
+                        <div className="text-xs text-neutral-500 mt-0.5">
+                          Currently: {qualityLevels.find((l) => l.index === activeLevel)?.label ?? '—'}
+                        </div>
+                      )}
+                    </div>
+                    {preferredLevel === -1 && <Check className="w-4 h-4 text-red-400" />}
+                  </button>
+                  {qualityLevels.map((lvl) => (
+                    <button
+                      key={lvl.index}
+                      onClick={() => {
+                        changeQuality(lvl.index);
+                        setShowSettingsModal(false);
+                      }}
+                      className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
+                        preferredLevel === lvl.index
+                          ? 'bg-red-950/40 text-red-400 border border-red-800/40'
+                          : 'hover:bg-neutral-800/60 text-neutral-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-medium">{lvl.label}</div>
+                        {lvl.bitrate > 0 && (
+                          <div className="text-xs text-neutral-500 mt-0.5">
+                            {(lvl.bitrate / 1_000_000).toFixed(1)} Mbps
+                          </div>
+                        )}
+                      </div>
+                      {preferredLevel === lvl.index && <Check className="w-4 h-4 text-red-400" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Speed Tab */}
+              {activeSettingsTab === 'speed' && (
+                <div className="grid grid-cols-3 gap-2">
+                  {PLAYBACK_RATES.map((rate) => (
+                    <button
+                      key={rate}
+                      onClick={() => {
+                        changePlaybackRate(rate);
+                        setShowSettingsModal(false);
+                      }}
+                      className={`py-3 px-2 rounded-xl text-center text-sm font-semibold transition ${
+                        playbackRate === rate
+                          ? 'bg-red-600 text-white shadow-lg'
+                          : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                      }`}
+                    >
+                      {rate === 1 ? 'Normal (1x)' : `${rate}x`}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
