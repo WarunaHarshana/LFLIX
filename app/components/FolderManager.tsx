@@ -12,6 +12,7 @@ type ScannedFolder = {
     folderName: string;
     contentType: string;
     addedAt: string;
+    exists?: boolean;
 };
 
 type Props = {
@@ -207,7 +208,15 @@ export default function FolderManager({ isOpen, onClose, onScan, onRefresh }: Pr
                                     >
                                         <Folder className="w-8 h-8 text-yellow-500 flex-shrink-0" />
                                         <div className="flex-1 min-w-0">
-                                            <h4 className="font-medium text-white truncate">{folder.folderName}</h4>
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-medium text-white truncate">{folder.folderName}</h4>
+                                                {folder.exists === false && (
+                                                    <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-md flex items-center gap-1 font-normal flex-shrink-0">
+                                                        <AlertCircle className="w-3 h-3" />
+                                                        Folder not found on disk
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="text-sm text-neutral-400 truncate">{folder.folderPath}</p>
                                         </div>
                                         <button aria-label="Remove folder"

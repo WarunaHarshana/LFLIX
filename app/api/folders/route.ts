@@ -1,6 +1,7 @@
+import fs from 'fs';
+import path from 'path';
 import { NextResponse } from 'next/server';
 import db, { removeAutoTrackingForShow } from '@/lib/db';
-import path from 'path';
 import { parsePositiveInt, validateExistingDirectory } from '@/lib/security';
 import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
 
@@ -10,8 +11,18 @@ export const dynamic = 'force-dynamic';
 // Get all scanned folders
 export async function GET() {
     try {
-        const folders = db.prepare('SELECT * FROM scanned_folders ORDER BY addedAt DESC').all();
-        return NextResponse.json(folders);
+        const folders = db.prepare('SELECT * FROM scanned_folders ORDER BY addedAt DESC').all() as Array<{
+            id: number;
+            folderPath: string;
+            folderName: string;
+            contentType: string;
+            addedAt: string;
+        }>;
+        const result = folders.map(f => ({
+            ...f,
+            exists: fs.existsSync(f.folderPath)
+        }));
+        return NextResponse.json(result);
     } catch (e) {
         return apiErrorResponse(e, 'Failed to load folders');
     }

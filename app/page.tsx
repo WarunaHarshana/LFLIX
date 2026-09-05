@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Keyboard, X } from 'lucide-react';
+import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { apiUrl } from '@/lib/mobileConfig';
 import { useAppStore } from './store/useAppStore';
@@ -99,6 +100,50 @@ export default function Home() {
   const filteredLibrary = getFilteredLibrary(activeTab);
   const hero = useHero(filteredLibrary);
 
+  // Available genres and languages dynamically computed for the active tab
+  const availableGenres = useMemo(() => {
+    const tabItems = activeTab === 'all'
+      ? library
+      : library.filter(item => item.type === activeTab);
+    const genreSet = new Set<string>();
+    for (const item of tabItems) {
+      if (item.genres) {
+        item.genres.split(',').forEach(g => {
+          const trimmed = g.trim();
+          if (trimmed) genreSet.add(trimmed);
+        });
+      }
+    }
+    return Array.from(genreSet).sort();
+  }, [library, activeTab]);
+
+  const availableLanguages = useMemo(() => {
+    const tabItems = activeTab === 'all'
+      ? library
+      : library.filter(item => item.type === activeTab);
+    const langSet = new Set<string>();
+    for (const item of tabItems) {
+      if (item.language) {
+        const trimmed = item.language.trim();
+        if (trimmed) langSet.add(trimmed);
+      }
+    }
+    return Array.from(langSet).sort();
+  }, [library, activeTab]);
+
+  // If active genre/language is not in available options for this tab, clear it
+  useEffect(() => {
+    if (selectedGenre && !availableGenres.includes(selectedGenre)) {
+      setSelectedGenre(null);
+    }
+  }, [availableGenres, selectedGenre, setSelectedGenre]);
+
+  useEffect(() => {
+    if (selectedLanguage && !availableLanguages.includes(selectedLanguage)) {
+      setSelectedLanguage(null);
+    }
+  }, [availableLanguages, selectedLanguage, setSelectedLanguage]);
+
   // ──────────────────── Refs ────────────────────
   const libraryRef = useRef(library);
   const filteredLibraryRef = useRef(filteredLibrary);
@@ -116,6 +161,8 @@ export default function Home() {
 
   // ──────────────────── Tab Switching ────────────────────
   const switchTab = (tab: TabId) => {
+    setSelectedGenre(null);
+    setSelectedLanguage(null);
     if (tab === 'discover') {
       setDiscoverMode('online');
       setTorrentInitialQuery('');
@@ -399,7 +446,7 @@ export default function Home() {
       <DetailTabNav
         activeTab={activeTab}
         showLiveSportsActive={showLiveSports}
-        onTabChange={(tab) => { if (tab === 'all') setSelectedGenre(null); switchTab(tab); }}
+        onTabChange={switchTab}
         onShowLiveSports={() => setShowLiveSports(true)}
         onShowSearch={() => setShowSearchModal(true)}
         onShowMobileConnect={() => setShowMobileConnect(true)}
@@ -443,10 +490,10 @@ export default function Home() {
             />
           )}
 
-          <div className="-mt-16 sm:-mt-20 relative z-20">
+          <div className={clsx(hero.featured ? "-mt-16 sm:-mt-20" : "pt-24 sm:pt-28", "relative z-20")}>
             {/* Genre Filter */}
-            {genres.length > 0 && (
-              <GenreFilter genres={genres} selectedGenre={selectedGenre} onSelect={setSelectedGenre} />
+            {availableGenres.length > 0 && (
+              <GenreFilter genres={availableGenres} selectedGenre={selectedGenre} onSelect={setSelectedGenre} />
             )}
 
             {/* Content Grid */}
@@ -454,7 +501,7 @@ export default function Home() {
               filteredLibrary={filteredLibrary}
               activeTab={activeTab}
               selectedGenre={selectedGenre}
-              languages={languages}
+              languages={availableLanguages}
               selectedLanguage={selectedLanguage}
               onLanguageSelect={setSelectedLanguage}
               sortBy={sortBy}

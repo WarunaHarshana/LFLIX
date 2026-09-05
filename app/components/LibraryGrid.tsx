@@ -299,7 +299,14 @@ export default function LibraryGrid({
       </div>
 
       {filteredLibrary.length === 0 ? (
-        <EmptyState type="no-results" searchQuery={selectedGenre || ''} />
+        <EmptyState
+          type="no-results"
+          searchQuery={selectedGenre || selectedLanguage || ''}
+          onClearFilter={() => {
+            onGenreClear();
+            onLanguageSelect?.(null);
+          }}
+        />
       ) : (
         <div
           ref={gridRef}

@@ -35,14 +35,36 @@ export function validateExistingDirectory(input: unknown): PathValidation {
   const result = toAbsolutePath(input);
   if (result.error !== null) return result;
 
-  if (!fs.existsSync(result.path)) {
+  let targetPath = result.path;
+
+  if (!fs.existsSync(targetPath)) {
+    // Attempt fuzzy match for space/case/dash differences in the parent directory
+    try {
+      const parent = path.dirname(targetPath);
+      const base = path.basename(targetPath);
+      if (fs.existsSync(parent) && fs.statSync(parent).isDirectory()) {
+        const normalizedBase = base.toLowerCase().replace(/[\s_-]+/g, '');
+        const entries = fs.readdirSync(parent, { withFileTypes: true });
+        const matched = entries.find(
+          (entry) => entry.isDirectory() && entry.name.toLowerCase().replace(/[\s_-]+/g, '') === normalizedBase
+        );
+        if (matched) {
+          targetPath = path.join(parent, matched.name);
+        }
+      }
+    } catch {
+      // ignore filesystem read error and fall through
+    }
+  }
+
+  if (!fs.existsSync(targetPath)) {
     return { path: null, error: 'Path does not exist' };
   }
-  if (!fs.statSync(result.path).isDirectory()) {
+  if (!fs.statSync(targetPath).isDirectory()) {
     return { path: null, error: 'Path is not a directory' };
   }
 
-  return { path: result.path, error: null };
+  return { path: targetPath, error: null };
 }
 
 export function validateExistingFile(input: unknown): PathValidation {

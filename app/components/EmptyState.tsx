@@ -6,9 +6,10 @@ type Props = {
     type: 'empty' | 'no-results' | 'loading';
     searchQuery?: string;
     onAddFolder?: () => void;
+    onClearFilter?: () => void;
 };
 
-export default function EmptyState({ type, searchQuery, onAddFolder }: Props) {
+export default function EmptyState({ type, searchQuery, onAddFolder, onClearFilter }: Props) {
     if (type === 'loading') {
         return (
             <div className="flex flex-col items-center justify-center py-32 text-center">
@@ -21,12 +22,21 @@ export default function EmptyState({ type, searchQuery, onAddFolder }: Props) {
 
     if (type === 'no-results') {
         return (
-            <div className="flex flex-col items-center justify-center py-32 text-center">
+            <div className="flex flex-col items-center justify-center py-28 text-center px-4">
                 <Search className="w-16 h-16 text-neutral-600 mb-6" />
                 <h3 className="text-xl font-semibold text-neutral-300 mb-2">No results found</h3>
                 <p className="text-neutral-500 max-w-md">
-                    No content matches "{searchQuery}". Try adjusting your filters or search terms.
+                    {searchQuery ? `No content matches "${searchQuery}". Try adjusting your filters or search terms.` : 'No content found for the selected filter.'}
                 </p>
+                {onClearFilter && (
+                    <button
+                        onClick={onClearFilter}
+                        className="mt-6 px-6 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium rounded-lg transition shadow-lg shadow-red-900/20 flex items-center gap-2 cursor-pointer"
+                    >
+                        <RefreshCw className="w-4 h-4" />
+                        Clear Filter
+                    </button>
+                )}
             </div>
         );
     }

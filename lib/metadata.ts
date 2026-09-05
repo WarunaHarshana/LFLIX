@@ -218,7 +218,11 @@ export function normalizeShowName(name: string): string {
 }
 
 export function normalizeShowNameForMatch(name: string): string {
-  return normalizeShowName(name).toLowerCase().replace(/[^a-z0-9]/g, '');
+  return normalizeShowName(name)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
 
 const LANGUAGE_KEYWORD_MAP: Record<string, string> = {
