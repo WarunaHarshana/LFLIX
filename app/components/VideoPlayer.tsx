@@ -408,6 +408,7 @@ export default function VideoPlayer({
 
   const [activeSrc, setActiveSrc] = useState(src);
   const [didFallback, setDidFallback] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const hlsRef = useRef<any>(null);
   const isNative = Capacitor.isNativePlatform();
 
@@ -485,73 +486,89 @@ export default function VideoPlayer({
     setQualityLevels([]);
     setActiveLevel(-1);
 
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = activeSrc;
-      return;
-    }
-
     let hls: any;
     let cancelled = false;
 
     import('hls.js')
       .then(({ default: Hls }) => {
         if (cancelled || !videoRef.current) return;
-        if (!Hls.isSupported()) {
-          setError('This browser cannot play the stream.');
-          return;
-        }
 
-        hls = new Hls(buildHlsConfig(activeSrc));
-        hlsRef.current = hls;
+        // Prioritize MSE / hls.js on all browsers that support it (including Android Chrome).
+        // On Android, video.canPlayType('application/vnd.apple.mpegurl') returns 'maybe',
+        // but Android Chrome's native player fails on transcode streams with error 4 (MEDIA_ERR_SRC_NOT_SUPPORTED).
+        // MediaSource Extensions (Hls.isSupported()) work reliably on Android Chrome.
+        if (Hls.isSupported()) {
+          hls = new Hls(buildHlsConfig(activeSrc));
+          hlsRef.current = hls;
 
-        hls.on(Hls.Events.MANIFEST_PARSED, (_e: any, data: any) => {
-          const levels = (data?.levels || []).map((lvl: any, index: number) => ({
-            index,
-            label: lvl.height ? `${lvl.height}p` : `${Math.round((lvl.bitrate || 0) / 1000)}k`,
-            height: lvl.height || 0,
-            bitrate: lvl.bitrate || 0,
-          }));
-          levels.sort((x: any, y: any) => y.height - x.height || y.bitrate - x.bitrate);
-          setQualityLevels(levels);
-        });
+          hls.on(Hls.Events.MANIFEST_PARSED, (_e: any, data: any) => {
+            const levels = (data?.levels || []).map((lvl: any, index: number) => ({
+              index,
+              label: lvl.height ? `${lvl.height}p` : `${Math.round((lvl.bitrate || 0) / 1000)}k`,
+              height: lvl.height || 0,
+              bitrate: lvl.bitrate || 0,
+            }));
+            levels.sort((x: any, y: any) => y.height - x.height || y.bitrate - x.bitrate);
+            setQualityLevels(levels);
 
-        hls.on(Hls.Events.LEVEL_SWITCHED, (_e: any, data: any) => {
-          setActiveLevel(typeof data?.level === 'number' ? data.level : -1);
-        });
-
-        hls.loadSource(activeSrc);
-        hls.attachMedia(videoRef.current);
-
-        hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
-          if (!data?.fatal) return;
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            hls.startLoad();
-          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-            hls.recoverMediaError();
-          } else {
-            setError('Playback encountered an error.');
-            try {
-              hls.destroy();
-            } catch {
-              /* ignore */
+            if (initialTime > 0 && videoRef.current) {
+              videoRef.current.currentTime = initialTime;
             }
-            onFatalError?.('hls-fatal');
+            videoRef.current?.play().catch(() => {});
+          });
+
+          hls.on(Hls.Events.LEVEL_SWITCHED, (_e: any, data: any) => {
+            setActiveLevel(typeof data?.level === 'number' ? data.level : -1);
+          });
+
+          hls.loadSource(activeSrc);
+          hls.attachMedia(videoRef.current);
+
+          hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
+            if (!data?.fatal) return;
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              hls.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hls.recoverMediaError();
+            } else {
+              setError('Playback encountered an error.');
+              try {
+                hls.destroy();
+              } catch {
+                /* ignore */
+              }
+              onFatalError?.('hls-fatal');
+            }
+          });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Native HLS fallback for Apple devices (iOS Safari, macOS Safari) where MSE is unavailable
+          video.src = activeSrc;
+          if (initialTime > 0) {
+            video.currentTime = initialTime;
           }
-        });
+          video.play().catch(() => {});
+        } else {
+          setError('This browser cannot play the stream.');
+        }
       })
       .catch(() => setError('Failed to load streaming engine.'));
 
     return () => {
       cancelled = true;
-      if (hls) {
+      if (hlsRef.current) {
         try {
-          hls.destroy();
+          hlsRef.current.destroy();
         } catch {
           /* ignore */
         }
+        hlsRef.current = null;
+      }
+      if (videoRef.current && isHlsSource(activeSrc)) {
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
       }
     };
-  }, [activeSrc, isNative, onFatalError]);
+  }, [activeSrc, isNative, initialTime, onFatalError, reloadKey]);
 
   // Subtitle auto-discovery / explicit track loading
   useEffect(() => {
@@ -1276,8 +1293,10 @@ export default function VideoPlayer({
                 onClick={() => {
                   setError(null);
                   setLoading(true);
+                  setDidFallback(true);
                   const t = buildApiUrl('/api/transcode');
                   if (t) setActiveSrc(t);
+                  setReloadKey((k) => k + 1);
                 }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition"
               >
