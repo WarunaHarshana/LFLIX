@@ -66,7 +66,7 @@ const HW_ENCODER_CANDIDATES = [
 
 const SOFTWARE_ENCODER = {
   name: 'libx264',
-  args: ['-preset', 'superfast', '-tune', 'zerolatency', '-crf', '19', '-threads', '0'],
+  args: ['-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '21', '-threads', '0'],
 };
 
 type EncoderChoice = { name: string; args: string[] };

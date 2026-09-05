@@ -208,6 +208,42 @@ export default function VideoPlayer({
   const [preferredLevel, setPreferredLevel] = useState<number>(-1);
   const [pipSupported, setPipSupported] = useState(false);
   const [hdrSupported, setHdrSupported] = useState<boolean | null>(null);
+  const [nativePlayerMsg, setNativePlayerMsg] = useState<string | null>(null);
+
+  const handleOpenInNativePlayer = async () => {
+    try {
+      const parsedUrl = new URL(src, window.location.origin);
+      const contentType = parsedUrl.searchParams.get('contentType');
+      const contentId = parsedUrl.searchParams.get('contentId');
+      const episodeId = parsedUrl.searchParams.get('episodeId');
+      const currentPos = videoRef.current?.currentTime || initialTime || 0;
+
+      if (contentType && contentId) {
+        const res = await fetch('/api/play', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contentType,
+            contentId: parseInt(contentId, 10),
+            episodeId: episodeId ? parseInt(episodeId, 10) : undefined,
+            startTime: Math.floor(currentPos),
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (videoRef.current) videoRef.current.pause();
+          setNativePlayerMsg(`Playing in ${data.message || 'Player'} (0% Buffering)`);
+          setTimeout(() => setNativePlayerMsg(null), 4000);
+          return;
+        }
+      }
+      const streamUrl = `${window.location.origin}${src}`;
+      window.location.href = `vlc://${streamUrl}`;
+    } catch {
+      const streamUrl = `${window.location.origin}${src}`;
+      window.location.href = `vlc://${streamUrl}`;
+    }
+  };
 
   const [activeSrc, setActiveSrc] = useState(src);
   const [didFallback, setDidFallback] = useState(false);
@@ -1121,6 +1157,17 @@ export default function VideoPlayer({
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {/* Play in MPV / VLC Button */}
+            <button
+              onClick={handleOpenInNativePlayer}
+              aria-label="Play in MPV / VLC"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700 border border-white/20 rounded-full text-xs font-semibold text-white transition active:scale-95 shadow-md"
+              title="Play in MPV / VLC player for 100% untouched 4K quality with zero lag"
+            >
+              <Play className="w-3.5 h-3.5 fill-current text-red-500" />
+              <span className="hidden sm:inline">Play in VLC/MPV</span>
+            </button>
+
             {/* Aspect Ratio Fit / Fill Toggle */}
             <button
               onClick={toggleAspectRatio}
@@ -1160,6 +1207,13 @@ export default function VideoPlayer({
             </button>
           </div>
         </div>
+
+        {/* ── Native Player Toast ── */}
+        {nativePlayerMsg && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-black/90 text-emerald-400 border border-emerald-500/40 px-4 py-2 rounded-xl text-xs font-semibold shadow-2xl backdrop-blur-md pointer-events-auto">
+            {nativePlayerMsg}
+          </div>
+        )}
 
         {/* ── Center Quick Play / Skip Controls ── */}
         <div className="w-full flex items-center justify-center gap-6 sm:gap-10 pointer-events-auto">

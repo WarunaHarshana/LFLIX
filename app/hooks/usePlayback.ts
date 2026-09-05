@@ -35,24 +35,24 @@ export function usePlayback(
 
 
   // Detect if client should use built-in browser player
-  // (Mobile, tablets, Smart TVs, consoles, touch devices, and any remote Wi-Fi connection)
+  // (Mobile phones, tablets, Smart TVs, consoles, touch devices, or when forced by user)
   const isMobile = useCallback(() => {
     if (typeof window === 'undefined') return false;
     if (forceBrowserPlayer) return true;
-
-    const hostname = window.location.hostname;
-    const isRemote = hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '::1';
-    if (isRemote) return true;
 
     const ua = navigator.userAgent;
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
     const isIPad = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
     const isTV = /SmartTV|AppleTV|HbbTV|NetCast|WebOS.+TV|Tizen.+TV|GoogleTV|PlayStation|Xbox|Nintendo/i.test(ua);
-    // Note: Windows desktops/laptops with touchscreens or pens should NOT be identified as mobile
-    // when running locally, allowing desktop VLC / native player unless forced.
+    // Note: Windows desktops/laptops with touchscreens or pens should NOT be identified as mobile.
     const isTouch = !/Windows NT/i.test(ua) && ((navigator.maxTouchPoints && navigator.maxTouchPoints > 0) || ('ontouchstart' in window));
 
-    return isMobileDevice || isIPad || isTV || isTouch;
+    // Mobile phones, tablets, TVs, and touch devices always use built-in browser player
+    if (isMobileDevice || isIPad || isTV || isTouch) return true;
+
+    // Desktop PCs (Windows, Mac, Linux) default to native MPV / VLC player for 100% 4K quality,
+    // or browser player if forceBrowserPlayer is toggled on in the top navigation.
+    return false;
   }, [forceBrowserPlayer]);
 
   // Play file - uses secure ID-based lookup instead of filePath
