@@ -1,8 +1,34 @@
 import type { NextConfig } from "next";
+import os from "os";
+
+function getLanDevOrigins(): string[] {
+  const origins = new Set<string>([
+    '192.168.*.*',
+    '10.*.*.*',
+    '172.*.*.*',
+    '*.local',
+    'localhost',
+    '127.0.0.1',
+  ]);
+  try {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const net of interfaces[name] || []) {
+        if (net.family === 'IPv4' && !net.internal) {
+          origins.add(net.address);
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return Array.from(origins);
+}
 
 const isExport = process.env.NEXT_EXPORT === '1';
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: getLanDevOrigins(),
   // Static export for mobile app (Capacitor)
   // Set NEXT_EXPORT=1 to build static files, otherwise normal build for web
   output: isExport ? 'export' : undefined,

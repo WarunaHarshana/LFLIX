@@ -16,12 +16,21 @@ export function usePlayback(
   // HDR display detection (live — updates when moving between monitors)
   const [hdrDisplaySupported, setHdrDisplaySupported] = useState(false);
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(dynamic-range: high)');
-    setHdrDisplaySupported(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setHdrDisplaySupported(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    try {
+      const mq = window.matchMedia('(dynamic-range: high)');
+      setHdrDisplaySupported(!!mq?.matches);
+      const handler = (e: MediaQueryListEvent | MediaQueryList) => setHdrDisplaySupported(!!e.matches);
+      if (typeof mq?.addEventListener === 'function') {
+        mq.addEventListener('change', handler as EventListener);
+        return () => mq.removeEventListener('change', handler as EventListener);
+      } else if (typeof (mq as any)?.addListener === 'function') {
+        (mq as any).addListener(handler);
+        return () => (mq as any).removeListener(handler);
+      }
+    } catch {
+      // Ignore errors on devices/browsers that don't support dynamic-range media queries
+    }
   }, []);
 
   // Play Choice Modal (for mobile)

@@ -55,6 +55,14 @@ function applySecurityHeaders(response: NextResponse, request: NextRequest): Nex
 }
 
 export async function middleware(request: NextRequest) {
+  // Never touch Next.js internals, HMR endpoints, or WebSocket upgrades
+  if (
+    request.nextUrl.pathname.startsWith('/_next') ||
+    request.headers.get('upgrade')?.toLowerCase() === 'websocket'
+  ) {
+    return NextResponse.next();
+  }
+
   const allowedOrigin = getAllowedOrigin(request);
 
   // Create base response

@@ -98,14 +98,22 @@ export default function DetailTabNav({
   const hdrDisplaySupported = hdrDisplaySupportedProp ?? internalHdrDisplaySupported;
 
   useEffect(() => {
-    if (hdrDisplaySupportedProp != null || typeof window === 'undefined') return;
+    if (hdrDisplaySupportedProp != null || typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
 
-    const mq = window.matchMedia('(dynamic-range: high)');
-    setInternalHdrDisplaySupported(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setInternalHdrDisplaySupported(e.matches);
-    mq.addEventListener('change', handler);
-
-    return () => mq.removeEventListener('change', handler);
+    try {
+      const mq = window.matchMedia('(dynamic-range: high)');
+      setInternalHdrDisplaySupported(!!mq?.matches);
+      const handler = (e: MediaQueryListEvent | MediaQueryList) => setInternalHdrDisplaySupported(!!e.matches);
+      if (typeof mq?.addEventListener === 'function') {
+        mq.addEventListener('change', handler as EventListener);
+        return () => mq.removeEventListener('change', handler as EventListener);
+      } else if (typeof (mq as any)?.addListener === 'function') {
+        (mq as any).addListener(handler);
+        return () => (mq as any).removeListener(handler);
+      }
+    } catch {
+      // Ignore errors on devices/browsers that don't support dynamic-range media queries
+    }
   }, [hdrDisplaySupportedProp]);
 
   useEffect(() => {
