@@ -58,7 +58,7 @@ export function findFFprobe(): string {
  * transcode path when the hardware is actually usable.
  */
 const HW_ENCODER_CANDIDATES = [
-  { name: 'h264_nvenc', args: ['-preset', 'p4', '-rc', 'vbr', '-cq', '23'] },
+  { name: 'h264_nvenc', args: ['-preset', 'p1', '-tune', 'zerolatency'] },
   { name: 'h264_qsv', args: ['-preset', 'veryfast', '-global_quality', '23'] },
   { name: 'h264_amf', args: ['-quality', 'speed', '-rc', 'cqp', '-qp_i', '23', '-qp_p', '23'] },
   { name: 'h264_videotoolbox', args: ['-q:v', '55'] },
@@ -66,7 +66,7 @@ const HW_ENCODER_CANDIDATES = [
 
 const SOFTWARE_ENCODER = {
   name: 'libx264',
-  args: ['-preset', 'veryfast', '-crf', '23', '-profile:v', 'high', '-level', '4.1'],
+  args: ['-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '22', '-threads', '0'],
 };
 
 type EncoderChoice = { name: string; args: string[] };

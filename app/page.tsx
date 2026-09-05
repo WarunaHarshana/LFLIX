@@ -20,10 +20,9 @@ import { useHero } from './hooks/useHero';
 import { useDownloads } from './hooks/useDownloads';
 
 // Components — always visible or lightweight (static imports)
-import ContinueWatching from './components/ContinueWatching';
 import GenreFilter from './components/GenreFilter';
 import EmptyState from './components/EmptyState';
-import { HeroSkeleton, CardGridSkeleton, ContinueWatchingSkeleton } from './components/LoadingStates';
+import { HeroSkeleton, CardGridSkeleton } from './components/LoadingStates';
 import FolderManager from './components/FolderManager';
 import LoginScreen from './components/LoginScreen';
 import SetupWizard from './components/SetupWizard';
@@ -67,7 +66,7 @@ export default function Home() {
     displayPrefs, updateDisplayPref,
     fetchLibrary, handleScan, getFilteredLibrary,
   } = useLibrary(showToast);
-  const { continueWatching, fetchContinueWatching } = useContinueWatching();
+  const { fetchContinueWatching } = useContinueWatching();
   const iptv = useIPTV();
   const { activeDownloads, showDownloads, setShowDownloads } = useDownloads();
   const playback = usePlayback(library, showToast);
@@ -420,7 +419,6 @@ export default function Home() {
         <>
           <HeroSkeleton />
           <div className="px-12 pb-20 -mt-20 relative z-20">
-            <ContinueWatchingSkeleton />
             <CardGridSkeleton count={16} />
           </div>
         </>
@@ -444,43 +442,30 @@ export default function Home() {
             />
           )}
 
-          {/* Continue Watching */}
-          <div className="-mt-20 relative z-20">
-            <ContinueWatching
-              items={continueWatching}
-              onPlay={(filePath, startTime) => {
-                const movie = library.find(m => m.type === 'movie' && m.filePath === filePath);
-                if (movie) playback.playFile('movie', movie.id, undefined, startTime);
-              }}
-              onOpenShow={(showId) => {
-                const show = library.find(l => l.type === 'show' && l.id === showId);
-                if (show) openShow(show);
-              }}
+          <div className="-mt-16 sm:-mt-20 relative z-20">
+            {/* Genre Filter */}
+            {genres.length > 0 && (
+              <GenreFilter genres={genres} selectedGenre={selectedGenre} onSelect={setSelectedGenre} />
+            )}
+
+            {/* Content Grid */}
+            <LibraryGrid
+              filteredLibrary={filteredLibrary}
+              activeTab={activeTab}
+              selectedGenre={selectedGenre}
+              languages={languages}
+              selectedLanguage={selectedLanguage}
+              onLanguageSelect={setSelectedLanguage}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+              onGenreClear={() => setSelectedGenre(null)}
+              focusedIndex={focusedIndex}
+              displayPrefs={displayPrefs}
+              onDisplayPrefChange={updateDisplayPref}
+              onCardClick={(item) => setSelectedDetail(item)}
+              onContextMenu={(e, item) => setContextMenu({ x: e.clientX, y: e.clientY, item })}
             />
           </div>
-
-          {/* Genre Filter */}
-          {genres.length > 0 && (
-            <GenreFilter genres={genres} selectedGenre={selectedGenre} onSelect={setSelectedGenre} />
-          )}
-
-          {/* Content Grid */}
-          <LibraryGrid
-            filteredLibrary={filteredLibrary}
-            activeTab={activeTab}
-            selectedGenre={selectedGenre}
-            languages={languages}
-            selectedLanguage={selectedLanguage}
-            onLanguageSelect={setSelectedLanguage}
-            sortBy={sortBy}
-            onSortChange={setSortBy}
-            onGenreClear={() => setSelectedGenre(null)}
-            focusedIndex={focusedIndex}
-            displayPrefs={displayPrefs}
-            onDisplayPrefChange={updateDisplayPref}
-            onCardClick={(item) => setSelectedDetail(item)}
-            onContextMenu={(e, item) => setContextMenu({ x: e.clientX, y: e.clientY, item })}
-          />
         </>
       ))}
 

@@ -50,19 +50,21 @@ function buildHlsConfig(src: string): Record<string, unknown> {
   if (local) {
     return {
       enableWorker: true,
-      maxBufferLength: 120,
-      maxMaxBufferLength: 240,
-      maxBufferSize: 120 * 1000 * 1000,
-      backBufferLength: 60,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+      maxBufferSize: 60 * 1000 * 1000,
+      backBufferLength: 30,
+      startFragPrefetch: true,
+      lowLatencyMode: false,
       xhrSetup: (xhr: XMLHttpRequest) => {
         xhr.withCredentials = true;
       },
       fragLoadPolicy: {
         default: {
-          maxTimeToFirstByteMs: 30_000,
-          maxLoadTimeMs: 120_000,
-          timeoutRetry: { maxNumRetry: 4, retryDelayMs: 500, maxRetryDelayMs: 4000 },
-          errorRetry: { maxNumRetry: 6, retryDelayMs: 500, maxRetryDelayMs: 4000 },
+          maxTimeToFirstByteMs: 15_000,
+          maxLoadTimeMs: 60_000,
+          timeoutRetry: { maxNumRetry: 4, retryDelayMs: 500, maxRetryDelayMs: 3000 },
+          errorRetry: { maxNumRetry: 6, retryDelayMs: 500, maxRetryDelayMs: 3000 },
         },
       },
     };
