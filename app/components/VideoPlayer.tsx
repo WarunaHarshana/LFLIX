@@ -21,6 +21,11 @@ import {
   PictureInPicture2,
   RectangleHorizontal,
   RefreshCw,
+  ExternalLink,
+  Copy,
+  Tv,
+  Smartphone,
+  Share2,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorVideoPlayer } from 'capacitor-video-player';
@@ -209,8 +214,70 @@ export default function VideoPlayer({
   const [pipSupported, setPipSupported] = useState(false);
   const [hdrSupported, setHdrSupported] = useState<boolean | null>(null);
   const [nativePlayerMsg, setNativePlayerMsg] = useState<string | null>(null);
+  const [showExternalPlayerModal, setShowExternalPlayerModal] = useState(false);
+  const [copiedStreamLink, setCopiedStreamLink] = useState(false);
+  const [isMobileClient, setIsMobileClient] = useState(false);
+  const [isAndroidClient, setIsAndroidClient] = useState(false);
+  const [isIOSClient, setIsIOSClient] = useState(false);
 
-  const handleOpenInNativePlayer = async () => {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const ua = navigator.userAgent;
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const isIPad = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    const isTouch = !/Windows NT/i.test(ua) && ((navigator.maxTouchPoints && navigator.maxTouchPoints > 0) || ('ontouchstart' in window));
+    setIsMobileClient(isMobileDevice || isIPad || isTouch);
+    setIsAndroidClient(/Android/i.test(ua));
+    setIsIOSClient(/iPhone|iPad|iPod/i.test(ua) || isIPad);
+  }, []);
+
+  // Resolves the full authenticated direct HTTP stream URL for external players
+  const getDirectStreamUrl = useCallback(async (): Promise<string> => {
+    try {
+      const parsedUrl = new URL(src, window.location.origin);
+      const contentType = parsedUrl.searchParams.get('contentType');
+      const contentId = parsedUrl.searchParams.get('contentId');
+      const episodeId = parsedUrl.searchParams.get('episodeId');
+      let token = parsedUrl.searchParams.get('token');
+
+      // If token is missing, generate a 24-hour token so external players (VLC, MX Player)
+      // bypass browser cookie requirements in middleware.ts
+      if (!token && contentType && contentId) {
+        try {
+          const res = await fetch('/api/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              contentType,
+              contentId: parseInt(contentId, 10),
+              episodeId: episodeId ? parseInt(episodeId, 10) : undefined,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            token = data.token || null;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const params = new URLSearchParams();
+      if (token) params.set('token', token);
+      if (contentType) params.set('contentType', contentType);
+      if (contentId) params.set('contentId', contentId);
+      if (episodeId) params.set('episodeId', episodeId);
+
+      const qs = params.toString();
+      return `${window.location.origin}/api/stream${qs ? `?${qs}` : ''}`;
+    } catch {
+      return `${window.location.origin}${src}`;
+    }
+  }, [src]);
+
+  // Plays on the PC screen (calls host /api/play)
+  const handlePlayOnHostPc = async () => {
     try {
       const parsedUrl = new URL(src, window.location.origin);
       const contentType = parsedUrl.searchParams.get('contentType');
@@ -222,6 +289,7 @@ export default function VideoPlayer({
         const res = await fetch('/api/play', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
           body: JSON.stringify({
             contentType,
             contentId: parseInt(contentId, 10),
@@ -232,16 +300,109 @@ export default function VideoPlayer({
         const data = await res.json();
         if (res.ok) {
           if (videoRef.current) videoRef.current.pause();
-          setNativePlayerMsg(`Playing in ${data.message || 'Player'} (0% Buffering)`);
+          setNativePlayerMsg(`Playing on Host PC (${data.message || 'Player'})`);
           setTimeout(() => setNativePlayerMsg(null), 4000);
+          setShowExternalPlayerModal(false);
           return;
+        } else {
+          setNativePlayerMsg(`Failed to launch on PC: ${data.error || 'Error'}`);
+          setTimeout(() => setNativePlayerMsg(null), 4000);
         }
       }
-      const streamUrl = `${window.location.origin}${src}`;
-      window.location.href = `vlc://${streamUrl}`;
+    } catch (err: any) {
+      setNativePlayerMsg(`Error: ${err?.message || 'Failed to play'}`);
+      setTimeout(() => setNativePlayerMsg(null), 4000);
+    }
+  };
+
+  // Opens mobile VLC via custom intent or URL scheme
+  const handleOpenMobileVlc = async () => {
+    try {
+      const streamUrl = await getDirectStreamUrl();
+      if (videoRef.current) videoRef.current.pause();
+
+      const hostAndPath = streamUrl.replace(/^https?:\/\//, '');
+      if (isAndroidClient) {
+        const intentUrl = `intent://${hostAndPath}#Intent;scheme=http;type=video/*;package=org.videolan.vlc;action=android.intent.action.VIEW;end`;
+        window.location.href = intentUrl;
+      } else if (isIOSClient) {
+        window.location.href = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(streamUrl)}`;
+      } else {
+        window.location.href = `vlc://${streamUrl}`;
+      }
+      setNativePlayerMsg('Opening in VLC Mobile...');
+      setTimeout(() => setNativePlayerMsg(null), 4000);
+      setShowExternalPlayerModal(false);
     } catch {
-      const streamUrl = `${window.location.origin}${src}`;
-      window.location.href = `vlc://${streamUrl}`;
+      setNativePlayerMsg('Failed to open VLC');
+      setTimeout(() => setNativePlayerMsg(null), 4000);
+    }
+  };
+
+  // Opens MX Player on Android
+  const handleOpenMobileMxPlayer = async () => {
+    try {
+      const streamUrl = await getDirectStreamUrl();
+      if (videoRef.current) videoRef.current.pause();
+
+      const hostAndPath = streamUrl.replace(/^https?:\/\//, '');
+      const intentUrl = `intent://${hostAndPath}#Intent;scheme=http;type=video/*;package=com.mxtech.videoplayer.ad;action=android.intent.action.VIEW;end`;
+      window.location.href = intentUrl;
+
+      setNativePlayerMsg('Opening in MX Player...');
+      setTimeout(() => setNativePlayerMsg(null), 4000);
+      setShowExternalPlayerModal(false);
+    } catch {
+      setNativePlayerMsg('Failed to open MX Player');
+      setTimeout(() => setNativePlayerMsg(null), 4000);
+    }
+  };
+
+  // Opens native Android app chooser dialog
+  const handleOpenAnyPlayer = async () => {
+    try {
+      const streamUrl = await getDirectStreamUrl();
+      if (videoRef.current) videoRef.current.pause();
+
+      if (isAndroidClient) {
+        const hostAndPath = streamUrl.replace(/^https?:\/\//, '');
+        const intentUrl = `intent://${hostAndPath}#Intent;scheme=http;type=video/*;action=android.intent.action.VIEW;end`;
+        window.location.href = intentUrl;
+      } else {
+        window.open(streamUrl, '_blank');
+      }
+      setShowExternalPlayerModal(false);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Copies direct stream link to clipboard for VLC, Infuse, Kodi, or casting
+  const handleCopyStreamLink = async () => {
+    try {
+      const streamUrl = await getDirectStreamUrl();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(streamUrl);
+      } else {
+        window.prompt('Copy stream URL:', streamUrl);
+      }
+      setCopiedStreamLink(true);
+      setNativePlayerMsg('Stream link copied! Paste into VLC Network Stream');
+      setTimeout(() => {
+        setCopiedStreamLink(false);
+        setNativePlayerMsg(null);
+      }, 4000);
+    } catch {
+      const streamUrl = await getDirectStreamUrl();
+      window.prompt('Copy stream URL:', streamUrl);
+    }
+  };
+
+  const handleExternalPlayerButtonClick = (e: React.MouseEvent) => {
+    if (isMobileClient || e.shiftKey) {
+      setShowExternalPlayerModal(true);
+    } else {
+      handlePlayOnHostPc();
     }
   };
 
@@ -1157,15 +1318,28 @@ export default function VideoPlayer({
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-            {/* Play in MPV / VLC Button */}
+            {/* Play in MPV / VLC or External App Button */}
             <button
-              onClick={handleOpenInNativePlayer}
-              aria-label="Play in MPV / VLC"
+              onClick={handleExternalPlayerButtonClick}
+              aria-label={isMobileClient ? 'External Player' : 'Play in MPV / VLC'}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700 border border-white/20 rounded-full text-xs font-semibold text-white transition active:scale-95 shadow-md"
-              title="Play in MPV / VLC player for 100% untouched 4K quality with zero lag"
+              title={
+                isMobileClient
+                  ? 'Play in VLC or external mobile player (0% server buffering)'
+                  : 'Play in MPV / VLC player for 100% untouched 4K quality with zero lag (Shift+Click for stream options)'
+              }
             >
-              <Play className="w-3.5 h-3.5 fill-current text-red-500" />
-              <span className="hidden sm:inline">Play in VLC/MPV</span>
+              {isMobileClient ? (
+                <>
+                  <ExternalLink className="w-3.5 h-3.5 text-red-500" />
+                  <span className="text-xs">External App</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current text-red-500" />
+                  <span className="hidden sm:inline">Play in VLC/MPV</span>
+                </>
+              )}
             </button>
 
             {/* Aspect Ratio Fit / Fill Toggle */}
@@ -1606,6 +1780,154 @@ export default function VideoPlayer({
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────── External Mobile / Desktop Player Modal ──────────────── */}
+      {showExternalPlayerModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
+          onClick={() => setShowExternalPlayerModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-neutral-900 border border-neutral-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-neutral-800 bg-neutral-950/60">
+              <div className="flex items-center gap-2.5">
+                <ExternalLink className="w-5 h-5 text-red-500" />
+                <div>
+                  <h3 className="font-bold text-white text-base leading-tight">External Player Options</h3>
+                  <p className="text-[11px] text-neutral-400">
+                    {isMobileClient
+                      ? 'Play in mobile apps with 0% server lag'
+                      : 'Play options for your local network'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowExternalPlayerModal(false)}
+                className="p-1.5 hover:bg-neutral-800 rounded-full text-neutral-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-2.5 overflow-y-auto">
+              {/* Option 1: Open in VLC */}
+              <button
+                onClick={handleOpenMobileVlc}
+                className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-700/90 border border-white/10 hover:border-orange-500/50 rounded-xl flex items-center gap-3.5 transition group text-left"
+              >
+                <div className="p-2.5 bg-orange-500/15 text-orange-400 rounded-xl group-hover:scale-105 transition">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white text-sm">Play in VLC (Mobile)</span>
+                    <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] font-bold rounded">
+                      Fastest
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-400 truncate">
+                    Direct hardware decoding on phone with 0% server CPU load
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: MX Player (Android only) */}
+              {isAndroidClient && (
+                <button
+                  onClick={handleOpenMobileMxPlayer}
+                  className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-700/90 border border-white/10 hover:border-blue-500/50 rounded-xl flex items-center gap-3.5 transition group text-left"
+                >
+                  <div className="p-2.5 bg-blue-500/15 text-blue-400 rounded-xl group-hover:scale-105 transition">
+                    <Play className="w-5 h-5 fill-current" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white text-sm">Play in MX Player</span>
+                      <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] font-bold rounded">
+                        HW+
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-400 truncate">
+                      Launch MX Player app with hardware acceleration
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {/* Option 3: Open with Any Video App */}
+              <button
+                onClick={handleOpenAnyPlayer}
+                className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-700/90 border border-white/10 hover:border-emerald-500/50 rounded-xl flex items-center gap-3.5 transition group text-left"
+              >
+                <div className="p-2.5 bg-emerald-500/15 text-emerald-400 rounded-xl group-hover:scale-105 transition">
+                  <Share2 className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-white text-sm">
+                    {isAndroidClient ? 'Open with Any App (Chooser)' : 'Open Direct Stream'}
+                  </div>
+                  <p className="text-xs text-neutral-400 truncate">
+                    {isAndroidClient
+                      ? 'Pick from installed video players (Nova, Just Player, etc.)'
+                      : 'Open direct media stream in browser tab'}
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 4: Copy Direct Stream URL */}
+              <button
+                onClick={handleCopyStreamLink}
+                className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-700/90 border border-white/10 hover:border-purple-500/50 rounded-xl flex items-center gap-3.5 transition group text-left"
+              >
+                <div className="p-2.5 bg-purple-500/15 text-purple-400 rounded-xl group-hover:scale-105 transition">
+                  {copiedStreamLink ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white text-sm">
+                      {copiedStreamLink ? 'Stream URL Copied!' : 'Copy Stream Link'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-400 truncate">
+                    Paste into VLC &gt; Network Stream, Infuse, Kodi, or TV cast app
+                  </p>
+                </div>
+              </button>
+
+              <div className="pt-2 pb-1">
+                <div className="border-t border-neutral-800" />
+              </div>
+
+              {/* Option 5: Remote Play on Host PC Screen */}
+              <button
+                onClick={handlePlayOnHostPc}
+                className="w-full p-3.5 bg-neutral-850 hover:bg-neutral-800 border border-white/10 hover:border-red-500/40 rounded-xl flex items-center gap-3.5 transition group text-left"
+              >
+                <div className="p-2.5 bg-red-500/15 text-red-400 rounded-xl group-hover:scale-105 transition">
+                  <Tv className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white text-sm">Play on Host PC Screen</span>
+                    <span className="px-1.5 py-0.5 bg-neutral-800 text-neutral-400 text-[10px] font-medium rounded">
+                      Remote Control
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-400 truncate">
+                    Start playback on the host computer / TV monitor (MPV/VLC)
+                  </p>
+                </div>
+              </button>
             </div>
           </div>
         </div>

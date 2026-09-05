@@ -19,9 +19,9 @@ function getPlayerPath(): string {
 }
 
 // Detect player type from executable path
-type PlayerType = 'vlc' | 'potplayer' | 'mpc' | 'mpv' | 'generic';
+export type PlayerType = 'vlc' | 'potplayer' | 'mpc' | 'mpv' | 'generic';
 
-function detectPlayerType(exePath: string): PlayerType {
+export function detectPlayerType(exePath: string): PlayerType {
   const lowerPath = exePath.toLowerCase();
   if (lowerPath.includes('vlc')) return 'vlc';
   if (lowerPath.includes('potplayer') || lowerPath.includes('potpayer')) return 'potplayer';
@@ -31,10 +31,10 @@ function detectPlayerType(exePath: string): PlayerType {
 }
 
 // Build player-specific arguments
-function buildPlayerArgs(playerType: PlayerType, filePath: string, startTime?: number): string[] {
+export function buildPlayerArgs(playerType: PlayerType, filePath: string, startTime?: number): string[] {
   switch (playerType) {
     case 'vlc': {
-      const args = ['--fullscreen'];
+      const args = ['--fullscreen', '--video-on-top'];
       if (startTime && startTime > 0) {
         args.push(`--start-time=${Math.floor(startTime)}`);
       }
@@ -63,7 +63,7 @@ function buildPlayerArgs(playerType: PlayerType, filePath: string, startTime?: n
       return args;
     }
     case 'mpv': {
-      const args = ['--fullscreen'];
+      const args = ['--fullscreen', '--force-window=yes', '--focus-on=open', '--ontop'];
       if (startTime && startTime > 0) {
         args.push(`--start=${Math.floor(startTime)}`);
       }
@@ -175,11 +175,25 @@ export async function POST(req: Request) {
     const playerArgs = buildPlayerArgs(playerType, mediaPath, safeStartTime);
 
     // Spawn player detached so it doesn't block the server
-    const child = spawn(playerPath, playerArgs, {
-      detached: true,
-      stdio: 'ignore'
-    });
-    child.unref();
+    if (process.platform === 'win32') {
+      // On Windows, background Node processes/services can inherit SW_HIDE or lack desktop focus.
+      // Launching via `cmd.exe /c start ""` invokes ShellExecuteEx with SW_SHOWNORMAL,
+      // guaranteeing the media player window visibly appears in the foreground on the active desktop.
+      const cmdLine = `start "" "${playerPath}" ${playerArgs.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`;
+      const child = spawn('cmd.exe', ['/c', cmdLine], {
+        windowsVerbatimArguments: true,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: false,
+      });
+      child.unref();
+    } else {
+      const child = spawn(playerPath, playerArgs, {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+    }
 
     const playerNames: Record<PlayerType, string> = {
       vlc: 'VLC',
