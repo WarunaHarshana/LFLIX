@@ -1019,20 +1019,32 @@ export default function VideoPlayer({
 
       switch (e.key) {
         case ' ':
+        case 'Enter':
         case 'k':
         case 'K':
+        case 'MediaPlayPause':
           e.preventDefault();
           togglePlayPause();
+          break;
+        case 'MediaPlay':
+          e.preventDefault();
+          if (videoRef.current && videoRef.current.paused) videoRef.current.play();
+          break;
+        case 'MediaPause':
+          e.preventDefault();
+          if (videoRef.current && !videoRef.current.paused) videoRef.current.pause();
           break;
         case 'ArrowLeft':
         case 'j':
         case 'J':
+        case 'MediaRewind':
           e.preventDefault();
           seekBy(-10);
           break;
         case 'ArrowRight':
         case 'l':
         case 'L':
+        case 'MediaFastForward':
           e.preventDefault();
           seekBy(10);
           break;

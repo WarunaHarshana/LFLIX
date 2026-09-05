@@ -53,6 +53,7 @@ const DlnaModal = dynamic(() => import('./components/DlnaModal'), { ssr: false }
 const MobileConnectModal = dynamic(() => import('./components/MobileConnectModal'), { ssr: false });
 const DownloadsPanel = dynamic(() => import('./components/DownloadsPanel'), { ssr: false });
 const FixMatchModal = dynamic(() => import('./components/FixMatchModal'), { ssr: false });
+const PlayChoiceModal = dynamic(() => import('./components/PlayChoiceModal'), { ssr: false });
 
 export default function Home() {
   // ──────────────────── Hooks ────────────────────
@@ -679,6 +680,37 @@ export default function Home() {
           videoCodec={playback.videoPlayer.videoCodec}
           fileName={playback.videoPlayer.fileName}
           onClose={() => playback.setVideoPlayer(null)}
+        />
+      )}
+
+      {/* Play Choice Modal (Choose destination before browser playback) */}
+      {playback.playChoiceItem && (
+        <PlayChoiceModal
+          item={playback.playChoiceItem}
+          onClose={() => playback.setPlayChoiceItem(null)}
+          onPlayInBrowser={() => playback.launchBrowserPlayer(playback.playChoiceItem!)}
+          onPlayOnHostPc={async () => {
+            if (!playback.playChoiceItem) return;
+            const { contentType, contentId, episodeId, startTime } = playback.playChoiceItem;
+            try {
+              const res = await fetch('/api/play', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ contentType, contentId, episodeId, startTime })
+              });
+              const data = await res.json();
+              if (res.ok) {
+                showToast(`Playing on Host PC (${data.message || 'Player'})`, 'success');
+              } else {
+                showToast(data.error || 'Failed to launch player on PC', 'error');
+              }
+            } catch (e: any) {
+              showToast('Error: ' + e.message, 'error');
+            }
+          }}
+          onOpenDlna={() => setShowDlna(true)}
+          showToast={showToast}
         />
       )}
 

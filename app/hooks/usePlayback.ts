@@ -3,12 +3,42 @@ import { Capacitor } from '@capacitor/core';
 import { apiUrl } from '@/lib/mobileConfig';
 import type { ContentItem } from '@/app/types';
 
+export type PlayChoiceItem = {
+  contentType: 'movie' | 'show';
+  contentId: number;
+  episodeId?: number;
+  startTime?: number;
+  title: string;
+  isHDR?: boolean;
+  audioCodec?: string | null;
+  videoCodec?: string | null;
+  fileName?: string | null;
+  streamUrl: string;
+  token?: string;
+};
+
 export function usePlayback(
   library: ContentItem[],
   showToast: (message: string, type: 'success' | 'error') => void
 ) {
   // Video Player (for mobile streaming)
   const [videoPlayer, setVideoPlayer] = useState<{ src: string; title: string; initialTime?: number; isHDR?: boolean; audioCodec?: string | null; videoCodec?: string | null; fileName?: string | null } | null>(null);
+
+  // Play Choice Modal (popped before starting playback on mobile / casting)
+  const [playChoiceItem, setPlayChoiceItem] = useState<PlayChoiceItem | null>(null);
+
+  const launchBrowserPlayer = useCallback((item: PlayChoiceItem) => {
+    setVideoPlayer({
+      src: item.streamUrl,
+      title: item.title,
+      initialTime: item.startTime,
+      isHDR: item.isHDR,
+      audioCodec: item.audioCodec,
+      videoCodec: item.videoCodec,
+      fileName: item.fileName,
+    });
+    setPlayChoiceItem(null);
+  }, []);
 
   // Force browser player (for TVs without VLC)
   const [forceBrowserPlayer, setForceBrowserPlayer] = useState(false);
@@ -146,15 +176,19 @@ export function usePlayback(
         });
         const streamUrl = `/api/stream?${params.toString()}`;
 
-        // Directly launch the built-in video player
-        setVideoPlayer({
-          src: streamUrl,
+        // Pop up the choice modal so user chooses where to play (Browser, VLC Mobile, Host PC, Smart TV DLNA)
+        setPlayChoiceItem({
+          contentType,
+          contentId,
+          episodeId,
+          startTime,
           title,
-          initialTime: startTime,
           isHDR,
           audioCodec,
           videoCodec,
-          fileName
+          fileName,
+          streamUrl,
+          token,
         });
         return;
       }
@@ -183,6 +217,8 @@ export function usePlayback(
 
   return {
     videoPlayer, setVideoPlayer,
+    playChoiceItem, setPlayChoiceItem,
+    launchBrowserPlayer,
     forceBrowserPlayer, setForceBrowserPlayer,
     hdrDisplaySupported,
     isMobile,
