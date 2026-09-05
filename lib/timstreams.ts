@@ -199,6 +199,11 @@ async function fetchWithFallback(endpoint: string, options: RequestInit = {}): P
         }
       });
       if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          lastError = new Error(`${url} returned HTML (Cloudflare challenge or redirect) instead of JSON`);
+          continue;
+        }
         return res;
       }
       lastError = new Error(`Request to ${url} returned status ${res.status}`);
