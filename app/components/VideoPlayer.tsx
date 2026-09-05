@@ -590,7 +590,7 @@ export default function VideoPlayer({
     if (!listUrl) return;
 
     let cancelled = false;
-    fetch(listUrl)
+    fetch(listUrl, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : { tracks: [], audioTracks: [] }))
       .then((data) => {
         if (cancelled) return;
@@ -620,6 +620,34 @@ export default function VideoPlayer({
       cancelled = true;
     };
   }, [src, isNative, subtitles, buildApiUrl]);
+
+  // Synchronize text tracks mode with currentSubtitleTrack state whenever tracks load or selection changes
+  useEffect(() => {
+    if (isNative) return;
+    const video = videoRef.current;
+    if (!video || subtitleTracks.length === 0) return;
+
+    const trackEls = video.querySelectorAll('track');
+    trackEls.forEach((el, i) => {
+      if (el.track) {
+        el.track.mode = i === currentSubtitleTrack ? 'showing' : 'disabled';
+      }
+    });
+
+    for (let i = 0; i < video.textTracks.length; i++) {
+      const track = video.textTracks[i];
+      if (currentSubtitleTrack === -1) {
+        track.mode = 'disabled';
+      } else if (currentSubtitleTrack < subtitleTracks.length) {
+        const target = subtitleTracks[currentSubtitleTrack];
+        if (i === currentSubtitleTrack || (target && track.label === target.label)) {
+          track.mode = 'showing';
+        } else {
+          track.mode = 'disabled';
+        }
+      }
+    }
+  }, [subtitleTracks, currentSubtitleTrack, isNative]);
 
   // Detect PiP and HDR capability
   useEffect(() => {
@@ -1005,14 +1033,27 @@ export default function VideoPlayer({
   const changeSubtitleTrack = (index: number) => {
     const video = videoRef.current;
     if (!video) return;
-    const targetId = `lflix-sub-${index}`;
 
+    // 1. Enable/disable HTMLTrackElements directly
+    const trackEls = video.querySelectorAll('track');
+    trackEls.forEach((el, i) => {
+      if (el.track) {
+        el.track.mode = i === index ? 'showing' : 'disabled';
+      }
+    });
+
+    // 2. Enable/disable video.textTracks
     for (let i = 0; i < video.textTracks.length; i++) {
       const track = video.textTracks[i];
-      if (index >= 0 && track.id === targetId) {
-        track.mode = 'showing';
-      } else {
+      if (index === -1) {
         track.mode = 'disabled';
+      } else if (index < subtitleTracks.length) {
+        const target = subtitleTracks[index];
+        if (i === index || (target && track.label === target.label)) {
+          track.mode = 'showing';
+        } else {
+          track.mode = 'disabled';
+        }
       }
     }
     setCurrentSubtitleTrack(index);
@@ -1227,6 +1268,7 @@ export default function VideoPlayer({
       >
         <video
           ref={videoRef}
+          crossOrigin="anonymous"
           src={isHlsSource(activeSrc) ? undefined : activeSrc}
           autoPlay
           playsInline
@@ -1235,7 +1277,7 @@ export default function VideoPlayer({
           } transition-[object-fit] duration-300 pointer-events-none`}
           onError={handleError}
         >
-          {subtitleTracks.map((track) => (
+          {subtitleTracks.map((track, i) => (
             <track
               key={track.id}
               id={`lflix-sub-${track.id}`}
@@ -1243,6 +1285,7 @@ export default function VideoPlayer({
               src={track.url}
               srcLang={(track.language || 'und').slice(0, 3)}
               label={track.label}
+              default={currentSubtitleTrack === i}
             />
           ))}
         </video>
@@ -1384,6 +1427,26 @@ export default function VideoPlayer({
                 className={`w-5 h-5 ${aspectRatio === 'cover' ? 'text-red-500 scale-110' : 'text-neutral-300'}`}
               />
             </button>
+
+            {/* Quick Subtitles Button */}
+            {subtitleTracks.length > 0 && (
+              <button
+                onClick={() => {
+                  setShowSettingsModal(true);
+                  setActiveSettingsTab('subtitles');
+                }}
+                aria-label="Subtitles"
+                className={`p-2 hover:bg-white/15 rounded-full transition active:scale-95 relative ${
+                  currentSubtitleTrack >= 0 ? 'text-red-500' : 'text-neutral-300'
+                }`}
+                title={`Subtitles: ${currentSubtitleTrack >= 0 ? subtitleTracks[currentSubtitleTrack]?.label || 'On' : 'Off'}`}
+              >
+                <Subtitles className="w-5 h-5" />
+                {currentSubtitleTrack >= 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+                )}
+              </button>
+            )}
 
             {/* Audio & Subtitles Settings */}
             <button

@@ -519,3 +519,18 @@ video::-moz-media-controls-fullscreen-button {
   border-radius: 0 !important;
   border: none !important;
 }
+
+/* ──────────────── Subtitle (WebVTT) Cue Styling ──────────────── */
+video::cue {
+  background-color: rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  font-size: 1.15rem;
+  line-height: 1.4;
+  font-weight: 500;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+  white-space: pre-line;
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+

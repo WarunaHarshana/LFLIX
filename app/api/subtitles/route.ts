@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { execFile, spawn } from 'child_process';
 import { findFFmpeg, findFFprobe, resolveMediaFromParams, forwardAuthParams } from '@/lib/ffmpeg';
 import { getSafeErrorMessage } from '@/lib/security';
@@ -58,9 +59,29 @@ function langLabel(code?: string | null): string {
   return LANG_LABELS[c] || code.toUpperCase();
 }
 
+function detectScriptLanguage(filePath: string): string {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(4096);
+    const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
+    fs.closeSync(fd);
+    const sample = buf.toString('utf8', 0, bytesRead);
+    if (/[\u0D80-\u0DFF]/.test(sample)) return 'si'; // Sinhala
+    if (/[\u0B80-\u0BFF]/.test(sample)) return 'ta'; // Tamil
+    if (/[\u0900-\u097F]/.test(sample)) return 'hi'; // Hindi
+    if (/[\u0600-\u06FF]/.test(sample)) return 'ar'; // Arabic
+    if (/[\u4E00-\u9FFF]/.test(sample)) return 'zh'; // Chinese
+    if (/[\u3040-\u30FF]/.test(sample)) return 'ja'; // Japanese
+    if (/[\uAC00-\uD7AF]/.test(sample)) return 'ko'; // Korean
+    if (/[\u0400-\u04FF]/.test(sample)) return 'ru'; // Russian
+  } catch {}
+  return '';
+}
+
 function srtToVtt(srt: string): string {
   let vtt = 'WEBVTT\n\n';
-  const lines = srt.replace(/\r\n/g, '\n').split('\n');
+  const clean = srt.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  const lines = clean.split('\n');
   for (const line of lines) {
     vtt += (line.includes('-->') ? line.replace(/,/g, '.') : line) + '\n';
   }
@@ -151,6 +172,10 @@ function findExternalSubs(videoPath: string): ExternalSub[] {
         }
       }
 
+      if (!lang) {
+        lang = detectScriptLanguage(full);
+      }
+
       found.push({
         file: full,
         lang,
@@ -163,6 +188,8 @@ function findExternalSubs(videoPath: string): ExternalSub[] {
 }
 
 type EmbeddedSub = { streamIndex: number; lang: string; label: string };
+
+const TEXT_SUB_CODECS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text']);
 
 // Probe the container for embedded subtitle streams.
 function findEmbeddedSubs(videoPath: string): Promise<EmbeddedSub[]> {
@@ -179,11 +206,15 @@ function findEmbeddedSubs(videoPath: string): Promise<EmbeddedSub[]> {
         try {
           const data = JSON.parse(stdout);
           const streams = data.streams || [];
-          const subs: EmbeddedSub[] = streams.map((s: any, i: number) => {
+          const subs: EmbeddedSub[] = [];
+          streams.forEach((s: any, i: number) => {
+            const codec = (s.codec_name || '').toLowerCase();
+            // Exclude image/bitmap subtitles (e.g. PGS, VobSub) that cannot be transcoded to WebVTT
+            if (codec && !TEXT_SUB_CODECS.has(codec)) return;
             const lang = s.tags?.language || '';
             const title = s.tags?.title || '';
             const label = title || langLabel(lang) || `Embedded ${i + 1}`;
-            return { streamIndex: i, lang, label: `${label} (embedded)` };
+            subs.push({ streamIndex: i, lang, label: `${label} (embedded)` });
           });
           resolve(subs);
         } catch {
@@ -230,8 +261,48 @@ function findAudioTracks(videoPath: string): Promise<AudioTrackInfo[]> {
   });
 }
 
+const SUB_CACHE_DIR = path.join(process.cwd(), 'data', 'subtitles_cache');
+try {
+  if (!fs.existsSync(SUB_CACHE_DIR)) {
+    fs.mkdirSync(SUB_CACHE_DIR, { recursive: true });
+  }
+} catch {}
+
+const inFlightVtt = new Map<string, Promise<string | null>>();
+
+function getCacheKey(videoPath: string, subStreamIndex: number): string {
+  try {
+    const stat = fs.statSync(videoPath);
+    return crypto
+      .createHash('sha256')
+      .update(`${videoPath}:${subStreamIndex}:${stat.size}:${stat.mtimeMs}`)
+      .digest('hex');
+  } catch {
+    return crypto
+      .createHash('sha256')
+      .update(`${videoPath}:${subStreamIndex}`)
+      .digest('hex');
+  }
+}
+
 function extractEmbeddedVtt(videoPath: string, subStreamIndex: number): Promise<string | null> {
-  return new Promise((resolve) => {
+  const cacheKey = getCacheKey(videoPath, subStreamIndex);
+  const cachedFile = path.join(SUB_CACHE_DIR, `${cacheKey}.vtt`);
+
+  if (fs.existsSync(cachedFile)) {
+    try {
+      const content = fs.readFileSync(cachedFile, 'utf8');
+      if (content.startsWith('WEBVTT')) return Promise.resolve(content);
+    } catch {
+      /* ignore read errors and re-extract */
+    }
+  }
+
+  if (inFlightVtt.has(cacheKey)) {
+    return inFlightVtt.get(cacheKey)!;
+  }
+
+  const extractionPromise = new Promise<string | null>((resolve) => {
     const ff = spawn(findFFmpeg(), [
       '-v', 'error',
       '-i', videoPath,
@@ -239,21 +310,35 @@ function extractEmbeddedVtt(videoPath: string, subStreamIndex: number): Promise<
       '-f', 'webvtt',
       'pipe:1',
     ], { stdio: ['ignore', 'pipe', 'ignore'] });
+
     let out = '';
     let errored = false;
     ff.stdout.on('data', (d) => { out += d.toString(); });
     ff.on('error', () => { errored = true; resolve(null); });
     ff.on('close', (code) => {
-      if (errored) return;
-      resolve(code === 0 && out ? out : null);
+      if (errored || code !== 0 || !out.startsWith('WEBVTT')) {
+        resolve(null);
+        return;
+      }
+      try {
+        fs.writeFileSync(cachedFile, out, 'utf8');
+      } catch {}
+      resolve(out);
     });
+  }).finally(() => {
+    inFlightVtt.delete(cacheKey);
   });
+
+  inFlightVtt.set(cacheKey, extractionPromise);
+  return extractionPromise;
 }
 
 function vttResponse(content: string) {
   return new NextResponse(content, {
     headers: {
       'Content-Type': 'text/vtt; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Cache-Control': 'public, max-age=3600',
     },
   });
@@ -291,6 +376,11 @@ export async function GET(req: Request) {
       const embedded = await findEmbeddedSubs(videoPath);
       const audioTracks = await findAudioTracks(videoPath);
 
+      // Pre-extract the first embedded text subtitle in the background so it is cached immediately
+      if (embedded.length > 0) {
+        extractEmbeddedVtt(videoPath, embedded[0].streamIndex).catch(() => {});
+      }
+
       const tracks = [
         ...external.map((s, i) => ({
           label: s.label,
@@ -306,7 +396,13 @@ export async function GET(req: Request) {
 
       return NextResponse.json(
         { tracks, audioTracks },
-        { headers: { 'Cache-Control': 'public, max-age=300' } },
+        {
+          headers: {
+            'Cache-Control': 'public, max-age=300',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          },
+        },
       );
     }
 

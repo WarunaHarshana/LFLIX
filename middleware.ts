@@ -113,10 +113,11 @@ export async function middleware(request: NextRequest) {
 
   // Check authentication for API routes
   if (request.nextUrl.pathname.startsWith('/api/')) {
-    // Skip auth if token is provided for stream/transcode/m3u8
+    // Skip auth if token is provided for stream/transcode/m3u8/subtitles
     if (
       (request.nextUrl.pathname.startsWith('/api/stream') ||
-       request.nextUrl.pathname.startsWith('/api/transcode')) &&
+       request.nextUrl.pathname.startsWith('/api/transcode') ||
+       request.nextUrl.pathname.startsWith('/api/subtitles')) &&
       request.nextUrl.searchParams.has('token')
     ) {
       return response;

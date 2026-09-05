@@ -77,6 +77,7 @@ describe('VideoPlayer HLS prioritization', () => {
   it('prioritizes hls.js (MSE) over native HLS when Hls.isSupported() is true on Android Chrome', async () => {
     render(
       <VideoPlayer
+        title="DC"
         src='/api/stream?contentType=movie&contentId=628'
         fileName='DC (2026).mkv'
         videoCodec='hevc'
@@ -97,8 +98,9 @@ describe('VideoPlayer HLS prioritization', () => {
 
     const { container } = render(
       <VideoPlayer
+        title="DC"
         src='/api/stream?contentType=movie&contentId=628'
-        fileName='DC (r026).mkv'
+        fileName='DC (2026).mkv'
         videoCodec='hevc'
         audioCodec='eac3'
         onClose={vi.fn()}
@@ -108,7 +110,7 @@ describe('VideoPlayer HLS prioritization', () => {
     await waitFor(() => {
       const video = container.querySelector('video');
       expect(video).toBeTruthy();
-      expect(video.src).toContain('/api/transcode');
+      expect(video?.src).toContain('/api/transcode');
     });
 
     expect(mockHlsConstructor).not.toHaveBeenCalled();
