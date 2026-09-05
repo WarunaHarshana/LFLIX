@@ -4,25 +4,38 @@ import fs from 'fs';
 import db from './db';
 import { getLocalIpAddress } from './network';
 
-// Global state to track if server is running
-let isRunning = false;
-let serverInstance: http.Server | null = null;
-let ssdpInterval: NodeJS.Timeout | null = null;
-let ssdpSearchSocket: dgram.Socket | null = null;
+interface GlobalDlnaState {
+  isRunning: boolean;
+  serverInstance: http.Server | null;
+  ssdpInterval: NodeJS.Timeout | null;
+  ssdpSearchSocket: dgram.Socket | null;
+  currentDlnaIp: string | null;
+  handler?: (req: http.IncomingMessage, res: http.ServerResponse) => void;
+}
 
-export const DLNA_PORT = 3001;
+const g = globalThis as unknown as { __dlnaState?: GlobalDlnaState };
+if (!g.__dlnaState) {
+  g.__dlnaState = {
+    isRunning: false,
+    serverInstance: null,
+    ssdpInterval: null,
+    ssdpSearchSocket: null,
+    currentDlnaIp: null,
+  };
+}
+const dlnaState = g.__dlnaState;
 
-let currentDlnaIp: string | null = null;
+export const DLNA_PORT = parseInt(process.env.DLNA_PORT || '3001', 10);
 
 export function getDlnaIp(): string {
-  if (!currentDlnaIp || currentDlnaIp === '127.0.0.1' || currentDlnaIp === 'localhost') {
-    currentDlnaIp = getLocalIpAddress();
+  if (!dlnaState.currentDlnaIp || dlnaState.currentDlnaIp === '127.0.0.1' || dlnaState.currentDlnaIp === 'localhost') {
+    dlnaState.currentDlnaIp = getLocalIpAddress();
   }
-  return currentDlnaIp;
+  return dlnaState.currentDlnaIp;
 }
 
 export function getDlnaStatus(): boolean {
-  return isRunning;
+  return dlnaState.isRunning;
 }
 
 function getDeviceDescription(): string {
@@ -62,10 +75,315 @@ function getDeviceDescription(): string {
 </root>`;
 }
 
+function getMediaMime(filePath: string): string {
+  const ext = filePath ? filePath.split('.').pop()?.toLowerCase() : 'mp4';
+  switch (ext) {
+    case 'mkv':
+      return 'video/x-matroska';
+    case 'avi':
+      return 'video/x-msvideo';
+    case 'mov':
+      return 'video/quicktime';
+    case 'webm':
+      return 'video/webm';
+    case 'ts':
+      return 'video/mp2t';
+    case 'flv':
+      return 'video/x-flv';
+    case 'wmv':
+      return 'video/x-ms-wmv';
+    default:
+      return 'video/mp4';
+  }
+}
+
+function escapeDidl(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;amp;')
+    .replace(/</g, '&amp;lt;')
+    .replace(/>/g, '&amp;gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function handleCdsControl(req: http.IncomingMessage, res: http.ServerResponse) {
+  let body = '';
+  req.on('data', chunk => { body += chunk; });
+  req.on('end', () => {
+    const soapAction = (req.headers['soapaction'] || '').toString().replace(/"/g, '');
+
+    if (soapAction.includes('GetSearchCapabilities')) {
+      const response = `<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+  <s:Body>
+    <u:GetSearchCapabilitiesResponse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+      <SearchCaps></SearchCaps>
+    </u:GetSearchCapabilitiesResponse>
+  </s:Body>
+</s:Envelope>`;
+      res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
+      res.end(response);
+      return;
+    }
+
+    if (soapAction.includes('GetSortCapabilities')) {
+      const response = `<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+  <s:Body>
+    <u:GetSortCapabilitiesResponse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+      <SortCaps>dc:title</SortCaps>
+    </u:GetSortCapabilitiesResponse>
+  </s:Body>
+</s:Envelope>`;
+      res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
+      res.end(response);
+      return;
+    }
+
+    if (soapAction.includes('GetSystemUpdateID')) {
+      const response = `<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+  <s:Body>
+    <u:GetSystemUpdateIDResponse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+      <Id>1</Id>
+    </u:GetSystemUpdateIDResponse>
+  </s:Body>
+</s:Envelope>`;
+      res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
+      res.end(response);
+      return;
+    }
+
+    // Default to Browse action
+    handleBrowse(body, res);
+  });
+}
+
+function handleCmControl(req: http.IncomingMessage, res: http.ServerResponse) {
+  let body = '';
+  req.on('data', chunk => { body += chunk; });
+  req.on('end', () => {
+    const soapAction = (req.headers['soapaction'] || '').toString().replace(/"/g, '');
+
+    if (soapAction.includes('GetCurrentConnectionIDs')) {
+      const response = `<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+  <s:Body>
+    <u:GetCurrentConnectionIDsResponse xmlns:u="urn:schemas-upnp-org:service:ConnectionManager:1">
+      <ConnectionIDs>0</ConnectionIDs>
+    </u:GetCurrentConnectionIDsResponse>
+  </s:Body>
+</s:Envelope>`;
+      res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
+      res.end(response);
+      return;
+    }
+
+    // Default to GetProtocolInfo
+    const response = `<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+  <s:Body>
+    <u:GetProtocolInfoResponse xmlns:u="urn:schemas-upnp-org:service:ConnectionManager:1">
+      <Source>http-get:*:video/mp4:*,http-get:*:video/x-matroska:*,http-get:*:video/mpeg:*,http-get:*:video/webm:*,http-get:*:video/quicktime:*,http-get:*:video/x-msvideo:*</Source>
+      <Sink></Sink>
+    </u:GetProtocolInfoResponse>
+  </s:Body>
+</s:Envelope>`;
+    res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
+    res.end(response);
+  });
+}
+
+function handleBrowse(body: string, res: http.ServerResponse) {
+  try {
+    const ip = getDlnaIp();
+
+    const objectIdMatch = body.match(/<ObjectID>([^<]+)<\/ObjectID>/i);
+    const objectId = objectIdMatch ? objectIdMatch[1].trim() : '0';
+
+    const browseFlagMatch = body.match(/<BrowseFlag>([^<]+)<\/BrowseFlag>/i);
+    const browseFlag = browseFlagMatch ? browseFlagMatch[1].trim() : 'BrowseDirectChildren';
+
+    let didlContent = '';
+    let count = 0;
+
+    if (browseFlag === 'BrowseMetadata' && objectId === '0') {
+      // Return container metadata for root
+      didlContent = `&lt;container id="0" parentID="-1" restricted="1" searchable="1"&gt;` +
+        `&lt;dc:title&gt;LocalFlix&lt;/dc:title&gt;` +
+        `&lt;upnp:class&gt;object.container.storageFolder&lt;/upnp:class&gt;` +
+        `&lt;/container&gt;`;
+      count = 1;
+    } else {
+      // BrowseDirectChildren: return movies and episodes
+      const movies = db.prepare(`
+        SELECT id, title, fileName, filePath
+        FROM movies
+        ORDER BY title ASC
+      `).all() as { id: number; title: string | null; fileName: string; filePath: string }[];
+
+      const episodes = db.prepare(`
+        SELECT e.id, e.title, e.fileName, e.filePath, e.seasonNumber, e.episodeNumber, s.title as showTitle
+        FROM episodes e
+        LEFT JOIN shows s ON e.showId = s.id
+        ORDER BY s.title ASC, e.seasonNumber ASC, e.episodeNumber ASC
+      `).all() as { id: number; title: string | null; fileName: string; filePath: string; seasonNumber: number; episodeNumber: number; showTitle: string | null }[];
+
+      let items = '';
+
+      for (const movie of movies) {
+        const mime = getMediaMime(movie.filePath);
+        const title = movie.title || movie.fileName || `Movie ${movie.id}`;
+        items += `&lt;item id="movie-${movie.id}" parentID="0" restricted="1"&gt;` +
+          `&lt;dc:title&gt;${escapeDidl(title)}&lt;/dc:title&gt;` +
+          `&lt;upnp:class&gt;object.item.videoItem.movie&lt;/upnp:class&gt;` +
+          `&lt;res protocolInfo="http-get:*:${mime}:*"&gt;http://${ip}:${DLNA_PORT}/media/movie/${movie.id}&lt;/res&gt;` +
+          `&lt;/item&gt;`;
+        count++;
+      }
+
+      for (const ep of episodes) {
+        const mime = getMediaMime(ep.filePath);
+        const show = ep.showTitle || 'TV Show';
+        const s = ep.seasonNumber != null ? `S${ep.seasonNumber}` : 'S1';
+        const e = ep.episodeNumber != null ? `E${ep.episodeNumber}` : 'E1';
+        const epName = ep.title ? ` - ${ep.title}` : '';
+        const title = `${show} ${s}${e}${epName}`;
+
+        items += `&lt;item id="ep-${ep.id}" parentID="0" restricted="1"&gt;` +
+          `&lt;dc:title&gt;${escapeDidl(title)}&lt;/dc:title&gt;` +
+          `&lt;upnp:class&gt;object.item.videoItem.videoBroadcast&lt;/upnp:class&gt;` +
+          `&lt;res protocolInfo="http-get:*:${mime}:*"&gt;http://${ip}:${DLNA_PORT}/media/episode/${ep.id}&lt;/res&gt;` +
+          `&lt;/item&gt;`;
+        count++;
+      }
+
+      didlContent = items;
+    }
+
+    const result = `&lt;DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"&gt;${didlContent}&lt;/DIDL-Lite&gt;`;
+
+    const soapResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+  <s:Body>
+    <u:BrowseResponse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
+      <Result>${result}</Result>
+      <NumberReturned>${count}</NumberReturned>
+      <TotalMatches>${count}</TotalMatches>
+      <UpdateID>1</UpdateID>
+    </u:BrowseResponse>
+  </s:Body>
+</s:Envelope>`;
+
+    res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
+    res.end(soapResponse);
+  } catch (e) {
+    console.error('DLNA Browse error:', e);
+    res.writeHead(500, { 'Content-Type': 'text/xml; charset=utf-8' });
+    res.end('<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault><faultcode>s:Client</faultcode><faultstring>UPnPError</faultstring></s:Fault></s:Body></s:Envelope>');
+  }
+}
+
+function streamMedia(req: http.IncomingMessage, url: string, res: http.ServerResponse) {
+  try {
+    let filePath: string | null = null;
+    const cleanUrl = url.split('?')[0];
+    const match = cleanUrl.match(/\/media\/(movie|episode)?\/?(\d+)/i);
+
+    if (match) {
+      const type = match[1]?.toLowerCase();
+      const id = parseInt(match[2], 10);
+
+      if (type === 'movie') {
+        const row = db.prepare('SELECT filePath FROM movies WHERE id = ?').get(id) as { filePath: string } | undefined;
+        filePath = row?.filePath || null;
+      } else if (type === 'episode') {
+        const row = db.prepare('SELECT filePath FROM episodes WHERE id = ?').get(id) as { filePath: string } | undefined;
+        filePath = row?.filePath || null;
+      } else {
+        // Fallback: check movies first, then episodes
+        const movie = db.prepare('SELECT filePath FROM movies WHERE id = ?').get(id) as { filePath: string } | undefined;
+        if (movie?.filePath) {
+          filePath = movie.filePath;
+        } else {
+          const ep = db.prepare('SELECT filePath FROM episodes WHERE id = ?').get(id) as { filePath: string } | undefined;
+          filePath = ep?.filePath || null;
+        }
+      }
+    }
+
+    if (!filePath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Media not found');
+      return;
+    }
+
+    const normalizedPath = filePath.replace(/\//g, '\\');
+    if (!fs.existsSync(normalizedPath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('File not found on disk');
+      return;
+    }
+
+    const stat = fs.statSync(normalizedPath);
+    const mimeType = getMediaMime(normalizedPath);
+
+    // Support HEAD requests
+    if (req.method === 'HEAD') {
+      res.writeHead(200, {
+        'Content-Type': mimeType,
+        'Content-Length': stat.size,
+        'Accept-Ranges': 'bytes',
+      });
+      res.end();
+      return;
+    }
+
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunkSize = end - start + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': mimeType,
+      });
+
+      fs.createReadStream(normalizedPath, { start, end }).pipe(res);
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': mimeType,
+      'Content-Length': stat.size,
+      'Accept-Ranges': 'bytes',
+    });
+
+    fs.createReadStream(normalizedPath).pipe(res);
+  } catch (e) {
+    console.error('DLNA Stream error:', e);
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end('Internal Server Error');
+  }
+}
+
 function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
   const url = req.url || '/';
   
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
 
   if (url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -91,128 +409,21 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
     res.end(`<?xml version="1.0"?>
 <scpd xmlns="urn:schemas-upnp-org:service-1-0">
   <specVersion><major>1</major><minor>0</minor></specVersion>
+  <actionList>
+    <action><name>GetProtocolInfo</name></action>
+    <action><name>GetCurrentConnectionIDs</name></action>
+  </actionList>
 </scpd>`);
   } else if (url === '/cds/control') {
-    handleBrowse(req, res);
+    handleCdsControl(req, res);
+  } else if (url === '/cm/control') {
+    handleCmControl(req, res);
   } else if (url.startsWith('/media/')) {
     streamMedia(req, url, res);
   } else {
     res.writeHead(404);
     res.end('Not Found');
   }
-}
-
-function handleBrowse(req: http.IncomingMessage, res: http.ServerResponse) {
-  let body = '';
-  req.on('data', chunk => { body += chunk; });
-  req.on('end', () => {
-    try {
-      const ip = getDlnaIp();
-      const movies = db.prepare('SELECT id, title, filePath, mimeType FROM movies ORDER BY title ASC').all() as any[];
-      
-      let result = '&lt;DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"&gt;';
-      
-      for (const movie of movies) {
-        const ext = movie.filePath ? movie.filePath.split('.').pop()?.toLowerCase() : 'mp4';
-        const mime = movie.mimeType || (ext === 'mkv' ? 'video/x-matroska' : ext === 'mp4' ? 'video/mp4' : 'video/mpeg');
-        
-        result += `&lt;item id="${movie.id}" parentID="0" restricted="1"&gt;`;
-        result += `&lt;dc:title&gt;${escapeXml(movie.title)}&lt;/dc:title&gt;`;
-        result += `&lt;upnp:class&gt;object.item.videoItem&lt;/upnp:class&gt;`;
-        result += `&lt;res protocolInfo="http-get:*:${mime}:*"&gt;http://${ip}:${DLNA_PORT}/media/${movie.id}&lt;/res&gt;`;
-        result += `&lt;/item&gt;`;
-      }
-      result += '&lt;/DIDL-Lite&gt;';
-
-      const soapResponse = `<?xml version="1.0" encoding="UTF-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-  <s:Body>
-    <u:BrowseResponse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
-      <Result>${result}</Result>
-      <NumberReturned>${movies.length}</NumberReturned>
-      <TotalMatches>${movies.length}</TotalMatches>
-      <UpdateID>1</UpdateID>
-    </u:BrowseResponse>
-  </s:Body>
-</s:Envelope>`;
-
-      res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
-      res.end(soapResponse);
-    } catch (e) {
-      console.error('DLNA Browse error:', e);
-      res.writeHead(500);
-      res.end('Error');
-    }
-  });
-}
-
-function streamMedia(req: http.IncomingMessage, url: string, res: http.ServerResponse) {
-  const id = parseInt(url.split('/').pop() || '0', 10);
-  if (!id) {
-    res.writeHead(404);
-    res.end('Not found');
-    return;
-  }
-
-  try {
-    const movie = db.prepare('SELECT filePath FROM movies WHERE id = ?').get(id) as { filePath: string } | undefined;
-    if (!movie) {
-      res.writeHead(404);
-      res.end('Not found');
-      return;
-    }
-
-    const filePath = movie.filePath.replace(/\//g, '\\');
-    if (!fs.existsSync(filePath)) {
-      res.writeHead(404);
-      res.end('File not found');
-      return;
-    }
-
-    const stat = fs.statSync(filePath);
-    const ext = filePath.split('.').pop()?.toLowerCase() || 'mp4';
-    const mimeType = ext === 'mp4' ? 'video/mp4' : ext === 'mkv' ? 'video/x-matroska' : 'video/mpeg';
-
-    const range = req.headers.range;
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
-      const chunkSize = end - start + 1;
-
-      res.writeHead(206, {
-        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunkSize,
-        'Content-Type': mimeType,
-      });
-
-      fs.createReadStream(filePath, { start, end }).pipe(res);
-      return;
-    }
-
-    res.writeHead(200, {
-      'Content-Type': mimeType,
-      'Content-Length': stat.size,
-      'Accept-Ranges': 'bytes',
-    });
-
-    fs.createReadStream(filePath).pipe(res);
-  } catch (e) {
-    console.error('DLNA Stream error:', e);
-    res.writeHead(500);
-    res.end('Error');
-  }
-}
-
-function escapeXml(str: string): string {
-  return str.replace(/[<>&'"]/g, c => ({
-    '<': '&lt;',
-    '>': '&gt;',
-    '&': '&amp;',
-    "'": '&apos;',
-    '"': '&quot;'
-  }[c] || c));
 }
 
 function sendSsdpNotify() {
@@ -317,7 +528,7 @@ function startSsdpListener() {
       } catch {}
     });
 
-    ssdpSearchSocket = socket;
+    dlnaState.ssdpSearchSocket = socket;
   } catch (e: any) {
     console.warn('[dlna] Could not bind M-SEARCH listener on port 1900:', e.message);
   }
@@ -326,20 +537,37 @@ function startSsdpListener() {
 // Global functions
 export function startDlnaServer(): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (isRunning && serverInstance) {
+    dlnaState.handler = handleRequest;
+
+    if (dlnaState.isRunning && dlnaState.serverInstance) {
       console.log('DLNA server already running');
       resolve();
       return;
     }
 
     try {
-      currentDlnaIp = getLocalIpAddress();
-      serverInstance = http.createServer(handleRequest);
-      
-      serverInstance.listen(DLNA_PORT, () => {
+      dlnaState.currentDlnaIp = getLocalIpAddress();
+
+      // If server was already listening, simply attach new handler
+      if (dlnaState.serverInstance) {
+        dlnaState.isRunning = true;
+        resolve();
+        return;
+      }
+
+      const server = http.createServer((req, res) => {
+        if (dlnaState.handler) {
+          dlnaState.handler(req, res);
+        } else {
+          handleRequest(req, res);
+        }
+      });
+
+      server.listen(DLNA_PORT, () => {
         const ip = getDlnaIp();
         console.log(`DLNA Server started on http://${ip}:${DLNA_PORT}`);
-        isRunning = true;
+        dlnaState.isRunning = true;
+        dlnaState.serverInstance = server;
         
         // Send initial SSDP broadcasts
         sendSsdpNotify();
@@ -354,12 +582,19 @@ export function startDlnaServer(): Promise<void> {
         }, 10000);
         
         // Then every 30 seconds
-        ssdpInterval = setInterval(sendSsdpNotify, 30000);
+        if (dlnaState.ssdpInterval) clearInterval(dlnaState.ssdpInterval);
+        dlnaState.ssdpInterval = setInterval(sendSsdpNotify, 30000);
         
         resolve();
       });
 
-      serverInstance.on('error', (err) => {
+      server.on('error', (err: any) => {
+        if (err.code === 'EADDRINUSE') {
+          console.warn('[dlna] Port 3001 already in use, reusing running instance');
+          dlnaState.isRunning = true;
+          resolve();
+          return;
+        }
         console.error('DLNA server error:', err);
         reject(err);
       });
@@ -370,18 +605,18 @@ export function startDlnaServer(): Promise<void> {
 }
 
 export function stopDlnaServer(): void {
-  if (serverInstance) {
-    try { serverInstance.close(); } catch {}
-    serverInstance = null;
+  if (dlnaState.serverInstance) {
+    try { dlnaState.serverInstance.close(); } catch {}
+    dlnaState.serverInstance = null;
   }
-  if (ssdpInterval) {
-    clearInterval(ssdpInterval);
-    ssdpInterval = null;
+  if (dlnaState.ssdpInterval) {
+    clearInterval(dlnaState.ssdpInterval);
+    dlnaState.ssdpInterval = null;
   }
-  if (ssdpSearchSocket) {
-    try { ssdpSearchSocket.close(); } catch {}
-    ssdpSearchSocket = null;
+  if (dlnaState.ssdpSearchSocket) {
+    try { dlnaState.ssdpSearchSocket.close(); } catch {}
+    dlnaState.ssdpSearchSocket = null;
   }
-  isRunning = false;
+  dlnaState.isRunning = false;
   console.log('DLNA Server stopped');
 }

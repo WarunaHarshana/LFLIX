@@ -54,6 +54,9 @@ function buildHlsConfig(src: string): Record<string, unknown> {
       maxMaxBufferLength: 240,
       maxBufferSize: 120 * 1000 * 1000,
       backBufferLength: 60,
+      xhrSetup: (xhr: XMLHttpRequest) => {
+        xhr.withCredentials = true;
+      },
       fragLoadPolicy: {
         default: {
           maxTimeToFirstByteMs: 30_000,

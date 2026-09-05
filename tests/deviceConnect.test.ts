@@ -141,6 +141,7 @@ describe('Network Interface Prioritization', () => {
 
 describe('/api/ip endpoint', () => {
   it('returns valid IP, dynamic port from host header, and list of candidates', async () => {
+    process.env.APP_PIN = '1234';
     const req = new NextRequest('http://192.168.1.11:4000/api/ip', {
       headers: {
         host: '192.168.1.11:4000',
@@ -154,6 +155,7 @@ describe('/api/ip endpoint', () => {
     expect(data).toHaveProperty('ip');
     expect(data).toHaveProperty('port', 4000);
     expect(data).toHaveProperty('allIps');
+    expect(data).toHaveProperty('pin', '1234');
     expect(Array.isArray(data.allIps)).toBe(true);
     expect(data.ip).not.toBe('100.96.0.4'); // Must not pick Cloudflare WARP on this host
   });
@@ -166,5 +168,15 @@ describe('/api/ip endpoint', () => {
     const dlnaReq = new NextRequest('http://localhost:3000/api/dlna');
     const dlnaRes = await middleware(dlnaReq);
     expect(dlnaRes.status).toBe(200);
+  });
+
+  it('allows token-authenticated access for /api/stream and /api/transcode', async () => {
+    const streamReq = new NextRequest('http://localhost:3000/api/stream?token=valid-token');
+    const streamRes = await middleware(streamReq);
+    expect(streamRes.status).toBe(200);
+
+    const transcodeReq = new NextRequest('http://localhost:3000/api/transcode?token=valid-token');
+    const transcodeRes = await middleware(transcodeReq);
+    expect(transcodeRes.status).toBe(200);
   });
 });

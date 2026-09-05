@@ -112,10 +112,27 @@ export function usePlayback(
 
       // Mobile Browser or TV (force browser): Show browser player choice
       if (mobile || forceBrowserPlayer) {
+        let token = '';
+        try {
+          const tokenRes = await fetch(apiUrl('/api/token'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ contentType, contentId, episodeId })
+          });
+          if (tokenRes.ok) {
+            const tokenData = await tokenRes.json();
+            token = tokenData.token || '';
+          }
+        } catch {
+          // continue without token if generation fails
+        }
+
         const params = new URLSearchParams({
           contentType,
           contentId: contentId.toString(),
-          ...(episodeId && { episodeId: episodeId.toString() })
+          ...(episodeId && { episodeId: episodeId.toString() }),
+          ...(token && { token })
         });
         const streamUrl = `/api/stream?${params.toString()}`;
 
@@ -125,7 +142,15 @@ export function usePlayback(
           contentType,
           contentId,
           episodeId,
-          onPlayBrowser: () => setVideoPlayer({ src: streamUrl, title, initialTime: startTime, isHDR, audioCodec, videoCodec, fileName })
+          onPlayBrowser: (chosenUrl?: string) => setVideoPlayer({
+            src: chosenUrl || streamUrl,
+            title,
+            initialTime: startTime,
+            isHDR,
+            audioCodec,
+            videoCodec,
+            fileName
+          })
         });
         return;
       }

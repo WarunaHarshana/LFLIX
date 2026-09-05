@@ -11,7 +11,7 @@ type Props = {
   contentType: 'movie' | 'show';
   contentId: number;
   episodeId?: number;
-  onPlayBrowser: () => void;
+  onPlayBrowser: (url?: string) => void;
   onClose: () => void;
 };
 
@@ -27,6 +27,15 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
     // Generate a token for external players
     const generateToken = async () => {
       try {
+        const u = new URL(streamUrl, window.location.origin);
+        if (u.searchParams.has('token')) {
+          setTokenUrl(streamUrl);
+          setLoading(false);
+          return;
+        }
+      } catch {}
+
+      try {
         const res = await fetch('/api/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -35,7 +44,8 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
         });
         const data = await res.json();
         if (data.token) {
-          setTokenUrl(`${streamUrl}&token=${data.token}`);
+          const separator = streamUrl.includes('?') ? '&' : '?';
+          setTokenUrl(`${streamUrl}${separator}token=${data.token}`);
         }
       } catch (e) {
         console.error('Token generation failed:', e);
@@ -95,7 +105,7 @@ export default function PlayChoiceModal({ title, streamUrl, contentType, content
           {/* Play in Browser */}
           <button
             onClick={() => {
-              onPlayBrowser();
+              onPlayBrowser(tokenUrl || streamUrl);
               onClose();
             }}
             className="w-full flex items-center gap-4 p-4 bg-neutral-800 hover:bg-neutral-700 rounded-xl transition"

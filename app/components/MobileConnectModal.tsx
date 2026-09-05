@@ -3,7 +3,7 @@
 import type React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, Smartphone, Wifi, Copy, Check, RefreshCw, Share2, AlertTriangle, Network } from 'lucide-react';
+import { X, Smartphone, Wifi, Copy, Check, RefreshCw, Share2, AlertTriangle, Network, Lock } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 
 type Props = {
@@ -22,6 +22,7 @@ export default function MobileConnectModal({ onClose }: Props) {
   const [selectedIp, setSelectedIp] = useState<string>('');
   const [port, setPort] = useState<number>(3000);
   const [allIps, setAllIps] = useState<NetworkAdapter[]>([]);
+  const [pin, setPin] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -46,6 +47,10 @@ export default function MobileConnectModal({ onClose }: Props) {
         setSelectedIp(data.ip);
       } else if (typeof window !== 'undefined') {
         setSelectedIp(window.location.hostname || '127.0.0.1');
+      }
+
+      if (data.pin) {
+        setPin(data.pin);
       }
 
       if (Array.isArray(data.allIps) && data.allIps.length > 0) {
@@ -165,7 +170,7 @@ export default function MobileConnectModal({ onClose }: Props) {
           </div>
 
           {/* URL Display */}
-          <div className="w-full bg-neutral-800 rounded-lg p-3 flex items-center gap-3 mb-4">
+          <div className="w-full bg-neutral-800 rounded-lg p-3 flex items-center gap-3 mb-3">
             <Wifi className="w-5 h-5 text-green-500 flex-shrink-0" />
             <code className="flex-1 text-sm font-mono text-neutral-300 truncate">
               {loading ? 'Detecting...' : fullUrl}
@@ -201,6 +206,19 @@ export default function MobileConnectModal({ onClose }: Props) {
             )}
           </div>
 
+          {/* PIN Display */}
+          {pin && (
+            <div className="w-full bg-neutral-800/90 border border-neutral-700/90 rounded-lg px-3 py-2.5 mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-neutral-300">
+                <Lock className="w-3.5 h-3.5 text-red-500" />
+                <span>Your Login PIN:</span>
+              </div>
+              <span className="font-mono font-bold tracking-widest text-sm text-yellow-400 bg-black/60 px-3 py-0.5 rounded border border-neutral-700">
+                {pin}
+              </span>
+            </div>
+          )}
+
           {/* Instructions */}
           <div className="text-center space-y-3 text-sm w-full">
             <div className="flex items-start gap-3 text-left">
@@ -213,7 +231,9 @@ export default function MobileConnectModal({ onClose }: Props) {
             </div>
             <div className="flex items-start gap-3 text-left">
               <span className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</span>
-              <p className="text-neutral-400">Tap the link and enter your PIN to watch</p>
+              <p className="text-neutral-400">
+                Tap the link and enter your PIN{pin ? <> (<strong className="text-yellow-400">{pin}</strong>)</> : ''} to watch
+              </p>
             </div>
           </div>
 

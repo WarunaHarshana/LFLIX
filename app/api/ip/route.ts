@@ -22,10 +22,12 @@ export async function GET(req: Request) {
 
   const allIps = getAvailableNetworkIps();
   const primaryIp = getLocalIpAddress();
+  const pin = process.env.APP_PIN ? process.env.APP_PIN.trim() : null;
 
   return NextResponse.json({
     ip: primaryIp,
     port,
     allIps,
+    pin,
   });
 }

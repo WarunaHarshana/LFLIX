@@ -213,7 +213,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             if (!urlParams.get('server')) {
                 // Auto-redirect to app with stored server
-                window.location.href = `./app/?server=${encodeURIComponent(storedServer)}`;
+                window.location.href = `${storedServer}/?server=${encodeURIComponent(storedServer)}`;
             } else {
                 // Server param exists, show last server button
                 try {
@@ -283,8 +283,7 @@
             localStorage.setItem('lflix_server_url', serverUrl.origin);
             
             // Redirect to app with server URL
-            // App is exported to app/ subfolder
-            window.location.href = `./app/?server=${encodeURIComponent(serverUrl.origin)}`;
+            window.location.href = `${serverUrl.origin}/?server=${encodeURIComponent(serverUrl.origin)}`;
         }
 
         function connectToLast() {

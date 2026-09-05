@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
+import { apiUrl } from '@/lib/mobileConfig';
 
 type Props = {
     onLogin: () => void;
@@ -15,12 +16,16 @@ export default function LoginScreen({ onLogin }: Props) {
     // Check if already logged in (cookie is httpOnly, can't read directly)
     useEffect(() => {
         const checkAuth = async () => {
-            // Try to access a protected endpoint - browser sends cookie automatically
-            const res = await fetch('/api/content', {
-                credentials: 'same-origin'
-            });
-            if (res.ok) {
-                onLogin();
+            // Check session endpoint - browser/webview sends cookie automatically
+            try {
+                const res = await fetch(apiUrl('/api/auth/session'), {
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    onLogin();
+                }
+            } catch {
+                // not logged in
             }
         };
         checkAuth();
@@ -32,7 +37,7 @@ export default function LoginScreen({ onLogin }: Props) {
         setLoading(true);
 
         try {
-            const res = await fetch('/api/auth/login', {
+            const res = await fetch(apiUrl('/api/auth/login'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include', // Important: send/receive cookies
