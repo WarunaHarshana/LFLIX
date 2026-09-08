@@ -124,7 +124,42 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             const res = await fetch(`/api/torrent-search?${params}`);
             const data = await res.json();
             if (data.error) setError(data.error);
-            else setResults(data.results || []);
+            else {
+                const torrentList: TorrentResult[] = data.results || [];
+                setResults(torrentList);
+
+                // Convert any DDL / http-direct results into DirectDownloadItems and merge into directDownloads
+                const ddlItems: DirectDownloadItem[] = torrentList
+                    .filter((r) => r.source === 'DDL' || r.magnet.startsWith('http-direct:'))
+                    .map((r) => {
+                        const rawUrl = r.magnet.replace(/^http-direct:/, '');
+                        return {
+                            source: 'Direct DDL',
+                            name: r.title,
+                            quality: parseInt(r.quality, 10) || 1080,
+                            qualityLabel: r.quality || 'HD',
+                            qualityTags: extractTags(r.title).map((t) => t.label).filter((t) => t !== 'SDR'),
+                            size: r.size,
+                            sizeBytes: r.sizeBytes,
+                            url: rawUrl,
+                            provider: 'ddl',
+                        };
+                    });
+
+                if (ddlItems.length > 0) {
+                    setDirectDownloads((prev) => {
+                        const existingUrls = new Set(prev.map((p) => p.url));
+                        const merged = [...prev];
+                        for (const item of ddlItems) {
+                            if (!existingUrls.has(item.url)) {
+                                existingUrls.add(item.url);
+                                merged.push(item);
+                            }
+                        }
+                        return merged;
+                    });
+                }
+            }
         } catch {
             setError('Search failed. Please try again.');
         } finally {
@@ -171,17 +206,17 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             const res = await fetch(`/api/direct-downloads?${params.toString()}`);
             const data = await res.json();
             if (data.success && Array.isArray(data.downloads)) {
-                setDirectDownloads(data.downloads);
+                setDirectDownloads((prev) => {
+                    const existingUrls = new Set(data.downloads.map((d: DirectDownloadItem) => d.url));
+                    const previousNonDuplicates = prev.filter((p) => !existingUrls.has(p.url));
+                    return [...data.downloads, ...previousNonDuplicates];
+                });
                 if (data.downloads.length > 0) {
                     setActiveTab('direct');
-                } else {
-                    setActiveTab('torrents');
                 }
-            } else {
-                setDirectDownloads([]);
             }
         } catch {
-            setDirectDownloads([]);
+            // Keep any existing merged DDL downloads
         } finally {
             setSearchingDirect(false);
             setSearchedDirect(true);
@@ -240,7 +275,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     const sourceBadge = (result: TorrentResult): { label: string; className: string } => {
         const source = result.source.toUpperCase();
         if (source === 'DDL') {
-            return { label: '⬇ DDL', className: 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold' };
+            return { label: '⚡ Direct DDL', className: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold' };
         }
         if (source === 'PSA') {
             return { label: 'PSA', className: 'bg-pink-500/20 text-pink-300 border border-pink-500/40 font-bold' };
@@ -560,14 +595,61 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                             <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        onClick={() => startDownload(result.magnet)}
-                                                        disabled={downloading !== null}
-                                                        className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
-                                                    >
-                                                        {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                                                        Download
-                                                    </button>
+                                                    {isDDL(result) ? (
+                                                        <div className="flex items-center gap-1.5 self-end sm:self-center flex-shrink-0">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => copyLink(result.magnet.replace(/^http-direct:/, ''))}
+                                                                className="px-2.5 py-2 bg-neutral-700/80 hover:bg-neutral-700 text-neutral-300 hover:text-white rounded-lg text-xs transition border border-neutral-600/50 flex items-center gap-1"
+                                                                title="Copy direct download link"
+                                                                aria-label="Copy direct download link"
+                                                            >
+                                                                {copiedUrl === result.magnet.replace(/^http-direct:/, '') ? (
+                                                                    <>
+                                                                        <Check className="w-3.5 h-3.5 text-green-400" />
+                                                                        <span className="text-[11px] text-green-400 font-medium">Copied</span>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Copy className="w-3.5 h-3.5" />
+                                                                        <span className="text-[11px]">Copy</span>
+                                                                    </>
+                                                                )}
+                                                            </button>
+
+                                                            <a
+                                                                href={result.magnet.replace(/^http-direct:/, '')}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                download
+                                                                className="px-2.5 py-2 bg-neutral-700/80 hover:bg-neutral-700 text-white font-medium rounded-lg text-xs flex items-center gap-1.5 transition border border-neutral-600/50"
+                                                                title="Download directly in browser"
+                                                            >
+                                                                <ExternalLink className="w-3.5 h-3.5" />
+                                                                <span className="text-[11px] hidden sm:inline">Browser</span>
+                                                            </a>
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => startDownload(result.magnet)}
+                                                                disabled={downloading !== null}
+                                                                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
+                                                                title="Download directly to library folder"
+                                                            >
+                                                                {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                                                <span>To Library</span>
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => startDownload(result.magnet)}
+                                                            disabled={downloading !== null}
+                                                            className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
+                                                        >
+                                                            {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                                            Download
+                                                        </button>
+                                                    )}
                                                 </div>
                                             );
                                         })}

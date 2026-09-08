@@ -485,9 +485,17 @@ class DownloadManager {
                     ? fs.statSync(filePath).size
                     : 0;
                 const requestUrl = activeUrl;
+                let referer = 'https://cinejoy.to/';
+                try {
+                    const parsed = new URL(requestUrl);
+                    if (!parsed.hostname.includes('shegu.st') && !parsed.hostname.includes('workers.dev') && !parsed.hostname.includes('cloudflarestorage.com')) {
+                        referer = `${parsed.origin}/`;
+                    }
+                } catch { /* ignore */ }
+
                 const headers: Record<string, string> = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
-                    'Referer': 'https://cinejoy.to/',
+                    'Referer': referer,
                 };
                 if (existingBytes > 0) {
                     headers.Range = `bytes=${existingBytes}-`;
