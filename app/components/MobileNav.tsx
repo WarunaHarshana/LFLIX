@@ -27,42 +27,42 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
     { id: 'watchlist' as Tab, label: 'Watchlist', icon: Bookmark },
   ];
 
-  return (
+    return (
     <>
       {/* Mobile Header */}
-      <div className="fixed top-0 left-0 right-0 z-[90] bg-[var(--overlay-strong)] backdrop-blur-md border-b border-[var(--border-subtle)] md:hidden pt-[env(safe-area-inset-top)]">
+      <div className="fixed top-0 left-0 right-0 z-[90] liquid-glass-dock border-b border-white/10 md:hidden pt-[env(safe-area-inset-top)]">
         <div className="flex items-center justify-between px-4 py-3">
-          <h1 className="text-xl font-bold tracking-tighter text-red-600">LFLIX</h1>
+          <h1 className="text-xl font-black tracking-tighter accent-text">LFLIX</h1>
           <div className="flex items-center gap-2">
             <button aria-label="Search"
               onClick={onShowSearch}
-              className="p-3 hover:bg-[var(--surface-hover)] rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="liquid-orb p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center text-neutral-200"
               title="Search"
               style={{ touchAction: 'manipulation' }}
             >
-              <Search className="w-5 h-5 pointer-events-none" />
+              <Search className="w-4 h-4 pointer-events-none" />
             </button>
             <button aria-label="Connect Mobile"
               onClick={onShowQR}
-              className="p-3 hover:bg-[var(--surface-hover)] rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="liquid-orb p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center text-neutral-200"
               title="Connect Mobile"
               style={{ touchAction: 'manipulation' }}
             >
-              <Smartphone className="w-5 h-5 pointer-events-none" />
+              <Smartphone className="w-4 h-4 pointer-events-none" />
             </button>
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="p-3 hover:bg-[var(--surface-hover)] rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="liquid-orb p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center text-neutral-200"
               style={{ touchAction: 'manipulation' }}
             >
-              {isOpen ? <X className="w-6 h-6 pointer-events-none" /> : <Menu className="w-6 h-6 pointer-events-none" />}
+              {isOpen ? <X className="w-5 h-5 pointer-events-none" /> : <Menu className="w-5 h-5 pointer-events-none" />}
             </button>
           </div>
         </div>
 
         {/* Mobile Menu */}
         {isOpen && (
-          <div className="border-t border-[var(--border-subtle)] py-2">
+          <div className="border-t border-white/10 p-3 space-y-1 bg-black/40 backdrop-blur-2xl">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -71,62 +71,65 @@ export default function MobileNav({ activeTab, onTabChange, onShowQR, onShowSett
                   setIsOpen(false);
                 }}
                 className={clsx(
-                  "w-full flex items-center gap-3 px-4 py-4 transition",
+                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition",
                   activeTab === tab.id
-                    ? 'bg-white text-black'
-                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'
+                    ? 'liquid-glass-pill-active font-bold'
+                    : 'liquid-glass-pill text-neutral-300 hover:text-white'
                 )}
                 style={{ touchAction: 'manipulation' }}
               >
                 <tab.icon className="w-5 h-5" />
-                <span className="font-medium">{tab.label}</span>
+                <span className="font-medium text-sm">{tab.label}</span>
               </button>
             ))}
-            <div className="border-t border-[var(--border-subtle)] mt-2 pt-2">
+            <div className="border-t border-white/10 mt-2 pt-2 space-y-1">
               <button
                 onClick={() => {
                   onShowLiveSports();
                   setIsOpen(false);
                 }}
-                className="w-full flex items-center gap-3 px-4 py-4 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] transition"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl liquid-glass-pill text-neutral-300 hover:text-white transition"
                 style={{ touchAction: 'manipulation' }}
               >
                 <Trophy className="w-5 h-5" />
-                <span className="font-medium">Live Sports</span>
+                <span className="font-medium text-sm">Live Sports</span>
               </button>
               <button
                 onClick={() => {
                   onShowSettings();
                   setIsOpen(false);
                 }}
-                className="w-full flex items-center gap-3 px-4 py-4 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] transition"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl liquid-glass-pill text-neutral-300 hover:text-white transition"
                 style={{ touchAction: 'manipulation' }}
               >
                 <Settings className="w-5 h-5" />
-                <span className="font-medium">Settings</span>
+                <span className="font-medium text-sm">Settings</span>
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Mobile Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 z-[90] bg-[var(--overlay-strong)] backdrop-blur-md border-t border-[var(--border-subtle)] md:hidden">
-        <div className="flex overflow-x-auto scrollbar-hide py-2 px-2 gap-2 snap-x">
+      {/* Floating Liquid Glass Bottom Dock */}
+      <div className="fixed bottom-3 left-3 right-3 z-[90] liquid-glass-dock rounded-2xl md:hidden shadow-2xl p-1">
+        <div className="flex items-center justify-around">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={clsx(
-                "flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-lg transition min-w-[72px] snap-center",
+                "relative flex flex-col items-center justify-center gap-0.5 py-1.5 px-2.5 rounded-xl transition-all duration-200 select-none",
                 activeTab === tab.id
-                  ? 'bg-white text-black'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                  ? 'text-black font-bold'
+                  : 'text-neutral-400 hover:text-white'
               )}
               style={{ touchAction: 'manipulation' }}
             >
-              <tab.icon className={clsx("w-6 h-6", activeTab === tab.id && "fill-current")} />
-              <span className="text-xs">{tab.label}</span>
+              {activeTab === tab.id && (
+                <div className="absolute inset-0 rounded-xl liquid-glass-pill-active -z-10 shadow-sm" />
+              )}
+              <tab.icon className={clsx("w-5 h-5", activeTab === tab.id && "fill-current")} />
+              <span className="text-[10px] font-medium tracking-tight">{tab.label}</span>
             </button>
           ))}
         </div>

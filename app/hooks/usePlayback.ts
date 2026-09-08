@@ -27,41 +27,109 @@ export function usePlayback(
   // Play Choice Modal (popped before starting playback on mobile / casting)
   const [playChoiceItem, setPlayChoiceItem] = useState<PlayChoiceItem | null>(null);
 
+  // Force browser player (for TVs without VLC) - persists across refreshes
+  const [forceBrowserPlayer, setForceBrowserPlayerState] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem('lflix-force-browser-player') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const setForceBrowserPlayer = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
+    setForceBrowserPlayerState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      try {
+        localStorage.setItem('lflix-force-browser-player', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  // HDR display auto-detection (live — auto-toggles when moving between SDR/HDR displays)
+  const [hdrDisplaySupported, setHdrDisplaySupported] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
+    let mqDynamicRange: MediaQueryList | null = null;
+    let mqVideoDynamicRange: MediaQueryList | null = null;
+
+    const checkHdr = () => {
+      try {
+        const dr = window.matchMedia('(dynamic-range: high)');
+        const vdr = window.matchMedia('(video-dynamic-range: high)');
+        const isHdr = !!(dr?.matches || vdr?.matches);
+        setHdrDisplaySupported(isHdr);
+      } catch {
+        // Fallback for browsers without dynamic-range query support
+      }
+    };
+
+    checkHdr();
+
+    const handler = () => checkHdr();
+
+    try {
+      mqDynamicRange = window.matchMedia('(dynamic-range: high)');
+      if (typeof mqDynamicRange.addEventListener === 'function') {
+        mqDynamicRange.addEventListener('change', handler);
+      } else if (typeof (mqDynamicRange as any).addListener === 'function') {
+        (mqDynamicRange as any).addListener(handler);
+      }
+    } catch {}
+
+    try {
+      mqVideoDynamicRange = window.matchMedia('(video-dynamic-range: high)');
+      if (typeof mqVideoDynamicRange.addEventListener === 'function') {
+        mqVideoDynamicRange.addEventListener('change', handler);
+      } else if (typeof (mqVideoDynamicRange as any).addListener === 'function') {
+        (mqVideoDynamicRange as any).addListener(handler);
+      }
+    } catch {}
+
+    // On Windows and macOS, moving windows across monitors does not always trigger matchMedia 'change'.
+    // Listening to resize, focus, and running a periodic poll guarantees auto-toggle across displays.
+    window.addEventListener('resize', handler);
+    window.addEventListener('focus', handler);
+    const interval = setInterval(checkHdr, 2000);
+
+    return () => {
+      try {
+        if (mqDynamicRange) {
+          if (typeof mqDynamicRange.removeEventListener === 'function') {
+            mqDynamicRange.removeEventListener('change', handler);
+          } else if (typeof (mqDynamicRange as any).removeListener === 'function') {
+            (mqDynamicRange as any).removeListener(handler);
+          }
+        }
+        if (mqVideoDynamicRange) {
+          if (typeof mqVideoDynamicRange.removeEventListener === 'function') {
+            mqVideoDynamicRange.removeEventListener('change', handler);
+          } else if (typeof (mqVideoDynamicRange as any).removeListener === 'function') {
+            (mqVideoDynamicRange as any).removeListener(handler);
+          }
+        }
+      } catch {}
+      window.removeEventListener('resize', handler);
+      window.removeEventListener('focus', handler);
+      clearInterval(interval);
+    };
+  }, []);
+
   const launchBrowserPlayer = useCallback((item: PlayChoiceItem) => {
     setVideoPlayer({
       src: item.streamUrl,
       title: item.title,
       initialTime: item.startTime,
-      isHDR: item.isHDR,
+      isHDR: item.isHDR ?? hdrDisplaySupported,
       audioCodec: item.audioCodec,
       videoCodec: item.videoCodec,
       fileName: item.fileName,
     });
     setPlayChoiceItem(null);
-  }, []);
-
-  // Force browser player (for TVs without VLC)
-  const [forceBrowserPlayer, setForceBrowserPlayer] = useState(false);
-
-  // HDR display detection (live — updates when moving between monitors)
-  const [hdrDisplaySupported, setHdrDisplaySupported] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    try {
-      const mq = window.matchMedia('(dynamic-range: high)');
-      setHdrDisplaySupported(!!mq?.matches);
-      const handler = (e: MediaQueryListEvent | MediaQueryList) => setHdrDisplaySupported(!!e.matches);
-      if (typeof mq?.addEventListener === 'function') {
-        mq.addEventListener('change', handler as EventListener);
-        return () => mq.removeEventListener('change', handler as EventListener);
-      } else if (typeof (mq as any)?.addListener === 'function') {
-        (mq as any).addListener(handler);
-        return () => (mq as any).removeListener(handler);
-      }
-    } catch {
-      // Ignore errors on devices/browsers that don't support dynamic-range media queries
-    }
-  }, []);
+  }, [hdrDisplaySupported]);
 
 
   // Detect if client should use built-in browser player
@@ -221,6 +289,7 @@ export function usePlayback(
     launchBrowserPlayer,
     forceBrowserPlayer, setForceBrowserPlayer,
     hdrDisplaySupported,
+    isHdrActive: hdrDisplaySupported,
     isMobile,
     playFile,
   };

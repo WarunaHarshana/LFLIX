@@ -24,13 +24,8 @@ import { useDownloads } from './hooks/useDownloads';
 import GenreFilter from './components/GenreFilter';
 import EmptyState from './components/EmptyState';
 import { HeroSkeleton, CardGridSkeleton } from './components/LoadingStates';
-import FolderManager from './components/FolderManager';
-import LoginScreen from './components/LoginScreen';
-import SetupWizard from './components/SetupWizard';
-import VideoPlayer from './components/VideoPlayer';
 import MobileNav from './components/MobileNav';
 import FloatingQRButton from './components/FloatingQRButton';
-import MobileSearchModal from './components/MobileSearchModal';
 import DetailTabNav from './components/DetailTabNav';
 import GlobalDropzone from './components/GlobalDropzone';
 
@@ -42,6 +37,11 @@ import ContextMenuOverlay from './components/ContextMenuOverlay';
 import ToastNotification from './components/ToastNotification';
 
 // Heavy modals & pages — lazy loaded (only fetched when opened)
+const VideoPlayer = dynamic(() => import('./components/VideoPlayer'), { ssr: false });
+const SetupWizard = dynamic(() => import('./components/SetupWizard'), { ssr: false });
+const LoginScreen = dynamic(() => import('./components/LoginScreen'), { ssr: false });
+const FolderManager = dynamic(() => import('./components/FolderManager'), { ssr: false });
+const MobileSearchModal = dynamic(() => import('./components/MobileSearchModal'), { ssr: false });
 const EpisodeModal = dynamic(() => import('./components/EpisodeModal'), { ssr: false });
 const ContentDetailModal = dynamic(() => import('./components/ContentDetailModal'), { ssr: false });
 const GlobalSearchModal = dynamic(() => import('./components/GlobalSearchModal'), { ssr: false });
@@ -97,7 +97,7 @@ export default function Home() {
   const [fixMatchItem, setFixMatchItem] = useState<ContentItem | null>(null);
 
   // ──────────────────── Computed ────────────────────
-  const filteredLibrary = getFilteredLibrary(activeTab);
+  const filteredLibrary = useMemo(() => getFilteredLibrary(activeTab), [getFilteredLibrary, activeTab]);
   const hero = useHero(filteredLibrary);
 
   // Available genres and languages dynamically computed for the active tab
@@ -172,23 +172,33 @@ export default function Home() {
       setTorrentInitialQuery('');
     }
     setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      const url = tab === 'all' ? window.location.pathname : `?tab=${tab}`;
+      window.history.replaceState(null, '', url);
+    }
   };
 
   // Tab from URL
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const searchParams = new URLSearchParams(window.location.search);
-    const requestedTab = searchParams.get('tab');
-    const openLiveSports = searchParams.get('liveSports') === '1';
-    if (openLiveSports) setShowLiveSports(true);
-    if (!isValidTab(requestedTab)) return;
-    if (requestedTab === 'all') setSelectedGenre(null);
-    if (requestedTab === 'discover') {
-      setDiscoverMode('online');
-      setTorrentInitialQuery('');
-    }
-    setActiveTab(requestedTab);
-  }, []);
+    const updateTabFromUrl = () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const requestedTab = searchParams.get('tab');
+      const openLiveSports = searchParams.get('liveSports') === '1';
+      if (openLiveSports) setShowLiveSports(true);
+      if (!isValidTab(requestedTab)) return;
+      if (requestedTab === 'all') setSelectedGenre(null);
+      if (requestedTab === 'discover') {
+        setDiscoverMode('online');
+        setTorrentInitialQuery('');
+      }
+      setActiveTab(requestedTab);
+    };
+
+    updateTabFromUrl();
+    window.addEventListener('popstate', updateTabFromUrl);
+    return () => window.removeEventListener('popstate', updateTabFromUrl);
+  }, [setActiveTab, setDiscoverMode, setTorrentInitialQuery, setSelectedGenre, setShowLiveSports]);
 
   const openOnlineInDiscover = (item: DiscoverOnlineItem) => {
     setDiscoverMode('online');
@@ -454,7 +464,11 @@ export default function Home() {
         onShowDownloads={() => setShowDownloads(true)}
         activeDownloads={activeDownloads}
         forceBrowserPlayer={playback.forceBrowserPlayer}
-        onToggleBrowserPlayer={() => playback.setForceBrowserPlayer(!playback.forceBrowserPlayer)}
+        onToggleBrowserPlayer={() => {
+          const next = !playback.forceBrowserPlayer;
+          playback.setForceBrowserPlayer(next);
+          showToast(next ? 'Browser Player activated (for TV & web playback)' : 'Browser Player deactivated (using native VLC/MPV)', 'success');
+        }}
         onRescan={handleRescanAll}
         scanning={loading}
         onShowFolderManager={() => setShowFolderManager(true)}
@@ -466,7 +480,7 @@ export default function Home() {
       {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'discover' && (loading ? (
         <>
           <HeroSkeleton />
-          <div className="px-12 pb-20 -mt-20 relative z-20">
+          <div className="px-12 pb-20 pt-6 sm:pt-8 relative z-20">
             <CardGridSkeleton count={16} />
           </div>
         </>
@@ -490,7 +504,7 @@ export default function Home() {
             />
           )}
 
-          <div className={clsx(hero.featured ? "-mt-16 sm:-mt-20" : "pt-24 sm:pt-28", "relative z-20")}>
+          <div className={clsx(hero.featured ? "pt-6 sm:pt-8" : "pt-24 sm:pt-28", "relative z-20")}>
             {/* Genre Filter */}
             {availableGenres.length > 0 && (
               <GenreFilter genres={availableGenres} selectedGenre={selectedGenre} onSelect={setSelectedGenre} />

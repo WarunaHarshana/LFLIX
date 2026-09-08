@@ -23,6 +23,14 @@ import DownloadModal from '../../../components/DownloadModal';
 import TrailerModal from '../../../components/TrailerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from '../../../components/ContentCard';
 import DetailTabNav from '../../../components/DetailTabNav';
+import { useAppStore } from '@/app/store/useAppStore';
+import LiquidDropdown from '../../../components/LiquidDropdown';
+
+const PERSON_SORT_OPTIONS = [
+  { id: 'date', name: 'Sort: Date' },
+  { id: 'rating', name: 'Sort: Rating' },
+  { id: 'popular', name: 'Sort: Popular' },
+];
 
 type TMDBResult = {
   tmdbId: number;
@@ -605,6 +613,12 @@ export default function DiscoverDetailPage() {
     return total > 0 ? total : null;
   }, [tvDetails?.seasons]);
 
+  const handleBack = () => {
+    useAppStore.getState().setActiveTab('discover');
+    useAppStore.getState().setDiscoverMode('online');
+    router.push('/?tab=discover');
+  };
+
   return (
     <div className="min-h-screen bg-[var(--background)] text-white">
       <DetailTabNav activeTab="discover" />
@@ -612,12 +626,12 @@ export default function DiscoverDetailPage() {
         <div className="absolute inset-0 bg-black" />
 
         <button
-          onClick={() => router.back()}
-          className="absolute left-4 top-20 z-40 h-10 w-10 rounded-full bg-black/45 text-white border border-neutral-500/60 hover:bg-black/70 transition inline-flex items-center justify-center backdrop-blur-md md:left-6 md:top-28"
+          onClick={handleBack}
+          className="absolute left-4 top-20 z-40 h-11 w-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 text-neutral-200 hover:text-white hover:scale-105 transition-all inline-flex items-center justify-center shadow-xl backdrop-blur-xl md:left-6 md:top-26 cursor-pointer"
           title="Back to Discover"
           aria-label="Back to Discover"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-5 h-5" />
         </button>
 
         {heroTrailerUrl ? (
@@ -626,7 +640,7 @@ export default function DiscoverDetailPage() {
               <iframe
                 src={heroTrailerUrl}
                 title={`${pageTitle} Trailer Background`}
-                className="h-full w-full pointer-events-none opacity-72"
+                className="h-full w-full pointer-events-none opacity-88"
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen *"
                 referrerPolicy="strict-origin-when-cross-origin"
                 allowFullScreen
@@ -637,31 +651,31 @@ export default function DiscoverDetailPage() {
           <img
             src={`https://image.tmdb.org/t/p/original${backdropPath}`}
             alt=""
-            className="absolute inset-0 w-full h-full object-cover opacity-74 animate-heroFade"
+            className="absolute inset-0 w-full h-full object-cover opacity-88 animate-heroFade"
           />
         ) : null}
 
-        <div className="absolute inset-0 bg-gradient-to-r from-black/62 via-black/22 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/35 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/20 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/25 to-transparent pointer-events-none" />
 
-        <div className="relative z-20 flex-1 px-4 sm:px-6 md:px-10 lg:px-12 pt-24 sm:pt-28 md:pt-44 flex flex-col items-start justify-start pb-10 sm:pb-14 md:pb-20">
+        <div className="relative z-20 flex-1 px-6 sm:px-10 md:px-14 lg:px-16 pt-36 sm:pt-42 md:pt-48 lg:pt-52 flex flex-col items-start justify-start pb-12 sm:pb-16 md:pb-20 max-w-4xl">
           {loadingDetails ? (
             <div className="flex items-center gap-3 text-neutral-300 pb-12">
               <Loader2 className="w-6 h-6 animate-spin" />
               Loading details...
             </div>
           ) : (
-            <div className="w-full max-w-5xl rounded-2xl bg-black/16 backdrop-blur-[4px] p-4 sm:p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
-              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 mb-3 text-xs sm:text-sm md:text-base font-semibold">
-                <span className="px-2.5 py-1 rounded-md bg-[#F5C518] text-black font-bold shadow-sm">{activeRatingSource} {activeRating?.toFixed(1) || 'N/A'}</span>
-                {activeDetails?.year && <span className="text-neutral-200">{activeDetails.year}</span>}
-                {mediaType === 'movie' && movieDetails?.runtime && <span className="text-neutral-200">{Math.floor(movieDetails.runtime / 60)}h {movieDetails.runtime % 60}m</span>}
-                {mediaType === 'tv' && tvDetails?.status && <span className="text-neutral-200">{tvDetails.status}</span>}
+            <div className="w-full">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mb-3.5 text-xs sm:text-sm md:text-base font-semibold">
+                <span className="px-3 py-1 rounded-xl liquid-glass-pill text-amber-300 font-bold border border-amber-400/30 text-xs sm:text-sm shadow-sm">{activeRatingSource} {activeRating?.toFixed(1) || 'N/A'}</span>
+                {activeDetails?.year && <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{activeDetails.year}</span>}
+                {mediaType === 'movie' && movieDetails?.runtime && <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{Math.floor(movieDetails.runtime / 60)}h {movieDetails.runtime % 60}m</span>}
+                {mediaType === 'tv' && tvDetails?.status && <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{tvDetails.status}</span>}
                 {mediaType === 'tv' && tvSeasonCount !== null && tvSeasonCount > 0 && (
-                  <span className="text-neutral-200">{tvSeasonCount} Season{tvSeasonCount > 1 ? 's' : ''}</span>
+                  <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{tvSeasonCount} Season{tvSeasonCount > 1 ? 's' : ''}</span>
                 )}
                 {mediaType === 'tv' && totalEpisodeCount !== null && (
-                  <span className="text-neutral-200">{totalEpisodeCount} Episode{totalEpisodeCount > 1 ? 's' : ''}</span>
+                  <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{totalEpisodeCount} Episode{totalEpisodeCount > 1 ? 's' : ''}</span>
                 )}
               </div>
 
@@ -669,16 +683,16 @@ export default function DiscoverDetailPage() {
                 <img
                   src={logoUrl}
                   alt={pageTitle}
-                  className="h-14 sm:h-20 md:h-24 lg:h-28 w-auto max-w-[96%] object-contain drop-shadow-[0_6px_24px_rgba(0,0,0,0.6)]"
+                  className="h-14 sm:h-20 md:h-24 lg:h-28 w-auto max-w-[92%] object-contain drop-shadow-[0_8px_30px_rgba(0,0,0,0.8)]"
                 />
               ) : (
-                <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black leading-[0.95] tracking-tight uppercase text-white drop-shadow-[0_6px_30px_rgba(0,0,0,0.6)]">
+                <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black leading-[0.95] tracking-tight uppercase text-white drop-shadow-[0_8px_30px_rgba(0,0,0,0.8)]">
                   {pageTitle}
                 </h1>
               )}
 
               {pageOverview && (
-                <p className="mt-4 text-base sm:text-lg md:text-xl text-neutral-100 max-w-2xl leading-relaxed line-clamp-5">
+                <p className="mt-4 text-base sm:text-lg md:text-xl text-neutral-100 max-w-2xl leading-relaxed line-clamp-4 drop-shadow-md">
                   {pageOverview}
                 </p>
               )}
@@ -686,7 +700,7 @@ export default function DiscoverDetailPage() {
               {genreList.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2.5">
                   {genreList.map((genre) => (
-                    <span key={genre} className="text-xs sm:text-sm px-3 py-1.5 rounded-md bg-black/50 border border-neutral-600 text-neutral-100">
+                    <span key={genre} className="text-xs sm:text-sm px-3.5 py-1.5 rounded-xl liquid-glass-pill border border-white/15 text-neutral-200 font-medium shadow-sm">
                       {genre}
                     </span>
                   ))}
@@ -694,29 +708,29 @@ export default function DiscoverDetailPage() {
               )}
 
               {heroCast.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-xs sm:text-sm font-semibold tracking-wide uppercase text-neutral-300 mb-2">Cast & Crew</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                <div className="mt-5 w-full max-w-3xl">
+                  <p className="text-xs sm:text-sm font-bold tracking-wider uppercase text-neutral-300 mb-2.5 drop-shadow-sm">Cast & Crew</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
                     {heroCast.map((member) => (
                       <button
                         key={member.id}
                         onClick={() => openPerson(member.id)}
-                        className="w-full flex items-center gap-3 rounded-xl bg-black/35 border border-neutral-700/70 px-3 py-2.5 hover:bg-black/55 transition"
+                        className="w-full flex items-center gap-3 rounded-2xl liquid-glass-card border border-white/10 hover:border-white/25 px-3.5 py-2.5 transition-all duration-200 hover:scale-[1.02] shadow-md cursor-pointer group text-left"
                       >
                         {member.profilePath ? (
                           <img
                             src={`https://image.tmdb.org/t/p/w92${member.profilePath}`}
                             alt={member.name}
-                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover"
+                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover ring-1 ring-white/20 group-hover:ring-white/40 transition shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-neutral-800 flex items-center justify-center">
-                            <User className="w-5 h-5 text-neutral-500" />
+                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/10 flex items-center justify-center ring-1 ring-white/20 shrink-0">
+                            <User className="w-5 h-5 text-neutral-400" />
                           </div>
                         )}
-                        <div className="text-left">
-                          <p className="text-sm sm:text-base font-medium text-neutral-100 leading-tight">{member.name}</p>
-                          <p className="text-xs sm:text-sm text-neutral-400 leading-tight">{member.character}</p>
+                        <div className="text-left min-w-0">
+                          <p className="text-sm sm:text-base font-semibold text-neutral-100 group-hover:text-white leading-tight truncate">{member.name}</p>
+                          <p className="text-xs sm:text-sm text-neutral-400 leading-tight truncate mt-0.5">{member.character}</p>
                         </div>
                       </button>
                     ))}
@@ -724,7 +738,7 @@ export default function DiscoverDetailPage() {
                 </div>
               )}
 
-              <div className="mt-6 flex flex-wrap gap-2.5">
+              <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   onClick={() => {
                     if (!tmdbId || !activeDetails) return;
@@ -740,30 +754,30 @@ export default function DiscoverDetailPage() {
                       });
                     }
                   }}
-                  className="px-5 py-3.5 rounded-xl bg-white text-black hover:bg-neutral-200 font-bold text-sm sm:text-base inline-flex items-center gap-2 transition"
+                  className="liquid-btn-primary px-6 py-3.5 rounded-2xl text-sm sm:text-base font-bold inline-flex items-center gap-2.5 shadow-xl hover:scale-105 transition-all cursor-pointer"
                 >
-                  <Play className="w-4 h-4 fill-black" /> Watch Now
+                  <Play className="w-4.5 h-4.5 fill-black" /> Watch Now
                 </button>
 
                 <button aria-label="Watch trailer"
                   onClick={() => setTrailerModal({ title: pageTitle })}
-                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-black/45 border border-neutral-500/60 hover:bg-black/70 inline-flex items-center justify-center backdrop-blur-md"
+                  className="w-12 h-12 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 inline-flex items-center justify-center shadow-lg transition-all text-neutral-200 hover:text-white cursor-pointer"
                   title="Watch trailer"
                 >
-                  <Play className="w-4 h-4" />
+                  <Play className="w-4.5 h-4.5" />
                 </button>
 
                 <button aria-label={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
                   onClick={handleWatchlistToggle}
-                  className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl border inline-flex items-center justify-center backdrop-blur-md transition ${
+                  className={`w-12 h-12 rounded-2xl border transition-all inline-flex items-center justify-center shadow-lg cursor-pointer ${
                     isInWatchlist
-                      ? 'bg-[#e4e078]/90 text-black border-[#e4e078]/60 hover:bg-[#f0ea8f]'
-                      : 'bg-black/45 border-neutral-500/60 hover:bg-black/70'
+                      ? 'liquid-glass-pill-active border-white/40 text-white font-bold'
+                      : 'liquid-glass-pill border-white/20 text-neutral-200 hover:text-white hover:scale-105'
                   } ${watchlistBusy ? 'opacity-70 cursor-not-allowed' : ''}`}
                   title={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
                   disabled={watchlistBusy}
                 >
-                  {watchlistBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : isInWatchlist ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  {watchlistBusy ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : isInWatchlist ? <Check className="w-4.5 h-4.5" /> : <Plus className="w-4.5 h-4.5" />}
                 </button>
 
                 <button
@@ -774,9 +788,9 @@ export default function DiscoverDetailPage() {
                     posterPath: activeDetails?.posterPath || null,
                     tmdbId: activeDetails?.id || tmdbId || undefined,
                   })}
-                  className="px-4 py-3.5 rounded-xl bg-neutral-700/80 hover:bg-neutral-600 text-white font-semibold text-sm sm:text-base inline-flex items-center gap-2 transition"
+                  className="liquid-glass-pill px-5 py-3.5 rounded-2xl border border-white/20 hover:border-white/40 hover:scale-105 text-white font-semibold text-sm sm:text-base inline-flex items-center gap-2.5 shadow-lg transition-all cursor-pointer"
                 >
-                  <Download className="w-4 h-4" /> Download
+                  <Download className="w-4.5 h-4.5" /> Download
                 </button>
 
               </div>
@@ -790,17 +804,17 @@ export default function DiscoverDetailPage() {
           )}
         </div>
 
-        <div className="absolute right-3 md:right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2">
+        <div className="absolute right-3 md:right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2.5">
           <button aria-label={heroPaused ? 'Play background' : 'Pause background'}
             onClick={() => setHeroPaused((prev) => !prev)}
-            className="w-11 h-11 rounded-full bg-black/50 hover:bg-black/75 border border-neutral-500/60 inline-flex items-center justify-center backdrop-blur-md"
+            className="w-11 h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer"
             title={heroPaused ? 'Play background' : 'Pause background'}
           >
             {heroPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
           </button>
           <button aria-label={heroMuted ? 'Unmute background' : 'Mute background'}
             onClick={() => setHeroMuted((prev) => !prev)}
-            className="w-11 h-11 rounded-full bg-black/50 hover:bg-black/75 border border-neutral-500/60 inline-flex items-center justify-center backdrop-blur-md"
+            className="w-11 h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer"
             title={heroMuted ? 'Unmute background' : 'Mute background'}
           >
             {heroMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -827,15 +841,15 @@ export default function DiscoverDetailPage() {
                 </button>
               )}
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin">
               {tvDetails.seasons.map((season) => (
                 <button
                   key={season.seasonNumber}
                   onClick={() => setSelectedSeason(season.seasonNumber)}
-                  className={`px-4 py-2 rounded-full border text-sm font-semibold whitespace-nowrap transition ${
+                  className={`px-4.5 py-2.5 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all cursor-pointer ${
                     selectedSeason === season.seasonNumber
-                      ? 'bg-white/15 border-white/40 text-white'
-                      : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
+                      ? 'liquid-glass-pill-active font-bold border-white/40 text-white shadow-md'
+                      : 'liquid-glass-pill border border-white/10 text-neutral-300 hover:text-white'
                   }`}
                 >
                   {season.name} ({season.episodeCount})
@@ -845,10 +859,10 @@ export default function DiscoverDetailPage() {
 
             {loadingEpisodes ? (
               <div className="py-8 flex justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-neutral-500" />
+                <Loader2 className="w-7 h-7 animate-spin text-neutral-400" />
               </div>
             ) : episodes.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {episodes.map((ep) => {
                   const seasonNumber = selectedSeason || 1;
                   const trailerKey = `${tmdbId}:${seasonNumber}:${ep.episodeNumber}`;
@@ -856,29 +870,29 @@ export default function DiscoverDetailPage() {
                   const hasEpisodeTrailer = isTrailerVideo(episodeTrailer);
 
                   return (
-                    <div key={ep.episodeNumber} className="flex flex-col md:flex-row gap-3 p-3 bg-neutral-900/60 border border-neutral-800 rounded-xl">
+                    <div key={ep.episodeNumber} className="flex flex-col md:flex-row gap-3.5 p-3.5 liquid-glass-card border border-white/10 rounded-2xl shadow-md transition-all hover:border-white/25">
                       {ep.stillPath ? (
                         <img
                           src={`https://image.tmdb.org/t/p/w300${ep.stillPath}`}
                           alt=""
-                          className="w-full md:w-40 h-24 object-cover rounded-lg"
+                          className="w-full md:w-44 h-26 object-cover rounded-xl border border-white/10 shadow-sm shrink-0"
                         />
                       ) : (
-                        <div className="w-full md:w-40 h-24 bg-neutral-800 rounded-lg flex items-center justify-center text-neutral-600 font-bold">
+                        <div className="w-full md:w-44 h-26 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-neutral-500 font-bold shrink-0">
                           E{ep.episodeNumber}
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold">E{ep.episodeNumber} · {ep.title}</p>
+                          <p className="text-sm sm:text-base font-semibold text-neutral-100">E{ep.episodeNumber} · {ep.title}</p>
                           {ep.rating != null && ep.rating > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-semibold">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg liquid-glass-pill border border-amber-400/30 text-amber-300 text-[10px] font-bold">
                               TMDB {ep.rating.toFixed(1)}
                             </span>
                           )}
                         </div>
-                        {ep.overview && <p className="text-xs text-neutral-400 mt-1 line-clamp-2">{ep.overview}</p>}
-                        <div className="mt-2 flex flex-wrap gap-2">
+                        {ep.overview && <p className="text-xs sm:text-sm text-neutral-400 mt-1 line-clamp-2">{ep.overview}</p>}
+                        <div className="mt-3 flex flex-wrap gap-2.5">
                           <button
                             onClick={() => setStreamModal({
                               tmdbId,
@@ -887,9 +901,9 @@ export default function DiscoverDetailPage() {
                               season: selectedSeason || 1,
                               episode: ep.episodeNumber,
                             })}
-                            className="px-3 py-1.5 rounded-lg bg-white text-black hover:bg-neutral-200 text-xs font-semibold inline-flex items-center gap-1"
+                            className="liquid-btn-primary px-4 py-2 rounded-xl text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 shadow-md hover:scale-105 transition-all cursor-pointer"
                           >
-                            <Play className="w-3 h-3 fill-black" /> Watch
+                            <Play className="w-3.5 h-3.5 fill-black" /> Watch
                           </button>
                           {hasEpisodeTrailer && (
                             <button aria-label={`Watch ${ep.title} trailer`}
@@ -898,10 +912,10 @@ export default function DiscoverDetailPage() {
                                 season: seasonNumber,
                                 episode: ep.episodeNumber,
                               })}
-                              className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-200 text-xs font-semibold inline-flex items-center gap-1"
+                              className="liquid-glass-pill px-4 py-2 rounded-xl border border-white/15 text-neutral-200 hover:text-white text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 shadow-md hover:scale-105 transition-all cursor-pointer"
                               title={`Watch ${ep.title} trailer`}
                             >
-                              <PlayCircle className="w-3 h-3" /> Trailer
+                              <PlayCircle className="w-3.5 h-3.5" /> Trailer
                             </button>
                           )}
                           <button
@@ -913,9 +927,9 @@ export default function DiscoverDetailPage() {
                               season: selectedSeason || 1,
                               episode: ep.episodeNumber,
                             })}
-                            className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold inline-flex items-center gap-1"
+                            className="liquid-glass-pill px-4 py-2 rounded-xl border border-white/15 text-neutral-200 hover:text-white text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 shadow-md hover:scale-105 transition-all cursor-pointer"
                           >
-                            <Download className="w-3 h-3" /> Download
+                            <Download className="w-3.5 h-3.5" /> Download
                           </button>
                         </div>
                       </div>
@@ -1002,32 +1016,32 @@ export default function DiscoverDetailPage() {
       </main>
 
       {personModalOpen && (
-        <div className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
-          <div className="w-full max-w-4xl max-h-[90vh] bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-neutral-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
+          <div className="w-full max-w-4xl max-h-[90vh] liquid-glass-menu border border-white/15 rounded-3xl overflow-hidden flex flex-col shadow-2xl backdrop-blur-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-white/10 flex items-center justify-between sticky top-0 bg-neutral-900/90 backdrop-blur-xl z-10">
               <div>
                 <h3 className="text-xl font-bold">Cast Filmography</h3>
                 {personData && <p className="text-xs text-neutral-400 mt-1">{personData.name}</p>}
               </div>
               <button
                 onClick={() => setPersonModalOpen(false)}
-                className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded-full transition"
+                className="p-2.5 liquid-glass-pill hover:scale-105 border border-white/15 rounded-full text-neutral-300 hover:text-white transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto flex-1">
+            <div className="p-5 overflow-y-auto flex-1 custom-scrollbar">
               {loadingPerson && (
                 <div className="flex justify-center py-12">
-                  <Loader2 className="w-7 h-7 animate-spin text-neutral-500" />
+                  <Loader2 className="w-7 h-7 animate-spin text-neutral-400" />
                 </div>
               )}
 
               {!loadingPerson && personData && (
                 <>
                   <div className="flex gap-4 mb-5">
-                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-neutral-800 shrink-0 flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-2xl overflow-hidden bg-white/5 border border-white/10 shrink-0 flex items-center justify-center shadow-md">
                       {personData.profilePath ? (
                         <img
                           src={`https://image.tmdb.org/t/p/w185${personData.profilePath}`}
@@ -1035,7 +1049,7 @@ export default function DiscoverDetailPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <User className="w-8 h-8 text-neutral-600" />
+                        <User className="w-8 h-8 text-neutral-500" />
                       )}
                     </div>
                     <div className="min-w-0">
@@ -1048,12 +1062,12 @@ export default function DiscoverDetailPage() {
 
                   <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                      <h5 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Movies & TV Shows</h5>
-                      <p className="mt-1 text-[11px] text-neutral-500">{filteredPersonCredits.length} credits</p>
+                      <h5 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Movies & TV Shows</h5>
+                      <p className="mt-1 text-[11px] text-neutral-400">{filteredPersonCredits.length} credits</p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex rounded-lg border border-neutral-800 bg-neutral-950/50 p-1">
+                      <div className="inline-flex rounded-xl border border-white/10 liquid-glass-pill p-1 gap-1">
                         {personCreditFilters.map((filter) => {
                           const count = filter.value === 'all'
                             ? personData.credits.length
@@ -1064,10 +1078,10 @@ export default function DiscoverDetailPage() {
                               key={filter.value}
                               type="button"
                               onClick={() => setPersonCreditFilter(filter.value)}
-                              className={`min-h-8 px-3 text-xs font-semibold rounded-md transition whitespace-nowrap ${
+                              className={`min-h-[42px] px-4 text-sm font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                                 personCreditFilter === filter.value
-                                  ? 'bg-white text-black'
-                                  : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                                  ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                  : 'text-neutral-300 hover:text-white hover:bg-white/5'
                               }`}
                               aria-pressed={personCreditFilter === filter.value}
                             >
@@ -1077,16 +1091,15 @@ export default function DiscoverDetailPage() {
                         })}
                       </div>
 
-                      <select
+                      <LiquidDropdown
+                        label="Sort: Date"
+                        title="Sort By"
+                        options={PERSON_SORT_OPTIONS}
                         value={personCreditSort}
-                        onChange={(event) => setPersonCreditSort(event.target.value as PersonCreditSort)}
-                        className="min-h-10 bg-neutral-950/50 text-neutral-200 text-xs font-semibold rounded-lg px-3 border border-neutral-800 focus:outline-none focus:border-neutral-500"
-                        aria-label="Sort cast credits"
-                      >
-                        <option value="date">Sort: Date</option>
-                        <option value="rating">Sort: Rating</option>
-                        <option value="popular">Sort: Popular</option>
-                      </select>
+                        onChange={(val) => setPersonCreditSort(val as PersonCreditSort)}
+                        align="right"
+                        className="min-w-[140px]"
+                      />
                     </div>
                   </div>
                   {personData.credits.length > 0 ? (
@@ -1100,7 +1113,7 @@ export default function DiscoverDetailPage() {
                               setPersonModalOpen(false);
                               router.push(`/discover/${credit.mediaType}/${credit.tmdbId}`);
                             }}
-                            className="w-full text-left bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 rounded-xl overflow-hidden transition"
+                            className="w-full text-left liquid-glass-card hover:border-white/30 border border-white/10 rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.03] shadow-md group cursor-pointer"
                           >
                             <div className="aspect-[2/3] bg-neutral-800">
                               {credit.posterPath ? (

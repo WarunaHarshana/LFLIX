@@ -4,6 +4,7 @@ import type React from 'react';
 import { useState, useEffect, useMemo } from 'react';
 import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown, Zap, Copy, Check, ExternalLink } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
+import LiquidDropdown from './LiquidDropdown';
 
 type SortMode = 'seeds' | 'size_asc' | 'size_desc';
 
@@ -354,73 +355,74 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
 
     return (
         <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Download options" className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative w-full max-w-2xl max-h-[85vh] bg-neutral-900 rounded-2xl border border-neutral-700 overflow-hidden flex flex-col">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
+            <div className="relative w-full max-w-2xl max-h-[85vh] liquid-glass-base rounded-3xl border border-white/15 overflow-hidden flex flex-col shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] animate-in zoom-in-95 duration-200">
 
                 {/* Header */}
-                <div className="flex items-center gap-4 p-5 border-b border-neutral-800">
+                <div className="flex items-center gap-4 p-5 border-b border-white/10">
                     {posterPath && (
-                        <img src={`https://image.tmdb.org/t/p/w92${posterPath}`} alt={title} className="w-12 h-16 object-cover rounded-lg" />
+                        <img src={`https://image.tmdb.org/t/p/w92${posterPath}`} alt={title} className="w-12 h-16 object-cover rounded-xl border border-white/10 shadow-md shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
-                        <h2 className="text-lg font-bold truncate">{title}</h2>
-                        <div className="flex items-center gap-2 text-sm text-neutral-400">
+                        <h2 className="text-lg font-bold tracking-tight text-white truncate">{title}</h2>
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-neutral-400 mt-0.5">
                             {mediaType === 'movie' ? <Film className="w-3.5 h-3.5" /> : <Tv className="w-3.5 h-3.5" />}
                             <span>{mediaType === 'movie' ? 'Movie' : 'TV Show'}</span>
                             {year && <span>• {year}</span>}
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-neutral-800 rounded-full transition">
+                    <button onClick={onClose} className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Folder Chooser */}
                 {folders.length > 0 && (
-                    <div className="px-5 py-3 border-b border-neutral-800 bg-neutral-800/30">
-                        <label className="text-xs text-neutral-400 font-medium flex items-center gap-1.5 mb-1.5">
-                            <Folder className="w-3.5 h-3.5" />
+                    <div className="px-5 py-3 border-b border-white/10 bg-white/[0.02]">
+                        <label className="text-xs text-neutral-300 font-medium flex items-center gap-1.5 mb-1.5">
+                            <Folder className="w-3.5 h-3.5 text-blue-400" />
                             Save to library folder:
                         </label>
-                        <select
+                        <LiquidDropdown
+                            label="Select Folder"
+                            title="Save Location"
+                            options={folders.map((f) => ({
+                                id: f.path,
+                                name: `${f.path} (${f.contentType})`,
+                            }))}
                             value={selectedFolder}
-                            onChange={(e) => setSelectedFolder(e.target.value)}
-                            className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-500 transition"
-                        >
-                            {folders.map((f) => (
-                                <option key={f.id} value={f.path}>
-                                    {f.path} ({f.contentType})
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(val) => setSelectedFolder(val)}
+                            className="w-full"
+                            menuWidth="w-full"
+                        />
                     </div>
                 )}
 
                 {/* Download Started Banner */}
                 {downloadStarted && (
-                    <div className="px-5 py-3 bg-green-600/20 border-b border-green-500/30 flex items-center gap-2 text-green-400 text-sm font-medium">
+                    <div className="px-5 py-3 bg-emerald-500/15 border-b border-emerald-500/30 flex items-center gap-2 text-emerald-300 text-sm font-semibold">
                         <Download className="w-4 h-4" />
                         Download started! Check the Downloads panel for progress.
                     </div>
                 )}
 
                 {/* Tabs: Direct Downloads vs Torrents */}
-                <div className="flex items-center gap-2 px-5 pt-3 border-b border-neutral-800 bg-neutral-900/50">
+                <div className="flex items-center gap-2 px-5 pt-3 border-b border-white/10 bg-black/20">
                     <button
                         type="button"
                         onClick={() => setActiveTab('direct')}
-                        className={`pb-2.5 px-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-1.5 transition ${
+                        className={`pb-2.5 px-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-1.5 transition cursor-pointer ${
                             activeTab === 'direct'
-                                ? 'border-amber-500 text-amber-400'
+                                ? 'border-white text-white font-bold'
                                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
                         }`}
                     >
-                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                        <Zap className="w-3.5 h-3.5 text-neutral-300" />
                         <span>Direct Downloads</span>
                         {searchingDirect ? (
-                            <Loader2 className="w-3 h-3 animate-spin ml-1 text-amber-500" />
+                            <Loader2 className="w-3 h-3 animate-spin ml-1 text-neutral-300" />
                         ) : directDownloads.length > 0 ? (
-                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-bold border border-white/30">
                                 {directDownloads.length}
                             </span>
                         ) : null}
@@ -428,18 +430,18 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                     <button
                         type="button"
                         onClick={() => setActiveTab('torrents')}
-                        className={`pb-2.5 px-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-1.5 transition ${
+                        className={`pb-2.5 px-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-1.5 transition cursor-pointer ${
                             activeTab === 'torrents'
-                                ? 'border-amber-500 text-amber-400'
+                                ? 'border-white text-white font-bold'
                                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
                         }`}
                     >
                         <Magnet className="w-3.5 h-3.5 text-neutral-400" />
                         <span>Torrents</span>
                         {searching ? (
-                            <Loader2 className="w-3 h-3 animate-spin ml-1 text-neutral-500" />
+                            <Loader2 className="w-3 h-3 animate-spin ml-1 text-neutral-400" />
                         ) : pureTorrentResults.length > 0 ? (
-                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-neutral-800 text-neutral-300 text-[10px] font-bold border border-neutral-700">
+                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/10 text-neutral-200 text-[10px] font-bold border border-white/10">
                                 {pureTorrentResults.length}
                             </span>
                         ) : null}
@@ -482,7 +484,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                         {directDownloads.map((item, i) => (
                                             <div
                                                 key={i}
-                                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-neutral-800/60 hover:bg-neutral-800/90 rounded-xl transition border border-neutral-700/40"
+                                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 liquid-glass-pill bg-white/[0.03] hover:bg-white/[0.07] rounded-2xl transition border border-white/10 hover:border-white/20"
                                             >
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -504,7 +506,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                     {item.qualityTags && item.qualityTags.length > 0 && (
                                                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                                                             {item.qualityTags.map((tag, ti) => (
-                                                                <span key={ti} className="px-1.5 py-0.5 rounded bg-neutral-700/60 text-neutral-300 text-[10px]">
+                                                                <span key={ti} className="px-1.5 py-0.5 rounded bg-white/10 text-neutral-300 text-[10px] font-medium">
                                                                     {tag}
                                                                 </span>
                                                             ))}
@@ -515,14 +517,14 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                     <button
                                                         type="button"
                                                         onClick={() => copyLink(item.url)}
-                                                        className="px-2.5 py-2 bg-neutral-700/80 hover:bg-neutral-700 text-neutral-300 hover:text-white rounded-lg text-xs transition border border-neutral-600/50 flex items-center gap-1.5"
+                                                        className="px-2.5 py-2 liquid-orb text-neutral-300 hover:text-white rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer"
                                                         title="Copy direct download link"
                                                         aria-label="Copy direct download link"
                                                     >
                                                         {copiedUrl === item.url ? (
                                                             <>
-                                                                <Check className="w-3.5 h-3.5 text-green-400" />
-                                                                <span className="text-[11px] text-green-400 font-medium">Copied</span>
+                                                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                                                <span className="text-[11px] text-emerald-400 font-medium">Copied</span>
                                                             </>
                                                         ) : (
                                                             <>
@@ -537,7 +539,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         download
-                                                        className="px-2.5 py-2 bg-neutral-700/80 hover:bg-neutral-700 text-white font-medium rounded-lg text-xs flex items-center gap-1.5 transition border border-neutral-600/50"
+                                                        className="px-2.5 py-2 liquid-orb text-white font-medium rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
                                                         title="Download directly in browser"
                                                     >
                                                         <ExternalLink className="w-3.5 h-3.5" />
@@ -548,7 +550,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                         type="button"
                                                         onClick={() => startDirectDownload(item)}
                                                         disabled={downloading !== null}
-                                                        className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
+                                                        className="px-3.5 py-2 liquid-btn-primary rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md disabled:opacity-50"
                                                         title="Download directly to library folder"
                                                     >
                                                         {downloading === item.url ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -563,13 +565,14 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
 
                             {/* No direct results */}
                             {!searchingDirect && searchedDirect && directDownloads.length === 0 && (
-                                <div className="text-center py-10">
-                                    <Zap className="w-10 h-10 text-neutral-700 mx-auto mb-3" />
-                                    <p className="text-neutral-400 text-sm">No direct downloads available for &quot;{title}&quot;</p>
+                                <div className="text-center py-8">
+                                    <Zap className="w-10 h-10 text-neutral-600 mx-auto mb-3 opacity-50" />
+                                    <p className="text-neutral-400 text-sm">No direct downloads found for &quot;{title}&quot;</p>
+                                    <p className="text-neutral-500 text-xs mt-1">Try switching to Torrents below</p>
                                     <button
                                         type="button"
                                         onClick={() => setActiveTab('torrents')}
-                                        className="mt-3 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-medium rounded-lg transition"
+                                        className="mt-3 px-3.5 py-1.5 liquid-glass-pill text-neutral-300 hover:text-white text-xs font-semibold rounded-xl transition cursor-pointer"
                                     >
                                         Switch to Torrents ({pureTorrentResults.length})
                                     </button>
@@ -581,8 +584,8 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                             {/* Torrent searching */}
                             {searching && (
                                 <div className="flex flex-col items-center justify-center py-12">
-                                    <Loader2 className="w-8 h-8 animate-spin text-amber-500 mb-3" />
-                                    <p className="text-neutral-400 text-sm">Searching for torrents...</p>
+                                    <Loader2 className="w-8 h-8 animate-spin text-amber-400 mb-3" />
+                                    <p className="text-neutral-400 text-sm font-medium">Searching for torrents...</p>
                                 </div>
                             )}
 
@@ -597,9 +600,9 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                 <button
                                                     key={mode}
                                                     onClick={() => setSortBy(mode)}
-                                                    className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition ${sortBy === mode
-                                                            ? 'bg-amber-500 text-black'
-                                                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                                                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${sortBy === mode
+                                                            ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                                            : 'liquid-glass-pill text-neutral-400 hover:text-white'
                                                         }`}
                                                 >
                                                     {mode === 'seeds' ? 'Seeds' : mode === 'size_desc' ? 'Size ↓' : 'Size ↑'}
@@ -611,24 +614,24 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                         {sortedResults.map((result, i) => {
                                             const source = sourceBadge(result);
                                             return (
-                                                <div key={i} className="flex items-center gap-3 p-3 bg-neutral-800/60 hover:bg-neutral-800 rounded-xl transition">
+                                                <div key={i} className="flex items-center gap-3 p-3.5 liquid-glass-pill bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 rounded-2xl transition">
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium truncate mb-1" title={result.title}>{result.title}</p>
+                                                        <p className="text-sm font-medium truncate mb-1 text-neutral-200" title={result.title}>{result.title}</p>
                                                         <div className="flex flex-wrap items-center gap-2 text-xs">
                                                             <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>{result.quality}</span>
                                                             {extractTags(result.title).map((tag, ti) => (
                                                                 <span key={ti} className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${tag.className}`}>{tag.label}</span>
                                                             ))}
                                                             <span className="text-neutral-400">{result.size}</span>
-                                                            <span className="text-green-500">↑{result.seeds}</span>
-                                                            <span className="text-red-400">↓{result.leeches}</span>
+                                                            <span className="text-emerald-400 font-semibold">↑{result.seeds}</span>
+                                                            <span className="text-rose-400 font-semibold">↓{result.leeches}</span>
                                                             <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
                                                         </div>
                                                     </div>
                                                     <button
                                                         onClick={() => startDownload(result.magnet)}
                                                         disabled={downloading !== null}
-                                                        className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
+                                                        className="px-3.5 py-2 liquid-btn-primary rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md disabled:opacity-50"
                                                     >
                                                         {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                                                         Download

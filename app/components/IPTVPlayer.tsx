@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { X, Maximize, Minimize, Volume2, VolumeX } from 'lucide-react';
+import LiquidDropdown from './LiquidDropdown';
 
 type Props = {
   channel: {
@@ -169,17 +170,18 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
         </div>
         <div className="flex items-center gap-2">
           {qualities.length > 0 && (
-            <select
+            <LiquidDropdown
+              label="Quality"
+              title="Stream Quality"
+              options={qualities.map((q) => ({
+                id: q.index,
+                name: q.label,
+              }))}
               value={currentQuality}
-              onChange={(e) => handleQualityChange(Number(e.target.value))}
-              className="bg-neutral-800 text-white text-xs rounded border border-neutral-700 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-600/50 mr-2 cursor-pointer font-medium"
-            >
-              {qualities.map((q) => (
-                <option key={q.index} value={q.index}>
-                  {q.label}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => handleQualityChange(Number(val))}
+              className="min-w-[130px]"
+              align="right"
+            />
           )}
           <button aria-label={isMuted ? "Unmute" : "Mute"} 
             onClick={() => setIsMuted(!isMuted)}

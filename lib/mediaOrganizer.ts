@@ -141,22 +141,35 @@ export function getDownloadRootDir(baseDownloadPath?: string): string {
   return path.resolve(process.cwd(), 'downloads');
 }
 
+export type ActiveDownloadItem = { name: string | null; magnetUri: string; downloadPath: string | null };
+
+let activeDownloadsStmt: any = null;
+export function getActiveDownloads(): ActiveDownloadItem[] {
+  if (!activeDownloadsStmt) {
+    activeDownloadsStmt = db.prepare(`
+      SELECT name, magnetUri, downloadPath 
+      FROM downloads 
+      WHERE status IN ('metadata', 'downloading', 'stalled', 'paused', 'error')
+    `);
+  }
+  return activeDownloadsStmt.all() as ActiveDownloadItem[];
+}
+
 /**
  * Check if a file or directory path belongs to an in-progress, paused, or stalled download.
  * Prevents media organization and file watching routines from moving or deleting partial downloads.
  */
-export function isItemPartOfActiveDownload(itemPath: string): boolean {
+export function isItemPartOfActiveDownload(
+  itemPath: string,
+  providedActiveDownloads?: ActiveDownloadItem[]
+): boolean {
   if (!itemPath) return false;
 
   try {
     const resolvedItem = path.resolve(itemPath).toLowerCase();
 
-    // Query non-completed downloads from database
-    const activeDownloads = db.prepare(`
-      SELECT name, magnetUri, downloadPath 
-      FROM downloads 
-      WHERE status IN ('metadata', 'downloading', 'stalled', 'paused', 'error')
-    `).all() as { name: string | null; magnetUri: string; downloadPath: string | null }[];
+    // Query non-completed downloads from database if not provided
+    const activeDownloads = providedActiveDownloads || getActiveDownloads();
 
     if (!activeDownloads || activeDownloads.length === 0) {
       return false;

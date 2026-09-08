@@ -964,7 +964,7 @@ export async function syncAllLibraryLanguages(): Promise<void> {
   hasSyncedLanguages = true;
 
   try {
-    const movies = db.prepare('SELECT id, tmdbId, title, fileName, language FROM movies WHERE tmdbId IS NOT NULL AND tmdbId > 0').all() as { id: number; tmdbId: number; title: string; fileName: string; language: string | null }[];
+    const movies = db.prepare("SELECT id, tmdbId, title, fileName, language FROM movies WHERE tmdbId IS NOT NULL AND tmdbId > 0 AND (language IS NULL OR language = '')").all() as { id: number; tmdbId: number; title: string; fileName: string; language: string | null }[];
     for (const m of movies) {
       try {
         const lang = await syncMediaLanguageFromTmdb(m.tmdbId, 'movie');
@@ -976,7 +976,7 @@ export async function syncAllLibraryLanguages(): Promise<void> {
       await new Promise(r => setTimeout(r, 20));
     }
 
-    const shows = db.prepare('SELECT id, tmdbId, title, language FROM shows WHERE tmdbId IS NOT NULL AND tmdbId > 0').all() as { id: number; tmdbId: number; title: string; language: string | null }[];
+    const shows = db.prepare("SELECT id, tmdbId, title, language FROM shows WHERE tmdbId IS NOT NULL AND tmdbId > 0 AND (language IS NULL OR language = '')").all() as { id: number; tmdbId: number; title: string; language: string | null }[];
     for (const s of shows) {
       try {
         const lang = await syncMediaLanguageFromTmdb(s.tmdbId, 'tv');

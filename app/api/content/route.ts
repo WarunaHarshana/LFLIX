@@ -98,8 +98,11 @@ export async function GET() {
     const content = [
       ...movies.map((m) => {
         const rawLang = m.language;
-        const detectedLang = resolveLanguageName(null, m.fileName || m.title, null);
-        const language = (rawLang && rawLang !== 'English') ? rawLang : (detectedLang || rawLang || 'English');
+        let language = rawLang;
+        if (!language || language === 'English') {
+          const detectedLang = resolveLanguageName(null, m.fileName || m.title, null);
+          language = detectedLang || language || 'English';
+        }
 
         return {
           id: m.id,
@@ -125,8 +128,11 @@ export async function GET() {
       }),
       ...shows.map((s) => {
         const rawLang = s.language;
-        const detectedLang = resolveLanguageName(null, s.title, null);
-        const language = (rawLang && rawLang !== 'English') ? rawLang : (detectedLang || rawLang || 'English');
+        let language = rawLang;
+        if (!language || language === 'English') {
+          const detectedLang = resolveLanguageName(null, s.title, null);
+          language = detectedLang || language || 'English';
+        }
 
         return {
           id: s.id,

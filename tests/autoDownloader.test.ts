@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach, vi } from 'vitest';
 import autoDownloader from '@/lib/autoDownloader';
 import db from '@/lib/db';
 
@@ -44,6 +44,7 @@ describe('AutoDownloader manual vs automatic tracking', () => {
     };
 
     // Calling processNewEpisodes with manualEp should not crash and should queue the episode
+    const findSpy = vi.spyOn(autoDownloader, 'findAndDownload').mockResolvedValue(true);
     expect(() => {
       autoDownloader.processNewEpisodes([manualEp]);
     }).not.toThrow();

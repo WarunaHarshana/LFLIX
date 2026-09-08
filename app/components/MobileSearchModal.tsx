@@ -52,27 +52,27 @@ export default function MobileSearchModal({ isOpen, onClose, library, onPlay, on
   if (!isOpen) return null;
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Search your library" className="fixed inset-0 z-[100] bg-black flex flex-col overscroll-none touch-none">
+    <div role="dialog" aria-modal="true" aria-label="Search your library" className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-2xl flex flex-col overscroll-none touch-none">
       {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b border-neutral-800">
+      <div className="flex items-center gap-3 p-4 border-b border-white/10 liquid-glass-dock">
         <div className="flex-1 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
             ref={inputRef}
             type="text"
             placeholder="Search movies & shows..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full bg-neutral-900 border border-neutral-700 rounded-full pl-12 pr-4 py-3 text-white placeholder-neutral-500 outline-none focus:border-red-600"
+            className="w-full bg-white/[0.06] border border-white/12 rounded-2xl pl-11 pr-4 py-2.5 text-white text-sm placeholder-neutral-500 outline-none focus:border-white/30 focus:ring-1 focus:ring-white/20 transition"
           />
         </div>
         <button
           onClick={onClose}
           onTouchStart={onClose}
-          className="p-3 hover:bg-neutral-800 rounded-full transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+          className="p-2.5 liquid-orb text-neutral-300 hover:text-white transition min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
           style={{ touchAction: 'manipulation' }}
         >
-          <X className="w-6 h-6 pointer-events-none" />
+          <X className="w-5 h-5 pointer-events-none" />
         </button>
       </div>
 
@@ -81,15 +81,15 @@ export default function MobileSearchModal({ isOpen, onClose, library, onPlay, on
         {!query.trim() ? (
           <div className="text-center text-neutral-500 mt-12">
             <Search className="w-16 h-16 mx-auto mb-4 opacity-30" />
-            <p>Start typing to search your library</p>
+            <p className="text-sm">Start typing to search your library</p>
           </div>
         ) : results.length === 0 ? (
           <div className="text-center text-neutral-500 mt-12">
-            <p>No results found for "{query}"</p>
+            <p className="text-sm">No results found for &quot;{query}&quot;</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-neutral-500 mb-3">{results.length} results</p>
+          <div className="space-y-2.5">
+            <p className="text-xs font-semibold text-neutral-400 mb-3 uppercase tracking-wider">{results.length} results</p>
             {results.map((item) => (
               <button
                 key={`${item.type}-${item.id}`}
@@ -101,9 +101,9 @@ export default function MobileSearchModal({ isOpen, onClose, library, onPlay, on
                   }
                   onClose();
                 }}
-                className="w-full flex items-center gap-4 p-3 bg-neutral-900 rounded-xl hover:bg-neutral-800 transition"
+                className="w-full flex items-center gap-4 p-3 liquid-glass-pill bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 rounded-2xl transition cursor-pointer text-left"
               >
-                <div className="w-16 h-24 bg-neutral-800 rounded-lg flex-shrink-0 overflow-hidden">
+                <div className="w-14 h-20 bg-neutral-800 border border-white/10 rounded-xl flex-shrink-0 overflow-hidden shadow-sm">
                   {item.posterPath ? (
                     <img
                       src={`https://image.tmdb.org/t/p/w200${item.posterPath}`}
@@ -116,14 +116,14 @@ export default function MobileSearchModal({ isOpen, onClose, library, onPlay, on
                     </div>
                   )}
                 </div>
-                <div className="text-left flex-1 min-w-0">
-                  <h3 className="font-medium text-white truncate">{item.title}</h3>
-                  <p className="text-sm text-neutral-400">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-white truncate text-sm">{item.title}</h3>
+                  <p className="text-xs text-neutral-400 mt-0.5">
                     {item.type === 'movie' ? 'Movie' : 'TV Show'}
                     {item.year && ` • ${item.year}`}
                   </p>
                   {item.genres && (
-                    <p className="text-xs text-neutral-500 truncate mt-1">
+                    <p className="text-[11px] text-neutral-500 truncate mt-1">
                       {item.genres.split(',').slice(0, 2).join(' • ')}
                     </p>
                   )}

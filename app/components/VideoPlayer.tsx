@@ -2066,31 +2066,31 @@ export default function VideoPlayer({
           onClick={() => setShowSettingsModal(false)}
         >
           <div
-            className="w-full max-w-md bg-neutral-900 border border-neutral-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            className="w-full max-w-md liquid-glass-menu rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-neutral-800 bg-neutral-950/40">
+            <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/[0.02]">
               <div className="flex items-center gap-2">
                 <Settings2 className="w-5 h-5 text-red-500" />
                 <h3 className="font-semibold text-white text-base">Playback Settings</h3>
               </div>
               <button
                 onClick={() => setShowSettingsModal(false)}
-                className="p-1.5 hover:bg-neutral-800 rounded-full text-neutral-400 hover:text-white transition"
+                className="p-1.5 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex border-b border-neutral-800 bg-neutral-900/90 overflow-x-auto no-scrollbar">
+            <div className="flex border-b border-white/10 bg-white/[0.02] overflow-x-auto no-scrollbar">
               <button
                 onClick={() => setActiveSettingsTab('audio')}
-                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
+                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeSettingsTab === 'audio'
-                    ? 'border-red-600 text-red-400 bg-neutral-800/40'
-                    : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                    ? 'border-red-500 text-white font-bold bg-white/[0.08]'
+                    : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]'
                 }`}
               >
                 <AudioLines className="w-4 h-4" />
@@ -2098,10 +2098,10 @@ export default function VideoPlayer({
               </button>
               <button
                 onClick={() => setActiveSettingsTab('subtitles')}
-                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
+                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeSettingsTab === 'subtitles'
-                    ? 'border-red-600 text-red-400 bg-neutral-800/40'
-                    : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                    ? 'border-red-500 text-white font-bold bg-white/[0.08]'
+                    : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]'
                 }`}
               >
                 <Subtitles className="w-4 h-4" />
@@ -2110,10 +2110,10 @@ export default function VideoPlayer({
               {qualityLevels.length > 1 && (
                 <button
                   onClick={() => setActiveSettingsTab('quality')}
-                  className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 cursor-pointer ${
                     activeSettingsTab === 'quality'
-                      ? 'border-red-600 text-red-400 bg-neutral-800/40'
-                      : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                      ? 'border-red-500 text-white font-bold bg-white/[0.08]'
+                      : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]'
                   }`}
                 >
                   <Gauge className="w-4 h-4" />
@@ -2122,10 +2122,10 @@ export default function VideoPlayer({
               )}
               <button
                 onClick={() => setActiveSettingsTab('speed')}
-                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
+                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeSettingsTab === 'speed'
-                    ? 'border-red-600 text-red-400 bg-neutral-800/40'
-                    : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                    ? 'border-red-500 text-white font-bold bg-white/[0.08]'
+                    : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]'
                 }`}
               >
                 <RefreshCw className="w-4 h-4" />
@@ -2146,10 +2146,10 @@ export default function VideoPlayer({
                           changeAudioTrack(track.id);
                           setShowSettingsModal(false);
                         }}
-                        className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
+                        className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition cursor-pointer liquid-dropdown-item ${
                           currentAudioTrack === track.id
-                            ? 'bg-red-950/40 text-red-400 border border-red-800/40'
-                            : 'hover:bg-neutral-800/60 text-neutral-300'
+                            ? 'liquid-dropdown-item-active text-white'
+                            : 'text-neutral-300 hover:text-white'
                         }`}
                       >
                         <span className="font-medium">
@@ -2178,23 +2178,23 @@ export default function VideoPlayer({
                     <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
                       <button
                         onClick={() => changeSubtitleTrack(-1)}
-                        className={`w-full px-3 py-2.5 rounded-lg text-left text-sm flex items-center justify-between transition ${
+                        className={`w-full px-3.5 py-2.5 rounded-xl text-left text-sm flex items-center justify-between transition cursor-pointer liquid-dropdown-item ${
                           currentSubtitleTrack === -1
-                            ? 'bg-red-950/40 text-red-400 border border-red-800/40'
-                            : 'hover:bg-neutral-800/60 text-neutral-300'
+                            ? 'liquid-dropdown-item-active text-white'
+                            : 'text-neutral-300 hover:text-white'
                         }`}
                       >
                         <span className="font-medium">Off</span>
-                        {currentSubtitleTrack === -1 && <Check className="w-4 h-4 text-red-400" />}
+                        {currentSubtitleTrack === -1 && <Check className="w-4 h-4 text-white" />}
                       </button>
                       {subtitleTracks.map((track) => (
                         <button
                           key={track.id}
                           onClick={() => changeSubtitleTrack(track.id)}
-                          className={`w-full px-3 py-2.5 rounded-lg text-left text-sm flex items-center justify-between transition ${
+                          className={`w-full px-3.5 py-2.5 rounded-xl text-left text-sm flex items-center justify-between transition cursor-pointer liquid-dropdown-item ${
                             currentSubtitleTrack === track.id
-                              ? 'bg-red-950/40 text-red-400 border border-red-800/40'
-                              : 'hover:bg-neutral-800/60 text-neutral-300'
+                              ? 'liquid-dropdown-item-active text-white'
+                              : 'text-neutral-300 hover:text-white'
                           }`}
                         >
                           <span className="font-medium truncate">
@@ -2343,21 +2343,21 @@ export default function VideoPlayer({
                       changeQuality(-1);
                       setShowSettingsModal(false);
                     }}
-                    className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
+                    className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition cursor-pointer liquid-dropdown-item ${
                       preferredLevel === -1
-                        ? 'bg-red-950/40 text-red-400 border border-red-800/40'
-                        : 'hover:bg-neutral-800/60 text-neutral-300'
+                        ? 'liquid-dropdown-item-active text-white'
+                        : 'text-neutral-300 hover:text-white'
                     }`}
                   >
                     <div>
                       <div className="font-medium">Auto (Recommended)</div>
                       {preferredLevel === -1 && activeLevel >= 0 && (
-                        <div className="text-xs text-neutral-500 mt-0.5">
+                        <div className="text-xs text-neutral-300 mt-0.5">
                           Currently: {qualityLevels.find((l) => l.index === activeLevel)?.label ?? '—'}
                         </div>
                       )}
                     </div>
-                    {preferredLevel === -1 && <Check className="w-4 h-4 text-red-400" />}
+                    {preferredLevel === -1 && <Check className="w-4 h-4 text-white" />}
                   </button>
                   {qualityLevels.map((lvl) => (
                     <button
@@ -2366,21 +2366,21 @@ export default function VideoPlayer({
                         changeQuality(lvl.index);
                         setShowSettingsModal(false);
                       }}
-                      className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
+                      className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition cursor-pointer liquid-dropdown-item ${
                         preferredLevel === lvl.index
-                          ? 'bg-red-950/40 text-red-400 border border-red-800/40'
-                          : 'hover:bg-neutral-800/60 text-neutral-300'
+                          ? 'liquid-dropdown-item-active text-white'
+                          : 'text-neutral-300 hover:text-white'
                       }`}
                     >
                       <div>
                         <div className="font-medium">{lvl.label}</div>
                         {lvl.bitrate > 0 && (
-                          <div className="text-xs text-neutral-500 mt-0.5">
+                          <div className="text-xs text-neutral-300 mt-0.5">
                             {(lvl.bitrate / 1_000_000).toFixed(1)} Mbps
                           </div>
                         )}
                       </div>
-                      {preferredLevel === lvl.index && <Check className="w-4 h-4 text-red-400" />}
+                      {preferredLevel === lvl.index && <Check className="w-4 h-4 text-white" />}
                     </button>
                   ))}
                 </div>
@@ -2396,10 +2396,10 @@ export default function VideoPlayer({
                         changePlaybackRate(rate);
                         setShowSettingsModal(false);
                       }}
-                      className={`py-3 px-2 rounded-xl text-center text-sm font-semibold transition ${
+                      className={`py-3 px-2 rounded-xl text-center text-sm font-semibold transition cursor-pointer ${
                         playbackRate === rate
-                          ? 'bg-red-600 text-white shadow-lg'
-                          : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                          ? 'liquid-btn-primary font-bold text-black shadow-lg'
+                          : 'liquid-glass-pill text-neutral-300 hover:text-white'
                       }`}
                     >
                       {rate === 1 ? 'Normal (1x)' : `${rate}x`}

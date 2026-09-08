@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder, Globe, ArrowUpDown, TrendingUp, Film, Tv } from 'lucide-react';
+import LiquidDropdown from './LiquidDropdown';
 
 type TrendingItem = {
     tmdbId: number;
@@ -276,26 +277,31 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
             {/* Header */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
-                    <Magnet className="w-8 h-8 text-blue-500" />
-                    <h1 className="text-3xl font-bold">Torrent Search</h1>
+                    <div className="p-3 bg-gradient-to-br from-blue-600/30 to-blue-500/10 border border-blue-500/30 rounded-2xl text-blue-400 shadow-lg shadow-blue-500/10">
+                        <Magnet className="w-7 h-7" />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">Torrent Search</h1>
+                        <p className="text-neutral-400 text-sm md:text-base mt-0.5">Search for any torrent — movies, TV episodes, anything. Download directly to your library.</p>
+                    </div>
                 </div>
-                <p className="text-neutral-400 text-sm">Search for any torrent — movies, TV episodes, anything. Download directly to your library.</p>
                 {onSwitchToOnline && (
                     <button
                         onClick={onSwitchToOnline}
-                        className="mt-3 px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-xl hover:bg-neutral-800 transition text-sm text-neutral-300 flex items-center gap-2"
+                        className="mt-3.5 px-4 py-2 liquid-glass-pill border border-white/15 hover:scale-105 transition-all text-sm text-neutral-200 hover:text-white flex items-center gap-2 shadow-lg"
                     >
                         <Globe className="w-4 h-4 text-blue-400" />
-                        Switch to Online
+                        <span>Switch to Online</span>
                     </button>
                 )}
             </div>
 
             {/* Search Bar */}
-            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 mb-6">
-                <div className="flex gap-3">
+            <div className="liquid-glass-base border border-white/15 rounded-3xl p-6 mb-6 shadow-2xl relative overflow-hidden">
+                <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-blue-500/[0.03] rounded-full blur-3xl pointer-events-none" />
+                <div className="flex flex-col sm:flex-row gap-3 relative z-10">
                     <div className="relative flex-1">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
                         <input
                             ref={inputRef}
                             type="text"
@@ -303,37 +309,37 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                             onChange={(e) => setSearchQuery(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder="Search torrents... e.g. Vikings S01E01 2160p, Inception 1080p BluRay"
-                            className="w-full bg-black border border-neutral-700 rounded-xl pl-12 pr-10 py-3.5 outline-none focus:border-blue-500 transition text-sm"
+                            className="w-full bg-white/[0.04] border border-white/15 focus:border-blue-400/50 focus:bg-white/[0.08] text-white placeholder-neutral-500 rounded-2xl pl-12 pr-10 py-3.5 outline-none transition-all text-sm md:text-base shadow-inner"
                             autoFocus
                         />
                         {searchQuery && (
                             <button
                                 onClick={() => { setSearchQuery(''); setResults([]); setSearched(false); }}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-neutral-800 rounded-full transition"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/10 rounded-full transition text-neutral-400 hover:text-white"
                             >
-                                <X className="w-4 h-4 text-neutral-500" />
+                                <X className="w-4 h-4" />
                             </button>
                         )}
                     </div>
                     <button
                         onClick={searchTorrents}
                         disabled={searching || searchQuery.trim().length < 2}
-                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-700 text-white font-semibold rounded-xl flex items-center gap-2 transition"
+                        className="px-6 py-3.5 liquid-btn-primary disabled:opacity-50 text-black font-bold rounded-2xl flex items-center justify-center gap-2 transition-all shadow-xl hover:scale-105 cursor-pointer text-sm sm:text-base"
                     >
-                        {searching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-                        Search
+                        {searching ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : <Search className="w-5 h-5 text-black" />}
+                        <span>Search</span>
                     </button>
                 </div>
 
                 {/* Search tips */}
                 {!searched && !searching && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                        <span className="text-xs text-neutral-600">Try:</span>
+                    <div className="mt-4 flex flex-wrap items-center gap-2 relative z-10">
+                        <span className="text-xs text-neutral-400 font-medium">Try:</span>
                         {['Vikings S01E01', 'Inception 2010 1080p', 'Breaking Bad S05E16 4K', 'Interstellar BluRay'].map(q => (
                             <button
                                 key={q}
                                 onClick={() => { setSearchQuery(q); executeSearch(q); }}
-                                className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 text-xs rounded-lg transition"
+                                className="px-3 py-1 liquid-glass-pill border border-white/10 hover:border-white/20 text-neutral-300 hover:text-white text-xs rounded-xl transition-all"
                             >
                                 {q}
                             </button>
@@ -344,37 +350,38 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
 
             {/* Folder Chooser */}
             {folders.length > 0 && (
-                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 mb-6">
-                    <label className="text-xs text-neutral-400 font-medium flex items-center gap-1.5 mb-2">
-                        <Folder className="w-3.5 h-3.5" />
+                <div className="liquid-glass-base border border-white/15 rounded-3xl p-5 mb-6 shadow-xl">
+                    <label className="text-xs md:text-sm text-neutral-300 font-semibold flex items-center gap-2 mb-2.5">
+                        <Folder className="w-4 h-4 text-blue-400" />
                         Save downloads to:
                     </label>
-                    <select
+                    <LiquidDropdown
+                        label="Select Folder"
+                        title="Destination Folder"
+                        options={folders.map((f) => ({
+                            id: f.path,
+                            name: `${f.path} (${f.contentType})`,
+                        }))}
                         value={selectedFolder}
-                        onChange={(e) => setSelectedFolder(e.target.value)}
-                        className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500 transition"
-                    >
-                        {folders.map((f) => (
-                            <option key={f.id} value={f.path}>
-                                {f.path} ({f.contentType})
-                            </option>
-                        ))}
-                    </select>
+                        onChange={(val) => setSelectedFolder(val)}
+                        className="w-full"
+                        menuWidth="w-full"
+                    />
                 </div>
             )}
 
             {/* Error */}
             {error && (
-                <div className="flex items-center gap-2 p-3 bg-red-600/10 border border-red-500/30 rounded-xl text-red-400 text-sm mb-4">
+                <div className="flex items-center gap-2 p-3 bg-red-600/10 border border-red-500/30 rounded-2xl text-red-400 text-sm mb-4">
                     <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                     {error}
-                    <button onClick={() => setError(null)} className="ml-auto p-1 hover:bg-red-600/20 rounded"><X className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setError(null)} className="ml-auto p-1 hover:bg-red-600/20 rounded-lg"><X className="w-3.5 h-3.5" /></button>
                 </div>
             )}
 
             {/* Download started toast */}
             {downloadStarted.size > 0 && (
-                <div className="flex items-center gap-2 p-3 bg-green-600/10 border border-green-500/30 rounded-xl text-green-400 text-sm mb-4">
+                <div className="flex items-center gap-2 p-3 bg-green-600/10 border border-green-500/30 rounded-2xl text-green-400 text-sm mb-4">
                     <Download className="w-4 h-4" />
                     {downloadStarted.size} download{downloadStarted.size > 1 ? 's' : ''} started! Check the Downloads panel (⬇ icon in navbar).
                 </div>
@@ -382,17 +389,17 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
 
             {/* Source status */}
             {!searching && searched && sourceStatuses.length > 0 && (
-                <div className={`flex flex-wrap items-center gap-2 p-3 border rounded-xl text-xs mb-4 ${sourceIssues.length > 0
+                <div className={`flex flex-wrap items-center gap-2 p-3 border rounded-2xl text-xs mb-4 ${sourceIssues.length > 0
                     ? 'bg-yellow-600/10 border-yellow-500/30 text-yellow-300'
-                    : 'bg-neutral-900 border-neutral-800 text-neutral-400'
+                    : 'liquid-glass-base border border-white/10 text-neutral-400'
                     }`}>
                     {sourceIssues.length > 0 && <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
                     {sourceStatuses.map(source => (
                         <span
                             key={source.name}
                             title={source.error || `${source.durationMs}ms`}
-                            className={`px-2 py-1 rounded-lg border ${source.status === 'ok'
-                                ? 'bg-neutral-800 border-neutral-700 text-neutral-300'
+                            className={`px-2.5 py-1 rounded-xl border ${source.status === 'ok'
+                                ? 'bg-white/[0.05] border-white/15 text-neutral-200'
                                 : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300'
                                 }`}
                         >
@@ -400,7 +407,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                         </span>
                     ))}
                     {sourceStatuses.some(source => source.cached) && (
-                        <span className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300">cached</span>
+                        <span className="px-2.5 py-1 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300">cached</span>
                     )}
                 </div>
             )}
@@ -415,18 +422,18 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
 
             {/* Results */}
             {!searching && searched && results.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                     <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm font-semibold text-neutral-300">{results.length} results</h2>
-                        <div className="flex items-center gap-1">
-                            <ArrowUpDown className="w-3.5 h-3.5 text-neutral-500 mr-1" />
+                        <h2 className="text-sm md:text-base font-bold text-neutral-200">{results.length} results</h2>
+                        <div className="flex items-center gap-1.5 liquid-glass-pill p-1 border border-white/10 rounded-xl">
+                            <ArrowUpDown className="w-3.5 h-3.5 text-neutral-400 mr-1 ml-1" />
                             {(['seeds', 'time_desc', 'size_desc', 'size_asc'] as SortMode[]).map(mode => (
                                 <button
                                     key={mode}
                                     onClick={() => setSortBy(mode)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${sortBy === mode
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                                    className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${sortBy === mode
+                                        ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                        : 'text-neutral-300 hover:text-white hover:bg-white/5'
                                         }`}
                                 >
                                     {mode === 'seeds' ? 'Seeds' : mode === 'time_desc' ? 'Time ↓' : mode === 'size_desc' ? 'Size ↓' : 'Size ↑'}
@@ -440,49 +447,51 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                         return (
                             <div
                                 key={i}
-                                className="flex items-center gap-4 p-4 bg-neutral-900 hover:bg-neutral-800/80 border border-neutral-800 rounded-xl transition group"
+                                className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 liquid-glass-base border border-white/10 hover:border-white/25 rounded-2xl transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.6),0_0_15px_rgba(255,255,255,0.04)] group"
                             >
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium mb-1.5 break-words" title={result.title}>{result.title}</p>
+                                    <p className="text-sm md:text-base font-semibold mb-1.5 break-words group-hover:text-white transition-colors" title={result.title}>{result.title}</p>
                                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                                        <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>
+                                        <span className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold ${qualityColor(result.quality)}`}>
                                             {result.quality}
                                         </span>
                                         {extractTags(result.title).map((tag, ti) => (
-                                            <span key={ti} className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${tag.className}`}>{tag.label}</span>
+                                            <span key={ti} className={`px-1.5 py-0.5 rounded-lg border text-[10px] font-bold ${tag.className}`}>{tag.label}</span>
                                         ))}
-                                        <span className="text-neutral-400">{result.size}</span>
-                                        {!isDDL(result) && <span className="text-green-500 font-medium">↑ {result.seeds}</span>}
+                                        <span className="text-neutral-300 font-medium">{result.size}</span>
+                                        {!isDDL(result) && <span className="text-green-400 font-semibold">↑ {result.seeds}</span>}
                                         {!isDDL(result) && <span className="text-red-400">↓ {result.leeches}</span>}
-                                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
-                                        {result.uploadDate && <span className="text-neutral-600">{result.uploadDate}</span>}
+                                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-medium ${source.className}`}>{source.label}</span>
+                                        {result.uploadDate && <span className="text-neutral-500">{result.uploadDate}</span>}
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => openDetailsByTitle(result.title)}
-                                    disabled={downloading !== null || resolvingDetails !== null}
-                                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-neutral-600 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
-                                >
-                                    {resolvingDetails === result.title ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
-                                    Details
-                                </button>
-                                <button
-                                    onClick={() => startDownload(result.magnet)}
-                                    disabled={downloading !== null || isStarted}
-                                    className={`px-4 py-2.5 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0 ${isStarted
-                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default'
-                                        : 'bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-600 text-white'
-                                        }`}
-                                >
-                                    {downloading === result.magnet ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    ) : isStarted ? (
-                                        <>✓ Started</>
-                                    ) : (
-                                        <Download className="w-3.5 h-3.5" />
-                                    )}
-                                    {!isStarted && downloading !== result.magnet && 'Download'}
-                                </button>
+                                <div className="flex items-center gap-2 self-end sm:self-center">
+                                    <button
+                                        onClick={() => openDetailsByTitle(result.title)}
+                                        disabled={downloading !== null || resolvingDetails !== null}
+                                        className="px-4 py-2 liquid-glass-pill border border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-600/30 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0"
+                                    >
+                                        {resolvingDetails === result.title ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+                                        Details
+                                    </button>
+                                    <button
+                                        onClick={() => startDownload(result.magnet)}
+                                        disabled={downloading !== null || isStarted}
+                                        className={`px-4 py-2 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer ${isStarted
+                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default'
+                                            : 'liquid-btn-primary shadow-md hover:scale-105'
+                                            }`}
+                                    >
+                                        {downloading === result.magnet ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : isStarted ? (
+                                            <>✓ Started</>
+                                        ) : (
+                                            <Download className="w-3.5 h-3.5" />
+                                        )}
+                                        {!isStarted && downloading !== result.magnet && 'Download'}
+                                    </button>
+                                </div>
                             </div>
                         );
                     })}
@@ -491,10 +500,10 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
 
             {/* No results */}
             {!searching && searched && results.length === 0 && !error && (
-                <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
-                    <Search className="w-12 h-12 text-neutral-700 mx-auto mb-3" />
-                    <p className="text-neutral-400 text-sm">No torrents found for &quot;{searchQuery}&quot;</p>
-                    <p className="text-neutral-600 text-xs mt-1">Try a different search query or paste a magnet link below</p>
+                <div className="text-center py-16 liquid-glass-base border border-white/10 rounded-3xl shadow-xl">
+                    <Search className="w-12 h-12 text-neutral-500 mx-auto mb-3" />
+                    <p className="text-neutral-300 text-sm md:text-base font-semibold">No torrents found for &quot;{searchQuery}&quot;</p>
+                    <p className="text-neutral-500 text-xs md:text-sm mt-1">Try a different search query or paste a magnet link below</p>
                 </div>
             )}
 
@@ -505,14 +514,14 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                             <TrendingUp className="w-5 h-5 text-red-500" />
-                            <h2 className="text-lg font-bold">Trending Now</h2>
+                            <h2 className="text-lg md:text-xl font-bold tracking-tight">Trending Now</h2>
                         </div>
-                        <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 rounded-xl p-1">
+                        <div className="flex items-center gap-1 liquid-glass-pill p-1 border border-white/10">
                             <button
                                 onClick={() => setTrendingTab('movie')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${trendingTab === 'movie'
-                                    ? 'bg-red-600 text-white'
-                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${trendingTab === 'movie'
+                                    ? 'liquid-glass-pill-active shadow-md text-white'
+                                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
                                     }`}
                             >
                                 <Film className="w-3.5 h-3.5" />
@@ -520,9 +529,9 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                             </button>
                             <button
                                 onClick={() => setTrendingTab('tv')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${trendingTab === 'tv'
-                                    ? 'bg-red-600 text-white'
-                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${trendingTab === 'tv'
+                                    ? 'liquid-glass-pill-active shadow-md text-white'
+                                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
                                     }`}
                             >
                                 <Tv className="w-3.5 h-3.5" />
@@ -534,13 +543,13 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                     {/* Trending loading */}
                     {loadingTrending && (
                         <div className="flex items-center justify-center py-16">
-                            <Loader2 className="w-6 h-6 animate-spin text-neutral-500" />
+                            <Loader2 className="w-7 h-7 animate-spin text-neutral-400" />
                         </div>
                     )}
 
                     {/* Trending grid */}
                     {!loadingTrending && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3.5">
                             {(trendingTab === 'movie' ? trendingMovies : trendingTv).map((item) => (
                                 <div
                                     key={item.tmdbId}
@@ -559,58 +568,58 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                     }}
                                     role="button"
                                     tabIndex={0}
-                                    className="group relative bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden hover:border-neutral-600 hover:scale-[1.03] transition-all duration-200 text-left cursor-pointer"
+                                    className="group relative liquid-card liquid-sheen-effect rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.04] hover:z-30 shadow-md hover:shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_24px_rgba(255,255,255,0.12)] text-left"
                                     title={`Search torrents for "${item.title}"`}
                                 >
                                     {/* Poster */}
-                                    <div className="aspect-[2/3] relative bg-neutral-800">
+                                    <div className="aspect-[2/3] relative bg-neutral-900 overflow-hidden">
                                         {onOpenOnline && (
                                             <button aria-label="Open details"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     onOpenOnline(item);
                                                 }}
-                                                className="absolute top-1.5 left-1.5 z-10 flex items-center gap-1 px-1.5 py-0.5 bg-indigo-600/90 hover:bg-indigo-500 text-white rounded-md text-[10px] font-bold transition"
+                                                className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/20 text-white rounded-lg text-[10px] font-bold transition shadow-md"
                                                 title="Open details"
                                             >
-                                                <Globe className="w-2.5 h-2.5" />
-                                                Details
+                                                <Globe className="w-3 h-3 text-blue-400" />
+                                                <span>Details</span>
                                             </button>
                                         )}
                                         {item.posterPath ? (
                                             <img
                                                 src={`https://image.tmdb.org/t/p/w300${item.posterPath}`}
                                                 alt={item.title}
-                                                className="w-full h-full object-cover"
+                                                className="w-full h-full object-cover transition duration-500 group-hover:scale-105 group-hover:brightness-95"
                                                 loading="lazy"
                                             />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center">
-                                                <Film className="w-8 h-8 text-neutral-700" />
+                                                {item.mediaType === 'movie' ? <Film className="w-8 h-8 text-neutral-700" /> : <Tv className="w-8 h-8 text-neutral-700" />}
                                             </div>
                                         )}
                                         {/* Hover overlay */}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end">
-                                            <div className="p-2.5 w-full">
-                                                <div className="flex items-center gap-1 text-[10px] text-blue-400 font-medium">
-                                                    <Search className="w-3 h-3" />
-                                                    Search torrents
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
+                                            <div className="w-full">
+                                                <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl liquid-glass-pill border border-white/20 text-xs text-blue-300 font-semibold shadow-lg">
+                                                    <Search className="w-3 h-3 text-blue-400" />
+                                                    <span>Search Torrents</span>
                                                 </div>
                                             </div>
                                         </div>
                                         {/* Rating badge */}
                                         {item.rating !== null && item.rating > 0 && (
-                                            <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
-                                                <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500" />
-                                                <span className="text-[10px] font-bold text-white">{item.rating.toFixed(1)}</span>
+                                            <div className="!absolute top-2 right-2 z-20 flex items-center gap-1 bg-black/75 backdrop-blur-md border border-amber-400/35 px-2 py-0.5 rounded-lg shadow-md w-fit pointer-events-none select-none text-amber-300 font-bold text-[10px]">
+                                                <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                                                <span>{item.rating.toFixed(1)}</span>
                                             </div>
                                         )}
                                     </div>
                                     {/* Info */}
-                                    <div className="p-2.5">
-                                        <p className="text-xs font-medium leading-tight line-clamp-2 mb-1">{item.title}</p>
+                                    <div className="p-3">
+                                        <p className="text-xs md:text-sm font-semibold leading-tight line-clamp-2 mb-1 group-hover:text-white transition-colors">{item.title}</p>
                                         {item.year && (
-                                            <p className="text-[10px] text-neutral-500">{item.year}</p>
+                                            <p className="text-[10px] md:text-xs text-neutral-400 font-medium">{item.year}</p>
                                         )}
                                     </div>
                                 </div>
@@ -620,10 +629,10 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
 
                     {/* Fallback if no trending data */}
                     {!loadingTrending && trendingMovies.length === 0 && trendingTv.length === 0 && (
-                        <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
-                            <Magnet className="w-16 h-16 text-neutral-700 mx-auto mb-4" />
-                            <h3 className="text-xl font-semibold text-neutral-400 mb-2">Search for anything</h3>
-                            <p className="text-neutral-500 text-sm max-w-md mx-auto">
+                        <div className="text-center py-16 liquid-glass-base border border-white/10 rounded-3xl shadow-xl">
+                            <Magnet className="w-16 h-16 text-neutral-600 mx-auto mb-4" />
+                            <h3 className="text-xl font-bold text-neutral-300 mb-2">Search for anything</h3>
+                            <p className="text-neutral-400 text-sm md:text-base max-w-md mx-auto">
                                 Search for movies, TV episodes, or any content by name. Include quality tags like 1080p or 4K for better results.
                             </p>
                         </div>
@@ -632,26 +641,27 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
             )}
 
             {/* Manual Magnet Input */}
-            <div className="mt-8 bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
-                <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wide mb-3 flex items-center gap-2">
-                    <Link2 className="w-4 h-4" />
+            <div className="mt-8 liquid-glass-base border border-white/15 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+                <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-white/[0.02] rounded-full blur-3xl pointer-events-none" />
+                <h3 className="text-xs md:text-sm font-bold text-neutral-300 uppercase tracking-wider mb-3 flex items-center gap-2 relative z-10">
+                    <Link2 className="w-4 h-4 text-blue-400" />
                     Or paste a magnet link directly
                 </h3>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-3 relative z-10">
                     <input
                         type="text"
                         value={manualMagnet}
                         onChange={(e) => setManualMagnet(e.target.value)}
                         placeholder="magnet:?xt=urn:btih:..."
-                        className="flex-1 bg-black border border-neutral-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-blue-500 transition font-mono"
+                        className="flex-1 bg-white/[0.04] border border-white/15 focus:border-blue-400/50 focus:bg-white/[0.08] rounded-2xl px-4 py-3 text-sm text-white outline-none transition-all font-mono shadow-inner"
                     />
                     <button
                         onClick={startManualDownload}
                         disabled={!manualMagnet.trim().startsWith('magnet:') || downloading !== null}
-                        className="px-5 py-3 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-600 text-white font-medium rounded-lg transition flex items-center gap-2"
+                        className="px-6 py-3 liquid-glass-pill hover:scale-105 border border-white/20 disabled:opacity-40 disabled:hover:scale-100 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg"
                     >
-                        <ArrowDown className="w-4 h-4" />
-                        Download
+                        <ArrowDown className="w-4 h-4 text-blue-400" />
+                        <span>Download</span>
                     </button>
                 </div>
             </div>

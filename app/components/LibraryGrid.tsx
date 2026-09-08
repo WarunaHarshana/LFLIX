@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ArrowUpDown, LayoutGrid, Globe } from 'lucide-react';
+import { ArrowUpDown, LayoutGrid, Globe, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 import ContentCard from './ContentCard';
 import EmptyState from './EmptyState';
@@ -114,64 +114,64 @@ export default function LibraryGrid({
   const gridColumnsClass = GRID_CLASS_MAP[currentColumns] || GRID_CLASS_MAP[8];
 
   return (
-    <div className="px-4 md:px-12 pb-20 relative z-20">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-xl font-semibold text-neutral-200 flex items-center gap-3">
+    <div className="px-4 md:px-12 pb-16 relative z-20">
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-3">
           {activeTab === 'all' ? 'My Library' : activeTab === 'movie' ? 'Movies' : 'TV Shows'}
           {selectedGenre && (
-            <span className="text-sm font-normal px-3 py-1 bg-neutral-800 rounded-full text-neutral-400">
+            <span className="text-sm sm:text-base font-medium px-3.5 py-1 liquid-glass-pill rounded-xl text-neutral-200 flex items-center">
               {selectedGenre}
               <button
                 onClick={onGenreClear}
-                className="ml-2 text-neutral-500 hover:text-white"
+                className="ml-2 text-neutral-400 hover:text-white cursor-pointer"
               >
                 ×
               </button>
             </span>
           )}
           {selectedLanguage && (
-            <span className="text-sm font-normal px-3 py-1 bg-neutral-800 rounded-full text-blue-400 border border-blue-500/30 flex items-center gap-1">
-              <Globe className="w-3 h-3" />
+            <span className="text-sm sm:text-base font-medium px-3.5 py-1 liquid-glass-pill rounded-xl text-blue-300 border border-blue-500/30 flex items-center gap-1.5">
+              <Globe className="w-4 h-4" />
               {selectedLanguage}
               <button
                 onClick={() => onLanguageSelect?.(null)}
-                className="ml-1 text-neutral-400 hover:text-white"
+                className="ml-1 text-neutral-400 hover:text-white cursor-pointer"
               >
                 ×
               </button>
             </span>
           )}
-          <span className="text-sm font-normal text-neutral-500">
+          <span className="text-sm sm:text-base font-semibold text-neutral-400">
             ({filteredLibrary.length} items)
           </span>
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {/* Language filter dropdown */}
           {languages.length > 0 && onLanguageSelect && (
             <div ref={langDropdownRef} className="relative group/lang">
               <button
                 onClick={() => setIsLangOpen(prev => !prev)}
                 aria-expanded={isLangOpen}
-                title="Filter by language"
                 className={clsx(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors border",
+                  "flex items-center gap-2 px-4 sm:px-4.5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition-all select-none min-h-[42px] sm:min-h-[44px] cursor-pointer",
                   selectedLanguage
-                    ? "bg-blue-600/20 text-blue-400 border-blue-500/40 hover:bg-blue-600/30"
-                    : "bg-neutral-800/80 hover:bg-neutral-700 active:bg-neutral-600 text-neutral-300 hover:text-white border-neutral-700/50"
+                    ? "liquid-glass-pill-active font-bold shadow-sm"
+                    : "liquid-glass-pill text-neutral-200 hover:text-white"
                 )}
               >
-                <Globe className="w-3.5 h-3.5" />
+                <Globe className="w-4.5 h-4.5" />
                 <span className="hidden sm:inline">
                   {selectedLanguage || 'All Languages'}
                 </span>
+                <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200", isLangOpen ? "rotate-180 text-white" : "group-hover/lang:rotate-180 group-hover/lang:text-white")} />
               </button>
               <div
                 className={clsx(
-                  "absolute right-0 top-full mt-1 w-44 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 transition-all duration-200 z-30",
+                  "absolute right-0 top-full mt-2 w-52 max-h-[480px] max-h-[75vh] overflow-y-auto scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
                   isLangOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/lang:opacity-100 group-hover/lang:visible"
                 )}
               >
-                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 border-b border-neutral-800 sticky top-0 bg-neutral-900">
+                <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10 sticky top-0 bg-neutral-900/95 backdrop-blur-xl rounded-t-xl">
                   Language
                 </div>
                 <button
@@ -180,14 +180,14 @@ export default function LibraryGrid({
                     setIsLangOpen(false);
                   }}
                   className={clsx(
-                    'w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between',
+                    'w-full text-left px-3.5 py-2.5 text-sm sm:text-base rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item',
                     selectedLanguage === null
-                      ? 'bg-red-600/20 text-red-400 font-medium'
-                      : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                      ? 'liquid-dropdown-item-active'
+                      : 'text-neutral-200 hover:text-white'
                   )}
                 >
-                  <span>All Languages</span>
-                  {selectedLanguage === null && <span className="text-xs">✓</span>}
+                  <span className="drop-shadow-sm">All Languages</span>
+                  {selectedLanguage === null && <span className="text-xs font-bold">✓</span>}
                 </button>
                 {languages.map((lang) => (
                   <button
@@ -197,14 +197,14 @@ export default function LibraryGrid({
                       setIsLangOpen(false);
                     }}
                     className={clsx(
-                      'w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between',
+                      'w-full text-left px-3.5 py-2.5 text-sm sm:text-base rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item',
                       selectedLanguage === lang
-                        ? 'bg-red-600/20 text-red-400 font-medium'
-                        : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                        ? 'liquid-dropdown-item-active'
+                        : 'text-neutral-200 hover:text-white'
                     )}
                   >
-                    <span>{lang}</span>
-                    {selectedLanguage === lang && <span className="text-xs">✓</span>}
+                    <span className="drop-shadow-sm">{lang}</span>
+                    {selectedLanguage === lang && <span className="text-xs font-bold">✓</span>}
                   </button>
                 ))}
               </div>
@@ -217,20 +217,21 @@ export default function LibraryGrid({
               onClick={() => setIsGridOpen(prev => !prev)}
               aria-expanded={isGridOpen}
               title="Tiles per row"
-              className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 active:bg-neutral-600 rounded-lg text-sm text-neutral-300 hover:text-white transition-colors border border-neutral-700/50"
+              className="flex items-center gap-2 px-4 sm:px-4.5 py-2 sm:py-2.5 liquid-glass-pill rounded-xl text-sm sm:text-base font-semibold text-neutral-200 hover:text-white transition-all select-none min-h-[42px] sm:min-h-[44px] cursor-pointer"
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
+              <LayoutGrid className="w-4.5 h-4.5" />
               <span className="hidden sm:inline">
                 {currentColumns} tiles
               </span>
+              <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200", isGridOpen ? "rotate-180 text-white" : "group-hover/grid:rotate-180 group-hover/grid:text-white")} />
             </button>
             <div
               className={clsx(
-                "absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden transition-all duration-200 z-30",
+                "absolute right-0 top-full mt-2 w-48 max-h-[480px] max-h-[75vh] overflow-y-auto scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
                 isGridOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/grid:opacity-100 group-hover/grid:visible"
               )}
             >
-              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 border-b border-neutral-800">
+              <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10">
                 Tiles Per Row
               </div>
               {GRID_COLUMNS_OPTIONS.map((opt) => (
@@ -241,14 +242,14 @@ export default function LibraryGrid({
                     setIsGridOpen(false);
                   }}
                   className={clsx(
-                    'w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between',
+                    'w-full text-left px-3.5 py-2.5 text-sm sm:text-base rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item',
                     currentColumns === opt.value
-                      ? 'bg-red-600/20 text-red-400 font-medium'
-                      : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                      ? 'liquid-dropdown-item-active'
+                      : 'text-neutral-200 hover:text-white'
                   )}
                 >
-                  <span>{opt.label}</span>
-                  {currentColumns === opt.value && <span className="text-xs">✓</span>}
+                  <span className="drop-shadow-sm">{opt.label}</span>
+                  {currentColumns === opt.value && <span className="text-xs font-bold">✓</span>}
                 </button>
               ))}
             </div>
@@ -259,20 +260,21 @@ export default function LibraryGrid({
             <button
               onClick={() => setIsOpen(prev => !prev)}
               aria-expanded={isOpen}
-              className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/80 hover:bg-neutral-700 active:bg-neutral-600 rounded-lg text-sm text-neutral-300 hover:text-white transition-colors border border-neutral-700/50"
+              className="flex items-center gap-2 px-4 sm:px-4.5 py-2 sm:py-2.5 liquid-glass-pill rounded-xl text-sm sm:text-base font-semibold text-neutral-200 hover:text-white transition-all select-none min-h-[42px] sm:min-h-[44px] cursor-pointer"
             >
-              <ArrowUpDown className="w-3.5 h-3.5" />
+              <ArrowUpDown className="w-4.5 h-4.5" />
               <span className="hidden sm:inline">
                 {sortLabel}
               </span>
+              <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200", isOpen ? "rotate-180 text-white" : "group-hover/sort:rotate-180 group-hover/sort:text-white")} />
             </button>
             <div
               className={clsx(
-                "absolute right-0 top-full mt-1 w-44 bg-neutral-900 border border-neutral-700/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden transition-all duration-200 z-30",
+                "absolute right-0 top-full mt-2 w-52 max-h-[480px] max-h-[75vh] overflow-y-auto scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
                 isOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/sort:opacity-100 group-hover/sort:visible"
               )}
             >
-              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 border-b border-neutral-800">
+              <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10">
                 Sort By
               </div>
               {SORT_OPTIONS.map((opt) => (
@@ -283,14 +285,14 @@ export default function LibraryGrid({
                     setIsOpen(false);
                   }}
                   className={clsx(
-                    'w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between',
+                    'w-full text-left px-3.5 py-2.5 text-sm sm:text-base rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item',
                     sortBy === opt.value
-                      ? 'bg-red-600/20 text-red-400 font-medium'
-                      : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                      ? 'liquid-dropdown-item-active'
+                      : 'text-neutral-200 hover:text-white'
                   )}
                 >
-                  <span>{opt.label}</span>
-                  {sortBy === opt.value && <span className="text-xs">✓</span>}
+                  <span className="drop-shadow-sm">{opt.label}</span>
+                  {sortBy === opt.value && <span className="text-xs font-bold">✓</span>}
                 </button>
               ))}
             </div>

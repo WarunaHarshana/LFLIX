@@ -209,28 +209,30 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
     return (
         <>
             <div role="dialog" aria-modal="true" aria-label="Downloads" className="fixed inset-0 z-[100] flex items-start justify-end">
-                <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-                <div className="relative w-full max-w-md h-full bg-neutral-900 border-l border-neutral-700 overflow-hidden flex flex-col">
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={onClose} />
+                <div className="relative w-full max-w-md h-full liquid-glass-base border-l border-white/15 overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
 
                     {/* Header */}
-                    <div className="flex items-center justify-between p-4 border-b border-neutral-800">
-                        <div className="flex items-center gap-2">
-                            <Download className="w-5 h-5 text-amber-500" />
-                            <h2 className="text-lg font-bold">Downloads</h2>
+                    <div className="flex items-center justify-between p-4 border-b border-white/10">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 liquid-orb bg-amber-500/15 border-amber-500/30 text-amber-400">
+                                <Download className="w-4 h-4" />
+                            </div>
+                            <h2 className="text-lg font-bold text-white tracking-tight">Downloads</h2>
                             {downloads.filter(d => d.status === 'metadata' || d.status === 'downloading' || d.status === 'stalled').length > 0 && (
-                                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs font-bold rounded-full">
+                                <span className="liquid-glass-pill px-2.5 py-0.5 bg-blue-500/20 text-blue-300 border-blue-400/30 text-xs font-bold rounded-full">
                                     {downloads.filter(d => d.status === 'metadata' || d.status === 'downloading' || d.status === 'stalled').length} active
                                 </span>
                             )}
                         </div>
-                        <button onClick={onClose} className="p-2 hover:bg-neutral-800 rounded-full transition">
+                        <button onClick={onClose} className="p-2 liquid-orb text-neutral-300 hover:text-white transition">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
 
                     {/* Auto-Queue Status */}
                     {autoStatus && (autoStatus.pending > 0 || autoStatus.retrying > 0) && (
-                        <div className="px-4 py-2.5 bg-neutral-800/40 border-b border-neutral-800 flex items-center justify-between text-xs text-neutral-400">
+                        <div className="px-4 py-2.5 bg-white/[0.04] border-b border-white/10 flex items-center justify-between text-xs text-neutral-300">
                            <div className="flex items-center gap-2">
                                <Tv className="w-3.5 h-3.5 shrink-0" />
                                <span>Auto-fetch queue: <strong className="text-white font-medium">{autoStatus.pending}</strong> pending, <strong className="text-white font-medium">{autoStatus.retrying}</strong> retrying</span>
@@ -265,14 +267,14 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                 return (
                                     <div
                                         key={dl.id}
-                                        className={`p-3 bg-neutral-800/60 rounded-xl border border-neutral-700/50 transition ${removingIds.has(dl.id) ? 'opacity-40 pointer-events-none' : ''}`}
+                                        className={`p-3.5 liquid-glass-pill rounded-2xl transition-all ${removingIds.has(dl.id) ? 'opacity-40 pointer-events-none' : ''}`}
                                     >
                                     {/* Name + status */}
-                                    <div className="flex items-start gap-2 mb-2">
+                                    <div className="flex items-start gap-2.5 mb-2">
                                         {statusIcon(dl.status)}
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">{dl.name || 'Loading metadata...'}</p>
-                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-500 mt-0.5">
+                                            <p className="text-sm font-semibold truncate text-white">{dl.name || 'Loading metadata...'}</p>
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-400 mt-0.5 font-medium">
                                                 {(dl.status === 'metadata' || dl.status === 'downloading' || dl.status === 'stalled') && (
                                                     <span className={dl.status === 'stalled' ? 'text-yellow-400' : 'text-blue-400'}>{downloadStatusText(dl)}</span>
                                                 )}
@@ -283,24 +285,24 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                                     <span className="text-amber-300">ETA {etaText}</span>
                                                 )}
                                                 {dl.status === 'completed' && (
-                                                    <span className="text-green-400">Completed</span>
+                                                    <span className="text-emerald-400">Completed</span>
                                                 )}
                                                 {dl.status === 'paused' && (
                                                     <span className="text-yellow-400">Paused</span>
                                                 )}
                                                 {dl.status === 'error' && (
-                                                    <span className="text-red-400 truncate">{dl.errorMessage || 'Error'}</span>
+                                                    <span className="text-rose-400 truncate">{dl.errorMessage || 'Error'}</span>
                                                 )}
                                             </div>
                                         </div>
 
                                         {/* Action buttons */}
-                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                        <div className="flex items-center gap-1.5 flex-shrink-0">
                                             {/* Pause / Resume */}
                                             {(dl.status === 'metadata' || dl.status === 'downloading') && (
                                                 <button aria-label="Pause"
                                                     onClick={() => pauseDownload(dl.id)}
-                                                    className="p-1.5 hover:bg-yellow-600/20 text-neutral-500 hover:text-yellow-400 rounded-lg transition"
+                                                    className="p-1.5 liquid-orb hover:bg-yellow-500/20 text-neutral-400 hover:text-yellow-300 rounded-full transition"
                                                     title="Pause"
                                                 >
                                                     <Pause className="w-3.5 h-3.5" />
@@ -309,7 +311,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                             {(dl.status === 'paused' || dl.status === 'error' || dl.status === 'stalled') && (
                                                 <button aria-label={dl.status === 'error' || dl.status === 'stalled' ? 'Retry' : 'Resume'}
                                                     onClick={() => resumeDownload(dl.id)}
-                                                    className="p-1.5 hover:bg-green-600/20 text-neutral-500 hover:text-green-400 rounded-lg transition"
+                                                    className="p-1.5 liquid-orb hover:bg-emerald-500/20 text-neutral-400 hover:text-emerald-300 rounded-full transition"
                                                     title={dl.status === 'error' || dl.status === 'stalled' ? 'Retry' : 'Resume'}
                                                 >
                                                     <Play className="w-3.5 h-3.5" />
@@ -320,7 +322,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                             <button aria-label="Remove"
                                                 onClick={() => setConfirmDelete(dl)}
                                                 disabled={removingIds.has(dl.id)}
-                                                className="p-1.5 hover:bg-red-600/20 text-neutral-500 hover:text-red-400 rounded-lg transition disabled:opacity-30"
+                                                className="p-1.5 liquid-orb hover:bg-rose-500/20 text-neutral-400 hover:text-rose-400 rounded-full transition disabled:opacity-30"
                                                 title="Remove"
                                             >
                                                 {removingIds.has(dl.id) ? (
@@ -334,15 +336,19 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
 
                                     {/* Progress bar */}
                                     {dl.status !== 'error' && (
-                                        <div className="w-full bg-neutral-700 rounded-full h-1.5 overflow-hidden">
+                                        <div className="w-full bg-white/[0.08] backdrop-blur-sm rounded-full h-2 overflow-hidden border border-white/10 p-[1px]">
                                             <div
-                                                className={`h-full rounded-full transition-all duration-500 ${progressColor(dl.status)}`}
+                                                className={`h-full rounded-full transition-all duration-500 relative shadow-sm ${progressColor(dl.status)}`}
                                                 style={{ width: `${Math.min(dl.progress, 100)}%` }}
-                                            />
+                                            >
+                                                {dl.progress > 0 && dl.progress < 100 && (
+                                                    <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,1)]" />
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                     {(dl.status === 'metadata' || dl.status === 'downloading' || dl.status === 'stalled' || dl.status === 'paused') && (
-                                        <p className="text-[11px] text-neutral-500 mt-1 text-right">{dl.progress.toFixed(1)}%</p>
+                                        <p className="text-[11px] text-neutral-400 font-mono mt-1 text-right">{dl.progress.toFixed(1)}%</p>
                                     )}
                                     </div>
                                 );
@@ -354,43 +360,43 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
 
             {/* Confirm Delete Dialog */}
             {confirmDelete && (
-                <div role="dialog" aria-modal="true" aria-label="Confirm delete download" className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/70" onClick={() => setConfirmDelete(null)} />
-                    <div className="relative bg-neutral-900 border border-neutral-700 rounded-2xl p-6 max-w-sm w-full">
+                <div role="dialog" aria-modal="true" aria-label="Confirm delete download" className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="absolute inset-0" onClick={() => setConfirmDelete(null)} />
+                    <div className="relative liquid-glass-base border border-white/15 rounded-3xl p-6 max-w-sm w-full shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] animate-in zoom-in-95 duration-200">
                         <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-red-600/20 rounded-full">
-                                <AlertTriangle className="w-5 h-5 text-red-400" />
+                            <div className="p-2.5 liquid-orb bg-rose-500/20 border-rose-500/35 text-rose-400">
+                                <AlertTriangle className="w-5 h-5" />
                             </div>
-                            <h3 className="text-lg font-bold">Remove Download?</h3>
+                            <h3 className="text-lg font-bold tracking-tight text-white">Remove Download?</h3>
                         </div>
-                        <p className="text-neutral-400 text-sm mb-1">
+                        <p className="text-neutral-400 text-xs mb-1">
                             Are you sure you want to remove this download?
                         </p>
-                        <p className="text-white text-sm font-medium mb-4 truncate">
+                        <p className="text-white text-sm font-semibold mb-4 truncate">
                             {confirmDelete.name || 'Unknown'}
                         </p>
                         {(confirmDelete.status === 'metadata' || confirmDelete.status === 'downloading' || confirmDelete.status === 'stalled') && (
-                            <p className="text-yellow-400 text-xs mb-4 flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" />
+                            <p className="text-amber-300 text-xs mb-4 flex items-center gap-1.5 p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30">
+                                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
                                 This download is still in progress!
                             </p>
                         )}
                         <div className="flex flex-col gap-2">
                             <button
                                 onClick={() => removeDownload(confirmDelete.id, true)}
-                                className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition text-sm"
+                                className="w-full py-2.5 liquid-btn-red text-white font-bold rounded-xl transition text-xs shadow-md cursor-pointer"
                             >
                                 🗑 Delete from Disk
                             </button>
                             <button
                                 onClick={() => removeDownload(confirmDelete.id, false)}
-                                className="w-full py-2.5 bg-neutral-700 hover:bg-neutral-600 text-white font-medium rounded-lg transition text-sm"
+                                className="w-full py-2.5 liquid-glass-pill hover:bg-white/15 text-white font-semibold rounded-xl transition text-xs cursor-pointer"
                             >
                                 Remove from List Only
                             </button>
                             <button
                                 onClick={() => setConfirmDelete(null)}
-                                className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 font-medium rounded-lg transition text-sm"
+                                className="w-full py-2.5 liquid-glass-pill text-neutral-400 hover:text-white rounded-xl transition text-xs cursor-pointer"
                             >
                                 Cancel
                             </button>

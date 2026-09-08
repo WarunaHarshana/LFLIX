@@ -15,36 +15,58 @@ import {
   isSampleClip,
   isVideoFile,
 } from './mediaNaming';
-import { isItemPartOfActiveDownload } from './mediaOrganizer';
+import { isItemPartOfActiveDownload, getActiveDownloads, type ActiveDownloadItem } from './mediaOrganizer';
 
 // Re-exported so existing importers (app/api/scan) keep working unchanged.
 export { isVideoFile } from './mediaNaming';
 
-export function getVideoFiles(dir: string, fileList: string[] = []): string[] {
+let checkMovieStmt: any = null;
+let checkEpStmt: any = null;
+
+function getCheckMovieStmt() {
+  if (!checkMovieStmt) {
+    checkMovieStmt = db.prepare('SELECT id, title, tmdbId, posterPath, resolution FROM movies WHERE filePath = ?');
+  }
+  return checkMovieStmt;
+}
+
+function getCheckEpStmt() {
+  if (!checkEpStmt) {
+    checkEpStmt = db.prepare('SELECT id, resolution, title, stillPath, rating, showId, seasonNumber, episodeNumber FROM episodes WHERE filePath = ?');
+  }
+  return checkEpStmt;
+}
+
+export function getVideoFiles(dir: string, fileList: string[] = [], activeDownloads?: ActiveDownloadItem[]): string[] {
   if (!fs.existsSync(dir)) return fileList;
 
-  const files = fs.readdirSync(dir);
-  for (const file of files) {
-    const filePath = path.join(dir, file);
-    try {
-      if (isItemPartOfActiveDownload(filePath)) {
-        continue;
+  const activeDls = activeDownloads ?? getActiveDownloads();
+
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const filePath = path.join(dir, entry.name);
+      try {
+        if (isItemPartOfActiveDownload(filePath, activeDls)) {
+          continue;
+        }
+        if (entry.isDirectory()) {
+          getVideoFiles(filePath, fileList, activeDls);
+        } else if (entry.isFile() && isVideoFile(filePath) && !isSampleClip(filePath) && !isExtrasContent(filePath)) {
+          fileList.push(filePath);
+        }
+      } catch {
+        // ignore access errors
       }
-      const stat = fs.statSync(filePath);
-      if (stat.isDirectory()) {
-        getVideoFiles(filePath, fileList);
-      } else if (isVideoFile(filePath) && !isSampleClip(filePath) && !isExtrasContent(filePath)) {
-        fileList.push(filePath);
-      }
-    } catch {
-      // ignore access errors
     }
+  } catch {
+    // ignore directory read errors
   }
 
   return fileList;
 }
 
-export async function scanFile(filePath: string): Promise<{ added: boolean; error?: string }> {
+export async function scanFile(filePath: string, activeDownloads?: ActiveDownloadItem[]): Promise<{ added: boolean; error?: string }> {
   try {
     if (!isVideoFile(filePath)) {
       return { added: false };
@@ -58,15 +80,15 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
       return { added: false, error: 'File not found' };
     }
 
-    if (isItemPartOfActiveDownload(filePath)) {
+    if (isItemPartOfActiveDownload(filePath, activeDownloads)) {
       return { added: false };
     }
 
     const fileName = path.basename(filePath);
 
-    // Check if already indexed
-    const movieExists = db.prepare('SELECT id, title, tmdbId, posterPath, resolution FROM movies WHERE filePath = ?').get(filePath) as { id: number; title: string | null; tmdbId: number | null; posterPath: string | null; resolution: string | null } | undefined;
-    const epExists = db.prepare('SELECT id, resolution, title, stillPath, rating, showId, seasonNumber, episodeNumber FROM episodes WHERE filePath = ?').get(filePath) as { id: number; resolution: string | null; title: string | null; stillPath: string | null; rating: number | null; showId: number; seasonNumber: number; episodeNumber: number } | undefined;
+    // Check if already indexed using cached prepared statements
+    const movieExists = getCheckMovieStmt().get(filePath) as { id: number; title: string | null; tmdbId: number | null; posterPath: string | null; resolution: string | null } | undefined;
+    const epExists = getCheckEpStmt().get(filePath) as { id: number; resolution: string | null; title: string | null; stillPath: string | null; rating: number | null; showId: number; seasonNumber: number; episodeNumber: number } | undefined;
 
     if (movieExists || epExists) {
       // Check if media info or episode metadata needs updating
@@ -300,7 +322,8 @@ export async function scanFolder(folderPath: string): Promise<{ added: number; e
   const errors: string[] = [];
   let added = 0;
 
-  const groups = groupFilesForScan(getVideoFiles(folderPath));
+  const activeDownloads = getActiveDownloads();
+  const groups = groupFilesForScan(getVideoFiles(folderPath, [], activeDownloads));
 
   const settled = await mapWithConcurrency(groups, SCAN_CONCURRENCY, async (group) => {
     let groupAdded = 0;
@@ -308,7 +331,7 @@ export async function scanFolder(folderPath: string): Promise<{ added: number; e
 
     for (const filePath of group) {
       try {
-        const result = await scanFile(filePath);
+        const result = await scanFile(filePath, activeDownloads);
         if (result.added) groupAdded++;
         if (result.error) groupErrors.push(`${filePath}: ${result.error}`);
       } catch (e) {

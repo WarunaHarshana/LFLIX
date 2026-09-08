@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X, Film, Tv, Loader2, Globe, TrendingUp, ChevronDown, Filter, Magnet } from 'lucide-react';
+import LiquidDropdown from './LiquidDropdown';
 
 const MOVIE_GENRES = [
     { id: '28', name: 'Action' },
@@ -84,6 +85,8 @@ type DiscoverProps = {
     initialItem?: TMDBResult | null;
     onSwitchToTorrents?: (query?: string) => void;
 };
+
+
 
 export default function DiscoverPage({ initialItem, onSwitchToTorrents }: DiscoverProps) {
     const router = useRouter();
@@ -264,56 +267,57 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
             {/* Header */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2.5 accent-gradient-box rounded-xl text-white">
+                    <div className="p-3 accent-gradient-box rounded-2xl text-white shadow-lg">
                         <Globe className="w-7 h-7" />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold">Discover</h1>
-                        <p className="text-neutral-400 text-sm">Search any movie or TV show. Watch online instantly or download.</p>
+                        <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">Discover</h1>
+                        <p className="text-neutral-400 text-sm md:text-base mt-0.5">Search any movie or TV show. Watch online instantly or download.</p>
                     </div>
                 </div>
                 {onSwitchToTorrents && (
                     <button
                         onClick={() => onSwitchToTorrents(searchQuery.trim() || undefined)}
-                        className="mt-3 px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-xl hover:bg-neutral-800 transition text-sm text-neutral-300 flex items-center gap-2"
+                        className="mt-3.5 px-4 py-2 liquid-glass-pill border border-white/15 hover:scale-105 transition-all text-sm text-neutral-200 hover:text-white flex items-center gap-2 shadow-lg"
                     >
                         <Magnet className="w-4 h-4 accent-text" />
-                        Switch to Torrents
+                        <span>Switch to Torrents</span>
                     </button>
                 )}
             </div>
 
             {/* Search Bar */}
-            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 mb-6">
-                <div className="flex flex-col sm:flex-row gap-3">
+            <div className="liquid-glass-base border border-white/15 rounded-3xl p-6 mb-6 shadow-2xl relative overflow-hidden">
+                <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-white/[0.02] rounded-full blur-3xl pointer-events-none" />
+                <div className="flex flex-col sm:flex-row gap-3 relative z-10">
                     <div className="relative flex-1">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
                         <input
                             ref={inputRef}
                             type="text"
                             value={searchQuery}
                             onChange={(e) => handleSearchChange(e.target.value)}
                             placeholder="Search any movie or TV show..."
-                            className="w-full bg-black border border-neutral-700 rounded-xl pl-12 pr-10 py-3.5 outline-none focus:border-[var(--accent-color)] transition text-sm"
+                            className="w-full bg-white/[0.04] border border-white/15 focus:border-white/40 focus:bg-white/[0.08] text-white placeholder-neutral-500 rounded-2xl pl-12 pr-10 py-3.5 outline-none transition-all text-sm md:text-base shadow-inner"
                             autoFocus
                         />
                         {searchQuery && (
                             <button
                                 onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-neutral-800 rounded-full transition"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/10 rounded-full transition text-neutral-400 hover:text-white"
                             >
-                                <X className="w-4 h-4 text-neutral-500" />
+                                <X className="w-4 h-4" />
                             </button>
                         )}
                     </div>
-                    <div className="flex gap-1 bg-black border border-neutral-700 rounded-xl p-1">
+                    <div className="flex gap-1.5 p-1 bg-white/[0.04] border border-white/10 rounded-xl self-start sm:self-auto">
                         {(['multi', 'movie', 'tv'] as const).map((type) => (
                             <button
                                 key={type}
                                 onClick={() => handleTypeChange(type)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${searchType === type
-                                    ? 'accent-chip'
-                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'
+                                className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition-all min-h-[42px] cursor-pointer ${searchType === type
+                                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
                                     }`}
                             >
                                 {type === 'multi' ? 'All' : type === 'movie' ? 'Movies' : 'TV Shows'}
@@ -332,26 +336,26 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
 
             {/* Filters Bar (when not searching) */}
             {!showingSearch && !searching && (
-                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 mb-8">
-                    <div className="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-6">
+                <div className="liquid-glass-base border border-white/15 rounded-3xl p-4 sm:p-5 mb-8 shadow-xl relative z-20">
+                    <div className="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-6 relative z-10">
                         {/* Title / Toggle */}
                         <div className="flex items-center gap-4 sm:min-w-fit">
                             <div className="flex items-center gap-2">
                                 <Filter className="w-5 h-5 accent-text" />
-                                <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-400">Filters</h2>
+                                <h2 className="text-xs md:text-sm font-bold uppercase tracking-wider text-neutral-300">Filters</h2>
                             </div>
-                            <div className="flex bg-black border border-neutral-700 rounded-xl p-1">
+                            <div className="flex liquid-glass-pill p-1 border border-white/10 rounded-xl">
                                 <button
                                     onClick={() => { setDiscoverType('movie'); setSelectedGenre(''); }}
-                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'movie' ? 'accent-chip' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
+                                    className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center gap-2 min-w-[110px] justify-center min-h-[42px] cursor-pointer ${discoverType === 'movie' ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40' : 'text-neutral-300 hover:text-white hover:bg-white/5'}`}
                                 >
-                                    <Film className="w-4 h-4" /> Movies
+                                    <Film className="w-4.5 h-4.5" /> Movies
                                 </button>
                                 <button
                                     onClick={() => { setDiscoverType('tv'); setSelectedGenre(''); }}
-                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 min-w-[100px] justify-center ${discoverType === 'tv' ? 'accent-chip' : 'text-neutral-400 hover:text-white hover:bg-neutral-800 border border-transparent'}`}
+                                    className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center gap-2 min-w-[110px] justify-center min-h-[42px] cursor-pointer ${discoverType === 'tv' ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40' : 'text-neutral-300 hover:text-white hover:bg-white/5'}`}
                                 >
-                                    <Tv className="w-4 h-4" /> TV Shows
+                                    <Tv className="w-4.5 h-4.5" /> TV Shows
                                 </button>
                             </div>
                         </div>
@@ -359,48 +363,46 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                         {/* Dropdowns */}
                         <div className="flex flex-wrap items-center gap-3 flex-1 xl:justify-end">
                             {/* Genre Filter */}
-                            <div className="relative min-w-[140px] flex-1 sm:flex-none">
-                                <select 
-                                    value={selectedGenre} 
-                                    onChange={(e) => setSelectedGenre(e.target.value)}
-                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-[var(--accent-color)] transition text-sm text-neutral-300 pr-10"
-                                >
-                                    <option value="">All Genres</option>
-                                    {activeGenres.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                                </select>
-                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
-                            </div>
+                            <LiquidDropdown
+                                label="All Genres"
+                                title="Select Genre"
+                                value={selectedGenre}
+                                onChange={setSelectedGenre}
+                                options={[{ id: '', name: 'All Genres' }, ...activeGenres]}
+                                className="min-w-[150px]"
+                                align="left"
+                                isHighlightActive={Boolean(selectedGenre)}
+                            />
 
                             {/* Language Filter */}
-                            <div className="relative min-w-[140px] flex-1 sm:flex-none">
-                                <select 
-                                    value={selectedLanguage} 
-                                    onChange={(e) => setSelectedLanguage(e.target.value)}
-                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-[var(--accent-color)] transition text-sm text-neutral-300 pr-10"
-                                >
-                                    <option value="">All Languages</option>
-                                    {LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                                </select>
-                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
-                            </div>
+                            <LiquidDropdown
+                                label="All Languages"
+                                title="Select Language"
+                                value={selectedLanguage}
+                                onChange={setSelectedLanguage}
+                                options={[{ id: '', name: 'All Languages' }, ...LANGUAGES]}
+                                className="min-w-[150px]"
+                                align="left"
+                                isHighlightActive={Boolean(selectedLanguage)}
+                            />
 
                             {/* Sort Filter */}
-                            <div className="relative min-w-[160px] flex-1 sm:flex-none">
-                                <select 
-                                    value={sortBy} 
-                                    onChange={(e) => setSortBy(e.target.value)}
-                                    className="w-full appearance-none bg-black border border-neutral-700 rounded-xl px-4 py-2.5 outline-none focus:border-[var(--accent-color)] transition text-sm text-neutral-300 pr-10"
-                                >
-                                    {SORT_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
-                            </div>
+                            <LiquidDropdown
+                                label="Most Popular"
+                                title="Sort By"
+                                value={sortBy}
+                                onChange={setSortBy}
+                                options={SORT_OPTIONS}
+                                className="min-w-[170px]"
+                                align="right"
+                                isHighlightActive={sortBy !== 'popularity.desc'}
+                            />
 
                             {/* Clear Filters */}
                             {isFiltering && (
                                 <button aria-label="Reset Filters"
                                     onClick={() => { setSelectedGenre(''); setSelectedLanguage(''); setSortBy('popularity.desc'); }}
-                                    className="p-2.5 bg-neutral-800 hover:bg-neutral-700 rounded-xl text-neutral-400 hover:text-white transition flex-shrink-0"
+                                    className="p-2.5 liquid-glass-pill hover:scale-105 border border-white/15 text-neutral-300 hover:text-white transition flex-shrink-0"
                                     title="Reset Filters"
                                 >
                                     <X className="w-4 h-4" />
@@ -413,16 +415,16 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
 
             {/* Results Header (if filtering/trending) */}
             {!showingSearch && !searching && (
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2.5 mb-4">
                     {isFiltering ? (
                         <>
                             <Filter className="w-5 h-5 accent-text" />
-                            <h2 className="text-lg font-bold">Filtered Results</h2>
+                            <h2 className="text-lg md:text-xl font-bold tracking-tight">Filtered Results</h2>
                         </>
                     ) : (
                         <>
                             <TrendingUp className="w-5 h-5 text-red-500" />
-                            <h2 className="text-lg font-bold">Trending Now</h2>
+                            <h2 className="text-lg md:text-xl font-bold tracking-tight">Trending Now</h2>
                         </>
                     )}
                 </div>
@@ -431,34 +433,34 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
             {/* Search results header */}
             {showingSearch && !searching && (
                 <div className="flex items-center gap-2 mb-4">
-                    <Search className="w-4 h-4 text-neutral-500" />
-                    <span className="text-sm text-neutral-400">{searchResults.length} results for &quot;{searchQuery}&quot;</span>
+                    <Search className="w-4 h-4 text-neutral-400" />
+                    <span className="text-sm md:text-base text-neutral-300">{searchResults.length} results for &quot;{searchQuery}&quot;</span>
                 </div>
             )}
 
             {/* Loading trending / initial filters */}
             {!showingSearch && (loadingTrending || (loadingDiscover && discoverPage === 1)) && (
                 <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-6 h-6 animate-spin text-neutral-500" />
+                    <Loader2 className="w-7 h-7 animate-spin text-neutral-400" />
                 </div>
             )}
 
             {/* Content Grid */}
             {!searching && !(loadingTrending && !showingSearch && !loadingDiscover) && !(loadingDiscover && discoverPage === 1) && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3.5">
                     {gridItems.map((item, idx) => (
                         <button
                             key={`${item.mediaType}-${item.tmdbId}-${idx}`}
                             onClick={() => openDetails(item)}
-                            className="group relative bg-neutral-900 rounded-xl overflow-hidden hover:scale-[1.03] transition-all duration-200 text-left cursor-pointer"
+                            className="group relative liquid-card liquid-sheen-effect rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.04] hover:z-30 shadow-md hover:shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_24px_rgba(255,255,255,0.12)] text-left"
                         >
                             {/* Poster */}
-                            <div className="aspect-[2/3] relative bg-neutral-800">
+                            <div className="aspect-[2/3] relative bg-neutral-900 overflow-hidden">
                                 {item.posterPath ? (
                                     <img
                                         src={`https://image.tmdb.org/t/p/w342${item.posterPath}`}
                                         alt={item.title}
-                                        className="w-full h-full object-cover"
+                                        className="w-full h-full object-cover transition duration-500 group-hover:scale-105 group-hover:brightness-95"
                                         loading="lazy"
                                     />
                                 ) : (
@@ -466,26 +468,17 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                         {item.mediaType === 'movie' ? <Film className="w-8 h-8 text-neutral-700" /> : <Tv className="w-8 h-8 text-neutral-700" />}
                                     </div>
                                 )}
-                                {/* Hover overlay */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end">
-                                    <div className="p-3 w-full">
-                                        <div className="flex items-center gap-1.5 text-xs accent-text font-medium">
-                                            <Globe className="w-3.5 h-3.5" />
-                                            Watch Online
-                                        </div>
-                                    </div>
-                                </div>
                                 {/* Type badge */}
-                                <div className="absolute top-1.5 left-1.5">
-                                    <span className="px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] uppercase tracking-wide text-neutral-300 font-medium">
+                                <div className="absolute top-2 left-2 z-10">
+                                    <span className="px-2 py-0.5 bg-black/70 backdrop-blur-md border border-white/15 rounded-lg text-[10px] uppercase tracking-wider text-neutral-200 font-bold shadow-md">
                                         {item.mediaType === 'movie' ? 'Movie' : 'TV'}
                                     </span>
                                 </div>
                             </div>
                             {/* Info */}
-                            <div className="p-2.5">
-                                <p className="text-xs font-medium leading-tight line-clamp-2 mb-1">{item.title}</p>
-                                {item.year && <p className="text-[10px] text-neutral-500">{item.year}</p>}
+                            <div className="p-3">
+                                <p className="text-xs md:text-sm font-semibold leading-tight line-clamp-2 mb-1 group-hover:text-white transition-colors">{item.title}</p>
+                                {item.year && <p className="text-[10px] md:text-xs text-neutral-400 font-medium">{item.year}</p>}
                             </div>
                         </button>
                     ))}
@@ -503,16 +496,16 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
 
             {/* No search results / Filter Results */}
             {showingSearch && !searching && searchResults.length === 0 && (
-                <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
-                    <Search className="w-12 h-12 text-neutral-700 mx-auto mb-3" />
-                    <p className="text-neutral-400 text-sm">No results found for &quot;{searchQuery}&quot;</p>
+                <div className="text-center py-16 liquid-glass-base border border-white/10 rounded-3xl shadow-xl">
+                    <Search className="w-12 h-12 text-neutral-500 mx-auto mb-3" />
+                    <p className="text-neutral-300 text-sm md:text-base font-medium">No results found for &quot;{searchQuery}&quot;</p>
                 </div>
             )}
             
             {!showingSearch && isFiltering && !loadingDiscover && discoveredItems.length === 0 && (
-                <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
-                    <Filter className="w-12 h-12 text-neutral-700 mx-auto mb-3" />
-                    <p className="text-neutral-400 text-sm">No results found for your filters. Try clearing some selections.</p>
+                <div className="text-center py-16 liquid-glass-base border border-white/10 rounded-3xl shadow-xl">
+                    <Filter className="w-12 h-12 text-neutral-500 mx-auto mb-3" />
+                    <p className="text-neutral-300 text-sm md:text-base font-medium">No results found for your filters. Try clearing some selections.</p>
                 </div>
             )}
 

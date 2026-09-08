@@ -110,18 +110,20 @@ export default function FixMatchModal({ item, isOpen, onClose, onMatched, onShow
 
     return (
         <>
-            <div className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-sm" onClick={onClose} />
+            <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-md" onClick={onClose} />
             <div className="fixed inset-0 z-[81] flex items-center justify-center p-4" onClick={onClose}>
                 <div
-                    className="bg-neutral-900 border border-neutral-700/60 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden"
+                    className="liquid-glass-base border border-white/15 rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
                     onClick={(e) => e.stopPropagation()}
                 >
                     {/* Header */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
                         <div className="flex items-center gap-3">
-                            <Sparkles className="w-5 h-5 text-red-500" />
+                            <div className="w-9 h-9 liquid-orb bg-amber-500/20 border-amber-500/40 text-amber-400 flex items-center justify-center">
+                                <Sparkles className="w-4 h-4" />
+                            </div>
                             <div>
-                                <h3 className="text-lg font-bold text-white">Fix Match / Search Metadata</h3>
+                                <h3 className="text-lg font-bold text-white tracking-tight">Fix Match / Search Metadata</h3>
                                 <p className="text-xs text-neutral-400 truncate max-w-md">
                                     Current: <span className="text-neutral-200 font-medium">{item.title}</span> {item.year ? `(${item.year})` : ''}
                                 </p>
@@ -129,15 +131,15 @@ export default function FixMatchModal({ item, isOpen, onClose, onMatched, onShow
                         </div>
                         <button
                             onClick={onClose}
-                            className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-lg transition"
+                            className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
                         >
-                            <X className="w-5 h-5" />
+                            <X className="w-4 h-4" />
                         </button>
                     </div>
 
                     {/* Search bar & Type toggle */}
-                    <div className="p-6 border-b border-neutral-800 space-y-4">
-                        <div className="flex gap-2">
+                    <div className="p-5 sm:p-6 border-b border-white/10 space-y-4">
+                        <div className="flex flex-col sm:flex-row gap-2.5">
                             <div className="relative flex-1">
                                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                                 <input
@@ -146,22 +148,22 @@ export default function FixMatchModal({ item, isOpen, onClose, onMatched, onShow
                                     value={query}
                                     onChange={(e) => handleQueryChange(e.target.value)}
                                     placeholder="Search title on TMDB..."
-                                    className="w-full bg-neutral-950 border border-neutral-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-white transition"
+                                    className="w-full bg-white/[0.04] border border-white/12 rounded-2xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/20 transition"
                                 />
                             </div>
-                            <div className="flex bg-neutral-950 border border-neutral-700 rounded-xl p-1">
+                            <div className="flex liquid-glass-pill p-1 gap-1 border border-white/10 rounded-2xl bg-white/[0.03] shrink-0">
                                 <button
                                     onClick={() => handleTypeChange('movie')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
-                                        type === 'movie' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-neutral-200'
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
+                                        type === 'movie' ? 'liquid-glass-pill-active text-white font-semibold shadow-sm' : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
                                     }`}
                                 >
                                     <Film className="w-3.5 h-3.5" /> Movie
                                 </button>
                                 <button
                                     onClick={() => handleTypeChange('tv')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
-                                        type === 'tv' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-neutral-200'
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
+                                        type === 'tv' ? 'liquid-glass-pill-active text-white font-semibold shadow-sm' : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
                                     }`}
                                 >
                                     <Tv className="w-3.5 h-3.5" /> TV Show
@@ -171,10 +173,10 @@ export default function FixMatchModal({ item, isOpen, onClose, onMatched, onShow
                     </div>
 
                     {/* Results list */}
-                    <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                    <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-3">
                         {searching ? (
                             <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
-                                <Loader2 className="w-6 h-6 animate-spin mb-2" />
+                                <Loader2 className="w-6 h-6 animate-spin mb-2 text-amber-400" />
                                 <span className="text-sm">Searching TMDB...</span>
                             </div>
                         ) : results.length === 0 ? (
@@ -185,10 +187,10 @@ export default function FixMatchModal({ item, isOpen, onClose, onMatched, onShow
                             results.map((res) => (
                                 <div
                                     key={res.tmdbId}
-                                    className="flex items-center gap-4 p-3 bg-neutral-950/60 hover:bg-neutral-800/80 border border-neutral-800/80 hover:border-neutral-700 rounded-xl transition group"
+                                    className="flex items-center gap-4 p-3.5 liquid-glass-pill bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 rounded-2xl transition-all duration-200 group"
                                 >
                                     {/* Thumbnail */}
-                                    <div className="relative w-12 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-neutral-800">
+                                    <div className="relative w-12 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-neutral-800 border border-white/10 shadow-inner">
                                         {res.posterPath ? (
                                             <TMDBImage
                                                 src={res.posterPath}
@@ -212,13 +214,13 @@ export default function FixMatchModal({ item, isOpen, onClose, onMatched, onShow
                                                 <span className="text-xs text-neutral-400 font-mono">({res.year})</span>
                                             )}
                                             {res.rating && (
-                                                <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded font-medium">
+                                                <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full font-medium shadow-[0_0_8px_rgba(245,158,11,0.2)]">
                                                     ★ {res.rating.toFixed(1)}
                                                 </span>
                                             )}
                                         </div>
                                         {res.overview && (
-                                            <p className="text-xs text-neutral-400 line-clamp-2 mt-1 leading-relaxed">
+                                            <p className="text-xs text-neutral-300/80 line-clamp-2 mt-1 leading-relaxed">
                                                 {res.overview}
                                             </p>
                                         )}
@@ -231,7 +233,7 @@ export default function FixMatchModal({ item, isOpen, onClose, onMatched, onShow
                                     <button
                                         onClick={() => handleApplyMatch(res)}
                                         disabled={matchingId !== null}
-                                        className="px-4 py-2 bg-white text-black font-semibold text-xs rounded-lg hover:bg-neutral-200 transition flex-shrink-0 disabled:opacity-50 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                        className="px-4 py-2 liquid-btn-primary font-bold text-xs rounded-xl hover:scale-105 active:scale-95 transition flex-shrink-0 disabled:opacity-50 flex items-center gap-1.5 shadow-md cursor-pointer"
                                     >
                                         {matchingId === res.tmdbId ? (
                                             <>

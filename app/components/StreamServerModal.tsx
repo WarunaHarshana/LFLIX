@@ -430,11 +430,13 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       onClick={(e) => e.stopPropagation()}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 bg-neutral-900/95 backdrop-blur-xl border-b border-neutral-800 shrink-0">
+      <div className="flex items-center justify-between px-6 py-3 liquid-glass-dock border-b border-white/10 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <Globe className="w-5 h-5 text-blue-400 shrink-0" />
+          <div className="w-8 h-8 liquid-orb bg-blue-500/20 border-blue-500/35 text-blue-400 flex items-center justify-center shrink-0">
+            <Globe className="w-4 h-4" />
+          </div>
           <div className="min-w-0">
-            <h2 className="text-base font-bold truncate">{title}</h2>
+            <h2 className="text-base font-bold text-white tracking-tight truncate">{title}</h2>
             {type === 'tv' && season && episode && (
               <p className="text-xs text-neutral-400">
                 Season {season} · Episode {episode}
@@ -445,17 +447,17 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
         <div className="flex items-center gap-2">
           {type === 'tv' && onNavigateEpisode && (
-            <div className="flex items-center rounded-full bg-neutral-800 overflow-hidden mr-1">
+            <div className="flex items-center rounded-full liquid-glass-pill p-0.5 overflow-hidden mr-1 border border-white/10">
               <button
                 aria-label="Previous episode"
                 title="Previous episode"
                 disabled={!canGoPrevEpisode}
                 onClick={() => onNavigateEpisode('prev')}
-                className="px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-transparent transition"
+                className="px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent transition cursor-pointer"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-              <span className="px-1 text-[11px] text-neutral-400 select-none">
+              <span className="px-1 text-[11px] text-neutral-400 font-mono select-none">
                 S{season ?? 1} E{episode ?? 1}
               </span>
               <button
@@ -463,7 +465,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                 title="Next episode"
                 disabled={!canGoNextEpisode}
                 onClick={() => onNavigateEpisode('next')}
-                className="px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-transparent transition"
+                className="px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent transition cursor-pointer"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -472,7 +474,9 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
           <button aria-label="Show or hide source list"
             onClick={() => setShowSources((prev) => !prev)}
-            className="px-3 py-1.5 rounded-full text-xs font-medium transition bg-neutral-800 hover:bg-neutral-700 text-neutral-200"
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
+              showSources ? 'liquid-glass-pill-active text-white' : 'liquid-glass-pill text-neutral-300 hover:text-white'
+            }`}
             title="Show or hide source list"
           >
             {showSources ? 'Hide Sources' : 'Show Sources'}
@@ -485,10 +489,10 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               setIframeBootstrapped(false);
               setPlaybackReady(false);
             }}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
               vpnMode
-                ? 'bg-blue-500 text-white'
-                : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+                ? 'bg-blue-500/25 border border-blue-400/40 text-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.3)]'
+                : 'liquid-glass-pill text-neutral-300 hover:text-white'
             }`}
             title="VPN mode refreshes probes and gives slow VPN routes more time"
           >
@@ -502,10 +506,10 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               setIframeBootstrapped(false);
               setPlaybackReady(false);
             }}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
               sandboxEnabled
-                ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+                ? 'bg-emerald-500/25 border border-emerald-400/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                : 'liquid-glass-pill text-neutral-300 hover:text-white'
             }`}
             title={sandboxEnabled ? "Sandbox is enabled (safer, blocks redirects)" : "Sandbox is disabled (better compatibility for VidLink/Flux)"}
           >
@@ -513,7 +517,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
           </button>
           <button aria-label="Refresh server checks"
             onClick={() => void fetchServers({ refresh: true })}
-            className="p-2 hover:bg-neutral-800 rounded-full transition text-neutral-400 hover:text-white"
+            className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
             title="Refresh server checks"
           >
             <RefreshCw className="w-4 h-4" />
@@ -528,10 +532,10 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               }
             }}
             disabled={!hasAlternateServer}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 ${
               hasAlternateServer
-                ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
-                : 'bg-neutral-900 text-neutral-600 cursor-not-allowed'
+                ? 'liquid-glass-pill text-neutral-200 hover:text-white cursor-pointer'
+                : 'opacity-40 text-neutral-500 cursor-not-allowed border border-white/5'
             }`}
             title={hasAlternateServer ? 'Try next server' : 'No alternate server available'}
           >
@@ -542,7 +546,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               href={displayUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 hover:bg-neutral-800 rounded-full transition text-neutral-400 hover:text-white"
+              className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
               title="Open in new tab"
             >
               <ExternalLink className="w-4 h-4" />
@@ -550,7 +554,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
           )}
           <button aria-label="Close"
             onClick={onClose}
-            className="p-2 hover:bg-neutral-800 rounded-full transition"
+            className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
             title="Close"
           >
             <X className="w-5 h-5" />
@@ -560,7 +564,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
       {/* Server Tabs */}
       {!loading && servers.length > 0 && showSources && (
-        <div className="px-4 py-2.5 bg-neutral-900/80 backdrop-blur border-b border-neutral-800 shrink-0">
+        <div className="px-4 py-2.5 bg-black/40 backdrop-blur-md border-b border-white/10 shrink-0">
           <div className="flex gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700 pb-1">
             {servers.map((server, i) => {
               const isBest = server.tier === 'best';

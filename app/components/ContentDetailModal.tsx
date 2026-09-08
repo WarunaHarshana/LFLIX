@@ -8,6 +8,21 @@ import StreamServerModal from './StreamServerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from './ContentCard';
 import TMDBImage from './TMDBImage';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
+import LiquidDropdown from './LiquidDropdown';
+
+const QUALITY_OPTIONS = [
+    { id: 'best', name: 'Best Available' },
+    { id: '2160p', name: '4K / 2160p' },
+    { id: '1080p', name: '1080p' },
+    { id: '720p', name: '720p' },
+    { id: 'any', name: 'Fallback (Any)' },
+];
+
+const PERSON_SORT_OPTIONS = [
+    { id: 'date', name: 'Sort: Date' },
+    { id: 'rating', name: 'Sort: Rating' },
+    { id: 'popular', name: 'Sort: Popular' },
+];
 
 type ContentItem = {
     id: number;
@@ -402,69 +417,69 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
     };
 
     return (
-        <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Title details" className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Title details" className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div
-                className="relative w-full max-w-4xl max-h-[90vh] bg-neutral-900 rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col"
+                className="relative w-full max-w-4xl max-h-[90vh] liquid-glass-base rounded-3xl overflow-hidden shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] animate-in zoom-in-95 duration-200 flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Backdrop Header */}
-                <div className="relative h-72 sm:h-96 shrink-0">
+                <div className="relative h-64 sm:h-80 shrink-0">
                     {(item.backdropPath || item.posterPath) ? (
                         <TMDBImage
                             src={item.backdropPath || item.posterPath}
                             alt=""
                             tmdbSize="original"
                             fill
-                            sizes="(max-width: 768px) 100vw, 896px"
-                            className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-60' : 'opacity-0'}`}
+                            sizes="(max-width: 768px) 100vw, 1200px"
+                            className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-75' : 'opacity-0'}`}
                             onLoad={() => setImgLoaded(true)}
                         />
                     ) : (
                         <div className="w-full h-full bg-neutral-800" />
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/40 to-transparent" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-neutral-900/60 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[rgba(10,10,14,0.92)] via-[rgba(10,10,14,0.3)] to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-[rgba(10,10,14,0.75)] via-[rgba(10,10,14,0.2)] to-transparent" />
 
                     {/* Close button */}
                     <button
                         onClick={onClose}
-                        className="absolute top-4 right-4 p-2.5 bg-black/50 hover:bg-black/80 rounded-full text-white transition z-10"
+                        className="absolute top-4 right-4 p-2 liquid-orb bg-black/40 text-white transition z-20 hover:scale-105"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="w-4 h-4" />
                     </button>
 
                     {/* Title + Actions overlaid on backdrop */}
-                    <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-8 flex gap-4 sm:gap-6">
+                    <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 flex gap-4 sm:gap-6">
                         {/* Poster thumbnail */}
                         {item.posterPath && (
-                            <div className="hidden sm:block shrink-0 w-32 h-48 rounded-xl overflow-hidden shadow-2xl border-2 border-neutral-700/50 -mb-16 relative z-10">
+                            <div className="hidden sm:block shrink-0 w-28 sm:w-32 h-40 sm:h-48 rounded-xl overflow-hidden shadow-2xl border-2 border-white/15 -mb-12 relative z-10">
                                 <TMDBImage
                                     src={item.posterPath}
                                     alt={item.title}
                                     tmdbSize="w300"
                                     fill
-                                    sizes="128px"
+                                    sizes="160px"
                                     className="w-full h-full object-cover"
                                 />
                             </div>
                         )}
 
                         <div className="flex-1 min-w-0">
-                            <h2 className="text-3xl sm:text-4xl font-extrabold text-white drop-shadow-lg leading-tight">
+                            <h2 className="text-2xl sm:text-3xl font-extrabold text-white drop-shadow-lg leading-tight tracking-tight">
                                 {item.title}
                             </h2>
 
                             {/* Metadata Row */}
-                            <div className="flex items-center gap-3 mt-3 flex-wrap text-sm">
+                            <div className="flex items-center gap-2 mt-2 flex-wrap text-xs sm:text-sm">
                                 {displayRating != null && displayRating > 0 && (
-                                    <span className="bg-[#F5C518] px-2.5 py-1 rounded-md shadow-sm">
-                                        <span className="text-sm font-bold text-black">{displayRatingSource} {displayRating.toFixed(1)}</span>
+                                    <span className="bg-[#F5C518] px-2 py-0.5 rounded-md shadow-sm">
+                                        <span className="text-xs sm:text-sm font-bold text-black">{displayRatingSource} {displayRating.toFixed(1)}</span>
                                     </span>
                                 )}
                                 {year && (
-                                    <span className="text-neutral-300">{year}</span>
+                                    <span className="text-neutral-200 font-medium">{year}</span>
                                 )}
-                                <span className="px-2 py-0.5 bg-neutral-800 rounded border border-neutral-600 text-neutral-300 uppercase tracking-wide text-xs font-medium">
+                                <span className="px-2 py-0.5 liquid-glass-pill rounded-md border border-white/15 text-neutral-200 uppercase tracking-wide text-xs font-semibold">
                                     {item.type === 'movie' ? 'Movie' : 'TV Show'}
                                 </span>
                                 {(() => {
@@ -475,7 +490,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     if (item.isHDR || /\bHDR\b/.test(fp))
                                         tags.push({ label: /HDR10\+|HDR10PLUS/.test(fp) ? 'HDR10+' : /HDR10/.test(fp) ? 'HDR10' : 'HDR', cls: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40' });
                                     else
-                                        tags.push({ label: 'SDR', cls: 'bg-neutral-600/40 text-neutral-400 border border-neutral-600/40' });
+                                        tags.push({ label: 'SDR', cls: 'bg-neutral-600/40 text-neutral-300 border border-neutral-600/40' });
                                     if (/\bDOVI\b|\bDV\b|DOLBY.?VISION/.test(fp))
                                         tags.push({ label: 'DV', cls: 'bg-fuchsia-500/90 text-white' });
                                     if (/\bIMAX\b/.test(fp))
@@ -497,47 +512,47 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     if (item.language)
                                         tags.push({ label: item.language, cls: 'bg-blue-500/20 text-blue-300 border border-blue-500/40' });
                                     return tags.map((t, i) => (
-                                        <span key={i} className={`px-1.5 py-0.5 text-xs rounded font-bold tracking-wide ${t.cls}`}>{t.label}</span>
+                                        <span key={i} className={`px-2 py-0.5 text-xs rounded font-bold tracking-wide ${t.cls}`}>{t.label}</span>
                                     ));
                                 })()}
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="flex gap-2 sm:gap-3 mt-4 flex-wrap">
+                            <div className="flex gap-2 sm:gap-3 mt-3 flex-wrap">
                                 {item.type === 'movie' ? (
                                     <button
                                         onClick={onPlay}
-                                        className="px-4 sm:px-6 py-2 sm:py-2.5 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
+                                        className="liquid-btn-primary px-5 sm:px-6 py-2.5 font-bold rounded-xl flex items-center gap-2 text-xs sm:text-sm shadow-xl hover:scale-105 transition"
                                     >
-                                        <Play className="w-5 h-5 fill-black" />
+                                        <Play className="w-4 h-4 fill-black" />
                                         {progressPercent > 0 && progressPercent < 95 ? 'Resume' : 'Play'}
                                     </button>
                                 ) : (
                                     <button
                                         onClick={onViewEpisodes}
-                                        className="px-4 sm:px-6 py-2 sm:py-2.5 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
+                                        className="liquid-btn-primary px-5 sm:px-6 py-2.5 font-bold rounded-xl flex items-center gap-2 text-xs sm:text-sm shadow-xl hover:scale-105 transition"
                                     >
-                                        <Play className="w-5 h-5 fill-black" /> View Episodes
+                                        <Play className="w-4 h-4 fill-black" /> View Episodes
                                     </button>
                                 )}
                                 <button
                                     onClick={() => setShowTrailer(true)}
-                                    className="px-4 py-2 sm:px-5 sm:py-2.5 bg-neutral-700/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-neutral-600 transition text-sm border border-neutral-600"
+                                    className="liquid-btn-secondary px-4 sm:px-5 py-2.5 font-semibold rounded-xl flex items-center gap-2 text-xs sm:text-sm hover:scale-105 transition"
                                 >
-                                    <PlayCircle className="w-4 h-4" /> Trailer
+                                    <PlayCircle className="w-4 h-4 text-white" /> Trailer
                                 </button>
                                 {item.tmdbId && (
                                     <button
                                         onClick={() => setShowStreamServers(true)}
-                                        className="px-4 py-2 sm:px-5 sm:py-2.5 bg-white text-black font-semibold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
+                                        className="liquid-btn-secondary px-4 sm:px-5 py-2.5 font-semibold rounded-xl flex items-center gap-2 text-xs sm:text-sm hover:scale-105 transition text-sky-300 border-sky-500/30"
                                     >
-                                        <Globe className="w-4 h-4" /> Watch Online
+                                        <Globe className="w-4 h-4 text-sky-400" /> Watch Online
                                     </button>
                                 )}
                                 {onFixMatch && (
                                     <button
                                         onClick={onFixMatch}
-                                        className="px-4 py-2 sm:px-4 sm:py-2.5 bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-semibold rounded-lg flex items-center gap-2 transition text-sm border border-neutral-700"
+                                        className="liquid-glass-pill px-4 sm:px-5 py-2.5 text-amber-300 font-semibold rounded-xl flex items-center gap-2 text-xs sm:text-sm border-amber-500/30 hover:border-amber-400/60 bg-amber-500/10 hover:scale-105 transition"
                                         title="Fix incorrect movie info or search TMDB"
                                     >
                                         <Sparkles className="w-4 h-4 text-amber-400" /> Fix Match
@@ -551,10 +566,10 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     <button aria-label={isTracking ? 'Stop tracking new episodes' : 'Auto-track new episodes & download'}
                                         onClick={toggleTracking}
                                         disabled={trackLoading}
-                                        className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-semibold transition-all ${
+                                        className={`px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-semibold transition-all ${
                                             isTracking
-                                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 hover:bg-blue-500/30'
-                                                : 'bg-neutral-700/50 text-neutral-400 border border-neutral-600/50 hover:bg-neutral-700 hover:text-white'
+                                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30'
+                                                : 'liquid-glass-pill text-neutral-300 hover:text-white'
                                         } ${trackLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                         title={isTracking ? 'Stop tracking new episodes' : 'Auto-track new episodes & download'}
                                         id="auto-track-toggle"
@@ -563,19 +578,16 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                         {isTracking ? 'Tracking' : 'Auto-Track'}
                                     </button>
                                     {isTracking && (
-                                        <select
+                                        <LiquidDropdown
+                                            label="Quality"
+                                            title="Preferred Quality"
+                                            options={QUALITY_OPTIONS}
                                             value={qualityPref}
-                                            onChange={(e) => updateQualityPref(e.target.value)}
-                                            className="bg-neutral-800 text-neutral-300 text-xs rounded-lg px-2 py-1.5 border border-neutral-700 focus:outline-none focus:border-blue-500 cursor-pointer"
-                                            title="Preferred download quality"
-                                            id="quality-preference-select"
-                                        >
-                                            <option value="best">Best Available Quality</option>
-                                            <option value="2160p">4K / 2160p</option>
-                                            <option value="1080p">1080p</option>
-                                            <option value="720p">720p</option>
-                                            <option value="any">Fallback (Any)</option>
-                                        </select>
+                                            onChange={(val) => updateQualityPref(val)}
+                                            align="left"
+                                            className="min-w-[130px]"
+                                            pillClassName="liquid-glass-pill px-3 py-1.5 rounded-xl flex items-center justify-between gap-2 text-xs font-semibold text-neutral-200 hover:text-white cursor-pointer"
+                                        />
                                     )}
                                 </div>
                             )}
@@ -584,17 +596,17 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                 </div>
 
                 {/* Content Body */}
-                <div className="p-4 sm:p-8 pt-4 sm:pl-48 overflow-y-auto flex-1">
+                <div className="p-4 sm:p-6 pt-3 sm:pl-44 overflow-y-auto flex-1">
                     {/* Watch Progress */}
                     {item.type === 'movie' && progressPercent > 0 && progressPercent < 95 && item.watchProgress && (
-                        <div className="mb-6">
-                            <div className="flex items-center gap-2 text-xs text-neutral-400 mb-1.5">
+                        <div className="mb-5">
+                            <div className="flex items-center gap-2 text-xs text-neutral-300 mb-1.5">
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>{formatDuration(item.watchProgress.progress)} / {formatDuration(item.watchProgress.duration)}</span>
                             </div>
-                            <div className="h-1.5 w-full max-w-md bg-neutral-800 rounded-full overflow-hidden">
+                            <div className="h-1.5 w-full max-w-md bg-white/10 rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-white rounded-full transition-all"
+                                    className="h-full bg-white rounded-full transition-all shadow-[0_0_8px_rgba(255,255,255,0.8)]"
                                     style={{ width: `${progressPercent}%` }}
                                 />
                             </div>
@@ -603,20 +615,20 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
 
                     {/* Overview */}
                     {displayOverview && (
-                        <div className="mb-6">
+                        <div className="mb-5">
                             {activeDetails?.tagline && (
-                                <p className="text-neutral-400 italic text-sm mb-3">&quot;{activeDetails.tagline}&quot;</p>
+                                <p className="text-neutral-300 italic text-xs sm:text-sm mb-2 leading-relaxed">&quot;{activeDetails.tagline}&quot;</p>
                             )}
-                            <p className="text-neutral-300 leading-relaxed">{displayOverview}</p>
+                            <p className="text-neutral-100 text-xs sm:text-sm leading-relaxed">{displayOverview}</p>
                         </div>
                     )}
 
                     {/* Genres */}
                     {displayGenres && (
-                        <div className="mb-6">
-                            <div className="flex flex-wrap gap-2">
+                        <div className="mb-5">
+                            <div className="flex flex-wrap gap-1.5">
                                 {displayGenres.split(',').map((genre, i) => (
-                                    <span key={i} className="px-3 py-1 bg-neutral-800 text-neutral-300 text-sm rounded-full border border-neutral-700">
+                                    <span key={i} className="px-3 py-1 liquid-glass-pill text-neutral-200 text-xs sm:text-sm rounded-full font-medium">
                                         {genre.trim()}
                                     </span>
                                 ))}
@@ -626,17 +638,17 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
 
                     {/* Runtime / Status */}
                     {(tmdbMovieDetails?.runtime || tmdbTvDetails?.status) && (
-                        <div className="mb-6 flex flex-wrap gap-4 text-sm text-neutral-400">
+                        <div className="mb-5 flex flex-wrap gap-5 text-xs sm:text-sm text-neutral-300">
                             {tmdbMovieDetails?.runtime && (
                                 <div>
-                                    <span className="text-neutral-500 text-xs uppercase tracking-wider">Runtime</span>
-                                    <p className="text-neutral-200">{Math.floor(tmdbMovieDetails.runtime / 60)}h {tmdbMovieDetails.runtime % 60}m</p>
+                                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-semibold">Runtime</span>
+                                    <p className="text-white font-medium mt-0.5">{Math.floor(tmdbMovieDetails.runtime / 60)}h {tmdbMovieDetails.runtime % 60}m</p>
                                 </div>
                             )}
                             {tmdbTvDetails?.status && (
                                 <div>
-                                    <span className="text-neutral-500 text-xs uppercase tracking-wider">Status</span>
-                                    <p className="text-neutral-200">{tmdbTvDetails.status}</p>
+                                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-semibold">Status</span>
+                                    <p className="text-white font-medium mt-0.5">{tmdbTvDetails.status}</p>
                                 </div>
                             )}
                         </div>
@@ -644,21 +656,21 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
 
                     {/* Cast */}
                     {activeDetails?.cast && activeDetails.cast.length > 0 && (
-                        <div className="mb-6">
-                            <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">Cast</h3>
+                        <div className="mb-5">
+                            <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2.5">Cast</h3>
                             <div className="flex flex-wrap gap-2">
                                 {activeDetails.cast.map((c, i) => (
                                     <button
                                         key={`${c.id}-${i}`}
                                         onClick={() => openPerson(c.id)}
-                                        className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-1.5 transition"
+                                        className="flex items-center gap-2.5 liquid-glass-pill hover:bg-white/15 rounded-xl px-3 py-1.5 transition"
                                     >
                                         {c.profilePath && (
-                                            <TMDBImage src={c.profilePath} alt="" tmdbSize="w45" width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
+                                             <TMDBImage src={c.profilePath} alt="" tmdbSize="w45" width={28} height={28} className="w-7 h-7 rounded-full object-cover shadow-sm" />
                                         )}
-                                        <div>
-                                            <div className="text-xs font-medium">{c.name}</div>
-                                            <div className="text-[10px] text-neutral-500">{c.character}</div>
+                                        <div className="text-left">
+                                            <div className="text-xs sm:text-sm font-semibold text-white">{c.name}</div>
+                                            <div className="text-[11px] sm:text-xs text-neutral-300 font-medium">{c.character}</div>
                                         </div>
                                     </button>
                                 ))}
@@ -794,19 +806,19 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
 
             {/* Person Modal */}
             {personModalOpen && (
-                <div role="dialog" aria-modal="true" aria-label="Cast member details" className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
+                <div role="dialog" aria-modal="true" aria-label="Cast member details" className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
                     <div
-                        className="w-full max-w-4xl max-h-[90vh] bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden flex flex-col"
+                        className="w-full max-w-4xl max-h-[90vh] liquid-glass-base border border-white/15 rounded-3xl overflow-hidden flex flex-col shadow-[0_25px_70px_rgba(0,0,0,0.85)] animate-in zoom-in-95 duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="p-5 border-b border-neutral-800 flex items-center justify-between">
+                        <div className="p-5 border-b border-white/10 flex items-center justify-between">
                             <div>
-                                <h3 className="text-xl font-bold">Cast Filmography</h3>
+                                <h3 className="text-xl font-bold tracking-tight text-white">Cast Filmography</h3>
                                 {personData && <p className="text-xs text-neutral-400 mt-1">{personData.name}</p>}
                             </div>
                             <button
                                 onClick={() => setPersonModalOpen(false)}
-                                className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded-full transition"
+                                className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -816,9 +828,9 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                             {loadingPerson && (
                                 <div>
                                     <div className="flex gap-4 mb-5 animate-pulse">
-                                        <div className="w-20 h-20 rounded-xl bg-neutral-800 shrink-0" />
+                                        <div className="w-20 h-20 rounded-2xl bg-neutral-800 shrink-0" />
                                         <div className="flex-1 space-y-2">
-                                            <div className="h-5 w-48 bg-neutral-800 rounded" />
+                                            <div className="h-5 w-48 bg-neutral-800 rounded-lg" />
                                             <div className="h-3 w-full bg-neutral-800 rounded" />
                                             <div className="h-3 w-5/6 bg-neutral-800 rounded" />
                                             <div className="h-3 w-3/4 bg-neutral-800 rounded" />
@@ -826,9 +838,9 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     </div>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         {Array.from({ length: 8 }).map((_, idx) => (
-                                            <div key={idx} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                                            <div key={idx} className="rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03] animate-pulse">
                                                 <div className="aspect-[2/3] bg-neutral-800" />
-                                                <div className="p-2 space-y-2">
+                                                <div className="p-2.5 space-y-2">
                                                     <div className="h-3 bg-neutral-700 rounded" />
                                                     <div className="h-3 w-2/3 bg-neutral-800 rounded" />
                                                 </div>
@@ -841,7 +853,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                             {!loadingPerson && personData && (
                                 <>
                                     <div className="flex gap-4 mb-5">
-                                        <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-neutral-800 shrink-0 flex items-center justify-center">
+                                        <div className="relative w-20 h-20 rounded-2xl overflow-hidden bg-neutral-800 shrink-0 flex items-center justify-center border border-white/10 shadow-inner">
                                             {personData.profilePath ? (
                                                 <TMDBImage
                                                     src={personData.profilePath}
@@ -856,21 +868,21 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                             )}
                                         </div>
                                         <div className="min-w-0">
-                                            <h4 className="text-lg font-semibold">{personData.name}</h4>
+                                            <h4 className="text-lg font-bold text-white tracking-tight">{personData.name}</h4>
                                             {personData.biography && (
-                                                <p className="text-sm text-neutral-400 mt-1 line-clamp-4">{personData.biography}</p>
+                                                <p className="text-sm text-neutral-300/90 mt-1 line-clamp-4 leading-relaxed">{personData.biography}</p>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                                         <div>
-                                            <h5 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Movies & TV Shows</h5>
-                                            <p className="mt-1 text-[11px] text-neutral-500">{filteredPersonCredits.length} credits</p>
+                                            <h5 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Movies & TV Shows</h5>
+                                            <p className="mt-1 text-[11px] text-neutral-500 font-medium">{filteredPersonCredits.length} credits</p>
                                         </div>
 
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <div className="inline-flex rounded-lg border border-neutral-800 bg-neutral-950/50 p-1">
+                                            <div className="inline-flex rounded-xl border border-white/10 liquid-glass-pill p-1 gap-1">
                                                 {personCreditFilters.map((filter) => {
                                                     const count = filter.value === 'all'
                                                         ? personData.credits.length
@@ -881,10 +893,10 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                                             key={filter.value}
                                                             type="button"
                                                             onClick={() => setPersonCreditFilter(filter.value)}
-                                                            className={`min-h-8 px-3 text-xs font-semibold rounded-md transition whitespace-nowrap ${
+                                                            className={`min-h-[42px] px-4 text-sm font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                                                                 personCreditFilter === filter.value
-                                                                    ? 'bg-white text-black'
-                                                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                                                                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                                                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
                                                             }`}
                                                             aria-pressed={personCreditFilter === filter.value}
                                                         >
@@ -894,16 +906,15 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                                 })}
                                             </div>
 
-                                            <select
+                                            <LiquidDropdown
+                                                label="Sort: Date"
+                                                title="Sort Filmography"
+                                                options={PERSON_SORT_OPTIONS}
                                                 value={personCreditSort}
-                                                onChange={(event) => setPersonCreditSort(event.target.value as PersonCreditSort)}
-                                                className="min-h-10 bg-neutral-950/50 text-neutral-200 text-xs font-semibold rounded-lg px-3 border border-neutral-800 focus:outline-none focus:border-neutral-500"
-                                                aria-label="Sort cast credits"
-                                            >
-                                                <option value="date">Sort: Date</option>
-                                                <option value="rating">Sort: Rating</option>
-                                                <option value="popular">Sort: Popular</option>
-                                            </select>
+                                                onChange={(val) => setPersonCreditSort(val as PersonCreditSort)}
+                                                align="right"
+                                                className="min-w-[140px]"
+                                            />
                                         </div>
                                     </div>
                                     {personData.credits.length > 0 ? (
@@ -918,7 +929,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                                     >
                                                         <button
                                                             onClick={() => openOnlineResult(credit)}
-                                                            className="w-full text-left bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 rounded-xl overflow-hidden transition"
+                                                            className="w-full text-left liquid-glass-card hover:border-white/30 border border-white/10 rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.03] shadow-md group block cursor-pointer"
                                                         >
                                                             <div className="relative aspect-[2/3] bg-neutral-800">
                                                                 {credit.posterPath ? (

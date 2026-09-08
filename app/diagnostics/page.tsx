@@ -220,13 +220,13 @@ function MetricTile({
   detail?: string;
 }) {
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-3">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-sm liquid-card backdrop-blur-md">
       <div className="mb-3 flex items-center gap-2 text-neutral-400">
-        {icon}
-        <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
+        <span className="text-neutral-300">{icon}</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">{label}</span>
       </div>
-      <div className="text-2xl font-bold text-white">{value}</div>
-      {detail && <div className="mt-1 text-xs text-neutral-500">{detail}</div>}
+      <div className="text-2xl sm:text-3xl font-black tracking-tight text-white">{value}</div>
+      {detail && <div className="mt-1.5 text-xs text-neutral-400 leading-relaxed">{detail}</div>}
     </div>
   );
 }
@@ -235,60 +235,60 @@ function StorageDriveRow({ drive }: { drive: StorageDrive }) {
   const usedPercent = Math.min(100, Math.max(0, drive.usedPercent || 0));
 
   return (
-    <div className="border-b border-neutral-900 px-4 py-4 last:border-b-0">
+    <div className="border-b border-white/10 px-6 py-5 last:border-b-0 hover:bg-white/[0.02] transition-colors">
       <div className="grid gap-4 lg:grid-cols-[minmax(170px,1fr)_minmax(260px,1.5fr)_minmax(200px,1fr)] lg:items-center">
         <div>
-          <div className="flex items-center gap-2">
-            <HardDrive className="h-5 w-5 text-neutral-400" />
-            <span className="font-semibold text-white">{drive.name}</span>
+          <div className="flex items-center gap-2.5">
+            <HardDrive className="h-5 w-5 text-sky-400" />
+            <span className="font-bold text-white text-base">{drive.name}</span>
             <StorageStatusBadge status={drive.status} />
           </div>
-          <div className="mt-1 truncate font-mono text-xs text-neutral-500" title={drive.path}>
+          <div className="mt-1 truncate font-mono text-xs text-neutral-400" title={drive.path}>
             {drive.path}
           </div>
           {drive.error && (
-            <div className="mt-1 truncate text-xs text-red-300" title={drive.error}>
+            <div className="mt-1 truncate text-xs text-red-400" title={drive.error}>
               {drive.error}
             </div>
           )}
         </div>
 
         <div>
-          <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
+          <div className="mb-2 flex items-center justify-between text-xs text-neutral-400">
             <span>{formatBytes(drive.usedBytes)} used</span>
             <span>{formatBytes(drive.freeBytes)} free</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-neutral-800">
+          <div className="h-2.5 overflow-hidden rounded-full bg-white/10 p-0.5">
             <div
-              className={`h-full rounded-full ${
+              className={`h-full rounded-full transition-all duration-500 ${
                 drive.status === 'critical'
-                  ? 'bg-red-400'
+                  ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'
                   : drive.status === 'low'
-                    ? 'bg-amber-400'
-                    : 'bg-emerald-400'
+                    ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]'
+                    : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
               }`}
               style={{ width: `${usedPercent}%` }}
             />
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-3 text-xs">
+          <div className="mt-2.5 grid grid-cols-3 gap-3 text-xs">
             <div>
-              <div className="text-neutral-500">Used</div>
-              <div className="mt-0.5 text-neutral-200">{formatPercent(drive.usedPercent)}</div>
+              <div className="text-neutral-400">Used</div>
+              <div className="mt-0.5 font-bold text-white">{formatPercent(drive.usedPercent)}</div>
             </div>
             <div>
-              <div className="text-neutral-500">Free</div>
-              <div className="mt-0.5 text-neutral-200">{formatPercent(drive.freePercent)}</div>
+              <div className="text-neutral-400">Free</div>
+              <div className="mt-0.5 font-bold text-white">{formatPercent(drive.freePercent)}</div>
             </div>
             <div>
-              <div className="text-neutral-500">Total</div>
-              <div className="mt-0.5 text-neutral-200">{formatBytes(drive.totalBytes)}</div>
+              <div className="text-neutral-400">Total</div>
+              <div className="mt-0.5 font-bold text-white">{formatBytes(drive.totalBytes)}</div>
             </div>
           </div>
         </div>
 
         <div>
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            <FolderOpen className="h-3.5 w-3.5" />
+          <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neutral-400">
+            <FolderOpen className="h-3.5 w-3.5 text-neutral-400" />
             LFLIX paths
           </div>
           {drive.locations.length > 0 ? (
@@ -296,15 +296,16 @@ function StorageDriveRow({ drive }: { drive: StorageDrive }) {
               {drive.locations.map((location) => (
                 <span
                   key={`${location.kind}-${location.path}`}
-                  className="max-w-full rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-300"
+                  className="max-w-full rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-neutral-300 font-mono shadow-sm"
                   title={location.path}
                 >
-                  <span className="text-neutral-500">{location.kind.replace('-', ' ')}:</span> {location.label}
+                  <span className="font-semibold text-white mr-1 capitalize">{location.kind}:</span>
+                  <span className="truncate">{location.path}</span>
                 </span>
               ))}
             </div>
           ) : (
-            <div className="text-xs text-neutral-500">No configured LFLIX folders on this drive</div>
+            <div className="text-xs text-neutral-500">No managed folders on this drive</div>
           )}
         </div>
       </div>
@@ -318,44 +319,44 @@ function SourceHealthRow({ source }: { source: SourceHealth }) {
     : null;
 
   return (
-    <div className="grid gap-4 border-b border-neutral-900 px-4 py-4 last:border-b-0 md:grid-cols-[minmax(120px,1fr)_120px_120px_120px_140px_minmax(160px,1.4fr)] md:items-center">
+    <div className="grid gap-4 border-b border-white/10 px-6 py-4 last:border-b-0 md:grid-cols-[minmax(120px,1fr)_120px_120px_120px_140px_minmax(160px,1.4fr)] md:items-center hover:bg-white/[0.02] transition-colors">
       <div>
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-white">{source.name}</span>
+          <span className="font-bold text-white">{source.name}</span>
           <StatusBadge status={source.state} />
         </div>
-        <div className="mt-1 truncate text-xs text-neutral-500">
+        <div className="mt-1 truncate text-xs text-neutral-400 font-mono">
           {source.lastQuery || 'No live checks yet'}
         </div>
       </div>
 
       <div>
-        <div className="text-xs uppercase tracking-wide text-neutral-500">Last</div>
-        <div className="mt-1 text-sm text-neutral-200">{source.lastStatus || '-'}</div>
+        <div className="text-xs uppercase tracking-wider text-neutral-400 font-bold">Last</div>
+        <div className="mt-1 text-sm text-neutral-200 font-medium">{source.lastStatus || '-'}</div>
       </div>
 
       <div>
-        <div className="text-xs uppercase tracking-wide text-neutral-500">Results</div>
-        <div className="mt-1 text-sm text-neutral-200">{source.lastResults ?? '-'}</div>
+        <div className="text-xs uppercase tracking-wider text-neutral-400 font-bold">Results</div>
+        <div className="mt-1 text-sm text-neutral-200 font-medium">{source.lastResults ?? '-'}</div>
       </div>
 
       <div>
-        <div className="text-xs uppercase tracking-wide text-neutral-500">Latency</div>
-        <div className="mt-1 text-sm text-neutral-200">{formatDuration(source.lastDurationMs)}</div>
+        <div className="text-xs uppercase tracking-wider text-neutral-400 font-bold">Latency</div>
+        <div className="mt-1 text-sm text-neutral-200 font-mono">{formatDuration(source.lastDurationMs)}</div>
       </div>
 
       <div>
-        <div className="text-xs uppercase tracking-wide text-neutral-500">Reliability</div>
-        <div className="mt-1 text-sm text-neutral-200">
+        <div className="text-xs uppercase tracking-wider text-neutral-400 font-bold">Reliability</div>
+        <div className="mt-1 text-sm text-neutral-200 font-semibold">
           {successRate === null ? '-' : `${successRate}% ok`}
         </div>
       </div>
 
       <div>
-        <div className="text-xs uppercase tracking-wide text-neutral-500">Last Check</div>
+        <div className="text-xs uppercase tracking-wider text-neutral-400 font-bold">Last Check</div>
         <div className="mt-1 text-sm text-neutral-200">{formatTimestamp(source.lastCheckAt)}</div>
         {source.lastError && (
-          <div className="mt-1 truncate text-xs text-red-300" title={source.lastError}>
+          <div className="mt-1 truncate text-xs text-red-400" title={source.lastError}>
             {source.lastError}
           </div>
         )}
@@ -436,18 +437,20 @@ export default function DiagnosticsPage() {
 
   return (
     <main className="min-h-screen bg-[var(--background)] text-white">
-      <header className="border-b border-neutral-800 bg-neutral-950">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-5 sm:px-8 md:flex-row md:items-center md:justify-between">
+      <header className="sticky top-0 z-30 liquid-glass-dock border-b border-white/10 backdrop-blur-2xl">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-4 sm:px-8 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/settings" className="rounded-full p-2 transition hover:bg-neutral-800" title="Back to settings">
+            <Link href="/settings" className="p-2.5 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer" title="Back to settings">
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <div>
               <div className="flex items-center gap-3">
-                <Activity className="h-6 w-6 text-[var(--text-secondary)]" />
-                <h1 className="text-2xl font-bold">Diagnostics</h1>
+                <div className="p-2 liquid-orb bg-emerald-500/15 border-emerald-500/30 text-emerald-400">
+                  <Activity className="h-5 w-5" />
+                </div>
+                <h1 className="text-2xl font-black tracking-tight text-white">Diagnostics</h1>
               </div>
-              <div className="mt-1 text-sm text-neutral-500">
+              <div className="mt-1 text-xs text-neutral-400 font-mono">
                 Last checked {formatTimestamp(health?.checkedAt)}
               </div>
             </div>
@@ -458,7 +461,7 @@ export default function DiagnosticsPage() {
             <button
               onClick={() => void fetchHealth(true)}
               disabled={refreshing}
-              className="inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:bg-neutral-700 disabled:text-neutral-300"
+              className="inline-flex min-h-[42px] items-center gap-2 rounded-xl liquid-btn-primary px-5 py-2.5 text-sm font-bold text-black transition shadow-md cursor-pointer disabled:opacity-50 hover:scale-105 active:scale-95"
             >
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
@@ -467,63 +470,65 @@ export default function DiagnosticsPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
+      <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 space-y-8">
         {error && (
-          <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/15 px-5 py-4 text-sm text-red-200 shadow-lg">
             {error}
           </div>
         )}
 
+        {/* Top Metric Cards */}
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricTile
-            icon={<Database className="h-4 w-4" />}
+            icon={<Database className="h-4 w-4 text-sky-400" />}
             label="Database"
             value={health?.database.ok ? 'Online' : 'Offline'}
             detail={health?.database.journalMode ? `SQLite ${health.database.journalMode}` : undefined}
           />
           <MetricTile
-            icon={<Download className="h-4 w-4" />}
+            icon={<Download className="h-4 w-4 text-amber-400" />}
             label="Downloads"
             value={health?.downloads?.active ?? 0}
             detail={`${downloadStatuses.length} status bucket${downloadStatuses.length === 1 ? '' : 's'}`}
           />
           <MetricTile
-            icon={<Search className="h-4 w-4" />}
+            icon={<Search className="h-4 w-4 text-purple-400" />}
             label="Release Queue"
             value={(health?.releaseTracking?.pendingEpisodes || 0) + (health?.releaseTracking?.pendingMovies || 0)}
             detail={`${health?.releaseTracking?.attemptedEpisodes ?? 0} attempted episodes`}
           />
           <MetricTile
-            icon={<Server className="h-4 w-4" />}
+            icon={<Server className="h-4 w-4 text-emerald-400" />}
             label="Uptime"
             value={formatUptime(health?.uptimeSeconds)}
             detail={health?.checkedAt ? new Date(health.checkedAt).toDateString() : undefined}
           />
           <MetricTile
-            icon={<HardDrive className="h-4 w-4" />}
+            icon={<HardDrive className="h-4 w-4 text-rose-400" />}
             label="Storage"
             value={storage?.status === 'ok' ? 'Healthy' : storage?.status || '-'}
             detail={storage ? `${formatBytes(storage.summary.freeBytes)} free across ${storage.summary.driveCount} drive${storage.summary.driveCount === 1 ? '' : 's'}` : undefined}
           />
         </section>
 
-        <section className="mt-8 rounded-lg border border-neutral-800 bg-neutral-950">
-          <div className="flex flex-col gap-3 border-b border-neutral-800 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Storage Sense */}
+        <section className="liquid-glass-base rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-5 sm:flex-row sm:items-center sm:justify-between bg-white/[0.02]">
             <div>
-              <h2 className="text-lg font-semibold">Storage Sense</h2>
-              <div className="mt-1 text-sm text-neutral-500">
+              <h2 className="text-lg font-bold tracking-tight text-white">Storage Sense</h2>
+              <div className="mt-1 text-xs sm:text-sm text-neutral-400">
                 Local drive capacity, free-space warnings, and LFLIX folder placement
               </div>
             </div>
             <div className="flex items-center gap-3">
               {storage && <StorageStatusBadge status={storage.status} />}
-              <span className="text-sm text-neutral-500">
+              <span className="text-xs sm:text-sm font-medium text-neutral-300">
                 {storage ? `${formatBytes(storage.summary.freeBytes)} free` : 'No storage data'}
               </span>
             </div>
           </div>
           {storageError && (
-            <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="border-b border-red-500/20 bg-red-500/10 px-6 py-3.5 text-sm text-red-200">
               {storageError}
             </div>
           )}
@@ -531,15 +536,18 @@ export default function DiagnosticsPage() {
             {sortedDrives.length > 0 ? sortedDrives.map((drive) => (
               <StorageDriveRow key={drive.path} drive={drive} />
             )) : (
-              <div className="px-4 py-6 text-sm text-neutral-500">No local drives detected.</div>
+              <div className="px-6 py-8 text-sm text-neutral-500 text-center">No local drives detected.</div>
             )}
           </div>
         </section>
 
-        <section className="mt-8 rounded-lg border border-neutral-800 bg-neutral-950">
-          <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-4">
-            <h2 className="text-lg font-semibold">Torrent Sources</h2>
-            <span className="text-sm text-neutral-500">{health?.torrentSources?.length || 0} tracked</span>
+        {/* Torrent Sources */}
+        <section className="liquid-glass-base rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
+          <div className="flex items-center justify-between border-b border-white/10 px-6 py-5 bg-white/[0.02]">
+            <h2 className="text-lg font-bold tracking-tight text-white">Torrent Sources</h2>
+            <span className="text-xs sm:text-sm font-semibold text-neutral-400 liquid-glass-pill px-3 py-1 rounded-full border border-white/10">
+              {health?.torrentSources?.length || 0} tracked
+            </span>
           </div>
           <div>
             {(health?.torrentSources || []).map((source) => (
@@ -548,51 +556,52 @@ export default function DiagnosticsPage() {
           </div>
         </section>
 
-        <section className="mt-8 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-neutral-400">Library Counts</h2>
+        {/* Bottom Details Grid */}
+        <section className="grid gap-6 lg:grid-cols-3">
+          <div className="liquid-glass-base rounded-3xl border border-white/10 p-6 shadow-xl">
+            <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-neutral-400">Library Counts</h2>
             <div className="space-y-3 text-sm">
               {Object.entries(health?.database.counts || {}).map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between gap-4">
+                <div key={label} className="flex items-center justify-between gap-4 py-1 border-b border-white/5 last:border-b-0">
                   <span className="capitalize text-neutral-400">{label.replace(/([A-Z])/g, ' $1')}</span>
-                  <span className="font-semibold text-white">{value}</span>
+                  <span className="font-bold text-white">{value}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-neutral-400">Download Status</h2>
+          <div className="liquid-glass-base rounded-3xl border border-white/10 p-6 shadow-xl">
+            <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-neutral-400">Download Status</h2>
             <div className="space-y-3 text-sm">
               {downloadStatuses.length > 0 ? downloadStatuses.map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between gap-4">
+                <div key={label} className="flex items-center justify-between gap-4 py-1 border-b border-white/5 last:border-b-0">
                   <span className="capitalize text-neutral-400">{label}</span>
-                  <span className="font-semibold text-white">{value}</span>
+                  <span className="font-bold text-white">{value}</span>
                 </div>
               )) : (
-                <div className="text-neutral-500">No downloads recorded</div>
+                <div className="text-neutral-500 py-4 text-center">No downloads recorded</div>
               )}
             </div>
           </div>
 
-          <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-neutral-400">Release Tracking</h2>
+          <div className="liquid-glass-base rounded-3xl border border-white/10 p-6 shadow-xl">
+            <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-neutral-400">Release Tracking</h2>
             <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-4 py-1 border-b border-white/5">
                 <span className="text-neutral-400">Pending episodes</span>
-                <span className="font-semibold text-white">{health?.releaseTracking?.pendingEpisodes ?? 0}</span>
+                <span className="font-bold text-white">{health?.releaseTracking?.pendingEpisodes ?? 0}</span>
               </div>
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-4 py-1 border-b border-white/5">
                 <span className="text-neutral-400">Attempted episodes</span>
-                <span className="font-semibold text-white">{health?.releaseTracking?.attemptedEpisodes ?? 0}</span>
+                <span className="font-bold text-white">{health?.releaseTracking?.attemptedEpisodes ?? 0}</span>
               </div>
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-4 py-1 border-b border-white/5">
                 <span className="text-neutral-400">Pending movies</span>
-                <span className="font-semibold text-white">{health?.releaseTracking?.pendingMovies ?? 0}</span>
+                <span className="font-bold text-white">{health?.releaseTracking?.pendingMovies ?? 0}</span>
               </div>
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-4 py-1 border-b border-white/5 last:border-b-0">
                 <span className="text-neutral-400">Available movies</span>
-                <span className="font-semibold text-white">{health?.releaseTracking?.availableMovies ?? 0}</span>
+                <span className="font-bold text-white">{health?.releaseTracking?.availableMovies ?? 0}</span>
               </div>
             </div>
           </div>

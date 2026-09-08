@@ -24,58 +24,60 @@ export default function ContextMenuOverlay({
     <>
       <div className="fixed inset-0 z-50" onClick={onClose} />
       <div
-        className="fixed z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-48"
+        className="fixed z-50 liquid-glass-menu rounded-2xl shadow-2xl overflow-hidden min-w-56 p-1.5"
         style={{
-          left: Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1920) - 200),
-          top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 1080) - 180)
+          left: Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1920) - 240),
+          top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 1080) - 220)
         }}
       >
-        <div className="px-4 py-2 border-b border-neutral-700">
-          <p className="text-sm font-medium truncate max-w-48">{contextMenu.item.title}</p>
+        <div className="px-3.5 py-2 border-b border-white/10">
+          <p className="text-xs sm:text-sm font-bold text-white truncate max-w-56">{contextMenu.item.title}</p>
         </div>
-        {onFixMatch && (
+        <div className="pt-1 space-y-0.5">
+          {onFixMatch && (
+            <button
+              onClick={() => {
+                onFixMatch(contextMenu.item);
+                onClose();
+              }}
+              className="flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 rounded-xl transition w-full text-left text-amber-400 font-medium text-xs sm:text-sm liquid-dropdown-item"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              Fix Match / Metadata
+            </button>
+          )}
+          {contextMenu.item.watchProgress?.completed ? (
+            <button
+              onClick={() => onMarkWatched(contextMenu.item, false)}
+              className="flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 rounded-xl transition w-full text-left text-neutral-200 text-xs sm:text-sm liquid-dropdown-item"
+            >
+              <EyeOff className="w-4 h-4" />
+              Mark as Unwatched
+            </button>
+          ) : (
+            <button
+              onClick={() => onMarkWatched(contextMenu.item, true)}
+              className="flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 rounded-xl transition w-full text-left text-neutral-200 text-xs sm:text-sm liquid-dropdown-item"
+            >
+              <Eye className="w-4 h-4" />
+              Mark as Watched
+            </button>
+          )}
           <button
-            onClick={() => {
-              onFixMatch(contextMenu.item);
-              onClose();
-            }}
-            className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-amber-400 font-medium"
+            onClick={() => onRemoveFromLibrary(contextMenu.item)}
+            className="flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 rounded-xl transition w-full text-left border-t border-white/10 text-neutral-200 text-xs sm:text-sm liquid-dropdown-item"
           >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            Fix Match / Metadata
+            <BookmarkMinus className="w-4 h-4" />
+            Remove from Library
           </button>
-        )}
-        {contextMenu.item.watchProgress?.completed ? (
           <button
-            onClick={() => onMarkWatched(contextMenu.item, false)}
-            className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
+            onClick={() => onDelete(contextMenu.item)}
+            className="flex items-center gap-2.5 px-3.5 py-2 hover:bg-red-500/20 hover:text-red-300 rounded-xl transition w-full text-left border-t border-white/10 text-red-400 text-xs sm:text-sm liquid-dropdown-item"
           >
-            <EyeOff className="w-4 h-4" />
-            Mark as Unwatched
+            <Trash2 className="w-4 h-4" />
+            Delete Permanently
           </button>
-        ) : (
-          <button
-            onClick={() => onMarkWatched(contextMenu.item, true)}
-            className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
-          >
-            <Eye className="w-4 h-4" />
-            Mark as Watched
-          </button>
-        )}
-        <button
-          onClick={() => onRemoveFromLibrary(contextMenu.item)}
-          className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left border-t border-neutral-700 text-neutral-200"
-        >
-          <BookmarkMinus className="w-4 h-4" />
-          Remove from Library
-        </button>
-        <button
-          onClick={() => onDelete(contextMenu.item)}
-          className="flex items-center gap-3 px-4 py-3 hover:bg-red-600 transition w-full text-left border-t border-neutral-700 text-red-400"
-        >
-          <Trash2 className="w-4 h-4" />
-          Delete Permanently
-        </button>
+        </div>
       </div>
     </>
   );

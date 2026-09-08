@@ -3,6 +3,7 @@ import { isGoodMovieReleaseQuality, searchTorrents } from '@/lib/torrentSearch';
 import * as cinejoy from '@/lib/cinejoy';
 import autoDownloader from '@/lib/autoDownloader';
 import downloadManager from '@/lib/downloader';
+import releaseMonitor from '@/lib/releaseMonitor';
 import db from '@/lib/db';
 
 describe('Direct Downloads Auto Integration', () => {
@@ -94,6 +95,7 @@ describe('Direct Downloads Auto Integration', () => {
       ];
 
       vi.spyOn(cinejoy, 'fetchCinejoyDirectDownloads').mockResolvedValue(mockDls);
+      const notifySpy = vi.spyOn(releaseMonitor, 'createNotification').mockReturnValue({} as any);
 
       let show = db.prepare('SELECT id FROM shows WHERE tmdbId = 70128').get() as any;
       let createdShowId: number | null = null;
@@ -147,8 +149,9 @@ describe('Direct Downloads Auto Integration', () => {
       } finally {
         if (createdShowId !== null) {
           db.prepare('DELETE FROM shows WHERE id = ?').run(createdShowId);
-          db.prepare('DELETE FROM episode_releases WHERE tmdbId = 70128').run();
         }
+        db.prepare('DELETE FROM episode_releases WHERE tmdbId = 70128').run();
+        db.prepare("DELETE FROM notifications WHERE tmdbId = 70128 OR message LIKE '%Genius%'").run();
       }
     }, 15000);
   });

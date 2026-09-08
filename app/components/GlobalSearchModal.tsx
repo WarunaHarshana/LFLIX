@@ -255,14 +255,14 @@ export default function GlobalSearchModal({ isOpen, onClose, onPlay, onOpenShow,
   if (!isOpen) return null;
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Search" className="fixed inset-0 z-[100] flex justify-center items-start pt-[10vh] bg-black/60 backdrop-blur-md">
+    <div role="dialog" aria-modal="true" aria-label="Search" className="fixed inset-0 z-[100] flex justify-center items-start pt-[10vh] bg-black/80 backdrop-blur-xl">
       {/* Click outside to close */}
       <div className="absolute inset-0" onClick={onClose} />
       
-      <div className="relative w-full max-w-2xl bg-[#111111] border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+      <div className="relative w-full max-w-2xl liquid-glass-base border border-white/15 rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] overflow-hidden flex flex-col max-h-[80vh]">
         {/* Search header area */}
-        <div className="flex items-center p-4 border-b border-neutral-800 bg-[#151515]">
-          <Search className="w-6 h-6 text-neutral-500 mr-3" />
+        <div className="flex items-center p-4 border-b border-white/10 bg-white/[0.03]">
+          <Search className="w-6 h-6 text-neutral-400 mr-3" />
           <input
             ref={inputRef}
             type="text"
@@ -270,50 +270,50 @@ export default function GlobalSearchModal({ isOpen, onClose, onPlay, onOpenShow,
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search movies, TV shows, or actors..."
-            className="flex-1 bg-transparent border-none outline-none text-xl text-white placeholder-neutral-600"
+            className="flex-1 bg-transparent border-none outline-none text-xl text-white placeholder-neutral-500"
           />
           {query && (
             <button
               onClick={() => { setQuery(''); inputRef.current?.focus(); }}
-              className="p-1 hover:bg-white/10 rounded-full transition text-neutral-400 mr-2"
+              className="p-1.5 liquid-orb hover:bg-white/10 rounded-full transition text-neutral-300 mr-2"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
-          <button onClick={onClose} className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-300 rounded-lg transition font-medium">
+          <button onClick={onClose} className="px-3 py-1 liquid-glass-pill text-xs text-neutral-300 rounded-lg transition font-mono">
             ESC
           </button>
         </div>
 
         {/* Tabs */}
         {query.trim().length >= 2 && (
-          <div className="flex px-4 py-2 bg-[#1a1a1a] border-b border-neutral-800/50 gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex px-4 py-2.5 bg-black/30 border-b border-white/10 gap-2 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab('local')}
               className={clsx(
-                "px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2 whitespace-nowrap",
-                activeTab === 'local' ? "bg-white text-black" : "text-neutral-400 hover:bg-white/10"
+                "px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap select-none",
+                activeTab === 'local' ? "liquid-glass-pill-active font-bold shadow-sm" : "liquid-glass-pill text-neutral-300 hover:text-white"
               )}
             >
-              <Film className="w-4 h-4" /> My Library {localResults.length > 0 && <span className="opacity-60 text-xs">({localResults.length})</span>}
+              <Film className="w-4 h-4" /> My Library {localResults.length > 0 && <span className="opacity-70 text-xs">({localResults.length})</span>}
             </button>
             <button
               onClick={() => setActiveTab('online')}
               className={clsx(
-                "px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2 whitespace-nowrap",
-                activeTab === 'online' ? "bg-white text-black" : "text-neutral-400 hover:bg-white/10"
+                "px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap select-none",
+                activeTab === 'online' ? "liquid-glass-pill-active font-bold shadow-sm" : "liquid-glass-pill text-neutral-300 hover:text-white"
               )}
             >
-              <Globe className="w-4 h-4" /> TMDB {onlineResults.length > 0 && <span className="opacity-60 text-xs">({onlineResults.length})</span>}
+              <Globe className="w-4 h-4" /> TMDB {onlineResults.length > 0 && <span className="opacity-70 text-xs">({onlineResults.length})</span>}
             </button>
             <button
               onClick={() => setActiveTab('torrents')}
               className={clsx(
-                "px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-2 whitespace-nowrap",
-                activeTab === 'torrents' ? "bg-white text-black" : "text-neutral-400 hover:bg-white/10"
+                "px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap select-none",
+                activeTab === 'torrents' ? "liquid-glass-pill-active font-bold shadow-sm" : "liquid-glass-pill text-neutral-300 hover:text-white"
               )}
             >
-              <Magnet className="w-4 h-4" /> Torrents {torrentResults.length > 0 && <span className="opacity-60 text-xs">({torrentResults.length})</span>}
+              <Magnet className="w-4 h-4" /> Torrents {torrentResults.length > 0 && <span className="opacity-70 text-xs">({torrentResults.length})</span>}
             </button>
           </div>
         )}

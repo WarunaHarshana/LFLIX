@@ -140,18 +140,18 @@ function validateId(id: unknown): id is number {
 export function getMediaInfoById(
   contentType: 'movie' | 'episode',
   id: number,
-): { filePath: string; videoCodec: string | null } | null {
+): { filePath: string; videoCodec: string | null; duration: number | null } | null {
   try {
     if (contentType === 'movie') {
       const result = db
-        .prepare('SELECT filePath, videoCodec FROM movies WHERE id = ?')
-        .get(id) as { filePath: string; videoCodec: string | null } | undefined;
-      return result ? { filePath: result.filePath, videoCodec: result.videoCodec || null } : null;
+        .prepare('SELECT filePath, videoCodec, duration FROM movies WHERE id = ?')
+        .get(id) as { filePath: string; videoCodec: string | null; duration: number | null } | undefined;
+      return result ? { filePath: result.filePath, videoCodec: result.videoCodec || null, duration: result.duration || null } : null;
     }
     const result = db
-      .prepare('SELECT filePath, videoCodec FROM episodes WHERE id = ?')
-      .get(id) as { filePath: string; videoCodec: string | null } | undefined;
-    return result ? { filePath: result.filePath, videoCodec: result.videoCodec || null } : null;
+      .prepare('SELECT filePath, videoCodec, duration FROM episodes WHERE id = ?')
+      .get(id) as { filePath: string; videoCodec: string | null; duration: number | null } | undefined;
+    return result ? { filePath: result.filePath, videoCodec: result.videoCodec || null, duration: result.duration || null } : null;
   } catch {
     return null;
   }
@@ -204,7 +204,7 @@ export function resolveExistingMediaPath(filePath: string): string | null {
 }
 
 export type ResolveResult =
-  | { ok: true; mediaPath: string; videoCodec?: string | null }
+  | { ok: true; mediaPath: string; videoCodec?: string | null; duration?: number | null }
   | { ok: false; status: number; error: string };
 
 /**
@@ -256,7 +256,7 @@ export function resolveMediaFromParams(searchParams: URLSearchParams): ResolveRe
   const mediaPath = resolveExistingMediaPath(mediaInfo.filePath);
   if (!mediaPath) return { ok: false, status: 404, error: 'File not found on disk' };
 
-  return { ok: true, mediaPath, videoCodec: mediaInfo.videoCodec };
+  return { ok: true, mediaPath, videoCodec: mediaInfo.videoCodec, duration: mediaInfo.duration };
 }
 
 /** Build a query string that carries the same auth params (token OR ids) forward. */

@@ -24,6 +24,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "android/**",
+    "mobile/**",
+    "downloads/**",
+    "data/**",
+    "scratch/**",
   ]),
 ]);
 

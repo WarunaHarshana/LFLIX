@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, BookmarkMinus, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download } from 'lucide-react';
+import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, BookmarkMinus, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download, Check } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import ToastNotification from './ToastNotification';
@@ -92,7 +92,7 @@ function episodeScore(
 }
 
 export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEpisode, onDeleteEpisode, onRemoveEpisodeFromLibrary, onMarkWatched }: Props) {
-    useModalBehavior(true, onClose);
+    const modalRef = useModalBehavior(true, onClose);
 
     const [activeSeason, setActiveSeason] = useState(seasons[0]?.season || 1);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; episode: Episode } | null>(null);
@@ -191,34 +191,41 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     };
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Episodes" className="fixed inset-0 z-50 bg-black/95 flex justify-end" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <div
+            ref={modalRef as React.RefObject<HTMLDivElement>}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Episodes"
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4 md:p-6"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
             <div
-                className="w-full max-w-2xl bg-neutral-900 h-full border-l border-neutral-800 flex flex-col animate-in slide-in-from-right duration-300"
+                className="relative w-full max-w-3xl xl:max-w-4xl max-h-[90vh] liquid-glass-base rounded-3xl border border-white/15 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)]"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header with backdrop */}
-                <div className="relative h-64 shrink-0">
+                <div className="relative h-64 sm:h-72 shrink-0">
                     {/* Show the episode still if one is selected, otherwise show backdrop */}
                     {selectedEpisode?.stillPath ? (
                         <img
                             src={`https://image.tmdb.org/t/p/original${selectedEpisode.stillPath}`}
-                            className="w-full h-full object-cover opacity-50 transition-all duration-300"
+                            className="w-full h-full object-cover opacity-75 transition-all duration-300"
                             alt=""
                         />
                     ) : (show.backdropPath || show.posterPath) ? (
                         <img
                             src={`https://image.tmdb.org/t/p/original${show.backdropPath || show.posterPath}`}
-                            className="w-full h-full object-cover opacity-40"
+                            className="w-full h-full object-cover opacity-70"
                             alt=""
                         />
                     ) : null}
-                    <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[rgba(16,16,22,0.92)] via-[rgba(16,16,22,0.3)] to-transparent" />
 
                     <button
                         onClick={onClose}
-                        className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black rounded-full text-white transition"
+                        className="absolute top-4 right-4 p-2.5 liquid-orb bg-black/40 text-white transition z-20"
                     >
-                        <X className="w-6 h-6" />
+                        <X className="w-5 h-5" />
                     </button>
 
                     <div className="absolute bottom-6 left-8 right-8">
@@ -280,13 +287,16 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             </>
                         ) : (
                             <>
-                                <h2 className="text-3xl font-bold">{show.title}</h2>
+                                <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white drop-shadow-md">{show.title}</h2>
                                 {displayRating != null && displayRating > 0 && (
-                                    <span className="inline-flex mt-2 bg-[#F5C518] px-2.5 py-1 rounded-md shadow-sm">
-                                        <span className="text-sm font-bold text-black">{displayRatingSource} {displayRating.toFixed(1)}</span>
-                                    </span>
+                                    <div className="flex items-center gap-2 mt-2.5">
+                                        <span className="inline-flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/40 text-amber-300 px-3 py-1 rounded-xl text-xs font-bold shadow-[0_0_12px_rgba(245,158,11,0.25)]">
+                                            <Star className="w-3.5 h-3.5 fill-amber-300" />
+                                            <span>{displayRatingSource} {displayRating.toFixed(1)}</span>
+                                        </span>
+                                    </div>
                                 )}
-                                <p className="text-neutral-400 mt-2 line-clamp-2">{show.overview}</p>
+                                <p className="text-neutral-300 text-xs sm:text-sm mt-2.5 line-clamp-2 leading-relaxed max-w-xl">{show.overview}</p>
                             </>
                         )}
                     </div>
@@ -299,9 +309,9 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                         <div className="flex gap-3 mb-6">
                             <button
                                 onClick={() => onPlayEpisode(selectedEpisode.id, selectedEpisode.watchProgress?.progress)}
-                                className="px-4 sm:px-6 py-2 sm:py-2.5 bg-white text-black font-bold rounded-lg flex items-center gap-2 hover:bg-neutral-200 transition text-sm"
+                                className="liquid-btn-primary px-5 sm:px-6 py-2.5 font-bold rounded-xl flex items-center gap-2 text-sm shadow-lg"
                             >
-                                <Play className="w-5 h-5 fill-black" />
+                                <Play className="w-4 h-4 fill-black" />
                                 {selectedEpisode.watchProgress && selectedEpisode.watchProgress.progress > 0
                                     && (selectedEpisode.watchProgress.progress / selectedEpisode.watchProgress.duration) * 100 < 95
                                     ? 'Resume' : 'Play'}
@@ -309,7 +319,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             {show.tmdbId && (
                                 <button
                                     onClick={() => setShowStreamServers(true)}
-                                    className="px-4 py-2 sm:px-5 sm:py-2.5 bg-blue-600/80 text-white font-semibold rounded-lg flex items-center gap-2 hover:bg-blue-500 transition text-sm border border-blue-500/50"
+                                    className="liquid-btn-primary px-4 py-2 sm:px-5 sm:py-2.5 font-semibold rounded-xl flex items-center gap-2 text-sm"
                                 >
                                     <Globe className="w-4 h-4" /> Watch Online
                                 </button>
@@ -378,7 +388,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             if (!nextEp) return null;
 
                             return (
-                                <div className="mt-4 pt-4 border-t border-neutral-800">
+                                <div className="mt-4 pt-4 border-t border-white/10">
                                     <div className="flex items-center gap-2 mb-3">
                                         <SkipForward className="w-4 h-4 text-neutral-400" />
                                         <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Up Next</span>
@@ -390,36 +400,36 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                             }
                                             setSelectedEpisode(nextEp);
                                         }}
-                                        className="flex gap-3 p-3 rounded-xl bg-neutral-800/50 hover:bg-neutral-800 cursor-pointer group/next transition-all border border-transparent hover:border-neutral-700"
+                                        className="flex items-center gap-4 p-4 rounded-2xl liquid-card bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 hover:border-white/25 cursor-pointer group/next transition-all duration-200 hover:scale-[1.01] hover:shadow-[0_10px_30px_rgba(0,0,0,0.6)]"
                                     >
                                         {nextEp.stillPath ? (
-                                            <div className="shrink-0 w-28 h-16 rounded-lg overflow-hidden bg-neutral-700 relative">
+                                            <div className="shrink-0 w-36 aspect-video rounded-xl overflow-hidden bg-neutral-900 border border-white/15 relative shadow-md group-hover/next:border-white/30 transition-all">
                                                 <img
                                                     src={`https://image.tmdb.org/t/p/w300${nextEp.stillPath}`}
-                                                    className="w-full h-full object-cover"
+                                                    className="w-full h-full object-cover group-hover/next:scale-105 transition-transform duration-300"
                                                     alt={nextEp.title}
                                                     loading="lazy"
                                                 />
-                                                <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover/next:opacity-100 transition">
-                                                    <div className="p-1.5 bg-white/20 backdrop-blur-sm rounded-full">
-                                                        <Play className="w-3.5 h-3.5 text-white fill-white" />
+                                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/next:opacity-100 transition">
+                                                    <div className="w-8 h-8 liquid-orb bg-white/25 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg">
+                                                        <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />
                                                     </div>
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="shrink-0 w-28 h-16 rounded-lg bg-neutral-700 flex items-center justify-center">
-                                                <span className="text-lg font-bold text-neutral-500">{nextEp.episodeNumber}</span>
+                                            <div className="shrink-0 w-36 aspect-video rounded-xl bg-neutral-900 border border-white/15 flex items-center justify-center shadow-md">
+                                                <span className="text-xl font-black text-neutral-600 font-mono">E{nextEp.episodeNumber}</span>
                                             </div>
                                         )}
                                         <div className="flex-1 min-w-0 flex flex-col justify-center">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-[11px] text-neutral-500 font-medium">
+                                                <span className="px-2 py-0.5 rounded-md bg-white/10 text-neutral-300 font-mono text-[11px] font-bold border border-white/10">
                                                     S{nextSeasonNum || nextEp.seasonNumber} E{nextEp.episodeNumber}
                                                 </span>
                                             </div>
-                                            <h5 className="text-sm font-medium text-neutral-200 group-hover/next:text-white transition truncate">{nextEp.title}</h5>
+                                            <h5 className="text-sm font-bold text-white group-hover/next:text-red-400 transition truncate mt-1">{nextEp.title}</h5>
                                             {nextEp.overview && (
-                                                <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">{nextEp.overview}</p>
+                                                <p className="text-xs text-neutral-300/80 line-clamp-1 mt-0.5">{nextEp.overview}</p>
                                             )}
                                         </div>
                                         <button
@@ -427,9 +437,9 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                 e.stopPropagation();
                                                 onPlayEpisode(nextEp!.id, nextEp!.watchProgress?.progress);
                                             }}
-                                            className="self-center px-3 py-1.5 bg-white text-black font-bold rounded-md text-xs hover:bg-neutral-200 transition flex items-center gap-1.5 shrink-0"
+                                            className="self-center px-4 py-2.5 liquid-btn-primary font-bold rounded-xl text-xs hover:scale-105 active:scale-95 transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-md"
                                         >
-                                            <Play className="w-3 h-3 fill-black" /> Play
+                                            <Play className="w-3.5 h-3.5 fill-black" /> Play
                                         </button>
                                     </div>
                                 </div>
@@ -441,15 +451,15 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                     <>
                         {/* Season Tabs */}
                         {seasons.length > 1 && (
-                            <div className="px-4 sm:px-8 py-4 border-b border-neutral-800">
-                                <div className="flex gap-2 overflow-x-auto">
+                            <div className="px-4 sm:px-8 py-3.5 border-b border-white/10">
+                                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-white/10">
                                     {seasons.map(({ season }) => (
                                         <button
                                             key={season}
                                             onClick={() => setActiveSeason(season)}
-                                            className={`px-4 py-2 rounded-full text-sm font-medium transition whitespace-nowrap ${activeSeason === season
-                                                ? 'bg-white text-black'
-                                                : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                                            className={`px-4 py-1.5 rounded-full text-sm transition-all whitespace-nowrap cursor-pointer select-none ${activeSeason === season
+                                                ? 'liquid-glass-pill-active font-bold shadow-sm'
+                                                : 'liquid-glass-pill text-neutral-300 hover:text-white font-medium'
                                                 }`}
                                         >
                                             Season {season}
@@ -461,27 +471,27 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
 
                         {/* Episode Rating Grid */}
                         {seasons.length > 0 && (
-                            <div className="px-4 sm:px-8 py-4 border-b border-neutral-800">
+                            <div className="px-4 sm:px-8 py-4 border-b border-white/10">
                                 <button
                                     onClick={() => setShowRatingGrid(!showRatingGrid)}
-                                    className="flex items-center gap-2 text-sm font-medium text-neutral-400 hover:text-white transition mb-3"
+                                    className="flex items-center gap-2 text-sm font-medium text-neutral-400 hover:text-white transition mb-3 cursor-pointer"
                                 >
-                                    <BarChart3 className="w-4 h-4" />
+                                    <BarChart3 className="w-4 h-4 text-amber-400" />
                                     Episode Grid
                                     <ChevronDown className={`w-3 h-3 transition-transform ${showRatingGrid ? '' : '-rotate-90'}`} />
                                 </button>
                                 {showRatingGrid && (
-                                    <div className="space-y-2">
+                                    <div className="p-4 liquid-glass-pill bg-white/[0.02] border border-white/10 rounded-2xl space-y-2">
                                         {seasons.map(({ season, episodes }) => (
                                             <div key={season} className="flex items-center gap-1.5">
-                                                <span className="text-[10px] text-neutral-500 font-medium w-6 shrink-0">S{season}</span>
+                                                <span className="text-[10px] text-neutral-400 font-medium w-6 shrink-0">S{season}</span>
                                                 <div className="flex gap-0.5 flex-wrap">
                                                     {episodes.map((ep) => {
                                                         const hasProgress = ep.watchProgress && ep.watchProgress.progress > 0;
                                                         const isCompleted = ep.watchProgress?.completed === 1;
-                                                        let bgColor = 'bg-neutral-700'; // No data
-                                                        if (isCompleted) bgColor = 'bg-green-500';
-                                                        else if (hasProgress) bgColor = 'bg-yellow-500';
+                                                        let bgColor = 'bg-neutral-700/80'; // No data
+                                                        if (isCompleted) bgColor = 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]';
+                                                        else if (hasProgress) bgColor = 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.4)]';
 
                                                         return (
                                                             <div
@@ -510,10 +520,10 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                 </div>
                                             </div>
                                         ))}
-                                        <div className="flex items-center gap-3 mt-1 text-[10px] text-neutral-500">
-                                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" /> Watched</span>
-                                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-yellow-500 inline-block" /> In Progress</span>
-                                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-neutral-700 inline-block" /> Not Watched</span>
+                                        <div className="flex items-center gap-3 mt-2 pt-2 border-t border-white/5 text-[10px] text-neutral-400">
+                                            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block shadow-[0_0_4px_rgba(16,185,129,0.5)]" /> Watched</span>
+                                            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block shadow-[0_0_4px_rgba(251,191,36,0.5)]" /> In Progress</span>
+                                            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-neutral-700/80 inline-block" /> Not Watched</span>
                                         </div>
                                     </div>
                                 )}
@@ -522,151 +532,165 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
 
                         {/* Episode List */}
                         <div className="flex-1 overflow-y-auto p-4 sm:p-8">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-bold text-neutral-300 flex items-center gap-2">
-                                    <ChevronDown className="w-4 h-4" />
-                                    {seasons.length > 1 ? `Season ${activeSeason}` : 'Episodes'}
-                                    <span className="text-neutral-500 font-normal">
-                                        ({currentSeason?.episodes.length || 0} local)
+                            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                                <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                                    <ChevronDown className="w-4 h-4 text-neutral-400" />
+                                    <span>{seasons.length > 1 ? `Season ${activeSeason}` : 'Episodes'}</span>
+                                    <span className="text-xs px-2.5 py-0.5 rounded-full liquid-glass-pill text-neutral-300 border border-white/10 font-mono">
+                                        {currentSeason?.episodes.length || 0} local
                                     </span>
                                 </h3>
                                 {show.tmdbId && (
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <button aria-label={`Download next episode globally across all seasons`}
                                             onClick={handleDownloadNext}
                                             disabled={isDownloadingNext}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs font-semibold text-neutral-300 rounded-lg transition border border-neutral-700"
+                                            className="liquid-glass-pill flex items-center gap-2 px-3.5 py-2 disabled:opacity-50 text-xs font-semibold text-neutral-200 hover:text-white rounded-xl transition min-h-[38px] cursor-pointer"
                                             title={`Download next episode globally across all seasons`}
                                         >
-                                            <Download className={`w-3.5 h-3.5 ${isDownloadingNext ? 'animate-bounce text-blue-400' : ''}`} />
-                                            {isDownloadingNext ? 'Resolving...' : 'Download Next Episode'}
+                                            <Download className={`w-4 h-4 ${isDownloadingNext ? 'animate-bounce text-blue-400' : 'text-neutral-400'}`} />
+                                            <span>{isDownloadingNext ? 'Resolving...' : 'Download Next Episode'}</span>
                                         </button>
                                         <button aria-label={`Download missing episodes in Season ${activeSeason}`}
                                             onClick={handleDownloadMissing}
                                             disabled={isDownloadingMissing}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs font-semibold text-neutral-300 rounded-lg transition border border-neutral-700"
+                                            className="liquid-glass-pill flex items-center gap-2 px-3.5 py-2 disabled:opacity-50 text-xs font-semibold text-neutral-200 hover:text-white rounded-xl transition min-h-[38px] cursor-pointer"
                                             title={`Download missing episodes in Season ${activeSeason}`}
                                         >
-                                            <DownloadCloud className={`w-3.5 h-3.5 ${isDownloadingMissing ? 'animate-pulse text-blue-400' : ''}`} />
-                                            {isDownloadingMissing ? 'Checking...' : 'Fetch Missing'}
+                                            <DownloadCloud className={`w-4 h-4 ${isDownloadingMissing ? 'animate-pulse text-blue-400' : 'text-neutral-400'}`} />
+                                            <span>{isDownloadingMissing ? 'Checking...' : 'Fetch Missing'}</span>
                                         </button>
                                     </div>
                                 )}
                             </div>
 
                             {loading ? (
-                                <div className="flex justify-center py-10">
-                                    <RefreshCw className="animate-spin text-neutral-500" />
+                                <div className="flex justify-center py-12">
+                                    <RefreshCw className="animate-spin text-neutral-400 w-6 h-6" />
                                 </div>
                             ) : (
-                                <div className="space-y-2">
+                                <div className="space-y-3">
                                     {currentSeason?.episodes.map((ep) => {
                                         const progressPercent = ep.watchProgress && ep.watchProgress.duration > 0
                                             ? (ep.watchProgress.progress / ep.watchProgress.duration) * 100
                                             : 0;
+                                        const score = episodeScore(ep.imdbRating, ep.rating, ep.voteCount);
+                                        const isWatched = ep.watchProgress?.completed === 1;
+                                        const isInProgress = progressPercent > 0 && !isWatched;
 
                                         return (
                                             <div
                                                 key={ep.id}
                                                 onClick={() => setSelectedEpisode(ep)}
                                                 onContextMenu={(e) => handleContextMenu(e, ep)}
-                                                className="relative flex gap-4 p-4 rounded-xl hover:bg-neutral-800 cursor-pointer group transition border border-transparent hover:border-neutral-700"
+                                                className="relative flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3.5 sm:p-4 rounded-2xl liquid-card bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 cursor-pointer group transition-all duration-200 hover:scale-[1.01] hover:shadow-[0_10px_30px_rgba(0,0,0,0.6),0_0_20px_rgba(255,255,255,0.04)]"
                                             >
                                                 {/* Episode thumbnail */}
                                                 {ep.stillPath ? (
-                                                    <div className="shrink-0 w-28 sm:w-36 h-16 sm:h-20 rounded-lg overflow-hidden bg-neutral-800 relative">
+                                                    <div className="shrink-0 w-full sm:w-44 aspect-video rounded-xl overflow-hidden bg-neutral-900 border border-white/15 relative shadow-md group-hover:border-white/30 transition-all">
                                                         <img
                                                             src={`https://image.tmdb.org/t/p/w300${ep.stillPath}`}
-                                                            className="w-full h-full object-cover"
+                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                                             alt={ep.title}
                                                             loading="lazy"
                                                         />
                                                         {/* Play overlay on thumbnail */}
-                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition">
-                                                            <div className="p-2 bg-white/20 backdrop-blur-sm rounded-full">
-                                                                <Play className="w-4 h-4 text-white fill-white" />
+                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                            <div className="w-10 h-10 liquid-orb bg-white/25 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
+                                                                <Play className="w-4 h-4 text-white fill-white ml-0.5" />
                                                             </div>
                                                         </div>
+                                                        {/* Integrated thumbnail progress bar */}
+                                                        {progressPercent > 0 && (
+                                                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/80 overflow-hidden">
+                                                                <div
+                                                                    className={`h-full ${isWatched ? "bg-emerald-500" : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]"}`}
+                                                                    style={{ width: `${Math.min(100, Math.max(5, progressPercent))}%` }}
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ) : (
-                                                    <div className="shrink-0 w-28 sm:w-36 h-16 sm:h-20 rounded-lg bg-neutral-800 flex items-center justify-center">
-                                                        <span className="text-2xl font-bold text-neutral-600">{ep.episodeNumber}</span>
+                                                    <div className="shrink-0 w-full sm:w-44 aspect-video rounded-xl bg-neutral-900 border border-white/15 flex items-center justify-center shadow-md">
+                                                        <span className="text-3xl font-black text-neutral-600 font-mono">E{ep.episodeNumber}</span>
                                                     </div>
                                                 )}
 
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs text-neutral-500 font-medium">E{ep.episodeNumber}</span>
-                                                        <h4 className="font-medium text-neutral-200 group-hover:text-red-500 transition truncate">
+                                                {/* Content info */}
+                                                <div className="flex-1 min-w-0 w-full">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="px-2 py-0.5 rounded-md bg-white/10 text-neutral-300 font-mono text-xs font-bold border border-white/10 shrink-0">
+                                                            E{ep.episodeNumber}
+                                                        </span>
+                                                        <h4 className="font-bold text-white group-hover:text-red-400 text-sm sm:text-base transition-colors truncate">
                                                             {ep.title}
                                                         </h4>
-                                                        {(() => {
-                                                            const score = episodeScore(ep.imdbRating, ep.rating, ep.voteCount);
-                                                            if (!score) return null;
-                                                            return (
-                                                                <span
-                                                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] rounded font-semibold"
-                                                                    title={`${score.source} rating`}
-                                                                >
-                                                                    <Star className="w-2.5 h-2.5 fill-amber-300" />
-                                                                    {score.value.toFixed(1)}
-                                                                </span>
-                                                            );
-                                                        })()}
+                                                        {score && (
+                                                            <span
+                                                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/15 border border-amber-500/35 text-amber-300 text-[11px] font-bold rounded-md shrink-0 shadow-sm"
+                                                                title={`${score.source} rating`}
+                                                            >
+                                                                <Star className="w-3 h-3 fill-amber-300" />
+                                                                {score.value.toFixed(1)}
+                                                            </span>
+                                                        )}
                                                     </div>
 
-                                                    {ep.overview && (
-                                                        <p className="text-xs text-neutral-500 line-clamp-2 mt-1">{ep.overview}</p>
-                                                    )}
+                                                    <p className="text-xs sm:text-sm text-neutral-300/90 line-clamp-2 mt-1.5 leading-relaxed">
+                                                        {ep.overview || 'No episode description available.'}
+                                                    </p>
 
-                                                    {/* Media info badges */}
-                                                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                                    {/* Crystal format badges */}
+                                                    <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
                                                         {ep.resolution && (
-                                                            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] rounded font-semibold">
-                                                                {ep.resolution === '2160p' ? '4K' : ep.resolution}
+                                                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                                                                {ep.resolution === '2160p' ? '4K UHD' : ep.resolution}
                                                             </span>
                                                         )}
                                                         {ep.isHDR && (
-                                                            <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 text-[10px] rounded font-semibold">
+                                                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-[0_0_8px_rgba(245,158,11,0.2)]">
                                                                 HDR
                                                             </span>
                                                         )}
                                                         {ep.videoCodec && (
-                                                            <span className="px-1.5 py-0.5 bg-violet-500/20 text-violet-300 text-[10px] rounded font-semibold">
+                                                            <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-violet-500/15 text-violet-300 border border-violet-500/30 uppercase">
                                                                 {ep.videoCodec}
                                                             </span>
                                                         )}
-                                                        {ep.audioChannels && (
-                                                            <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] rounded font-semibold">
-                                                                {ep.audioChannels}
+                                                        {(ep.audioChannels || ep.audioCodec) && (
+                                                            <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-teal-500/15 text-teal-300 border border-teal-500/30 uppercase">
+                                                                {ep.audioChannels || ep.audioCodec}
                                                             </span>
                                                         )}
                                                     </div>
-
-                                                    {/* Progress bar */}
-                                                    {progressPercent > 0 && progressPercent < 95 && (
-                                                        <div className="mt-2 h-1 w-full max-w-xs bg-neutral-700 rounded overflow-hidden">
-                                                            <div
-                                                                className="h-full accent-fill"
-                                                                style={{ width: `${progressPercent}%` }}
-                                                            />
-                                                        </div>
-                                                    )}
                                                 </div>
 
-                                                {ep.watchProgress?.completed === 1 && (
-                                                    <span className="px-2 py-0.5 bg-green-600/20 text-green-400 text-xs rounded self-start">
-                                                        Watched
-                                                    </span>
-                                                )}
-
-                                                <ChevronDown className="w-4 h-4 text-neutral-600 group-hover:text-white -rotate-90 self-center shrink-0" />
+                                                {/* Right status & action */}
+                                                <div className="flex items-center gap-2 self-end sm:self-center shrink-0 mt-2 sm:mt-0">
+                                                    {isWatched && (
+                                                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+                                                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                                            Watched
+                                                        </span>
+                                                    )}
+                                                    {isInProgress && (
+                                                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 border border-amber-500/35 text-amber-300 flex items-center gap-1.5 shadow-[0_0_12px_rgba(251,191,36,0.25)]">
+                                                            <Clock className="w-3.5 h-3.5 text-amber-400" />
+                                                            {Math.round(progressPercent)}%
+                                                        </span>
+                                                    )}
+                                                    <div className="w-8 h-8 rounded-full liquid-orb flex items-center justify-center text-neutral-400 group-hover:text-white group-hover:translate-x-0.5 transition-all">
+                                                        <ChevronDown className="w-4 h-4 -rotate-90" />
+                                                    </div>
+                                                </div>
                                             </div>
                                         );
                                     })}
 
                                     {(!currentSeason || currentSeason.episodes.length === 0) && (
-                                        <p className="text-neutral-500 text-center py-8">No episodes found.</p>
+                                        <div className="text-center py-12 liquid-glass-pill rounded-2xl p-6 border border-white/10">
+                                            <p className="text-neutral-400 font-medium">No local episodes found for this season.</p>
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -680,49 +704,52 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                 <>
                     <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)} />
                     <div
-                        className="fixed z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-48"
+                        className="fixed z-[60] liquid-glass-dock rounded-2xl border border-white/15 shadow-[0_15px_40px_rgba(0,0,0,0.85)] overflow-hidden min-w-52 divide-y divide-white/10 backdrop-blur-2xl animate-in zoom-in-95 duration-150"
                         style={{ left: contextMenu.x, top: contextMenu.y }}
                     >
-                        <div className="px-4 py-2 border-b border-neutral-700">
-                            <p className="text-sm font-medium truncate max-w-48 text-neutral-100">{contextMenu.episode.title}</p>
+                        <div className="px-4 py-2.5 bg-white/[0.04]">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Episode Options</p>
+                            <p className="text-sm font-semibold truncate max-w-48 text-white mt-0.5">{contextMenu.episode.title}</p>
                         </div>
-                        {contextMenu.episode.watchProgress?.completed === 1 ? (
+                        <div className="p-1 space-y-0.5">
+                            {contextMenu.episode.watchProgress?.completed === 1 ? (
+                                <button
+                                    onClick={() => {
+                                        if (onMarkWatched) onMarkWatched(contextMenu.episode, false);
+                                        setContextMenu(null);
+                                    }}
+                                    className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10 transition w-full text-left text-neutral-200 text-sm cursor-pointer"
+                                >
+                                    <EyeOff className="w-4 h-4 text-neutral-400" />
+                                    Mark as Unwatched
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => {
+                                        if (onMarkWatched) onMarkWatched(contextMenu.episode, true);
+                                        setContextMenu(null);
+                                    }}
+                                    className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10 transition w-full text-left text-neutral-200 text-sm cursor-pointer"
+                                >
+                                    <Eye className="w-4 h-4 text-emerald-400" />
+                                    Mark as Watched
+                                </button>
+                            )}
                             <button
-                                onClick={() => {
-                                    if (onMarkWatched) onMarkWatched(contextMenu.episode, false);
-                                    setContextMenu(null);
-                                }}
-                                className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
+                                onClick={handleRemoveFromLibrary}
+                                className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10 transition w-full text-left text-neutral-200 text-sm cursor-pointer"
                             >
-                                <EyeOff className="w-4 h-4" />
-                                Mark as Unwatched
+                                <BookmarkMinus className="w-4 h-4 text-neutral-400" />
+                                Remove from Library
                             </button>
-                        ) : (
                             <button
-                                onClick={() => {
-                                    if (onMarkWatched) onMarkWatched(contextMenu.episode, true);
-                                    setContextMenu(null);
-                                }}
-                                className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left text-neutral-200"
+                                onClick={handleDelete}
+                                className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-red-500/20 text-rose-300 hover:text-rose-200 transition w-full text-left text-sm cursor-pointer"
                             >
-                                <Eye className="w-4 h-4" />
-                                Mark as Watched
+                                <Trash2 className="w-4 h-4 text-rose-400" />
+                                Delete Permanently
                             </button>
-                        )}
-                        <button
-                            onClick={handleRemoveFromLibrary}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-700 transition w-full text-left border-t border-neutral-700 text-neutral-200"
-                        >
-                            <BookmarkMinus className="w-4 h-4" />
-                            Remove from Library
-                        </button>
-                        <button
-                            onClick={handleDelete}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-red-600 transition w-full text-left border-t border-neutral-700 text-red-400"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                            Delete Permanently
-                        </button>
+                        </div>
                     </div>
                 </>
             )}

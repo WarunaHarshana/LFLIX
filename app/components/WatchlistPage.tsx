@@ -59,6 +59,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
     const [downloadItem, setDownloadItem] = useState<WatchlistItem | null>(null);
     const [trailerItem, setTrailerItem] = useState<{ tmdbId: number; mediaType: 'movie' | 'tv'; title: string } | null>(null);
     const [availability, setAvailability] = useState<Map<number, MovieAvailability>>(new Map());
+    const [savedTab, setSavedTab] = useState<'all' | 'movie' | 'tv' | 'available'>('all');
 
     // Fetch watchlist on mount
     useEffect(() => {
@@ -197,48 +198,80 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     };
 
+    const movieCount = watchlist.filter(w => w.mediaType === 'movie').length;
+    const tvCount = watchlist.filter(w => w.mediaType === 'tv').length;
+    const availableCount = watchlist.filter(w => w.mediaType === 'movie' && isMovieAvailable(w.tmdbId) && !isInLibrary(w.tmdbId)).length;
+
+    const filteredWatchlist = watchlist.filter(item => {
+        if (savedTab === 'movie') return item.mediaType === 'movie';
+        if (savedTab === 'tv') return item.mediaType === 'tv';
+        if (savedTab === 'available') return item.mediaType === 'movie' && isMovieAvailable(item.tmdbId) && !isInLibrary(item.tmdbId);
+        return true;
+    });
+
     return (
-        <div className="pt-24 px-6 md:px-12 pb-20">
-            {/* Header */}
-            <div className="mb-8">
-                <div className="flex items-center gap-3 mb-2">
-                    <Bookmark className="w-8 h-8 text-[var(--text-secondary)]" />
-                    <h1 className="text-3xl font-bold">My Watchlist</h1>
+        <div className="pt-24 px-4 md:px-12 pb-20 w-full">
+            {/* Sleek Integrated Header */}
+            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shadow-lg flex-shrink-0">
+                        <Bookmark className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2.5">
+                            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">My Watchlist</h1>
+                            <span className="liquid-glass-pill px-2.5 py-0.5 text-xs rounded-full font-bold text-neutral-300 border border-white/15">
+                                {watchlist.length}
+                            </span>
+                        </div>
+                        <p className="text-neutral-400 text-xs sm:text-sm mt-0.5">
+                            Save upcoming releases to stream online or auto-track for downloads.
+                        </p>
+                    </div>
                 </div>
-                <p className="text-neutral-400 text-sm">Search TMDB for movies & shows you want to watch. Save them here so you can download and add to your library later.</p>
+
+                {availableCount > 0 && (
+                    <button
+                        onClick={() => setSavedTab('available')}
+                        className="self-start md:self-auto inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 rounded-2xl text-xs font-semibold text-emerald-300 transition-all cursor-pointer shadow-sm"
+                    >
+                        <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
+                        <span>{availableCount} title{availableCount > 1 ? 's' : ''} ready to download</span>
+                    </button>
+                )}
             </div>
 
-            {/* Search Section */}
-            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 mb-8">
-                <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
+            {/* Compact Search Bar & Floating Results */}
+            <div className="liquid-glass-base border border-white/15 rounded-2xl p-2.5 sm:p-3 mb-8 shadow-xl relative transition-all duration-300">
+                <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+                    <div className="relative flex-1 flex items-center">
+                        <Search className="absolute left-3.5 w-4.5 h-4.5 text-neutral-400 pointer-events-none" />
                         <input
                             ref={searchInputRef}
                             type="text"
                             value={searchQuery}
                             onChange={(e) => handleSearchChange(e.target.value)}
-                            placeholder="Search movies & shows on TMDB..."
-                            className="w-full bg-black border border-neutral-700 rounded-xl pl-12 pr-10 py-3.5 outline-none focus:border-white/70 transition text-sm"
-                            autoFocus
+                            placeholder="Search TMDB to add movies & shows..."
+                            className="w-full bg-white/[0.04] border border-white/10 focus:border-white/30 focus:bg-white/[0.07] rounded-xl pl-11 pr-10 py-2.5 outline-none transition text-sm text-white placeholder:text-neutral-500 shadow-inner"
                         />
                         {searchQuery && (
                             <button
                                 onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-neutral-800 rounded-full transition"
+                                className="absolute right-2.5 p-1.5 hover:bg-white/10 rounded-lg transition text-neutral-400 hover:text-white"
+                                title="Clear search"
                             >
-                                <X className="w-4 h-4 text-neutral-500" />
+                                <X className="w-4 h-4" />
                             </button>
                         )}
                     </div>
-                    <div className="flex gap-1 bg-black border border-neutral-700 rounded-xl p-1">
+                    <div className="flex gap-1.5 p-1 bg-white/[0.04] border border-white/10 rounded-xl flex-shrink-0 self-start md:self-center">
                         {(['multi', 'movie', 'tv'] as const).map((type) => (
                             <button
                                 key={type}
                                 onClick={() => handleTypeChange(type)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${searchType === type
-                                    ? 'bg-white text-black border border-white/80'
-                                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer min-h-[38px] ${searchType === type
+                                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                    : 'text-neutral-300 hover:text-white hover:bg-white/10'
                                     }`}
                             >
                                 {type === 'multi' ? 'All' : type === 'movie' ? 'Movies' : 'TV Shows'}
@@ -247,144 +280,222 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                     </div>
                 </div>
 
-                {/* Search Results */}
-                {searching && (
-                    <div className="flex items-center justify-center py-8">
-                        <Loader2 className="w-6 h-6 animate-spin text-[var(--text-secondary)]" />
-                        <span className="ml-3 text-neutral-400">Searching TMDB...</span>
-                    </div>
-                )}
+                {/* Search Results Expander: ONLY appears when query typed or searching */}
+                {(searching || searchQuery.trim().length >= 2) && (
+                    <div className="border-t border-white/10 mt-3 pt-3">
+                        <div className="flex items-center justify-between px-1 mb-2.5">
+                            <span className="text-xs font-semibold text-neutral-300">
+                                {searching ? 'Searching TMDB...' : `Results for "${searchQuery}" (${searchResults.length})`}
+                            </span>
+                            <button
+                                onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                                className="text-[11px] text-neutral-400 hover:text-white flex items-center gap-1 transition px-2 py-0.5 rounded-lg hover:bg-white/10 cursor-pointer"
+                            >
+                                <X className="w-3 h-3" /> Dismiss
+                            </button>
+                        </div>
 
-                {!searching && searchResults.length > 0 && (
-                    <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                        {searchResults.map((result) => {
-                            const inWatchlist = isInWatchlist(result.tmdbId);
-                            const inLibrary = isInLibrary(result.tmdbId);
-                            return (
-                                <div
-                                    key={`${result.mediaType}-${result.tmdbId}`}
-                                    className="flex gap-4 p-3 bg-neutral-800/50 hover:bg-neutral-800 rounded-xl transition group"
-                                >
-                                    {/* Poster */}
-                                    <div className="w-14 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-neutral-700">
-                                        {result.posterPath ? (
-                                            <img
-                                                src={`https://image.tmdb.org/t/p/w92${result.posterPath}`}
-                                                alt={result.title}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center">
-                                                {result.mediaType === 'movie' ? <Film className="w-6 h-6 text-neutral-500" /> : <Tv className="w-6 h-6 text-neutral-500" />}
+                        {searching && (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+                                <span className="ml-2.5 text-neutral-300 text-xs">Finding matches on TMDB...</span>
+                            </div>
+                        )}
+
+                        {!searching && searchResults.length > 0 && (
+                            <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1.5 custom-scrollbar">
+                                {searchResults.map((result) => {
+                                    const inWatchlist = isInWatchlist(result.tmdbId);
+                                    const inLibrary = isInLibrary(result.tmdbId);
+                                    return (
+                                        <div
+                                            key={`${result.mediaType}-${result.tmdbId}`}
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 liquid-glass-base border border-white/10 hover:border-white/25 rounded-xl transition group"
+                                        >
+                                            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                                                {/* Poster */}
+                                                <div className="w-12 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-white/5 border border-white/10 shadow-sm">
+                                                    {result.posterPath ? (
+                                                        <img
+                                                            src={`https://image.tmdb.org/t/p/w92${result.posterPath}`}
+                                                            alt={result.title}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center">
+                                                            {result.mediaType === 'movie' ? <Film className="w-5 h-5 text-neutral-500" /> : <Tv className="w-5 h-5 text-neutral-500" />}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Info */}
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                        <h3 className="font-semibold text-white truncate text-sm">{result.title}</h3>
+                                                        <span className="px-1.5 py-0.5 liquid-glass-pill rounded text-[9px] uppercase tracking-wide text-neutral-300 flex-shrink-0 font-medium">
+                                                            {result.mediaType === 'movie' ? 'Movie' : 'TV'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-xs text-neutral-400 mb-1">
+                                                        {result.year && <span>{result.year}</span>}
+                                                        {result.rating != null && result.rating > 0 && (
+                                                            <span className="flex items-center gap-1 text-amber-300 font-medium text-[11px]">
+                                                                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                                                                {result.rating.toFixed(1)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {result.overview && (
+                                                        <p className="text-xs text-neutral-400 line-clamp-1 leading-relaxed">{result.overview}</p>
+                                                    )}
+                                                </div>
                                             </div>
-                                        )}
-                                    </div>
 
-                                    {/* Info */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <h3 className="font-semibold truncate">{result.title}</h3>
-                                            <span className="px-1.5 py-0.5 bg-neutral-700 rounded text-[10px] uppercase tracking-wide text-neutral-400 flex-shrink-0">
-                                                {result.mediaType === 'movie' ? 'Movie' : 'TV'}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-3 text-xs text-neutral-400 mb-1">
-                                            {result.year && <span>{result.year}</span>}
-                                            {result.rating != null && result.rating > 0 && (
-                                                <span className="flex items-center gap-1">
-                                                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                                                    {result.rating.toFixed(1)}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {result.overview && (
-                                            <p className="text-xs text-neutral-500 line-clamp-2">{result.overview}</p>
-                                        )}
-                                    </div>
-
-                                    {/* Action */}
-                                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                                        <button aria-label="Open Details"
-                                            onClick={() => onOpenOnline?.(result)}
-                                            className="p-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition"
-                                            title="Open Details"
-                                        >
-                                            <Globe className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button aria-label="Watch Trailer"
-                                            onClick={() => setTrailerItem({ tmdbId: result.tmdbId, mediaType: result.mediaType, title: result.title })}
-                                            className="p-2 bg-neutral-700/80 hover:bg-neutral-600 text-white rounded-lg transition border border-neutral-600"
-                                            title="Watch Trailer"
-                                        >
-                                            <Play className="w-3.5 h-3.5" />
-                                        </button>
-                                        {inLibrary ? (
-                                            <span className="px-3 py-1.5 bg-green-500/10 text-green-400 border border-green-500/30 rounded-lg text-xs font-medium">
-                                                In Library
-                                            </span>
-                                        ) : inWatchlist ? (
-                                            <span className="px-3 py-1.5 bg-white/15 text-white border border-white/30 rounded-lg text-xs font-medium flex items-center gap-1">
-                                                <Check className="w-3.5 h-3.5" />
-                                                Added
-                                            </span>
-                                        ) : (
-                                            <button
-                                                onClick={() => addToWatchlist(result)}
-                                                disabled={addingIds.has(result.tmdbId)}
-                                                className="px-3 py-1.5 bg-white hover:bg-neutral-200 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1 transition"
-                                            >
-                                                {addingIds.has(result.tmdbId) ? (
-                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            {/* Actions */}
+                                            <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
+                                                <button
+                                                    aria-label="Open Details"
+                                                    onClick={() => onOpenOnline?.(result)}
+                                                    className="p-2.5 liquid-glass-pill hover:bg-white/20 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer"
+                                                    title="Open Details"
+                                                >
+                                                    <Globe className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    aria-label="Watch Trailer"
+                                                    onClick={() => setTrailerItem({ tmdbId: result.tmdbId, mediaType: result.mediaType, title: result.title })}
+                                                    className="p-2.5 liquid-glass-pill hover:bg-white/20 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer"
+                                                    title="Watch Trailer"
+                                                >
+                                                    <Play className="w-4 h-4" />
+                                                </button>
+                                                {inLibrary ? (
+                                                    <span className="px-3 py-1.5 bg-green-500/15 text-green-300 border border-green-500/30 rounded-xl text-xs font-semibold shadow-sm">
+                                                        In Library
+                                                    </span>
+                                                ) : inWatchlist ? (
+                                                    <span className="px-3 py-1.5 liquid-glass-pill text-white border border-white/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                                                        <Check className="w-3.5 h-3.5 text-green-400" />
+                                                        Added
+                                                    </span>
                                                 ) : (
-                                                    <Plus className="w-3.5 h-3.5" />
+                                                    <button
+                                                        onClick={() => addToWatchlist(result)}
+                                                        disabled={addingIds.has(result.tmdbId)}
+                                                        className="px-3.5 py-1.5 liquid-btn-primary disabled:opacity-50 text-xs font-bold rounded-xl flex items-center gap-1.5 transition shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                                                    >
+                                                        {addingIds.has(result.tmdbId) ? (
+                                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        ) : (
+                                                            <Plus className="w-3.5 h-3.5" />
+                                                        )}
+                                                        Add
+                                                    </button>
                                                 )}
-                                                Add
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
 
-                {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
-                    <div className="text-center py-8">
-                        <p className="text-neutral-500">No results found for &quot;{searchQuery}&quot;</p>
-                    </div>
-                )}
-
-                {!searching && searchQuery.length === 0 && (
-                    <div className="text-center py-6">
-                        <Search className="w-10 h-10 text-neutral-700 mx-auto mb-3" />
-                        <p className="text-neutral-500 text-sm">Start typing to search TMDB for movies and TV shows</p>
+                        {!searching && searchResults.length === 0 && (
+                            <div className="text-center py-6 text-neutral-400 text-xs">
+                                No TMDB results found for &quot;{searchQuery}&quot;
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
 
-            {/* Watchlist Grid */}
-            <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Bookmark className="w-5 h-5 text-[var(--text-secondary)]" />
-                    Saved ({watchlist.length})
-                </h2>
+            {/* Saved Titles Section Controls */}
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                    <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                        <span>Saved Titles</span>
+                    </h2>
+                    <span className="liquid-glass-pill px-2.5 py-0.5 text-xs rounded-full font-bold text-neutral-300 border border-white/15">
+                        {filteredWatchlist.length}
+                    </span>
+                </div>
+
+                {/* Filter Tabs for Saved Items */}
+                {watchlist.length > 0 && (
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
+                        <button
+                            onClick={() => setSavedTab('all')}
+                            className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition cursor-pointer min-h-[42px] sm:min-h-[44px] ${savedTab === 'all'
+                                ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                : 'liquid-glass-pill text-neutral-300 hover:text-white'
+                                }`}
+                        >
+                            All ({watchlist.length})
+                        </button>
+                        {movieCount > 0 && (
+                            <button
+                                onClick={() => setSavedTab('movie')}
+                                className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition cursor-pointer min-h-[42px] sm:min-h-[44px] ${savedTab === 'movie'
+                                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                    : 'liquid-glass-pill text-neutral-300 hover:text-white'
+                                    }`}
+                            >
+                                Movies ({movieCount})
+                            </button>
+                        )}
+                        {tvCount > 0 && (
+                            <button
+                                onClick={() => setSavedTab('tv')}
+                                className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition cursor-pointer min-h-[42px] sm:min-h-[44px] ${savedTab === 'tv'
+                                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                    : 'liquid-glass-pill text-neutral-300 hover:text-white'
+                                    }`}
+                            >
+                                TV Shows ({tvCount})
+                            </button>
+                        )}
+                        {availableCount > 0 && (
+                            <button
+                                onClick={() => setSavedTab('available')}
+                                className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition flex items-center gap-2 cursor-pointer min-h-[42px] sm:min-h-[44px] ${savedTab === 'available'
+                                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                    : 'liquid-glass-pill text-neutral-300 hover:text-white'
+                                    }`}
+                            >
+                                <Sparkles className="w-4 h-4 text-emerald-400" />
+                                <span>Available ({availableCount})</span>
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {loading ? (
-                <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-8 h-8 animate-spin text-neutral-500" />
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-8 h-8 animate-spin text-white/50" />
                 </div>
             ) : watchlist.length === 0 ? (
-                <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
-                    <Bookmark className="w-16 h-16 text-neutral-700 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-neutral-400 mb-2">Your watchlist is empty</h3>
-                    <p className="text-neutral-500 text-sm max-w-md mx-auto">
-                        Search for movies and TV shows above, then add them to your watchlist. You can download them later and add to your library.
+                <div className="text-center py-16 liquid-glass-base border border-white/10 rounded-3xl p-10 max-w-lg mx-auto shadow-2xl">
+                    <div className="w-16 h-16 rounded-3xl liquid-glass-pill flex items-center justify-center mx-auto mb-4 border border-white/20">
+                        <Bookmark className="w-8 h-8 text-neutral-400" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-white mb-2">Your watchlist is empty</h3>
+                    <p className="text-neutral-400 text-sm leading-relaxed">
+                        Search for movies and TV shows above, then add them to your watchlist. You can download them later and add them directly to your library.
                     </p>
                 </div>
+            ) : filteredWatchlist.length === 0 ? (
+                <div className="text-center py-14 liquid-glass-base border border-white/10 rounded-2xl p-8 max-w-md mx-auto shadow-xl">
+                    <p className="text-neutral-300 text-sm">No saved titles match this filter.</p>
+                    <button
+                        onClick={() => setSavedTab('all')}
+                        className="mt-3 px-4 py-2 liquid-glass-pill hover:bg-white/15 text-xs text-white font-semibold rounded-xl transition cursor-pointer"
+                    >
+                        Show All Saved Titles
+                    </button>
+                </div>
             ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
-                    {watchlist.map((item) => {
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
+                    {filteredWatchlist.map((item) => {
                         const inLibrary = isInLibrary(item.tmdbId);
                         const available = item.mediaType === 'movie' && isMovieAvailable(item.tmdbId);
                         const displayRating = item.imdbRating ?? item.rating;
@@ -392,91 +503,93 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                             <div
                                 key={item.id}
                                 onClick={() => openWatchlistItemOnline(item)}
-                                className={`group relative bg-neutral-900 rounded-xl overflow-hidden border transition-all hover:scale-[1.02] hover:shadow-2xl ${
+                                className={`group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.04] hover:z-30 liquid-card liquid-sheen-effect shadow-md hover:shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_24px_rgba(255,255,255,0.12)] border ${
                                     available && !inLibrary
-                                        ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/10 hover:border-emerald-400/70'
-                                        : 'border-neutral-800 hover:border-neutral-600'
+                                        ? 'border-emerald-500/40 shadow-emerald-500/10 hover:border-emerald-400/80 hover:shadow-emerald-500/20'
+                                        : 'border-white/10 hover:border-white/30'
                                 }`}
                             >
                                 {/* Poster */}
-                                <div className="aspect-[2/3] bg-neutral-800 relative">
+                                <div className="aspect-[2/3] bg-white/5 relative overflow-hidden">
                                     {item.posterPath ? (
                                         <img
                                             src={`https://image.tmdb.org/t/p/w342${item.posterPath}`}
                                             alt={item.title}
-                                            className="w-full h-full object-cover"
+                                            className="w-full h-full object-cover transition duration-500 group-hover:scale-105 group-hover:brightness-95"
                                             loading="lazy"
                                         />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center">
-                                            {item.mediaType === 'movie' ? <Film className="w-12 h-12 text-neutral-600" /> : <Tv className="w-12 h-12 text-neutral-600" />}
+                                            {item.mediaType === 'movie' ? <Film className="w-12 h-12 text-neutral-500" /> : <Tv className="w-12 h-12 text-neutral-500" />}
                                         </div>
                                     )}
 
                                     {/* Overlay on hover */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3">
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/30 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col justify-end p-3.5 backdrop-blur-[2px] z-10">
                                         {item.overview && (
-                                            <p className="text-[11px] text-neutral-300 line-clamp-3 mb-2">{item.overview}</p>
+                                            <p className="text-[11px] text-neutral-200 line-clamp-3 mb-3 leading-relaxed drop-shadow">{item.overview}</p>
                                         )}
-                                        <div className="flex gap-1.5 w-full">
+                                        {/* Action buttons: Stacked for 100% spacing safety */}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setDownloadItem(item); }}
+                                            className="w-full py-2.5 liquid-btn-primary text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg mb-2 cursor-pointer transition active:scale-95"
+                                        >
+                                            <Download className="w-3.5 h-3.5" />
+                                            Download
+                                        </button>
+                                        <div className="flex gap-2 w-full">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setTrailerItem(item); }}
-                                                className="flex-1 py-1.5 bg-neutral-700/80 hover:bg-neutral-600 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition border border-neutral-600"
+                                                className="flex-1 py-2 liquid-btn-secondary text-xs font-medium rounded-xl flex items-center justify-center gap-1 cursor-pointer hover:scale-105 active:scale-95 transition"
                                             >
                                                 <Play className="w-3.5 h-3.5" />
                                                 Trailer
                                             </button>
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); setDownloadItem(item); }}
-                                                className="flex-1 py-1.5 bg-white hover:bg-neutral-200 text-black text-xs font-medium rounded-lg flex items-center justify-center gap-1 transition"
-                                            >
-                                                <Download className="w-3.5 h-3.5" />
-                                                Download
-                                            </button>
-                                            <button
                                                 onClick={(e) => { e.stopPropagation(); removeFromWatchlist(item.id); }}
-                                                className="py-1.5 px-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg flex items-center justify-center transition"
+                                                className="p-2 bg-red-500/20 hover:bg-red-500/35 text-red-300 border border-red-500/30 rounded-xl flex items-center justify-center transition cursor-pointer hover:scale-105 active:scale-95"
+                                                title="Remove from Watchlist"
                                             >
-                                                <Trash2 className="w-3.5 h-3.5" />
+                                                <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>
 
                                     {/* Badges */}
-                                    <div className="absolute top-2 left-2 flex flex-col gap-1">
-                                        <span className="px-1.5 py-0.5 bg-black/70 backdrop-blur rounded text-[10px] uppercase tracking-wide text-neutral-300 font-medium">
+                                    <div className="!absolute top-2.5 left-2.5 z-20 flex flex-col gap-1 pointer-events-none select-none max-w-[60%]">
+                                        <span className="px-2 py-0.5 bg-black/80 backdrop-blur-md border border-white/20 rounded-lg text-[10px] uppercase tracking-wide text-white font-semibold shadow-md w-fit">
                                             {item.mediaType === 'movie' ? 'Movie' : 'TV'}
                                         </span>
                                         {inLibrary && (
-                                            <span className="px-1.5 py-0.5 bg-green-500/80 backdrop-blur rounded text-[10px] text-black font-bold">
-                                                IN LIBRARY
+                                            <span className="px-2 py-0.5 bg-green-500/30 backdrop-blur-md border border-green-500/40 rounded-lg text-[10px] text-green-300 font-bold shadow-md w-fit">
+                                                In Library
                                             </span>
                                         )}
                                         {available && !inLibrary && (
-                                            <span className="px-1.5 py-0.5 bg-emerald-500/90 backdrop-blur rounded text-[10px] text-black font-bold flex items-center gap-0.5 animate-pulse">
+                                            <span className="px-2 py-0.5 bg-emerald-500/35 backdrop-blur-md border border-emerald-500/40 rounded-lg text-[10px] text-emerald-300 font-bold flex items-center gap-1 animate-pulse shadow-md w-fit">
                                                 <Sparkles className="w-2.5 h-2.5" />
-                                                AVAILABLE
+                                                Available
                                             </span>
                                         )}
                                     </div>
 
                                     {/* Rating badge */}
                                     {displayRating != null && displayRating > 0 && (
-                                        <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/70 backdrop-blur rounded text-[10px] text-amber-400 font-bold flex items-center gap-0.5">
-                                            <Star className="w-2.5 h-2.5 fill-amber-400" />
-                                            {displayRating.toFixed(1)}
+                                        <div className="!absolute top-2.5 right-2.5 z-20 inline-flex items-center gap-1 px-2 py-0.5 bg-black/80 backdrop-blur-md border border-amber-400/35 rounded-lg text-[10px] text-amber-300 font-bold shadow-md pointer-events-none select-none w-fit">
+                                            <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                                            <span>{displayRating.toFixed(1)}</span>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Title */}
-                                <div className="p-2.5">
-                                    <h3 className="font-medium text-sm truncate" title={item.title}>{item.title}</h3>
-                                    <div className="flex items-center gap-2 text-[11px] text-neutral-500 mt-0.5">
-                                        {item.year && <span>{item.year}</span>}
-                                        <span className="flex items-center gap-0.5">
-                                            <Clock className="w-3 h-3" />
-                                            {formatDate(item.addedAt)}
+                                <div className="p-3.5">
+                                    <h3 className="font-semibold text-white text-sm truncate" title={item.title}>{item.title}</h3>
+                                    <div className="flex items-center justify-between gap-2 text-[11px] text-neutral-400 mt-1">
+                                        <span>{item.year || '—'}</span>
+                                        <span className="flex items-center gap-1 text-neutral-400 truncate">
+                                            <Clock className="w-3 h-3 text-neutral-400 flex-shrink-0" />
+                                            <span className="truncate">{formatDate(item.addedAt)}</span>
                                         </span>
                                     </div>
                                 </div>

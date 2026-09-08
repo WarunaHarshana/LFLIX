@@ -90,15 +90,17 @@ export default function TrailerModal({ isOpen, tmdbId, mediaType, title, season,
 
             {/* Modal */}
             <div
-                className="relative w-full max-w-5xl bg-neutral-900/95 border border-neutral-700/50 rounded-2xl overflow-hidden shadow-2xl shadow-black/60"
+                className="relative w-full max-w-5xl liquid-glass-base border border-white/15 rounded-3xl overflow-hidden shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] animate-in zoom-in-95 duration-200"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
                     <div className="flex items-center gap-3 min-w-0">
-                        <PlayCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                        <div className="w-9 h-9 liquid-orb bg-amber-500/20 border-amber-500/35 text-amber-400 flex items-center justify-center shrink-0">
+                            <PlayCircle className="w-4 h-4" />
+                        </div>
                         <div className="min-w-0">
-                            <h3 className="font-semibold text-white truncate">{title}</h3>
+                            <h3 className="font-bold text-white text-base truncate">{title}</h3>
                             {trailer && (
                                 <p className="text-xs text-neutral-400 truncate">{trailer.name}</p>
                             )}
@@ -106,9 +108,9 @@ export default function TrailerModal({ isOpen, tmdbId, mediaType, title, season,
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-neutral-800 rounded-full transition flex-shrink-0 ml-3"
+                        className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer flex-shrink-0 ml-3"
                     >
-                        <X className="w-5 h-5 text-neutral-400" />
+                        <X className="w-4 h-4" />
                     </button>
                 </div>
 
@@ -116,17 +118,17 @@ export default function TrailerModal({ isOpen, tmdbId, mediaType, title, season,
                 <div className="relative aspect-video bg-black">
                     {loading && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                            <Loader2 className="w-10 h-10 animate-spin text-amber-500" />
-                            <p className="text-neutral-400 text-sm">Loading trailer...</p>
+                            <Loader2 className="w-10 h-10 animate-spin text-amber-400" />
+                            <p className="text-neutral-400 text-sm font-medium">Loading trailer...</p>
                         </div>
                     )}
 
                     {error && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6">
-                            <div className="p-4 bg-neutral-800/50 rounded-2xl border border-neutral-700/50 text-center max-w-md">
-                                <AlertCircle className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
-                                <h4 className="font-semibold text-neutral-300 mb-1">No Trailer Available</h4>
-                                <p className="text-sm text-neutral-500">
+                            <div className="p-5 liquid-glass-pill bg-white/[0.03] rounded-2xl border border-white/10 text-center max-w-md">
+                                <AlertCircle className="w-12 h-12 text-neutral-500 mx-auto mb-3" />
+                                <h4 className="font-bold text-neutral-200 mb-1">No Trailer Available</h4>
+                                <p className="text-xs text-neutral-400 leading-relaxed">
                                     {error === 'No trailer found'
                                         ? `We couldn't find a trailer for "${title}" on TMDB.`
                                         : error}

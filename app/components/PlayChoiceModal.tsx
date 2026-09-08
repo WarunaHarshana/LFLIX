@@ -134,43 +134,43 @@ export default function PlayChoiceModal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xl animate-fadeIn"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-neutral-900 border border-neutral-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="w-full max-w-lg liquid-glass-base border border-white/15 rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] overflow-hidden flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-neutral-800 bg-neutral-950/70 flex items-start justify-between gap-3">
+        <div className="p-4 sm:p-5 border-b border-white/10 bg-white/[0.03] flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="w-4 h-4 text-red-500 flex-shrink-0" />
-              <span className="text-xs font-semibold text-red-500 uppercase tracking-wider">
+              <Sparkles className="w-4 h-4 text-red-400 flex-shrink-0" />
+              <span className="text-xs font-bold text-red-400 uppercase tracking-wider">
                 Choose Where to Play
               </span>
             </div>
-            <h2 className="text-base sm:text-lg font-bold text-white truncate">
+            <h2 className="text-base sm:text-xl font-bold text-white truncate">
               {item.title}
             </h2>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               {item.isHDR && (
-                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] font-bold rounded border border-amber-500/30">
+                <span className="px-2 py-0.5 bg-amber-500/25 text-amber-300 text-[11px] font-bold rounded-md border border-amber-400/40 shadow-sm">
                   HDR
                 </span>
               )}
               {item.videoCodec && (
-                <span className="px-1.5 py-0.5 bg-neutral-800 text-neutral-300 text-[10px] font-medium rounded uppercase">
+                <span className="px-2 py-0.5 liquid-glass-pill text-neutral-200 text-[11px] font-medium rounded-md uppercase border border-white/10">
                   {item.videoCodec.toUpperCase()}
                 </span>
               )}
               {item.audioCodec && (
-                <span className="px-1.5 py-0.5 bg-neutral-800 text-neutral-300 text-[10px] font-medium rounded uppercase">
+                <span className="px-2 py-0.5 liquid-glass-pill text-neutral-200 text-[11px] font-medium rounded-md uppercase border border-white/10">
                   {item.audioCodec.toUpperCase()}
                 </span>
               )}
               {item.startTime && item.startTime > 0 && (
-                <span className="text-[11px] text-neutral-400">
+                <span className="text-xs text-neutral-400">
                   Resume from {Math.floor(item.startTime / 60)}m
                 </span>
               )}
@@ -179,7 +179,7 @@ export default function PlayChoiceModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="p-2 hover:bg-neutral-800 rounded-full text-neutral-400 hover:text-white transition flex-shrink-0"
+            className="p-2 liquid-orb text-neutral-300 hover:text-white transition flex-shrink-0 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -193,18 +193,18 @@ export default function PlayChoiceModal({
               onPlayInBrowser();
               onClose();
             }}
-            className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-750 border border-white/10 hover:border-red-500/60 rounded-xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99]"
+            className="w-full p-4 liquid-glass-pill hover:border-red-500/50 rounded-2xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99] cursor-pointer"
           >
-            <div className="p-2.5 bg-red-600/20 text-red-500 rounded-xl group-hover:bg-red-600 group-hover:text-white transition">
+            <div className="p-2.5 liquid-orb bg-red-600/20 border-red-500/30 text-red-400 rounded-xl group-hover:bg-red-600 group-hover:text-white transition">
               <Globe className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-white text-sm sm:text-base">
+                <span className="font-bold text-white text-sm sm:text-base">
                   Play in Browser Player
                 </span>
                 {isTV && (
-                  <span className="px-1.5 py-0.5 bg-red-500/20 text-red-400 text-[10px] font-bold rounded">
+                  <span className="px-1.5 py-0.5 bg-red-500/20 text-red-300 text-[10px] font-bold rounded border border-red-500/30">
                     TV Browser
                   </span>
                 )}
@@ -218,17 +218,17 @@ export default function PlayChoiceModal({
           {/* Option 2: VLC Mobile App (Android/iOS) */}
           <button
             onClick={handleOpenVlc}
-            className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-750 border border-white/10 hover:border-orange-500/60 rounded-xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99]"
+            className="w-full p-4 liquid-glass-pill hover:border-orange-500/50 rounded-2xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99] cursor-pointer"
           >
-            <div className="p-2.5 bg-orange-500/20 text-orange-400 rounded-xl group-hover:bg-orange-500 group-hover:text-white transition">
+            <div className="p-2.5 liquid-orb bg-orange-500/20 border-orange-500/30 text-orange-400 rounded-xl group-hover:bg-orange-500 group-hover:text-white transition">
               <Smartphone className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-white text-sm sm:text-base">
+                <span className="font-bold text-white text-sm sm:text-base">
                   Play in VLC App (Mobile)
                 </span>
-                <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] font-bold rounded">
+                <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-300 text-[10px] font-bold rounded border border-orange-500/30">
                   0% Server Lag
                 </span>
               </div>
@@ -242,17 +242,17 @@ export default function PlayChoiceModal({
           {isAndroid && (
             <button
               onClick={handleOpenMxPlayer}
-              className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-750 border border-white/10 hover:border-blue-500/60 rounded-xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99]"
+              className="w-full p-4 liquid-glass-pill hover:border-blue-500/50 rounded-2xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99] cursor-pointer"
             >
-              <div className="p-2.5 bg-blue-500/20 text-blue-400 rounded-xl group-hover:bg-blue-500 group-hover:text-white transition">
+              <div className="p-2.5 liquid-orb bg-blue-500/20 border-blue-500/30 text-blue-400 rounded-xl group-hover:bg-blue-500 group-hover:text-white transition">
                 <Play className="w-5 h-5 fill-current" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-white text-sm sm:text-base">
+                  <span className="font-bold text-white text-sm sm:text-base">
                     Play in MX Player
                   </span>
-                  <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] font-bold rounded">
+                  <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] font-bold rounded border border-blue-500/30">
                     HW+ Decoder
                   </span>
                 </div>
@@ -267,13 +267,13 @@ export default function PlayChoiceModal({
           {isMobile && (
             <button
               onClick={handleOpenAnyPlayer}
-              className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-750 border border-white/10 hover:border-emerald-500/60 rounded-xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99]"
+              className="w-full p-4 liquid-glass-pill hover:border-emerald-500/50 rounded-2xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99] cursor-pointer"
             >
-              <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl group-hover:bg-emerald-500 group-hover:text-white transition">
+              <div className="p-2.5 liquid-orb bg-emerald-500/20 border-emerald-500/30 text-emerald-400 rounded-xl group-hover:bg-emerald-500 group-hover:text-white transition">
                 <Share2 className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-white text-sm sm:text-base">
+                <div className="font-bold text-white text-sm sm:text-base">
                   {isAndroid ? 'Open with Any App (Chooser)' : 'Open Stream Directly'}
                 </div>
                 <p className="text-xs text-neutral-400 truncate">
@@ -291,17 +291,17 @@ export default function PlayChoiceModal({
               onOpenDlna();
               onClose();
             }}
-            className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-750 border border-white/10 hover:border-sky-500/60 rounded-xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99]"
+            className="w-full p-4 liquid-glass-pill hover:border-sky-500/50 rounded-2xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99] cursor-pointer"
           >
-            <div className="p-2.5 bg-sky-500/20 text-sky-400 rounded-xl group-hover:bg-sky-500 group-hover:text-white transition">
+            <div className="p-2.5 liquid-orb bg-sky-500/20 border-sky-500/30 text-sky-400 rounded-xl group-hover:bg-sky-500 group-hover:text-white transition">
               <Cast className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-white text-sm sm:text-base">
+                <span className="font-bold text-white text-sm sm:text-base">
                   Cast to Smart TV (DLNA)
                 </span>
-                <span className="px-1.5 py-0.5 bg-sky-500/20 text-sky-400 text-[10px] font-bold rounded">
+                <span className="px-1.5 py-0.5 bg-sky-500/20 text-sky-300 text-[10px] font-bold rounded border border-sky-500/30">
                   Samsung / LG / Sony / Roku
                 </span>
               </div>
@@ -317,17 +317,17 @@ export default function PlayChoiceModal({
               onPlayOnHostPc();
               onClose();
             }}
-            className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-750 border border-white/10 hover:border-violet-500/60 rounded-xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99]"
+            className="w-full p-4 liquid-glass-pill hover:border-violet-500/50 rounded-2xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99] cursor-pointer"
           >
-            <div className="p-2.5 bg-violet-500/20 text-violet-400 rounded-xl group-hover:bg-violet-500 group-hover:text-white transition">
+            <div className="p-2.5 liquid-orb bg-violet-500/20 border-violet-500/30 text-violet-400 rounded-xl group-hover:bg-violet-500 group-hover:text-white transition">
               <Tv className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-white text-sm sm:text-base">
+                <span className="font-bold text-white text-sm sm:text-base">
                   Play on Host PC Screen
                 </span>
-                <span className="px-1.5 py-0.5 bg-violet-500/20 text-violet-400 text-[10px] font-medium rounded">
+                <span className="px-1.5 py-0.5 bg-violet-500/20 text-violet-300 text-[10px] font-bold rounded border border-violet-500/30">
                   Remote Control
                 </span>
               </div>
@@ -340,13 +340,13 @@ export default function PlayChoiceModal({
           {/* Option 7: Copy Direct Stream Link */}
           <button
             onClick={handleCopyLink}
-            className="w-full p-3.5 bg-neutral-800/80 hover:bg-neutral-750 border border-white/10 hover:border-purple-500/60 rounded-xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99]"
+            className="w-full p-4 liquid-glass-pill hover:border-purple-500/50 rounded-2xl flex items-center gap-3.5 transition group text-left shadow-sm active:scale-[0.99] cursor-pointer"
           >
-            <div className="p-2.5 bg-purple-500/20 text-purple-400 rounded-xl group-hover:bg-purple-500 group-hover:text-white transition">
+            <div className="p-2.5 liquid-orb bg-purple-500/20 border-purple-500/30 text-purple-400 rounded-xl group-hover:bg-purple-500 group-hover:text-white transition">
               {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5" />}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-white text-sm sm:text-base">
+              <div className="font-bold text-white text-sm sm:text-base">
                 {copied ? 'Stream URL Copied!' : 'Copy Direct Stream Link'}
               </div>
               <p className="text-xs text-neutral-400 truncate">

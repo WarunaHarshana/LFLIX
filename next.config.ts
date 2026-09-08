@@ -59,6 +59,9 @@ const nextConfig: NextConfig = {
   },
   // Prevent Turbopack from bundling native Node modules
   serverExternalPackages: ['webtorrent', 'node-datachannel'],
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'framer-motion'],
+  },
 };
 
 export default nextConfig;

@@ -4,6 +4,7 @@ import type React from 'react';
 import { useState, useRef } from 'react';
 import { X, Upload, Plus, Tv, Globe, Link, FileText, Trash2 } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
+import LiquidDropdown from './LiquidDropdown';
 
 type Props = {
   onClose: () => void;
@@ -203,24 +204,25 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
   };
 
   return (
-    <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Manage channels" className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4">
-      <div className="bg-neutral-900 w-full max-w-2xl rounded-2xl border border-neutral-800 flex flex-col max-h-[85vh]">
-        <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
+    <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Manage channels" className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[70] p-4">
+      <div className="liquid-glass-base border border-white/20 w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[85vh] relative overflow-hidden">
+        <div className="absolute -right-20 -top-20 w-64 h-64 bg-red-600/[0.04] rounded-full blur-3xl pointer-events-none" />
+        <div className="p-5 border-b border-white/10 flex items-center justify-between relative z-10">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-600 rounded-lg">
-              <Tv className="w-5 h-5 text-white" />
+            <div className="p-2.5 bg-gradient-to-br from-red-600/30 to-red-600/10 border border-red-500/30 rounded-2xl text-red-500 shadow-md">
+              <Tv className="w-5 h-5" />
             </div>
-            <h3 className="font-semibold text-white text-lg">Live TV Manager</h3>
+            <h3 className="font-bold text-white text-lg tracking-tight">Live TV Manager</h3>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowConfirmClear(true)}
-              className="px-3 py-1.5 bg-red-900/50 hover:bg-red-800 text-red-400 hover:text-white text-sm font-medium rounded-lg transition flex items-center gap-1.5"
+              className="px-3.5 py-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-300 hover:text-white text-xs md:text-sm font-semibold rounded-xl transition-all flex items-center gap-1.5"
             >
               <Trash2 className="w-4 h-4" />
-              Clear All
+              <span>Clear All</span>
             </button>
-            <button onClick={onClose} className="p-2 hover:bg-neutral-800 rounded-lg">
+            <button onClick={onClose} className="p-2 liquid-glass-pill hover:scale-105 border border-white/10 rounded-xl text-neutral-400 hover:text-white transition-all">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -228,19 +230,19 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
 
         {/* Clear All Confirmation */}
         {showConfirmClear && (
-          <div className="p-4 bg-red-950/50 border-b border-red-800">
-            <p className="text-red-400 text-sm mb-3">⚠️ Are you sure you want to remove all channels? This cannot be undone.</p>
+          <div className="p-4 bg-red-950/60 border-b border-red-500/30 relative z-10">
+            <p className="text-red-300 text-sm mb-3 font-medium">⚠️ Are you sure you want to remove all channels? This cannot be undone.</p>
             <div className="flex gap-2">
               <button
                 onClick={handleClearAllChannels}
                 disabled={loading}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs md:text-sm font-bold rounded-xl transition shadow-lg shadow-red-900/30 disabled:opacity-50"
               >
                 Yes, Clear All
               </button>
               <button
                 onClick={() => setShowConfirmClear(false)}
-                className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg"
+                className="px-4 py-2 liquid-glass-pill border border-white/15 text-white text-xs md:text-sm font-semibold rounded-xl transition"
               >
                 Cancel
               </button>
@@ -249,10 +251,10 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
         )}
 
         {/* Tabs */}
-        <div className="flex border-b border-neutral-800">
+        <div className="flex border-b border-white/10 relative z-10">
           <button
             onClick={() => setActiveTab('add')}
-            className={`flex-1 py-3 text-sm font-medium transition flex items-center justify-center gap-2 ${activeTab === 'add' ? 'text-red-400 border-b-2 border-red-600' : 'text-neutral-400 hover:text-white'
+            className={`flex-1 py-3.5 text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'add' ? 'text-white border-b-2 border-white/60 bg-white/[0.06]' : 'text-neutral-400 hover:text-white hover:bg-white/[0.02]'
               }`}
           >
             <Plus className="w-4 h-4" />
@@ -260,7 +262,7 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
           </button>
           <button
             onClick={() => setActiveTab('import')}
-            className={`flex-1 py-3 text-sm font-medium transition flex items-center justify-center gap-2 ${activeTab === 'import' ? 'text-red-400 border-b-2 border-red-600' : 'text-neutral-400 hover:text-white'
+            className={`flex-1 py-3.5 text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'import' ? 'text-white border-b-2 border-white/60 bg-white/[0.06]' : 'text-neutral-400 hover:text-white hover:bg-white/[0.02]'
               }`}
           >
             <Upload className="w-4 h-4" />
@@ -268,13 +270,13 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto">
+        <div className="p-6 overflow-y-auto relative z-10 custom-scrollbar">
           {message && (
-            <div className={`mb-4 p-3 rounded-lg text-sm ${message.startsWith('✅')
-              ? 'bg-emerald-900/30 border border-emerald-800 text-emerald-400'
+            <div className={`mb-4 p-3.5 rounded-2xl text-xs md:text-sm font-medium ${message.startsWith('✅')
+              ? 'bg-emerald-950/40 border border-emerald-500/30 text-emerald-300'
               : message.startsWith('📄')
-                ? 'bg-blue-900/30 border border-blue-800 text-blue-400'
-                : 'bg-red-900/30 border border-red-800 text-red-400'
+                ? 'bg-blue-950/40 border border-blue-500/30 text-blue-300'
+                : 'bg-red-950/40 border border-red-500/30 text-red-300'
               }`}>
               {message}
             </div>
@@ -283,57 +285,61 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
           {activeTab === 'add' ? (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-neutral-400 mb-1">Channel Name</label>
+                <label className="block text-xs md:text-sm font-semibold text-neutral-300 mb-1.5 uppercase tracking-wider">Channel Name</label>
                 <input
                   type="text"
                   value={newChannel.name}
                   onChange={(e) => setNewChannel({ ...newChannel, name: e.target.value })}
                   placeholder="e.g. CNN"
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2 focus:ring-2 focus:ring-red-600 outline-none"
+                  className="w-full bg-white/[0.04] border border-white/15 focus:border-red-400/50 focus:bg-white/[0.08] rounded-2xl px-4 py-2.5 text-sm text-white outline-none transition-all shadow-inner"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-neutral-400 mb-1">Stream URL (M3U8)</label>
+                <label className="block text-xs md:text-sm font-semibold text-neutral-300 mb-1.5 uppercase tracking-wider">Stream URL (M3U8)</label>
                 <input
                   type="text"
                   value={newChannel.url}
                   onChange={(e) => setNewChannel({ ...newChannel, url: e.target.value })}
                   placeholder="https://example.com/stream.m3u8"
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2 focus:ring-2 focus:ring-red-600 outline-none"
+                  className="w-full bg-white/[0.04] border border-white/15 focus:border-red-400/50 focus:bg-white/[0.08] rounded-2xl px-4 py-2.5 text-sm text-white outline-none transition-all shadow-inner"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-neutral-400 mb-1">Logo URL (optional)</label>
+                <label className="block text-xs md:text-sm font-semibold text-neutral-300 mb-1.5 uppercase tracking-wider">Logo URL (optional)</label>
                 <input
                   type="text"
                   value={newChannel.logo}
                   onChange={(e) => setNewChannel({ ...newChannel, logo: e.target.value })}
                   placeholder="https://example.com/logo.png"
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2 focus:ring-2 focus:ring-red-600 outline-none"
+                  className="w-full bg-white/[0.04] border border-white/15 focus:border-red-400/50 focus:bg-white/[0.08] rounded-2xl px-4 py-2.5 text-sm text-white outline-none transition-all shadow-inner"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-neutral-400 mb-1">Category</label>
-                <select
+                <label className="block text-xs md:text-sm font-semibold text-neutral-300 mb-1.5 uppercase tracking-wider">Category</label>
+                <LiquidDropdown
+                  label="Category"
+                  title="Channel Category"
+                  options={[
+                    { id: 'General', name: 'General' },
+                    { id: 'Sports', name: 'Sports' },
+                    { id: 'News', name: 'News' },
+                    { id: 'Entertainment', name: 'Entertainment' },
+                    { id: 'Movies', name: 'Movies' },
+                    { id: 'Kids', name: 'Kids' },
+                    { id: 'Music', name: 'Music' },
+                  ]}
                   value={newChannel.category}
-                  onChange={(e) => setNewChannel({ ...newChannel, category: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2 focus:ring-2 focus:ring-red-600 outline-none"
-                >
-                  <option value="General">General</option>
-                  <option value="Sports">Sports</option>
-                  <option value="News">News</option>
-                  <option value="Entertainment">Entertainment</option>
-                  <option value="Movies">Movies</option>
-                  <option value="Kids">Kids</option>
-                  <option value="Music">Music</option>
-                </select>
+                  onChange={(val) => setNewChannel({ ...newChannel, category: val })}
+                  className="w-full"
+                  menuWidth="w-full"
+                />
               </div>
               <button
                 onClick={handleAddChannel}
                 disabled={loading}
-                className="w-full py-3 bg-red-600 hover:bg-red-500 disabled:bg-neutral-800 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
+                className="w-full py-3.5 liquid-btn-primary text-black font-bold rounded-2xl transition-all flex items-center justify-center gap-2 shadow-xl hover:scale-[1.02] mt-2 cursor-pointer disabled:opacity-50 text-sm sm:text-base"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-5 h-5 text-black" />
                 {loading ? 'Adding...' : 'Add Channel'}
               </button>
             </div>
@@ -343,9 +349,9 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
               <div className="flex gap-2">
                 <button
                   onClick={() => setImportTab('public')}
-                  className={`flex-1 py-2 text-sm font-medium rounded-lg transition flex items-center justify-center gap-2 ${importTab === 'public'
-                    ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-800'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                  className={`flex-1 py-2.5 text-xs md:text-sm font-semibold rounded-2xl transition-all flex items-center justify-center gap-2 ${importTab === 'public'
+                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                    : 'liquid-glass-pill border border-white/10 text-neutral-400 hover:text-white'
                     }`}
                 >
                   <Globe className="w-4 h-4" />
@@ -353,9 +359,9 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
                 </button>
                 <button
                   onClick={() => setImportTab('url')}
-                  className={`flex-1 py-2 text-sm font-medium rounded-lg transition flex items-center justify-center gap-2 ${importTab === 'url'
-                    ? 'bg-blue-900/30 text-blue-400 border border-blue-800'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                  className={`flex-1 py-2.5 text-xs md:text-sm font-semibold rounded-2xl transition-all flex items-center justify-center gap-2 ${importTab === 'url'
+                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                    : 'liquid-glass-pill border border-white/10 text-neutral-400 hover:text-white'
                     }`}
                 >
                   <Link className="w-4 h-4" />
@@ -363,9 +369,9 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
                 </button>
                 <button
                   onClick={() => setImportTab('file')}
-                  className={`flex-1 py-2 text-sm font-medium rounded-lg transition flex items-center justify-center gap-2 ${importTab === 'file'
-                    ? 'bg-purple-900/30 text-purple-400 border border-purple-800'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                  className={`flex-1 py-2.5 text-xs md:text-sm font-semibold rounded-2xl transition-all flex items-center justify-center gap-2 ${importTab === 'file'
+                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                    : 'liquid-glass-pill border border-white/10 text-neutral-400 hover:text-white'
                     }`}
                 >
                   <FileText className="w-4 h-4" />
@@ -375,9 +381,9 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
 
               {importTab === 'public' && (
                 <div className="space-y-4">
-                  <div className="bg-emerald-900/20 border border-emerald-800/50 rounded-lg p-4">
-                    <h4 className="font-medium text-emerald-400 mb-2">Free Public IPTV</h4>
-                    <p className="text-sm text-emerald-300/70 mb-4">
+                  <div className="liquid-glass-base border border-emerald-500/30 rounded-3xl p-5 shadow-lg">
+                    <h4 className="font-bold text-emerald-300 mb-1.5">Free Public IPTV</h4>
+                    <p className="text-xs sm:text-sm text-emerald-200/70 mb-4">
                       Import free channels from iptv-org. Select a region or import all worldwide channels.
                     </p>
 
@@ -386,52 +392,52 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
                       <button
                         onClick={() => { setM3uUrl('https://iptv-org.github.io/iptv/index.m3u'); handleImportPublic(); }}
                         disabled={loading}
-                        className="py-2 px-3 bg-emerald-700/50 hover:bg-emerald-600/50 disabled:bg-neutral-800 text-emerald-100 text-sm font-medium rounded-lg transition flex items-center justify-center gap-2"
+                        className="py-2.5 px-3 liquid-glass-pill hover:bg-white/[0.12] border border-white/15 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                       >
-                        <Globe className="w-4 h-4" />
-                        🌍 Worldwide (8000+)
+                        <Globe className="w-4 h-4 text-neutral-400" />
+                        <span>Worldwide (8000+)</span>
                       </button>
                       <button
                         onClick={() => handleImportUrlWithValue('https://iptv-org.github.io/iptv/countries/lk.m3u')}
                         disabled={loading}
-                        className="py-2 px-3 bg-amber-700/50 hover:bg-amber-600/50 disabled:bg-neutral-800 text-amber-100 text-sm font-medium rounded-lg transition flex items-center justify-center gap-2"
+                        className="py-2.5 px-3 liquid-glass-pill hover:bg-white/[0.12] border border-white/15 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                       >
-                        🇱🇰 Sri Lanka
+                        <span>Sri Lanka</span>
                       </button>
                       <button
                         onClick={() => handleImportUrlWithValue('https://iptv-org.github.io/iptv/countries/us.m3u')}
                         disabled={loading}
-                        className="py-2 px-3 bg-blue-700/50 hover:bg-blue-600/50 disabled:bg-neutral-800 text-blue-100 text-sm font-medium rounded-lg transition"
+                        className="py-2.5 px-3 liquid-glass-pill hover:bg-white/[0.12] border border-white/15 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                       >
-                        🇺🇸 United States
+                        <span>United States</span>
                       </button>
                       <button
                         onClick={() => handleImportUrlWithValue('https://iptv-org.github.io/iptv/countries/in.m3u')}
                         disabled={loading}
-                        className="py-2 px-3 bg-orange-700/50 hover:bg-orange-600/50 disabled:bg-neutral-800 text-orange-100 text-sm font-medium rounded-lg transition"
+                        className="py-2.5 px-3 liquid-glass-pill hover:bg-white/[0.12] border border-white/15 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                       >
-                        🇮🇳 India
+                        <span>India</span>
                       </button>
                       <button
                         onClick={() => handleImportUrlWithValue('https://iptv-org.github.io/iptv/countries/gb.m3u')}
                         disabled={loading}
-                        className="py-2 px-3 bg-purple-700/50 hover:bg-purple-600/50 disabled:bg-neutral-800 text-purple-100 text-sm font-medium rounded-lg transition"
+                        className="py-2.5 px-3 liquid-glass-pill hover:bg-white/[0.12] border border-white/15 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                       >
-                        🇬🇧 United Kingdom
+                        <span>United Kingdom</span>
                       </button>
                       <button
                         onClick={() => handleImportUrlWithValue('https://iptv-org.github.io/iptv/countries/ca.m3u')}
                         disabled={loading}
-                        className="py-2 px-3 bg-red-700/50 hover:bg-red-600/50 disabled:bg-neutral-800 text-red-100 text-sm font-medium rounded-lg transition"
+                        className="py-2.5 px-3 liquid-glass-pill hover:bg-white/[0.12] border border-white/15 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                       >
-                        🇨🇦 Canada
+                        <span>Canada</span>
                       </button>
                     </div>
 
                     <button
                       onClick={handleImportPublic}
                       disabled={loading}
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-800 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
+                      className="w-full py-3.5 liquid-btn-emerald disabled:opacity-50 text-white font-bold rounded-2xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 cursor-pointer"
                     >
                       <Globe className="w-5 h-5" />
                       {loading ? 'Fetching...' : 'Import All Worldwide Channels'}
@@ -442,9 +448,9 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
 
               {importTab === 'url' && (
                 <div className="space-y-4">
-                  <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-400 mb-2">Import from URL</h4>
-                    <p className="text-sm text-blue-300/70 mb-4">
+                  <div className="liquid-glass-base border border-blue-500/30 rounded-3xl p-5 shadow-lg">
+                    <h4 className="font-bold text-blue-300 mb-1.5">Import from URL</h4>
+                    <p className="text-xs sm:text-sm text-blue-200/70 mb-4">
                       Paste your IPTV provider's M3U playlist URL
                     </p>
                     <input
@@ -452,12 +458,12 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
                       value={m3uUrl}
                       onChange={(e) => setM3uUrl(e.target.value)}
                       placeholder="http://provider.com/playlist.m3u"
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-600 outline-none mb-3"
+                      className="w-full bg-white/[0.04] border border-white/15 focus:border-blue-400/50 focus:bg-white/[0.08] rounded-2xl px-4 py-2.5 text-sm text-white outline-none mb-3 shadow-inner"
                     />
                     <button
                       onClick={handleImportUrl}
                       disabled={loading}
-                      className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-800 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
+                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-2xl transition flex items-center justify-center gap-2 shadow-lg shadow-blue-950/50"
                     >
                       <Link className="w-5 h-5" />
                       {loading ? 'Fetching...' : 'Import from URL'}
@@ -468,9 +474,9 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
 
               {importTab === 'file' && (
                 <div className="space-y-4">
-                  <div className="bg-purple-900/20 border border-purple-800/50 rounded-lg p-4">
-                    <h4 className="font-medium text-purple-400 mb-2">Upload M3U File</h4>
-                    <p className="text-sm text-purple-300/70 mb-4">
+                  <div className="liquid-glass-base border border-purple-500/30 rounded-3xl p-5 shadow-lg">
+                    <h4 className="font-bold text-purple-300 mb-1.5">Upload M3U File</h4>
+                    <p className="text-xs sm:text-sm text-purple-200/70 mb-4">
                       Upload an .m3u or .m3u8 file from your device
                     </p>
                     <input
@@ -485,12 +491,12 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
                       onChange={(e) => setM3uContent(e.target.value)}
                       placeholder="#EXTM3U\n#EXTINF:-1,Channel Name\nhttp://stream-url.m3u8"
                       rows={6}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2 focus:ring-2 focus:ring-purple-600 outline-none font-mono text-sm mb-3"
+                      className="w-full bg-white/[0.04] border border-white/15 focus:border-purple-400/50 focus:bg-white/[0.08] rounded-2xl px-4 py-2.5 font-mono text-xs sm:text-sm text-white outline-none mb-3 shadow-inner"
                     />
                     <div className="flex gap-3">
                       <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex-1 py-3 bg-neutral-800 hover:bg-neutral-700 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
+                        className="flex-1 py-3 liquid-glass-pill border border-white/15 hover:scale-105 text-white font-bold rounded-2xl transition flex items-center justify-center gap-2 shadow-md"
                       >
                         <Upload className="w-5 h-5" />
                         Choose File
@@ -498,7 +504,7 @@ export default function IPTVManager({ onClose, onChannelsUpdated }: Props) {
                       <button
                         onClick={handleImportFile}
                         disabled={loading || !m3uContent}
-                        className="flex-1 py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-neutral-800 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
+                        className="flex-1 py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold rounded-2xl transition flex items-center justify-center gap-2 shadow-lg shadow-purple-950/50"
                       >
                         <FileText className="w-5 h-5" />
                         {loading ? 'Importing...' : 'Import'}

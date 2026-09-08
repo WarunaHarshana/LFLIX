@@ -35,6 +35,7 @@ try {
   db.pragma('busy_timeout = 5000');
   db.pragma('temp_store = MEMORY');
   db.pragma('cache_size = -20000');
+  db.pragma('mmap_size = 268435456');
 } catch (error) {
   console.warn('[DB] Failed to apply SQLite performance pragmas:', error);
 }
@@ -363,49 +364,6 @@ try {
   `).run();
 } catch { /* ignore */ }
 
-// Backfill language for existing movies and shows (detect keywords, avoid blindly overwriting non-English)
-try {
-  db.prepare(`
-    UPDATE movies
-    SET language = CASE
-      WHEN fileName LIKE '%Tamil%' OR fileName LIKE '%TAM%' OR title LIKE '%Tamil%' THEN 'Tamil'
-      WHEN fileName LIKE '%Telugu%' OR fileName LIKE '%TEL%' OR title LIKE '%Telugu%' THEN 'Telugu'
-      WHEN fileName LIKE '%Hindi%' OR fileName LIKE '%HIN%' OR title LIKE '%Hindi%' THEN 'Hindi'
-      WHEN fileName LIKE '%Malayalam%' OR fileName LIKE '%MAL%' OR title LIKE '%Malayalam%' THEN 'Malayalam'
-      WHEN fileName LIKE '%Kannada%' OR fileName LIKE '%KAN%' OR title LIKE '%Kannada%' THEN 'Kannada'
-      WHEN fileName LIKE '%Japanese%' OR fileName LIKE '%JPN%' OR fileName LIKE '%JAP%' OR title LIKE '%Japanese%' THEN 'Japanese'
-      WHEN fileName LIKE '%Korean%' OR fileName LIKE '%KOR%' OR title LIKE '%Korean%' THEN 'Korean'
-      WHEN fileName LIKE '%Spanish%' OR fileName LIKE '%SPA%' OR title LIKE '%Spanish%' THEN 'Spanish'
-      WHEN fileName LIKE '%French%' OR fileName LIKE '%FRE%' OR fileName LIKE '%FRA%' OR title LIKE '%French%' THEN 'French'
-      WHEN fileName LIKE '%German%' OR fileName LIKE '%GER%' OR fileName LIKE '%DEU%' OR title LIKE '%German%' THEN 'German'
-      WHEN fileName LIKE '%Italian%' OR fileName LIKE '%ITA%' OR title LIKE '%Italian%' THEN 'Italian'
-      WHEN fileName LIKE '%Russian%' OR fileName LIKE '%RUS%' OR title LIKE '%Russian%' THEN 'Russian'
-      WHEN fileName LIKE '%Chinese%' OR fileName LIKE '%CHI%' OR fileName LIKE '%ZHO%' OR title LIKE '%Chinese%' THEN 'Chinese'
-      ELSE language
-    END
-  `).run();
-
-  db.prepare(`
-    UPDATE shows
-    SET language = CASE
-      WHEN title LIKE '%Tamil%' OR title LIKE '%TAM%' THEN 'Tamil'
-      WHEN title LIKE '%Telugu%' OR title LIKE '%TEL%' THEN 'Telugu'
-      WHEN title LIKE '%Hindi%' OR title LIKE '%HIN%' THEN 'Hindi'
-      WHEN title LIKE '%Malayalam%' OR title LIKE '%MAL%' THEN 'Malayalam'
-      WHEN title LIKE '%Kannada%' OR title LIKE '%KAN%' THEN 'Kannada'
-      WHEN title LIKE '%Japanese%' OR title LIKE '%JPN%' OR title LIKE '%JAP%' THEN 'Japanese'
-      WHEN title LIKE '%Korean%' OR title LIKE '%KOR%' THEN 'Korean'
-      WHEN title LIKE '%Spanish%' OR title LIKE '%SPA%' THEN 'Spanish'
-      WHEN title LIKE '%French%' OR title LIKE '%FRE%' OR title LIKE '%FRA%' THEN 'French'
-      WHEN title LIKE '%German%' OR title LIKE '%GER%' OR title LIKE '%DEU%' THEN 'German'
-      WHEN title LIKE '%Italian%' OR title LIKE '%ITA%' THEN 'Italian'
-      WHEN title LIKE '%Russian%' OR title LIKE '%RUS%' THEN 'Russian'
-      WHEN title LIKE '%Chinese%' OR title LIKE '%CHI%' OR title LIKE '%ZHO%' THEN 'Chinese'
-      ELSE language
-    END
-  `).run();
-} catch { /* ignore */ }
-
 // Create indexes for frequently queried columns
 db.exec(`
   -- Movies: looked up by tmdbId during scan/refresh, sorted by addedAt on content page
@@ -715,8 +673,74 @@ export function cleanupOrphanedAutoTracks(): { trackingRemoved: number; releases
   return { trackingRemoved, releasesRemoved };
 }
 
-dedupeShows();
-cleanupOrphanedAutoTracks();
+function runStartupMigrationsOnce(): void {
+  const STARTUP_MIGRATION_VERSION = '1';
+  try {
+    const current = db
+      .prepare("SELECT value FROM settings WHERE key = 'startupOptimizationVersion'")
+      .get() as { value: string } | undefined;
+
+    if (current?.value === STARTUP_MIGRATION_VERSION) {
+      return;
+    }
+
+    // Backfill language for existing movies and shows (detect keywords, avoid blindly overwriting non-English)
+    db.prepare(`
+      UPDATE movies
+      SET language = CASE
+        WHEN fileName LIKE '%Tamil%' OR fileName LIKE '%TAM%' OR title LIKE '%Tamil%' THEN 'Tamil'
+        WHEN fileName LIKE '%Telugu%' OR fileName LIKE '%TEL%' OR title LIKE '%Telugu%' THEN 'Telugu'
+        WHEN fileName LIKE '%Hindi%' OR fileName LIKE '%HIN%' OR title LIKE '%Hindi%' THEN 'Hindi'
+        WHEN fileName LIKE '%Malayalam%' OR fileName LIKE '%MAL%' OR title LIKE '%Malayalam%' THEN 'Malayalam'
+        WHEN fileName LIKE '%Kannada%' OR fileName LIKE '%KAN%' OR title LIKE '%Kannada%' THEN 'Kannada'
+        WHEN fileName LIKE '%Japanese%' OR fileName LIKE '%JPN%' OR fileName LIKE '%JAP%' OR title LIKE '%Japanese%' THEN 'Japanese'
+        WHEN fileName LIKE '%Korean%' OR fileName LIKE '%KOR%' OR title LIKE '%Korean%' THEN 'Korean'
+        WHEN fileName LIKE '%Spanish%' OR fileName LIKE '%SPA%' OR title LIKE '%Spanish%' THEN 'Spanish'
+        WHEN fileName LIKE '%French%' OR fileName LIKE '%FRE%' OR fileName LIKE '%FRA%' OR title LIKE '%French%' THEN 'French'
+        WHEN fileName LIKE '%German%' OR fileName LIKE '%GER%' OR fileName LIKE '%DEU%' OR title LIKE '%German%' THEN 'German'
+        WHEN fileName LIKE '%Italian%' OR fileName LIKE '%ITA%' OR title LIKE '%Italian%' THEN 'Italian'
+        WHEN fileName LIKE '%Russian%' OR fileName LIKE '%RUS%' OR title LIKE '%Russian%' THEN 'Russian'
+        WHEN fileName LIKE '%Chinese%' OR fileName LIKE '%CHI%' OR fileName LIKE '%ZHO%' OR title LIKE '%Chinese%' THEN 'Chinese'
+        ELSE language
+      END
+      WHERE language IS NULL OR language = '' OR language = 'English'
+    `).run();
+
+    db.prepare(`
+      UPDATE shows
+      SET language = CASE
+        WHEN title LIKE '%Tamil%' OR title LIKE '%TAM%' THEN 'Tamil'
+        WHEN title LIKE '%Telugu%' OR title LIKE '%TEL%' THEN 'Telugu'
+        WHEN title LIKE '%Hindi%' OR title LIKE '%HIN%' THEN 'Hindi'
+        WHEN title LIKE '%Malayalam%' OR title LIKE '%MAL%' THEN 'Malayalam'
+        WHEN title LIKE '%Kannada%' OR title LIKE '%KAN%' THEN 'Kannada'
+        WHEN title LIKE '%Japanese%' OR title LIKE '%JPN%' OR title LIKE '%JAP%' THEN 'Japanese'
+        WHEN title LIKE '%Korean%' OR title LIKE '%KOR%' OR title LIKE '%Korean%' THEN 'Korean'
+        WHEN title LIKE '%Spanish%' OR title LIKE '%SPA%' THEN 'Spanish'
+        WHEN title LIKE '%French%' OR title LIKE '%FRE%' OR title LIKE '%FRA%' THEN 'French'
+        WHEN title LIKE '%German%' OR title LIKE '%GER%' OR title LIKE '%DEU%' THEN 'German'
+        WHEN title LIKE '%Italian%' OR title LIKE '%ITA%' THEN 'Italian'
+        WHEN title LIKE '%Russian%' OR title LIKE '%RUS%' THEN 'Russian'
+        WHEN title LIKE '%Chinese%' OR title LIKE '%CHI%' OR title LIKE '%ZHO%' THEN 'Chinese'
+        ELSE language
+      END
+      WHERE language IS NULL OR language = '' OR language = 'English'
+    `).run();
+
+    dedupeShows();
+    cleanupOrphanedAutoTracks();
+
+    db.prepare(`
+      INSERT INTO settings (key, value)
+      VALUES ('startupOptimizationVersion', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(STARTUP_MIGRATION_VERSION);
+  } catch (error) {
+    console.warn('[DB] Startup optimization migration skipped or failed:', error);
+  }
+}
+
+runStartupMigrationsOnce();
 
 // IPTV Helper Functions
 export const iptvDb = {
