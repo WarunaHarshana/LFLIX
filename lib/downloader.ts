@@ -329,25 +329,47 @@ class DownloadManager {
         if (magnetUri.startsWith('http-direct:')) {
             const url = magnetUri.replace('http-direct:', '');
             let filename = customFilename ? sanitizeFilename(customFilename) : '';
-            if (!filename) {
+            const hasProviderJunk = Boolean(
+                filename && (
+                    /cinejoy/i.test(filename) ||
+                    /fsl_server/i.test(filename) ||
+                    /^4k_/i.test(filename) ||
+                    /download_\d+/i.test(filename)
+                )
+            );
+
+            if (!filename || hasProviderJunk) {
                 try {
                     const parsedUrl = new URL(url);
                     const disposition = parsedUrl.searchParams.get('response-content-disposition');
                     if (disposition) {
                         const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
-                        if (match) filename = sanitizeFilename(decodeURIComponent(match[1]));
+                        if (match && match[1]) {
+                            const extracted = sanitizeFilename(decodeURIComponent(match[1]));
+                            if (extracted && !/^(?:download|video|file)\.[a-z0-9]+$/i.test(extracted)) {
+                                filename = extracted;
+                            }
+                        }
                     }
-                    if (!filename) {
-                        const pathName = parsedUrl.pathname.split('/').pop();
+                    if (!filename || (hasProviderJunk && /cinejoy|fsl_server/i.test(filename))) {
+                        const pathName = parsedUrl.pathname.split('/').filter(Boolean).pop();
                         if (pathName && pathName.includes('.')) {
-                            filename = sanitizeFilename(decodeURIComponent(pathName));
+                            const extracted = sanitizeFilename(decodeURIComponent(pathName));
+                            if (extracted && !/^(?:download|video|file)\.[a-z0-9]+$/i.test(extracted)) {
+                                filename = extracted;
+                            }
                         }
                     }
                 } catch {
-                    filename = sanitizeFilename(decodeURIComponent(url.split('/').pop()?.split('?')[0] || ''));
+                    if (!filename || (hasProviderJunk && /cinejoy|fsl_server/i.test(filename))) {
+                        const fallback = sanitizeFilename(decodeURIComponent(url.split('/').pop()?.split('?')[0] || ''));
+                        if (fallback && !/^(?:download|video|file)\.[a-z0-9]+$/i.test(fallback)) {
+                            filename = fallback;
+                        }
+                    }
                 }
             }
-            if (!filename || filename === 'download') {
+            if (!filename || filename === 'download' || (hasProviderJunk && /cinejoy|fsl_server/i.test(filename))) {
                 filename = `download_${Date.now()}.mkv`;
             }
             return this.addHttpDownload(url, filename, watchlistId, customPath);

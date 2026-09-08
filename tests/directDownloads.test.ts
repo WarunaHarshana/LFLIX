@@ -143,6 +143,61 @@ describe('Direct Downloads Resolver', () => {
       const results = await fetchCinejoyDirectDownloads(999999, 'movie');
       expect(results).toEqual([]);
     });
+
+    it('extracts real release filename from response-content-disposition instead of raw provider name', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          links: [
+            {
+              source: '4K CINEJOY [FSL Server]',
+              name: '4K CINEJOY [FSL Server] [WEB-DL DDP5][16.62 GB]',
+              quality: 2160,
+              url: 'https://r2.example.com/stream?response-content-disposition=attachment%3B%20filename%3D%22Mutiny.2026.2160p.MA.WEB-DL.DDP5.1.H.265-4KHDHub.com.mkv%22',
+              size: '16.62 GB',
+              provider: 'r2',
+            },
+          ],
+        }),
+      } as any);
+
+      const results = await fetchCinejoyDirectDownloads(1288445, 'movie');
+      expect(results.length).toBe(1);
+      expect(results[0].name).toBe('Mutiny.2026.2160p.MA.WEB-DL.DDP5.1.H.265-4KHDHub.com');
+      expect(results[0].name).not.toContain('CINEJOY');
+      expect(results[0].name).not.toContain('FSL Server');
+      expect(results[0].qualityTags).toContain('WEB-DL');
+      expect(results[0].qualityTags).not.toContain('FSL');
+      expect(results[0].qualityTags).not.toContain('Server');
+    });
+
+    it('uses media title and year context when URL has no embedded filename', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          links: [
+            {
+              source: '4K CINEJOY',
+              name: '4K CINEJOY [1080p][5 GB]',
+              quality: 1080,
+              url: 'https://r2.example.com/raw-stream-chunk',
+              size: '5 GB',
+              provider: 'r2',
+            },
+          ],
+        }),
+      } as any);
+
+      const results = await fetchCinejoyDirectDownloads(1288446, 'movie', undefined, undefined, {
+        title: 'Mutiny',
+        year: '2026',
+      });
+      expect(results.length).toBe(1);
+      expect(results[0].name).toContain('Mutiny (2026)');
+      expect(results[0].name).not.toContain('CINEJOY');
+    });
   });
 
   describe('GET /api/direct-downloads', () => {

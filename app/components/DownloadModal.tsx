@@ -262,7 +262,11 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             const params = new URLSearchParams();
             if (tmdbId) params.set('tmdbId', String(tmdbId));
             params.set('type', mediaType);
-            if (title) params.set('q', title);
+            if (title) {
+                params.set('q', title);
+                params.set('title', title);
+            }
+            if (year) params.set('year', String(year));
             if (season) params.set('season', String(season));
             if (episode) params.set('episode', String(episode));
 
@@ -289,10 +293,28 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     const startDirectDownload = async (item: DirectDownloadItem) => {
         setDownloading(item.url);
         try {
+            let cleanFilename = '';
+            const isJunkName = !item.name ||
+                /cinejoy/i.test(item.name) ||
+                /fsl\s*server/i.test(item.name) ||
+                /^4k\s*\[/i.test(item.name);
+
+            if (!isJunkName) {
+                cleanFilename = item.name.endsWith('.mkv') || item.name.endsWith('.mp4')
+                    ? item.name
+                    : `${item.name}.mkv`;
+            } else {
+                if (mediaType === 'tv' && season && episode) {
+                    cleanFilename = `${title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')} [${item.qualityLabel || '1080p'}].mkv`;
+                } else {
+                    cleanFilename = `${title}${year ? ` (${year})` : ''} [${item.qualityLabel || '1080p'}].mkv`;
+                }
+            }
+
             const body: any = {
                 httpUrl: item.url,
                 watchlistId,
-                filename: item.name ? `${item.name}.mkv` : `${title}.mkv`,
+                filename: cleanFilename,
             };
             if (selectedFolder) body.downloadPath = selectedFolder;
             const res = await fetch('/api/downloads', {

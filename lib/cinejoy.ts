@@ -337,6 +337,39 @@ export function parseDirectDownloadSizeBytes(sizeStr: string): number {
   return Math.round(parseFloat(match[1]) * (multipliers[unit] ?? 1));
 }
 
+export type DirectDownloadContext = {
+  title?: string;
+  year?: string | number | null;
+  season?: number;
+  episode?: number;
+};
+
+export function extractRealReleaseFilename(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const disposition = parsed.searchParams.get('response-content-disposition');
+    if (disposition) {
+      const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
+      if (match && match[1]) {
+        const decoded = decodeURIComponent(match[1]).trim();
+        if (decoded && !/^(?:download|video|file)\.[a-z0-9]+$/i.test(decoded)) {
+          return decoded;
+        }
+      }
+    }
+    const pathName = parsed.pathname.split('/').filter(Boolean).pop();
+    if (pathName && pathName.includes('.')) {
+      const decoded = decodeURIComponent(pathName).trim();
+      if (decoded && !/^(?:download|video|file)\.[a-z0-9]+$/i.test(decoded)) {
+        return decoded;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export function parseDirectDownloadQualityTags(name: string): string[] {
   const sizeMatch = name.match(/\[(\d+(?:\.\d+)?\s*(?:GB|MB|TB|KB))\]/i);
   const matchedSize = sizeMatch ? sizeMatch[1] : '';
@@ -369,7 +402,8 @@ export async function fetchCinejoyDirectDownloads(
   tmdbId: number,
   mediaType: 'movie' | 'tv',
   season?: number,
-  episode?: number
+  episode?: number,
+  context?: DirectDownloadContext
 ): Promise<CinejoyDirectDownload[]> {
   if (!tmdbId || typeof tmdbId !== 'number' || tmdbId <= 0) {
     return [];
@@ -422,16 +456,48 @@ export async function fetchCinejoyDirectDownloads(
       const sizeStr = typeof link.size === 'string' ? link.size.trim() : '';
       const sizeBytes = parseDirectDownloadSizeBytes(sizeStr);
       const quality = typeof link.quality === 'number' ? link.quality : 1080;
-      const name = typeof link.name === 'string' ? link.name.trim() : '';
+      const rawName = typeof link.name === 'string' ? link.name.trim() : '';
       const source = typeof link.source === 'string' ? link.source.trim() : 'Direct';
       const provider = typeof link.provider === 'string' ? link.provider.trim() : '';
 
+      const extractedRelease = extractRealReleaseFilename(url);
+      let displayName = '';
+      if (extractedRelease) {
+        displayName = extractedRelease.replace(/\.[a-z0-9]+$/i, '');
+      } else if (context?.title) {
+        if (mediaType === 'tv') {
+          displayName = `${context.title} S${String(season || context.season || 1).padStart(2, '0')}E${String(episode || context.episode || 1).padStart(2, '0')} [${getDirectDownloadQualityLabel(quality)}]`;
+        } else {
+          displayName = `${context.title}${context.year ? ` (${context.year})` : ''} [${getDirectDownloadQualityLabel(quality)}]`;
+        }
+      } else {
+        displayName = rawName.replace(/^(?:4K\s*)?CINEJOY\s*(?:\[[^\]]*\]\s*)*/i, '').trim() ||
+          `${mediaType === 'movie' ? 'Movie' : 'Episode'} ${getDirectDownloadQualityLabel(quality)}`;
+      }
+
+      // Quality tags
+      const bracketTags = parseDirectDownloadQualityTags(rawName);
+      const combinedForTags = `${displayName} ${rawName} ${url}`;
+      const extraTags: string[] = [];
+      if (/\b(?:DOVI|DV|DOLBY[\s.-]?VISION)\b/i.test(combinedForTags) && !bracketTags.includes('DV')) extraTags.push('DV');
+      if (/\bHDR10\+|HDR10PLUS\b/i.test(combinedForTags) && !bracketTags.includes('HDR10+')) extraTags.push('HDR10+');
+      else if (/\bHDR(?:10)?\b/i.test(combinedForTags) && !bracketTags.includes('HDR') && !bracketTags.includes('HDR10')) extraTags.push('HDR');
+      if (/\bIMAX\b/i.test(combinedForTags) && !bracketTags.includes('IMAX')) extraTags.push('IMAX');
+      if (/\bREMUX\b/i.test(combinedForTags) && !bracketTags.includes('Remux')) extraTags.push('Remux');
+      if (/\b(?:WEB[\s.-]?DL)\b/i.test(combinedForTags) && !bracketTags.includes('WEB-DL')) extraTags.push('WEB-DL');
+      if (/\b(?:ATMOS)\b/i.test(combinedForTags) && !bracketTags.includes('Atmos')) extraTags.push('Atmos');
+      if (/\b(?:DDP[\s.-]?5[\s.-]?1|DDP5\.1|DDP5)\b/i.test(combinedForTags) && !bracketTags.includes('DDP5')) extraTags.push('DDP 5.1');
+      if (/\b(?:HEVC|H\.?265|X265)\b/i.test(combinedForTags) && !bracketTags.includes('HEVC') && !bracketTags.includes('X265')) extraTags.push('HEVC');
+
+      const cleanTags = Array.from(new Set([...bracketTags, ...extraTags]))
+        .filter(tag => !/^(?:fsl|server|cinejoy|fast|direct)$/i.test(tag));
+
       downloads.push({
         source,
-        name,
+        name: displayName,
         quality,
         qualityLabel: getDirectDownloadQualityLabel(quality),
-        qualityTags: parseDirectDownloadQualityTags(name),
+        qualityTags: cleanTags,
         size: sizeStr,
         sizeBytes,
         url,

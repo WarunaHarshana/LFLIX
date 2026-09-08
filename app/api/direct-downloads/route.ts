@@ -17,6 +17,8 @@ export async function GET(req: Request) {
     const seasonParam = searchParams.get('season');
     const episodeParam = searchParams.get('episode');
     const query = searchParams.get('q')?.trim();
+    const titleParam = searchParams.get('title')?.trim();
+    const yearParam = searchParams.get('year')?.trim();
 
     const mediaType: 'movie' | 'tv' = typeParam === 'tv' ? 'tv' : 'movie';
     let tmdbId = tmdbIdParam ? parsePositiveInt(tmdbIdParam) : null;
@@ -51,7 +53,14 @@ export async function GET(req: Request) {
       );
     }
 
-    const downloads = await fetchCinejoyDirectDownloads(tmdbId, mediaType, season, episode);
+    const title = titleParam || query || undefined;
+    const year = yearParam || undefined;
+    const downloads = await fetchCinejoyDirectDownloads(tmdbId, mediaType, season, episode, {
+      title,
+      year,
+      season,
+      episode,
+    });
 
     return NextResponse.json({
       success: true,
