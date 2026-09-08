@@ -125,11 +125,11 @@ export default function LiquidDropdown({
           </div>
         )}
         <div className="space-y-0.5 pt-0.5">
-          {options.map((opt) => {
+          {options.map((opt, idx) => {
             const isSelected = String(opt.id) === String(value);
             return (
               <button
-                key={opt.id}
+                key={`${opt.id}-${idx}`}
                 type="button"
                 role="option"
                 aria-selected={isSelected}

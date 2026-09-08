@@ -582,8 +582,14 @@ class DownloadManager {
                         scheduleRetry(attempt, reason);
                     };
 
+                    // Inactivity timeout: if no data received for 30s, automatically retry and resume
+                    response.setTimeout(30000, () => {
+                        retryFromPartial('Connection stalled (no data for 30s)');
+                    });
+
                     response.on('data', (chunk: Buffer) => {
                         downloadedBytes += chunk.length;
+                        response.setTimeout(30000);
                     });
 
                     response.on('aborted', () => {
@@ -635,6 +641,11 @@ class DownloadManager {
                     });
 
                     response.pipe(activeFileStream);
+                });
+
+                activeRequest.setTimeout(30000, () => {
+                    if (abortController.signal.aborted) return;
+                    activeRequest?.destroy(new Error('Connection timed out'));
                 });
 
                 activeRequest.on('error', (err: Error) => {

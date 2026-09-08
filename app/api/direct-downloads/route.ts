@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/apiSecurity';
 import { parsePositiveInt } from '@/lib/security';
 import { fetchCinejoyDirectDownloads } from '@/lib/cinejoy';
+import { isDirectDownloadMatch } from '@/lib/titleMatching';
 import { cachedTmdbCall, getTmdbClient } from '@/lib/metadata';
 
 export const dynamic = 'force-dynamic';
@@ -62,10 +63,21 @@ export async function GET(req: Request) {
       episode,
     });
 
+    const filteredDownloads = title
+      ? downloads.filter((dl) =>
+          isDirectDownloadMatch(dl, title, {
+            year,
+            mediaType,
+            season,
+            episode,
+          })
+        )
+      : downloads;
+
     return NextResponse.json({
       success: true,
-      downloads,
-      count: downloads.length,
+      downloads: filteredDownloads,
+      count: filteredDownloads.length,
       tmdbId,
       mediaType,
     });

@@ -109,4 +109,111 @@ describe('DownloadModal DDL filtering', () => {
         const torrentsList = screen.queryByText('Movie.2026.1080p.DDL.Direct');
         expect(torrentsList).toBeNull();
     });
+
+    it('filters out mismatched direct downloads (wrong movie or conflicting year) in Direct tab', async () => {
+        global.fetch = vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/folders')) {
+                return Promise.resolve({
+                    json: () => Promise.resolve({ folders: [] }),
+                });
+            }
+            if (url.includes('/api/direct-downloads')) {
+                return Promise.resolve({
+                    json: () => Promise.resolve({
+                        success: true,
+                        downloads: [
+                            {
+                                source: 'Direct Provider',
+                                name: 'The Runner 2026 1080p WEB-DL',
+                                quality: 1080,
+                                qualityLabel: '1080p',
+                                qualityTags: ['1080p'],
+                                size: '2.5 GB',
+                                sizeBytes: 2684354560,
+                                url: 'https://example.com/the-runner-2026.mp4',
+                                provider: 'direct',
+                            },
+                            {
+                                source: 'Direct Provider',
+                                name: 'Maze Runner The Scorch Trials 2015 1080p',
+                                quality: 1080,
+                                qualityLabel: '1080p',
+                                qualityTags: ['1080p'],
+                                size: '4.5 GB',
+                                sizeBytes: 4831838208,
+                                url: 'https://example.com/maze-runner.mp4',
+                                provider: 'direct',
+                            },
+                            {
+                                source: 'Direct Provider',
+                                name: 'The Runner (1984)',
+                                quality: 720,
+                                qualityLabel: '720p',
+                                qualityTags: ['720p'],
+                                size: '1.1 GB',
+                                sizeBytes: 1181116006,
+                                url: 'https://example.com/the-runner-1984.mp4',
+                                provider: 'direct',
+                            }
+                        ]
+                    }),
+                });
+            }
+            if (url.includes('/api/torrent-search')) {
+                return Promise.resolve({
+                    json: () => Promise.resolve({
+                        results: [
+                            {
+                                title: 'The Bugs Bunny Road Runner Movie 1979',
+                                magnet: 'http-direct:https://example.com/bugs-bunny.mp4',
+                                size: '1.5 GB',
+                                sizeBytes: 1610612736,
+                                seeds: 0,
+                                leeches: 0,
+                                quality: '720p',
+                                source: 'DDL',
+                            },
+                            {
+                                title: 'The Runner 2026 2160p DDL',
+                                magnet: 'http-direct:https://example.com/runner-2026-4k.mp4',
+                                size: '8.5 GB',
+                                sizeBytes: 9126805504,
+                                seeds: 0,
+                                leeches: 0,
+                                quality: '2160p',
+                                source: 'DDL',
+                            }
+                        ]
+                    }),
+                });
+            }
+            return Promise.reject(new Error(`Unhandled URL: ${url}`));
+        }) as any;
+
+        render(
+            <DownloadModal
+                isOpen={true}
+                title="The Runner"
+                year="2026"
+                mediaType="movie"
+                onClose={() => {}}
+            />
+        );
+
+        // Wait for rendering
+        await waitFor(() => {
+            expect(screen.getByText('The Runner 2026 1080p WEB-DL')).toBeTruthy();
+            expect(screen.getByText('The Runner 2026 2160p DDL')).toBeTruthy();
+        });
+
+        // Mismatched movies must NOT be in the document
+        expect(screen.queryByText(/Maze Runner/i)).toBeNull();
+        expect(screen.queryByText(/The Runner \(1984\)/i)).toBeNull();
+        expect(screen.queryByText(/Bugs Bunny/i)).toBeNull();
+
+        // Direct Downloads tab badge should show 2 (only the 2 valid 2026 matches)
+        const directTabBtn = screen.getByRole('button', { name: /Direct Downloads/i });
+        expect(directTabBtn.textContent).toContain('2');
+    });
 });
+

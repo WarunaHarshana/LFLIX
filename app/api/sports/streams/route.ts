@@ -64,7 +64,7 @@ export async function GET(request: Request) {
         const is4k = label.includes('4K') || label.includes('UHD');
         const isHd = is4k || label.includes('FHD') || label.includes('720P') || label.includes('1080P') || label.includes('MAX') || label.includes('HEVC');
         return {
-          id: `${id}-${index}`,
+          id: `timstreams-${id}-${index + 1}`,
           streamNo: index + 1,
           language: stream.name || `Stream ${index + 1}`,
           hd: !!isHd,
@@ -99,17 +99,19 @@ export async function GET(request: Request) {
     const streams = await response.json();
     
     // Transform streams
-    const transformedStreams = streams.map((stream: any) => {
+    const transformedStreams = streams.map((stream: any, index: number) => {
       const label = (stream.language || '').toUpperCase();
       const is4k = label.includes('4K') || label.includes('UHD');
+      const streamNum = stream.streamNo ?? (index + 1);
+      const streamSrc = stream.source || source;
       return {
-        id: stream.id,
-        streamNo: stream.streamNo,
+        id: `${streamSrc}-${stream.id || id}-${streamNum}`,
+        streamNo: streamNum,
         language: stream.language,
         hd: stream.hd || is4k,
         is4k: is4k,
         embedUrl: stream.embedUrl,
-        source: stream.source
+        source: streamSrc
       };
     });
 

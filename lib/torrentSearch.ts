@@ -4,6 +4,51 @@
 
 import { recordSourceHealth } from './sourceHealth';
 import { fetchCinejoyDirectDownloads } from './cinejoy';
+import {
+    parseSizeToBytes,
+    extractQuality,
+    isCamQualityResult,
+    isGoodMovieReleaseQuality,
+    extractYears,
+    relevanceScore,
+    getSignificantQueryWords,
+    getSignificantTvQueryWords,
+    extractEpisodeQuery,
+    extractEpisodeKey,
+    titleMatchesEpisode,
+    titleContainsQueryWord,
+    isTvShowTitle,
+    extractCleanTitle,
+    getSignificantWords,
+    matchesMovieTitleStrictly,
+    matchesTvTitleStrictly,
+    filterByRelevance,
+    isDirectDownloadMatch,
+    normalizeTitle,
+} from './titleMatching';
+
+export {
+    parseSizeToBytes,
+    extractQuality,
+    isCamQualityResult,
+    isGoodMovieReleaseQuality,
+    extractYears,
+    relevanceScore,
+    getSignificantQueryWords,
+    getSignificantTvQueryWords,
+    extractEpisodeQuery,
+    extractEpisodeKey,
+    titleMatchesEpisode,
+    titleContainsQueryWord,
+    isTvShowTitle,
+    extractCleanTitle,
+    getSignificantWords,
+    matchesMovieTitleStrictly,
+    matchesTvTitleStrictly,
+    filterByRelevance,
+    isDirectDownloadMatch,
+    normalizeTitle,
+};
 
 export interface TorrentResult {
     title: string;
@@ -245,312 +290,6 @@ function formatBytes(bytes: number): string {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
-}
-
-/** Parse a human-readable size string (e.g. "1.5 GB", "850 MB") back to bytes */
-export function parseSizeToBytes(sizeStr: string): number {
-    const match = sizeStr.match(/([\d.]+)\s*(B|KB|KiB|MB|MiB|GB|GiB|TB|TiB)/i);
-    if (!match) return 0;
-    const value = parseFloat(match[1]);
-    const unit = match[2].toUpperCase().replace('IB', 'B');
-    const multipliers: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
-    return Math.round(value * (multipliers[unit] || 0));
-}
-
-function extractQuality(title: string): string {
-    const match = title.match(/(2160p|4K|UHD|1080p|720p|480p|HDRip|BDRip|BluRay|WEBRip|WEB-DL|HDTV|HDCAM|CAM|TS|TC|TeleSync|Telecine)/i);
-    return match ? match[1] : 'Unknown';
-}
-
-export function isCamQualityResult(result: Pick<TorrentResult, 'title' | 'quality'>): boolean {
-    const haystack = `${result.title} ${result.quality}`.toLowerCase();
-    return /\b(?:cam|hdcam|ts|telesync|telecine|tc|xbet|hd-?cam|camrip)\b/i.test(haystack);
-}
-
-export function isGoodMovieReleaseQuality(result: Pick<TorrentResult, 'title' | 'quality' | 'source'>): boolean {
-    if (isCamQualityResult(result)) return false;
-
-    const haystack = `${result.title} ${result.quality} ${result.source}`.toLowerCase();
-    if (/\b(?:web[\s.-]?dl|web[\s.-]?rip|bluray|blu[\s.-]?ray|bdrip|br[-\s]?rip|remux|hdrip|dvdrip)\b/i.test(haystack)) {
-        return true;
-    }
-
-    // YTS, TorrentsCSV, 1337x, EZTV, and DDL publish finished digital encodes, so a resolution-tagged result is acceptable.
-    if ((result.source === 'YTS' || result.source === 'TorrentsCSV' || result.source === '1337x' || result.source === 'EZTV' || result.source === 'DDL') && /\b(?:720p|1080p|2160p|4k|uhd)\b/i.test(haystack)) {
-        return true;
-    }
-
-    return false;
-}
-
-function extractYears(title: string): number[] {
-    const matches = title.match(/\b(19|20)\d{2}\b/g) || [];
-    const years = matches.map(y => parseInt(y, 10)).filter(y => y >= 1900 && y <= 2099);
-    return Array.from(new Set(years));
-}
-
-/** Score how relevant a torrent title is to the search query (0-100) */
-export function relevanceScore(title: string, query: string): number {
-    const normTitle = title.toLowerCase().replace(/[._\-]+/g, ' ');
-    const normQuery = query.toLowerCase().replace(/[._\-]+/g, ' ');
-    const queryWords = normQuery.split(/\s+/).filter(w => w.length > 1);
-    
-    if (queryWords.length === 0) return 0;
-
-    let score = 0;
-    let matchedWords = 0;
-
-    for (const word of queryWords) {
-        if (normTitle.includes(word)) {
-            matchedWords++;
-            // Bonus for exact word match (not substring)
-            if (normTitle.split(/\s+/).some(w => w === word)) score += 15;
-            else score += 10;
-        }
-    }
-
-    // Must match at least 60% of query words
-    const matchRatio = matchedWords / queryWords.length;
-    if (matchRatio < 0.5) return 0;
-
-    // Bonus for matching all words
-    if (matchedWords === queryWords.length) score += 20;
-
-    // Bonus for shorter titles (more specific matches)
-    if (normTitle.length < 80) score += 10;
-
-    // Penalty for very long titles (usually spam/pack releases)
-    if (normTitle.length > 120) score -= 15;
-
-    return Math.max(0, Math.min(100, score));
-}
-
-function getSignificantQueryWords(query: string): string[] {
-    return normalizeTitle(query)
-        .split(' ')
-        .filter(w => w.length > 1 && !/^(19|20)\d{2}$/.test(w));
-}
-
-function getSignificantTvQueryWords(query: string): string[] {
-    return normalizeTitle(query)
-        .split(' ')
-        .filter(w =>
-            w.length > 1 &&
-            !/^(19|20)\d{2}$/.test(w) &&
-            !/^s\d{1,2}e\d{1,3}$/.test(w) &&
-            !/^\d{1,2}x\d{1,3}$/.test(w) &&
-            !/^s\d{1,2}$/.test(w) &&
-            !/^\d{3,4}p$/.test(w) &&
-            !/^(4k|uhd|hdr|hevc|x264|x265|web|webdl|web-dl|webrip|bluray|hdtv)$/.test(w)
-        );
-}
-
-export function extractEpisodeQuery(query: string): { season: number; episode: number } | null {
-    const sxxexx = query.match(/\bs(\d{1,2})\s*[\W_]*\s*e(\d{1,3})\b/i);
-    if (sxxexx) {
-        return { season: parseInt(sxxexx[1], 10), episode: parseInt(sxxexx[2], 10) };
-    }
-
-    const xFormat = query.match(/\b(\d{1,2})x(\d{1,3})\b/i);
-    if (xFormat) {
-        return { season: parseInt(xFormat[1], 10), episode: parseInt(xFormat[2], 10) };
-    }
-
-    return null;
-}
-
-export function extractEpisodeKey(title: string): string | null {
-    const episode = extractEpisodeQuery(title);
-    if (!episode) return null;
-    return `s${String(episode.season).padStart(2, '0')}e${String(episode.episode).padStart(2, '0')}`;
-}
-
-export function titleMatchesEpisode(title: string, episodeQuery: { season: number; episode: number }): boolean {
-    const compact = title.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const season = String(episodeQuery.season);
-    const episode = String(episodeQuery.episode);
-    const seasonPadded = season.padStart(2, '0');
-    const episodePadded = episode.padStart(2, '0');
-
-    const tokens = [
-        `s${season}e${episode}`,
-        `s${season}e${episodePadded}`,
-        `s${seasonPadded}e${episode}`,
-        `s${seasonPadded}e${episodePadded}`,
-        `${season}x${episode}`,
-        `${season}x${episodePadded}`,
-    ];
-
-    return tokens.some(token => compact.includes(token));
-}
-
-function titleContainsQueryWord(normTitle: string, word: string): boolean {
-    const titleWords = normTitle.split(' ');
-    if (titleWords.includes(word) || normTitle.includes(word)) return true;
-
-    const romanAlternates: Record<string, string[]> = {
-        ii: ['2', 'two'],
-        iii: ['3', 'three'],
-        iv: ['4', 'four'],
-        v: ['5', 'five'],
-        vi: ['6', 'six'],
-        vii: ['7', 'seven'],
-        viii: ['8', 'eight'],
-        ix: ['9', 'nine'],
-        x: ['10', 'ten'],
-    };
-
-    return (romanAlternates[word] || []).some(alt => titleWords.includes(alt));
-}
-
-export function isTvShowTitle(title: string): boolean {
-    const lower = title.toLowerCase();
-    // Season/Episode pattern: S01E01, s1e12, s01e012, s01-s02, etc.
-    if (/\bs\d{1,2}\s*[ex]\d{1,3}\b/i.test(lower)) return true;
-    if (/\b\d{1,2}x\d{1,3}\b/i.test(lower)) return true;
-    
-    // Season indicator: S01, S12, S01-S02 (usually a boundary like word, or preceded/followed by dot, space, dash)
-    if (/\bs\d{1,2}\b/i.test(lower)) return true;
-    
-    // Season/Episode spelled out
-    if (/\b(?:season|seasons|series|episode|episodes|ep|eps)\s*\d{1,2}\b/i.test(lower)) return true;
-    
-    return false;
-}
-
-export function extractCleanTitle(title: string, query: string): string {
-    const lower = title.toLowerCase();
-    
-    // Find index of first matching token
-    const tokens = [
-        /\b(19|20)\d{2}\b/g, // year
-        /\b(2160p|4k|uhd|1080p|720p|480p|576p|360p)\b/g, // resolution
-        /\b(hdrip|bdrip|bluray|blu-ray|webrip|web-dl|web|hdtv|cam|ts|tc|dvdrip|brrip|remux|h264|h265|x264|x265|hevc|10bit|aac|dd5|ddp5)\b/g, // quality/codec
-        /\b(s\d{1,2}(e\d{1,3})?|\d{1,2}x\d{1,3})\b/g, // season/episode
-        /\b(season|episodes|episode|complete)\b/g, // tv terms
-    ];
-
-    let minIndex = title.length;
-    const normalizedQuery = normalizeTitle(query);
-    const queryWords = normalizedQuery.split(' ');
-
-    for (const regex of tokens) {
-        regex.lastIndex = 0; // reset
-        let match;
-        while ((match = regex.exec(lower)) !== null) {
-            const matchedText = match[0];
-            if (queryWords.includes(matchedText)) {
-                continue;
-            }
-            if (match.index < minIndex) {
-                minIndex = match.index;
-            }
-            break;
-        }
-    }
-
-    let clean = title.slice(0, minIndex);
-    clean = clean.replace(/[._\-]+/g, ' ').trim();
-    return clean;
-}
-
-export function getSignificantWords(text: string): string[] {
-    const STOP_WORDS = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'is', 'are', 'was', 'were', 'it', 'its']);
-    return normalizeTitle(text)
-        .split(' ')
-        .filter(w => (w.length > 1 || /^\d$/.test(w)) && !STOP_WORDS.has(w) && !/^(19|20)\d{2}$/.test(w));
-}
-
-export function matchesMovieTitleStrictly(title: string, query: string): boolean {
-    if (isTvShowTitle(title)) return false;
-
-    const cleanTitle = extractCleanTitle(title, query);
-    
-    const queryWords = getSignificantWords(query);
-    const candidateWords = getSignificantWords(cleanTitle);
-
-    if (queryWords.length === 0) return true;
-
-    // The candidate clean title must contain all significant words from the query
-    const hasAllQueryWords = queryWords.every(word => candidateWords.includes(word));
-    if (!hasAllQueryWords) return false;
-
-    // For short queries (<= 3 words), the candidate clean title shouldn't have extra significant words that are not in the query.
-    if (queryWords.length <= 3) {
-        const extraWords = candidateWords.filter(word => !queryWords.includes(word));
-        if (extraWords.length > 0) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-function matchesTvTitleStrictly(title: string, query: string): boolean {
-    const episodeQuery = extractEpisodeQuery(query);
-    if (episodeQuery && !titleMatchesEpisode(title, episodeQuery)) {
-        return false;
-    }
-
-    const normTitle = normalizeTitle(title);
-    const words = getSignificantTvQueryWords(query);
-    if (words.length === 0) return true;
-
-    const matchedWords = words.filter(word => titleContainsQueryWord(normTitle, word));
-
-    if (words.length <= 2) {
-        const titleWords = normTitle.split(' ');
-        return words.every((word, index) => titleWords[index] === word);
-    }
-
-    return matchedWords.length / words.length >= 0.75;
-}
-
-/** Filter and sort results by relevance */
-function filterByRelevance(
-    results: TorrentResult[],
-    query: string,
-    minScore: number = 30,
-    options?: { year?: string; type?: 'movie' | 'tv' }
-): TorrentResult[] {
-    const targetYear = options?.year ? parseInt(options.year, 10) : NaN;
-    const useYearFilter = (options?.type === 'movie' || options?.type === 'tv') && Number.isFinite(targetYear);
-
-    return results
-        .filter(r => options?.type !== 'movie' || matchesMovieTitleStrictly(r.title, query))
-        .filter(r => options?.type !== 'tv' || matchesTvTitleStrictly(r.title, query))
-        .map(r => {
-            const baseScore = relevanceScore(r.title, query);
-            if (!useYearFilter) {
-                return { ...r, _score: baseScore, _yearBonus: 0, _hasExactYear: false, _hasConflictingYear: false };
-            }
-
-            const years = extractYears(r.title);
-            const hasExactYear = years.includes(targetYear);
-            const hasCloseYear = years.some(y => Math.abs(y - targetYear) <= 1);
-            const hasConflictingYear = years.length > 0 && !hasExactYear && !hasCloseYear;
-
-            // Prefer exact year heavily for movie queries with a given year.
-            let yearBonus = 0;
-            if (hasExactYear) yearBonus += 30;
-            else if (hasCloseYear) yearBonus += 15; // Close year (±1 year) is acceptable with a smaller bonus.
-            else if (hasConflictingYear) yearBonus -= 40;
-            else yearBonus += 5; // No explicit year still acceptable.
-
-            return {
-                ...r,
-                _score: baseScore + yearBonus,
-                _yearBonus: yearBonus,
-                _hasExactYear: hasExactYear,
-                _hasConflictingYear: hasConflictingYear,
-            };
-        })
-        .filter(r => !(useYearFilter && r._hasConflictingYear))
-        .filter(r => r._score >= minScore)
-        .sort((a, b) => {
-            if (a._hasExactYear !== b._hasExactYear) return a._hasExactYear ? -1 : 1;
-            return (b._score - a._score) || (b.seeds - a.seeds);
-        });
 }
 
 // --- apibay.org (The Pirate Bay API) ---
@@ -1063,16 +802,6 @@ async function fetchDirectoryListing(url: string, timeoutMs: number): Promise<{ 
     return entries;
 }
 
-/** Normalize a title for fuzzy comparison */
-function normalizeTitle(t: string): string {
-    return t
-        .toLowerCase()
-        .replace(/[\(\)\[\]\{\}'"!@#$%^&*,.:;]/g, ' ')
-        .replace(/[-_]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
 /** Extract entries from the HTML index page (uses data-entry table rows) */
 function parseDirectoryListing(html: string, listingUrl: string): { name: string; href: string; sizeBytes: number }[] {
     const entries: { name: string; href: string; sizeBytes: number }[] = [];
@@ -1119,6 +848,9 @@ function parseDirectoryListing(html: string, listingUrl: string): { name: string
 
 /** Check if folder name matches search query. Ignores episode/resolution tokens for folder matching. */
 function titleMatches(folderName: string, query: string, type?: 'movie' | 'tv'): boolean {
+    if (type === 'movie') {
+        return matchesMovieTitleStrictly(folderName, query);
+    }
     const normalFolder = normalizeTitle(folderName);
     const queryWords = type === 'tv' ? getSignificantTvQueryWords(query) : getSignificantQueryWords(query);
     if (queryWords.length === 0) return true;
@@ -2010,13 +1742,8 @@ export async function searchTorrentsWithDiagnostics(
     // Filter by relevance to search query — removes random/unrelated results
     const relevant = filterByRelevance(unique, title, 25, { year: options?.year, type: options?.type });
 
-    // Apply the same relevance/year filtering to DDL fallback results, preserving verified TMDB direct stream results
-    const relevantDdl = ddlResults.filter(r => {
-        if (options?.tmdbId && r.magnet.startsWith('http-direct:')) {
-            return true;
-        }
-        return filterByRelevance([r], title, 15, { year: options?.year, type: options?.type }).length > 0;
-    });
+    // Apply the same relevance/year filtering to DDL results
+    const relevantDdl = filterByRelevance(ddlResults, title, 15, { year: options?.year, type: options?.type });
 
     // Deduplicate merged result set.
     const merged = [...relevant, ...relevantDdl];

@@ -4,7 +4,7 @@
  */
 
 import db from './db';
-import { searchTorrents, TorrentResult } from './torrentSearch';
+import { searchTorrents, TorrentResult, isDirectDownloadMatch } from './torrentSearch';
 import downloadManager from './downloader';
 import releaseMonitor, { NewEpisodeInfo } from './releaseMonitor';
 
@@ -136,9 +136,9 @@ function filterForEpisode(results: TorrentResult[], showTitle: string, season: n
   const showWords = showTitle.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim().split(/\s+/);
 
   return results.filter(r => {
-    // Direct downloads resolved specifically for this episode via TMDB are guaranteed matches
-    if (r.source === 'DDL' && r.magnet.startsWith('http-direct:')) {
-      return true;
+    // Validate DDL results against show title, season, and episode
+    if (r.source === 'DDL') {
+      return isDirectDownloadMatch(r, showTitle, { mediaType: 'tv', season, episode });
     }
 
     let titleLower = r.title.toLowerCase();

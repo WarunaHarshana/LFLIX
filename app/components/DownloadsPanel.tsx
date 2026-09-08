@@ -168,15 +168,23 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
     };
 
     const downloadStatusText = (dl: DownloadItem) => {
+        const isHttp = dl.magnetUri?.startsWith('http-direct:');
         if (dl.status === 'metadata') {
+            if (isHttp) return 'Connecting to server...';
             return dl.retryCount && dl.retryCount > 0
                 ? `Loading metadata · retry ${dl.retryCount}/3`
                 : 'Loading metadata';
         }
-        if (dl.status === 'stalled') return 'Stalled · waiting for peers';
+        if (dl.status === 'stalled') {
+            return isHttp ? 'Stalled · reconnecting...' : 'Stalled · waiting for peers';
+        }
         if (dl.status !== 'downloading') return null;
-        if (dl.totalSize === 0 && dl.progress === 0) return 'Finding metadata/peers';
-        if (dl.downloadSpeed === 0) return 'Waiting for peers';
+        if (dl.totalSize === 0 && dl.progress === 0) {
+            return isHttp ? 'Connecting to stream...' : 'Finding metadata/peers';
+        }
+        if (dl.downloadSpeed === 0) {
+            return isHttp ? 'Connecting / Buffering...' : 'Waiting for peers';
+        }
         return formatSpeed(dl.downloadSpeed);
     };
 

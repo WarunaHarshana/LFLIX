@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown, Zap, Copy, Check, ExternalLink } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import LiquidDropdown from './LiquidDropdown';
+import { isDirectDownloadMatch } from '@/lib/titleMatching';
 
 type SortMode = 'seeds' | 'size_asc' | 'size_desc';
 
@@ -142,6 +143,12 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         }
     }, [pureTorrentResults, sortBy]);
 
+    const filteredDirectDownloads = useMemo(() => {
+        return directDownloads.filter((d) =>
+            isDirectDownloadMatch(d, title, { year, mediaType, season, episode })
+        );
+    }, [directDownloads, title, year, mediaType, season, episode]);
+
     // Fetch folders + auto-search on open
     useEffect(() => {
         if (isOpen && title) {
@@ -198,6 +205,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                 // Convert any DDL / http-direct results into DirectDownloadItems and merge into directDownloads
                 const ddlItems: DirectDownloadItem[] = torrentList
                     .filter(isDDL)
+                    .filter((r) => isDirectDownloadMatch({ name: r.title }, title, { year, mediaType, season, episode }))
                     .map((r) => {
                         const rawUrl = r.magnet.replace(/^http-direct:/, '');
                         return {
@@ -277,12 +285,17 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             const res = await fetch(`/api/direct-downloads?${params.toString()}`);
             const data = await res.json();
             if (data.success && Array.isArray(data.downloads)) {
+                const validDownloads = (data.downloads as DirectDownloadItem[]).filter((d) =>
+                    isDirectDownloadMatch(d, title, { year, mediaType, season, episode })
+                );
                 setDirectDownloads((prev) => {
-                    const existingUrls = new Set(data.downloads.map((d: DirectDownloadItem) => d.url));
-                    const previousNonDuplicates = prev.filter((p) => !existingUrls.has(p.url));
-                    return [...data.downloads, ...previousNonDuplicates];
+                    const existingUrls = new Set(validDownloads.map((d: DirectDownloadItem) => d.url));
+                    const previousNonDuplicates = prev
+                        .filter((p) => !existingUrls.has(p.url))
+                        .filter((p) => isDirectDownloadMatch(p, title, { year, mediaType, season, episode }));
+                    return [...validDownloads, ...previousNonDuplicates];
                 });
-                if (data.downloads.length > 0) {
+                if (validDownloads.length > 0) {
                     setActiveTab('direct');
                 }
             }
@@ -421,9 +434,9 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                         <span>Direct Downloads</span>
                         {searchingDirect ? (
                             <Loader2 className="w-3 h-3 animate-spin ml-1 text-neutral-300" />
-                        ) : directDownloads.length > 0 ? (
+                        ) : filteredDirectDownloads.length > 0 ? (
                             <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-bold border border-white/30">
-                                {directDownloads.length}
+                                {filteredDirectDownloads.length}
                             </span>
                         ) : null}
                     </button>
@@ -469,19 +482,19 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                             )}
 
                             {/* Direct Results */}
-                            {!searchingDirect && directDownloads.length > 0 && (
+                            {!searchingDirect && filteredDirectDownloads.length > 0 && (
                                 <>
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-1.5">
                                             <Zap className="w-3.5 h-3.5 text-amber-400" />
-                                            {directDownloads.length} direct stream{directDownloads.length === 1 ? '' : 's'} available
+                                            {filteredDirectDownloads.length} direct stream{filteredDirectDownloads.length === 1 ? '' : 's'} available
                                         </h3>
                                         <span className="text-[11px] text-neutral-500">
                                             Instant HTTP • 0 seeds needed
                                         </span>
                                     </div>
                                     <div className="space-y-2">
-                                        {directDownloads.map((item, i) => (
+                                        {filteredDirectDownloads.map((item, i) => (
                                             <div
                                                 key={i}
                                                 className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 liquid-glass-pill bg-white/[0.03] hover:bg-white/[0.07] rounded-2xl transition border border-white/10 hover:border-white/20"
@@ -564,7 +577,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                             )}
 
                             {/* No direct results */}
-                            {!searchingDirect && searchedDirect && directDownloads.length === 0 && (
+                            {!searchingDirect && searchedDirect && filteredDirectDownloads.length === 0 && (
                                 <div className="text-center py-8">
                                     <Zap className="w-10 h-10 text-neutral-600 mx-auto mb-3 opacity-50" />
                                     <p className="text-neutral-400 text-sm">No direct downloads found for &quot;{title}&quot;</p>

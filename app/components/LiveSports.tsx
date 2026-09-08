@@ -902,12 +902,22 @@ export default function LiveSports({ onClose }: Props) {
       const allStreams = results.flat();
 
       if (allStreams.length > 0) {
-        setStreams(allStreams);
+        const seenIds = new Set<string>();
+        const uniqueStreams = allStreams.map((st, idx) => {
+          let uniqueId = st.id || `stream-${idx + 1}`;
+          if (seenIds.has(uniqueId)) {
+            uniqueId = `${uniqueId}-${idx + 1}`;
+          }
+          seenIds.add(uniqueId);
+          return { ...st, id: uniqueId };
+        });
+
+        setStreams(uniqueStreams);
         if (sortByQuality) {
-          const sorted = [...allStreams].sort((a, b) => getQualityRank(b) - getQualityRank(a));
+          const sorted = [...uniqueStreams].sort((a, b) => getQualityRank(b) - getQualityRank(a));
           setSelectedStream(sorted[0]);
         } else {
-          setSelectedStream(allStreams[0]);
+          setSelectedStream(uniqueStreams[0]);
         }
       } else {
         setStreams([]);
@@ -1335,7 +1345,7 @@ export default function LiveSports({ onClose }: Props) {
                             }))}
                             value={selectedStream?.id || ''}
                             onChange={(val) => {
-                              const s = streams.find((st) => st.id === val);
+                              const s = streams.find((st) => String(st.id) === String(val));
                               if (s) setSelectedStream(s);
                             }}
                             className="w-full"
