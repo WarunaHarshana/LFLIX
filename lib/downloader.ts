@@ -10,6 +10,18 @@ import http from 'http';
 import https from 'https';
 import { isPathInsideAny, sanitizeFilename } from './security';
 
+const downloadHttpsAgent = new https.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 15000,
+    maxSockets: 64,
+});
+
+const downloadHttpAgent = new http.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 15000,
+    maxSockets: 64,
+});
+
 type DownloadStatus = 'metadata' | 'downloading' | 'stalled' | 'completed' | 'error' | 'paused';
 
 // Download record type
@@ -523,8 +535,10 @@ class DownloadManager {
                     headers.Range = `bytes=${existingBytes}-`;
                 }
 
-                const httpModule = requestUrl.startsWith('https') ? https : http;
-                activeRequest = httpModule.get(requestUrl, { headers }, (response) => {
+                const isHttps = requestUrl.startsWith('https');
+                const httpModule = isHttps ? https : http;
+                const agent = isHttps ? downloadHttpsAgent : downloadHttpAgent;
+                activeRequest = httpModule.get(requestUrl, { headers, agent }, (response) => {
                     if (abortController.signal.aborted) {
                         response.resume();
                         return;
@@ -555,7 +569,10 @@ class DownloadManager {
                     }
 
                     let settled = false;
-                    activeFileStream = fs.createWriteStream(filePath, { flags: canAppend ? 'a' : 'w' });
+                    activeFileStream = fs.createWriteStream(filePath, {
+                        flags: canAppend ? 'a' : 'w',
+                        highWaterMark: 4 * 1024 * 1024, // 4MB buffer for maximum throughput
+                    });
 
                     const retryFromPartial = (reason: string) => {
                         if (settled) return;
@@ -1168,14 +1185,20 @@ class DownloadManager {
     }
 }
 
-// Singleton
-const downloadManager = new DownloadManager();
+// Singleton with globalThis preservation across dev server reloads
+const globalForDownloader = globalThis as unknown as {
+    downloadManagerInstance?: DownloadManager;
+    downloaderStartupDone?: boolean;
+};
+const downloadManager = globalForDownloader.downloadManagerInstance || new DownloadManager();
+if (process.env.NODE_ENV !== 'production') {
+    globalForDownloader.downloadManagerInstance = downloadManager;
+}
 
 // Auto-recover on module load — only runs once
-let startupDone = false;
-setImmediate(async () => {
-    if (startupDone) return;
-    startupDone = true;
+if (!globalForDownloader.downloaderStartupDone) {
+    globalForDownloader.downloaderStartupDone = true;
+    setImmediate(async () => {
     try {
         await downloadManager.getClient();
         console.log('[DownloadManager] Running startup recovery...');
@@ -1235,6 +1258,7 @@ setImmediate(async () => {
     } catch (e) {
         console.error('[DownloadManager] Startup init failed:', e);
     }
-});
+    });
+}
 
 export default downloadManager;
