@@ -59,6 +59,35 @@ export async function GET(req: NextRequest) {
     }
 
     const contentType = upstreamRes.headers.get('content-type') || '';
+
+    const isSubtitle =
+      searchParams.get('sub') === '1' ||
+      parsedUrl.pathname.endsWith('.srt') ||
+      parsedUrl.pathname.endsWith('.vtt') ||
+      parsedUrl.hostname.includes('subtitles.');
+
+    if (isSubtitle) {
+      const rawText = await upstreamRes.text();
+      const isAlreadyVtt = rawText.trim().startsWith('WEBVTT');
+      const vttContent = isAlreadyVtt
+        ? rawText
+        : 'WEBVTT\n\n' +
+          rawText
+            .replace(/^\uFEFF/, '')
+            .replace(/\r\n/g, '\n')
+            .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+
+      return new NextResponse(vttContent, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/vtt; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+          'Cache-Control': 'public, max-age=86400',
+        },
+      });
+    }
+
     const isM3u8 =
       parsedUrl.pathname.endsWith('.m3u8') ||
       contentType.includes('application/vnd.apple.mpegurl') ||

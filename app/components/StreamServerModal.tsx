@@ -716,6 +716,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                 src={displayUrl}
                 title={title}
                 subtitles={currentServer.directSubtitles}
+                hideExternalPlayer={true}
                 onClose={onClose}
                 onPlaybackReady={() => {
                   setIframeLoading(false);

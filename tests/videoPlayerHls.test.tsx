@@ -184,4 +184,18 @@ describe('VideoPlayer HLS prioritization', () => {
 
     expect(onPlaybackReadyMock).toHaveBeenCalled();
   });
+
+  it('hides the external player button when hideExternalPlayer is true', () => {
+    const { queryByText, queryByLabelText } = render(
+      <VideoPlayer
+        title="Test Stream"
+        src="https://proxy.example/stream.m3u8"
+        hideExternalPlayer={true}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(queryByText(/Play in VLC\/MPV/i)).toBeNull();
+    expect(queryByLabelText(/Play in MPV \/ VLC/i)).toBeNull();
+  });
 });

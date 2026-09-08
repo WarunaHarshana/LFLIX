@@ -3,6 +3,7 @@ import {
   isAllowedCinejoyHost,
   registerAllowedCinejoyHost,
   rewriteM3u8Playlist,
+  fetchCinejoySubtitles,
 } from '@/lib/cinejoy';
 
 describe('Cinejoy Host Validation', () => {
@@ -12,6 +13,8 @@ describe('Cinejoy Host Validation', () => {
     expect(isAllowedCinejoyHost('movieboxnoob.cc')).toBe(true);
     expect(isAllowedCinejoyHost('nebula.bright67.online')).toBe(true);
     expect(isAllowedCinejoyHost('api.shegu.st')).toBe(true);
+    expect(isAllowedCinejoyHost('subtitles.shegu.st')).toBe(true);
+    expect(isAllowedCinejoyHost('subs5.strem.io')).toBe(true);
     expect(isAllowedCinejoyHost('cinejoy.to')).toBe(true);
   });
 
@@ -73,5 +76,51 @@ seg-1.m4s`;
     expect(rewritten).toContain(
       '/api/stream-servers/proxy?url=https%3A%2F%2Finfo.movieboxnoob.cc%2Fvideo%2Fseg-1.m4s'
     );
+  });
+});
+
+describe('fetchCinejoySubtitles', () => {
+  it('fetches, formats through proxy, and prioritizes English subtitles', async () => {
+    const originalFetch = global.fetch;
+    try {
+      global.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            total: 3,
+            subtitles: [
+              {
+                id: 'sub-1',
+                language: 'es',
+                display: 'Spanish',
+                url: 'https://subtitles.shegu.st/sub/spanish123',
+              },
+              {
+                id: 'sub-2',
+                language: 'en',
+                display: 'English (Full)',
+                url: 'https://subtitles.shegu.st/sub/english456',
+              },
+              {
+                id: 'sub-3',
+                language: 'fr',
+                display: 'French',
+                url: 'https://subtitles.shegu.st/sub/french789',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+
+      const subs = await fetchCinejoySubtitles(12345, 'movie');
+      expect(subs).toHaveLength(3);
+      // English should be ranked first
+      expect(subs[0].language).toBe('en');
+      expect(subs[0].label).toBe('English (Full)');
+      expect(subs[0].url).toBe(
+        '/api/stream-servers/proxy?url=https%3A%2F%2Fsubtitles.shegu.st%2Fsub%2Fenglish456&sub=1'
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 });

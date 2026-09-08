@@ -138,6 +138,7 @@ type Props = {
   fileName?: string | null;
   onFatalError?: (reason: string) => void;
   onPlaybackReady?: () => void;
+  hideExternalPlayer?: boolean;
 };
 
 interface ExtendedHTMLVideoElement extends HTMLVideoElement {
@@ -171,6 +172,7 @@ export default function VideoPlayer({
   fileName,
   onFatalError,
   onPlaybackReady,
+  hideExternalPlayer = false,
 }: Props) {
   const videoRef = useRef<ExtendedHTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1496,28 +1498,30 @@ export default function VideoPlayer({
 
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
             {/* Play in MPV / VLC or External App Button */}
-            <button
-              onClick={handleExternalPlayerButtonClick}
-              aria-label={isMobileClient ? 'External Player' : 'Play in MPV / VLC'}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700 border border-white/20 rounded-full text-xs font-semibold text-white transition active:scale-95 shadow-md"
-              title={
-                isMobileClient
-                  ? 'Play in VLC or external mobile player (0% server buffering)'
-                  : 'Play in MPV / VLC player for 100% untouched 4K quality with zero lag (Shift+Click for stream options)'
-              }
-            >
-              {isMobileClient ? (
-                <>
-                  <ExternalLink className="w-3.5 h-3.5 text-red-500" />
-                  <span className="text-xs">External App</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-current text-red-500" />
-                  <span className="hidden sm:inline">Play in VLC/MPV</span>
-                </>
-              )}
-            </button>
+            {!hideExternalPlayer && (
+              <button
+                onClick={handleExternalPlayerButtonClick}
+                aria-label={isMobileClient ? 'External Player' : 'Play in MPV / VLC'}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800/90 hover:bg-neutral-700 border border-white/20 rounded-full text-xs font-semibold text-white transition active:scale-95 shadow-md"
+                title={
+                  isMobileClient
+                    ? 'Play in VLC or external mobile player (0% server buffering)'
+                    : 'Play in MPV / VLC player for 100% untouched 4K quality with zero lag (Shift+Click for stream options)'
+                }
+              >
+                {isMobileClient ? (
+                  <>
+                    <ExternalLink className="w-3.5 h-3.5 text-red-500" />
+                    <span className="text-xs">External App</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current text-red-500" />
+                    <span className="hidden sm:inline">Play in VLC/MPV</span>
+                  </>
+                )}
+              </button>
+            )}
 
             {/* Aspect Ratio Fit / Fill Toggle */}
             <button

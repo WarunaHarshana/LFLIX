@@ -2,6 +2,7 @@ import { MemoryCache } from './cache';
 
 const CINEJOY_ENC_DEC_API = 'https://enc-dec.app/api';
 const CINEJOY_SHEGU_API = 'https://api.shegu.st';
+const CINEJOY_SUBTITLES_API = 'https://subtitles.shegu.st';
 
 const CINEJOY_HEADERS = {
   Accept: '*/*',
@@ -11,12 +12,13 @@ const CINEJOY_HEADERS = {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
 };
 
-// Known CDN domains for Cinejoy streams
+// Known CDN domains for Cinejoy streams & subtitles
 const ALLOWED_CDN_DOMAINS = [
   'movieboxnoob.cc',
   'bright67.online',
   'shegu.st',
   'cinejoy.to',
+  'strem.io',
 ];
 
 // In-memory set of dynamically resolved stream hostnames for the proxy
@@ -108,6 +110,54 @@ export function rewriteM3u8Playlist(
 /**
  * Resolves a direct HLS stream from Cinejoy API.
  */
+export async function fetchCinejoySubtitles(
+  tmdbId: number,
+  type: 'movie' | 'tv',
+  season?: number,
+  episode?: number
+): Promise<CinejoySubtitle[]> {
+  try {
+    let url = `${CINEJOY_SUBTITLES_API}/subtitles?type=${type === 'tv' ? 'tv' : 'movie'}&tmdb=${tmdbId}`;
+    if (type === 'tv' && season && episode) {
+      url += `&season=${season}&episode=${episode}`;
+    }
+
+    const res = await fetch(url, {
+      headers: CINEJOY_HEADERS,
+      signal: AbortSignal.timeout(4000),
+    });
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data?.subtitles)) return [];
+
+    const subs: CinejoySubtitle[] = [];
+    for (const s of data.subtitles) {
+      const subUrl = s.url || s.file || s.id;
+      if (typeof subUrl === 'string' && subUrl.startsWith('http')) {
+        subs.push({
+          label: s.display || s.language || 'English',
+          url: `/api/stream-servers/proxy?url=${encodeURIComponent(subUrl)}&sub=1`,
+          language: s.language || 'en',
+        });
+      }
+    }
+
+    subs.sort((a, b) => {
+      const aEn = a.language?.toLowerCase().startsWith('en');
+      const bEn = b.language?.toLowerCase().startsWith('en');
+      if (aEn && !bEn) return -1;
+      if (!aEn && bEn) return 1;
+      return a.label.localeCompare(b.label);
+    });
+
+    return subs;
+  } catch (err: any) {
+    console.warn('[cinejoy] Subtitle query failed:', err?.message || err);
+    return [];
+  }
+}
+
 export async function resolveCinejoyStream(
   params: CinejoyQueryParams
 ): Promise<CinejoyResolvedStream | null> {
@@ -126,6 +176,9 @@ export async function resolveCinejoyStream(
   if (cinejoyCache.has(cacheKey)) {
     return cinejoyCache.get(cacheKey);
   }
+
+  // Fetch subtitles in parallel with stream resolution
+  const subtitlesPromise = fetchCinejoySubtitles(tmdbId, type, season, episode);
 
   try {
     const isTv = type === 'tv';
@@ -218,14 +271,16 @@ export async function resolveCinejoyStream(
     // Route playlist through local proxy
     const proxiedUrl = `/api/stream-servers/proxy?url=${encodeURIComponent(rawPlaylistUrl)}`;
 
-    const subtitles: CinejoySubtitle[] = [];
+    const externalSubs = await subtitlesPromise;
+    const subtitles: CinejoySubtitle[] = [...externalSubs];
+
     if (Array.isArray(primaryStream.captions)) {
       for (const cap of primaryStream.captions) {
         const subUrl = cap.url || cap.file;
         if (typeof subUrl === 'string') {
           subtitles.push({
             label: cap.label || cap.lang || cap.language || 'English',
-            url: subUrl,
+            url: `/api/stream-servers/proxy?url=${encodeURIComponent(subUrl)}&sub=1`,
             language: cap.lang || cap.language || 'en',
           });
         }
