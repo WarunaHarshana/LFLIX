@@ -126,7 +126,8 @@ export async function POST(req: Request) {
             uri = file.path;
         }
 
-        const download = await downloadManager.addDownload(uri, parsedWatchlistId, validatedDownloadPath);
+        const customFilename = typeof filename === 'string' && filename.trim() ? sanitizeFilename(filename.trim()) : undefined;
+        const download = await downloadManager.addDownload(uri, parsedWatchlistId, validatedDownloadPath, customFilename);
         return NextResponse.json({ success: true, download });
     } catch (e) {
         console.error('Download error:', e);

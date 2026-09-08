@@ -494,6 +494,7 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                 mediaType={downloadItem?.mediaType || 'movie'}
                 posterPath={downloadItem?.posterPath}
                 watchlistId={downloadItem?.id}
+                tmdbId={downloadItem?.tmdbId}
                 onClose={() => setDownloadItem(null)}
             />
 

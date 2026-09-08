@@ -196,7 +196,7 @@ export default function DiscoverDetailPage() {
   const [episodeTrailers, setEpisodeTrailers] = useState<Record<string, TrailerData | null>>({});
 
   const [streamModal, setStreamModal] = useState<{ tmdbId: number; type: 'movie' | 'tv'; title: string; season?: number; episode?: number } | null>(null);
-  const [downloadModal, setDownloadModal] = useState<{ title: string; year?: string | null; mediaType: 'movie' | 'tv'; posterPath?: string | null } | null>(null);
+  const [downloadModal, setDownloadModal] = useState<{ title: string; year?: string | null; mediaType: 'movie' | 'tv'; posterPath?: string | null; tmdbId?: number; season?: number; episode?: number } | null>(null);
   const [trailerModal, setTrailerModal] = useState<TrailerModalState>(null);
   const [isInWatchlist, setIsInWatchlist] = useState(false);
   const [watchlistItemId, setWatchlistItemId] = useState<number | null>(null);
@@ -772,6 +772,7 @@ export default function DiscoverDetailPage() {
                     year: activeDetails?.year || null,
                     mediaType,
                     posterPath: activeDetails?.posterPath || null,
+                    tmdbId: activeDetails?.id || tmdbId || undefined,
                   })}
                   className="px-4 py-3.5 rounded-xl bg-neutral-700/80 hover:bg-neutral-600 text-white font-semibold text-sm sm:text-base inline-flex items-center gap-2 transition"
                 >
@@ -908,6 +909,9 @@ export default function DiscoverDetailPage() {
                               title: `${pageTitle} S${String(selectedSeason || 1).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`,
                               mediaType: 'tv',
                               posterPath: ep.stillPath || activeDetails?.posterPath,
+                              tmdbId: activeDetails?.id || tmdbId || undefined,
+                              season: selectedSeason || 1,
+                              episode: ep.episodeNumber,
                             })}
                             className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold inline-flex items-center gap-1"
                           >
@@ -1166,6 +1170,9 @@ export default function DiscoverDetailPage() {
         year={downloadModal?.year}
         mediaType={downloadModal?.mediaType || 'movie'}
         posterPath={downloadModal?.posterPath}
+        tmdbId={downloadModal?.tmdbId}
+        season={downloadModal?.season}
+        episode={downloadModal?.episode}
         onClose={() => setDownloadModal(null)}
       />
 

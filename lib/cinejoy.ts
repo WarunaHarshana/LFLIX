@@ -3,6 +3,7 @@ import { MemoryCache } from './cache';
 const CINEJOY_ENC_DEC_API = 'https://enc-dec.app/api';
 const CINEJOY_SHEGU_API = 'https://api.shegu.st';
 const CINEJOY_SUBTITLES_API = 'https://subtitles.shegu.st';
+const CINEJOY_DOWNLOADS_API = 'https://downloads.shegu.st';
 
 const CINEJOY_HEADERS = {
   Accept: '*/*',
@@ -19,6 +20,8 @@ const ALLOWED_CDN_DOMAINS = [
   'shegu.st',
   'cinejoy.to',
   'strem.io',
+  'cloudflarestorage.com',
+  'workers.dev',
 ];
 
 // In-memory set of dynamically resolved stream hostnames for the proxy
@@ -308,3 +311,143 @@ export async function resolveCinejoyStream(
     return null;
   }
 }
+
+export type CinejoyDirectDownload = {
+  source: string;
+  name: string;
+  quality: number;
+  qualityLabel: string;
+  qualityTags: string[];
+  size: string;
+  sizeBytes: number;
+  url: string;
+  provider: string;
+};
+
+export function parseDirectDownloadSizeBytes(sizeStr: string): number {
+  const match = sizeStr.match(/^(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB)$/i);
+  if (!match) return 0;
+  const multipliers: Record<string, number> = {
+    KB: 1e3,
+    MB: 1e6,
+    GB: 1e9,
+    TB: 1e12,
+  };
+  const unit = match[2].toUpperCase();
+  return Math.round(parseFloat(match[1]) * (multipliers[unit] ?? 1));
+}
+
+export function parseDirectDownloadQualityTags(name: string): string[] {
+  const sizeMatch = name.match(/\[(\d+(?:\.\d+)?\s*(?:GB|MB|TB|KB))\]/i);
+  const matchedSize = sizeMatch ? sizeMatch[1] : '';
+  const tags = [...name.matchAll(/\[([^\]]+)\]/g)]
+    .map((m) => m[1])
+    .filter((tag) => !matchedSize || tag !== matchedSize)
+    .filter((tag) => !/^(\d{3,4}p|4k)$/i.test(tag.trim()));
+
+  const separated: string[] = [];
+  for (const tag of tags) {
+    const parts = tag.split(/\s+/).filter(Boolean);
+    separated.push(...parts);
+  }
+  return Array.from(new Set(separated));
+}
+
+export function getDirectDownloadQualityLabel(quality: number): string {
+  if (quality >= 2160) return '4K (2160p)';
+  if (quality >= 1440) return '2K (1440p)';
+  if (quality >= 1080) return '1080p';
+  if (quality >= 720) return '720p';
+  if (quality >= 480) return '480p';
+  return `${quality}p`;
+}
+
+const DOWNLOADS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const cinejoyDownloadsCache = new MemoryCache<CinejoyDirectDownload[]>(1, 100);
+
+export async function fetchCinejoyDirectDownloads(
+  tmdbId: number,
+  mediaType: 'movie' | 'tv',
+  season?: number,
+  episode?: number
+): Promise<CinejoyDirectDownload[]> {
+  if (!tmdbId || typeof tmdbId !== 'number' || tmdbId <= 0) {
+    return [];
+  }
+
+  const cacheKey = mediaType === 'movie'
+    ? `dl-movie-${tmdbId}`
+    : `dl-tv-${tmdbId}-${season || 1}-${episode || 1}`;
+
+  const cached = cinejoyDownloadsCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const endpoint = mediaType === 'movie'
+    ? `${CINEJOY_DOWNLOADS_API}/movie/${tmdbId}`
+    : `${CINEJOY_DOWNLOADS_API}/tv/${tmdbId}/${season || 1}/${episode || 1}`;
+
+  try {
+    const res = await fetch(endpoint, {
+      headers: CINEJOY_HEADERS,
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!res.ok) {
+      if (res.status === 404 || res.status === 500) {
+        cinejoyDownloadsCache.set(cacheKey, [], 60_000);
+        return [];
+      }
+      throw new Error(`Direct downloads request failed: HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const rawLinks = Array.isArray(data?.links) ? data.links : [];
+    if (rawLinks.length === 0) {
+      cinejoyDownloadsCache.set(cacheKey, [], 60_000);
+      return [];
+    }
+
+    const seenUrls = new Set<string>();
+    const downloads: CinejoyDirectDownload[] = [];
+
+    for (const link of rawLinks) {
+      const url = typeof link.url === 'string' ? link.url.trim() : '';
+      if (!url || seenUrls.has(url)) continue;
+      seenUrls.add(url);
+
+      registerAllowedCinejoyHost(url);
+
+      const sizeStr = typeof link.size === 'string' ? link.size.trim() : '';
+      const sizeBytes = parseDirectDownloadSizeBytes(sizeStr);
+      const quality = typeof link.quality === 'number' ? link.quality : 1080;
+      const name = typeof link.name === 'string' ? link.name.trim() : '';
+      const source = typeof link.source === 'string' ? link.source.trim() : 'Direct';
+      const provider = typeof link.provider === 'string' ? link.provider.trim() : '';
+
+      downloads.push({
+        source,
+        name,
+        quality,
+        qualityLabel: getDirectDownloadQualityLabel(quality),
+        qualityTags: parseDirectDownloadQualityTags(name),
+        size: sizeStr,
+        sizeBytes,
+        url,
+        provider,
+      });
+    }
+
+    // Sort by resolution descending, then file size descending
+    downloads.sort((a, b) => b.quality - a.quality || b.sizeBytes - a.sizeBytes);
+
+    cinejoyDownloadsCache.set(cacheKey, downloads, DOWNLOADS_CACHE_TTL_MS);
+    return downloads;
+  } catch (error: any) {
+    console.error(`[cinejoy] Direct downloads fetch failed for ${mediaType} ${tmdbId}:`, error.message || error);
+    cinejoyDownloadsCache.set(cacheKey, [], 60_000);
+    return [];
+  }
+}
+

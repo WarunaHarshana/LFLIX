@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
-import { isPathInsideAny } from './security';
+import { isPathInsideAny, sanitizeFilename } from './security';
 
 type DownloadStatus = 'metadata' | 'downloading' | 'stalled' | 'completed' | 'error' | 'paused';
 
@@ -323,12 +323,33 @@ class DownloadManager {
     }
 
     // Start a new download (auto-detects torrent vs HTTP)
-    async addDownload(magnetUri: string, watchlistId?: number, customPath?: string): Promise<DownloadRecord> {
+    async addDownload(magnetUri: string, watchlistId?: number, customPath?: string, customFilename?: string): Promise<DownloadRecord> {
         console.log(`[DownloadManager] addDownload called for: ${magnetUri.substring(0, 30)}...`);
         // Detect HTTP direct download
         if (magnetUri.startsWith('http-direct:')) {
             const url = magnetUri.replace('http-direct:', '');
-            const filename = decodeURIComponent(url.split('/').pop() || 'download');
+            let filename = customFilename ? sanitizeFilename(customFilename) : '';
+            if (!filename) {
+                try {
+                    const parsedUrl = new URL(url);
+                    const disposition = parsedUrl.searchParams.get('response-content-disposition');
+                    if (disposition) {
+                        const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
+                        if (match) filename = sanitizeFilename(decodeURIComponent(match[1]));
+                    }
+                    if (!filename) {
+                        const pathName = parsedUrl.pathname.split('/').pop();
+                        if (pathName && pathName.includes('.')) {
+                            filename = sanitizeFilename(decodeURIComponent(pathName));
+                        }
+                    }
+                } catch {
+                    filename = sanitizeFilename(decodeURIComponent(url.split('/').pop()?.split('?')[0] || ''));
+                }
+            }
+            if (!filename || filename === 'download') {
+                filename = `download_${Date.now()}.mkv`;
+            }
             return this.addHttpDownload(url, filename, watchlistId, customPath);
         }
 
@@ -465,7 +486,8 @@ class DownloadManager {
                     : 0;
                 const requestUrl = activeUrl;
                 const headers: Record<string, string> = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+                    'Referer': 'https://cinejoy.to/',
                 };
                 if (existingBytes > 0) {
                     headers.Range = `bytes=${existingBytes}-`;
