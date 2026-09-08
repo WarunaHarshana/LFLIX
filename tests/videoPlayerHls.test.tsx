@@ -10,11 +10,17 @@ const mockAttachMedia = vi.fn();
 const mockLoadSource = vi.fn();
 const mockOn = vi.fn();
 const mockDestroy = vi.fn();
+const mockStartLoad = vi.fn();
+const mockRecoverMediaError = vi.fn();
+const mockSwapAudioCodec = vi.fn();
 const mockHlsConstructor = vi.fn().mockImplementation(() => ({
   attachMedia: mockAttachMedia,
   loadSource: mockLoadSource,
   on: mockOn,
   destroy: mockDestroy,
+  startLoad: mockStartLoad,
+  recoverMediaError: mockRecoverMediaError,
+  swapAudioCodec: mockSwapAudioCodec,
 }));
 
 let isHlsSupportedMock = vi.fn().mockReturnValue(true);
@@ -114,5 +120,68 @@ describe('VideoPlayer HLS prioritization', () => {
     });
 
     expect(mockHlsConstructor).not.toHaveBeenCalled();
+  });
+
+  it('triggers onFatalError after fatal network errors exceed retry threshold', async () => {
+    let errorHandler: any = null;
+    mockOn.mockImplementation((event: string, callback: any) => {
+      if (event === 'hlsError') {
+        errorHandler = callback;
+      }
+    });
+
+    const onFatalErrorMock = vi.fn();
+    render(
+      <VideoPlayer
+        title="Test Stream"
+        src="https://proxy.example/stream.m3u8"
+        onClose={vi.fn()}
+        onFatalError={onFatalErrorMock}
+      />
+    );
+
+    await waitFor(() => {
+      expect(errorHandler).toBeTruthy();
+    });
+
+    // Fire fatal network error 3 times
+    errorHandler('hlsError', { fatal: true, type: 'networkError' });
+    errorHandler('hlsError', { fatal: true, type: 'networkError' });
+    errorHandler('hlsError', { fatal: true, type: 'networkError' });
+
+    expect(onFatalErrorMock).toHaveBeenCalledWith('hls-network-fatal');
+    expect(mockDestroy).toHaveBeenCalled();
+  });
+
+  it('triggers onPlaybackReady when manifest is parsed', async () => {
+    let manifestHandler: any = null;
+    mockOn.mockImplementation((event: string, callback: any) => {
+      if (event === 'hlsManifestParsed') {
+        manifestHandler = callback;
+      }
+    });
+
+    const onPlaybackReadyMock = vi.fn();
+    render(
+      <VideoPlayer
+        title="Test Stream"
+        src="https://proxy.example/stream.m3u8"
+        onClose={vi.fn()}
+        onPlaybackReady={onPlaybackReadyMock}
+      />
+    );
+
+    await waitFor(() => {
+      expect(manifestHandler).toBeTruthy();
+    });
+
+    manifestHandler('hlsManifestParsed', {
+      levels: [
+        { height: 2160, bitrate: 15000000 },
+        { height: 1080, bitrate: 5000000 },
+      ],
+    });
+
+    expect(onPlaybackReadyMock).toHaveBeenCalled();
   });
 });

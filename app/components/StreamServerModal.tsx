@@ -413,11 +413,8 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
   useEffect(() => {
     if (currentServer?.isDirect) {
-      setIframeLoading(false);
-      setIframeError(false);
       setIframeBootstrapped(true);
-      setPlaybackReady(true);
-      setAutoSwitching(false);
+      setIframeError(false);
     }
   }, [activeServer, currentServer]);
 
@@ -720,10 +717,16 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
                 title={title}
                 subtitles={currentServer.directSubtitles}
                 onClose={onClose}
+                onPlaybackReady={() => {
+                  setIframeLoading(false);
+                  setPlaybackReady(true);
+                  setAutoSwitching(false);
+                }}
                 onFatalError={() => {
                   // A direct source that dies used to leave the viewer on the
                   // player's error screen with no route to the other servers.
                   if (!tryNextServer(activeServer, 'auto')) {
+                    setIframeLoading(false);
                     setIframeError(true);
                   }
                 }}

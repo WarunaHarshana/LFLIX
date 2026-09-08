@@ -137,6 +137,7 @@ type Props = {
   audioCodec?: string | null;
   fileName?: string | null;
   onFatalError?: (reason: string) => void;
+  onPlaybackReady?: () => void;
 };
 
 interface ExtendedHTMLVideoElement extends HTMLVideoElement {
@@ -169,6 +170,7 @@ export default function VideoPlayer({
   audioCodec,
   fileName,
   onFatalError,
+  onPlaybackReady,
 }: Props) {
   const videoRef = useRef<ExtendedHTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -488,6 +490,21 @@ export default function VideoPlayer({
 
     let hls: any;
     let cancelled = false;
+    let connectWatchdog: NodeJS.Timeout | null = null;
+
+    if (onFatalError) {
+      connectWatchdog = setTimeout(() => {
+        if (!cancelled) {
+          try {
+            if (hlsRef.current) hlsRef.current.destroy();
+          } catch {
+            /* ignore */
+          }
+          setError('Stream connection timed out.');
+          onFatalError('connect-timeout');
+        }
+      }, 15000);
+    }
 
     import('hls.js')
       .then(({ default: Hls }) => {
@@ -502,6 +519,12 @@ export default function VideoPlayer({
           hlsRef.current = hls;
 
           hls.on(Hls.Events.MANIFEST_PARSED, (_e: any, data: any) => {
+            if (connectWatchdog) {
+              clearTimeout(connectWatchdog);
+              connectWatchdog = null;
+            }
+            onPlaybackReady?.();
+
             const levels = (data?.levels || []).map((lvl: any, index: number) => {
               const is4k = (lvl.height && lvl.height >= 2160) || (lvl.width && lvl.width >= 3840);
               const label = is4k
@@ -539,13 +562,57 @@ export default function VideoPlayer({
           hls.loadSource(activeSrc);
           hls.attachMedia(videoRef.current);
 
+          let networkErrorRetries = 0;
+          let mediaErrorRetries = 0;
+
           hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
             if (!data?.fatal) return;
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-              hls.startLoad();
+              networkErrorRetries += 1;
+              if (networkErrorRetries <= 2) {
+                hls.startLoad();
+              } else {
+                if (connectWatchdog) {
+                  clearTimeout(connectWatchdog);
+                  connectWatchdog = null;
+                }
+                setError('Playback encountered a network error.');
+                try {
+                  hls.destroy();
+                } catch {
+                  /* ignore */
+                }
+                onFatalError?.('hls-network-fatal');
+              }
             } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-              hls.recoverMediaError();
+              mediaErrorRetries += 1;
+              if (mediaErrorRetries === 1) {
+                hls.recoverMediaError();
+              } else if (mediaErrorRetries === 2) {
+                try {
+                  hls.swapAudioCodec?.();
+                } catch {
+                  /* ignore */
+                }
+                hls.recoverMediaError();
+              } else {
+                if (connectWatchdog) {
+                  clearTimeout(connectWatchdog);
+                  connectWatchdog = null;
+                }
+                setError('Playback encountered a media decode error.');
+                try {
+                  hls.destroy();
+                } catch {
+                  /* ignore */
+                }
+                onFatalError?.('hls-media-fatal');
+              }
             } else {
+              if (connectWatchdog) {
+                clearTimeout(connectWatchdog);
+                connectWatchdog = null;
+              }
               setError('Playback encountered an error.');
               try {
                 hls.destroy();
@@ -563,13 +630,29 @@ export default function VideoPlayer({
           }
           video.play().catch(() => {});
         } else {
+          if (connectWatchdog) {
+            clearTimeout(connectWatchdog);
+            connectWatchdog = null;
+          }
           setError('This browser cannot play the stream.');
+          onFatalError?.('unsupported-browser');
         }
       })
-      .catch(() => setError('Failed to load streaming engine.'));
+      .catch(() => {
+        if (connectWatchdog) {
+          clearTimeout(connectWatchdog);
+          connectWatchdog = null;
+        }
+        setError('Failed to load streaming engine.');
+        onFatalError?.('engine-load-failed');
+      });
 
     return () => {
       cancelled = true;
+      if (connectWatchdog) {
+        clearTimeout(connectWatchdog);
+        connectWatchdog = null;
+      }
       if (hlsRef.current) {
         try {
           hlsRef.current.destroy();
@@ -583,7 +666,7 @@ export default function VideoPlayer({
         videoRef.current.load();
       }
     };
-  }, [activeSrc, isNative, initialTime, onFatalError, reloadKey]);
+  }, [activeSrc, isNative, initialTime, onFatalError, onPlaybackReady, reloadKey]);
 
   // Subtitle auto-discovery / explicit track loading
   useEffect(() => {
@@ -822,11 +905,13 @@ export default function VideoPlayer({
     const onPlaying = () => {
       setIsBuffering(false);
       setLoading(false);
+      onPlaybackReady?.();
     };
     const onCanPlay = () => {
       setLoading(false);
       setIsBuffering(false);
       setError(null);
+      onPlaybackReady?.();
     };
     const onTimeUpdate = () => {
       if (!isScrubbing) {
@@ -864,7 +949,7 @@ export default function VideoPlayer({
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('timeupdate', onTimeUpdate);
     };
-  }, [isNative, isScrubbing, scheduleHideControls]);
+  }, [isNative, isScrubbing, onPlaybackReady, scheduleHideControls]);
 
   // Playback error handler
   const handleError = () => {
@@ -899,6 +984,9 @@ export default function VideoPlayer({
           break;
       }
       setError(friendlyError);
+      if (onFatalError) {
+        onFatalError(`video-error-${errorCode || 'unknown'}`);
+      }
     }
     setLoading(false);
     setIsBuffering(false);
