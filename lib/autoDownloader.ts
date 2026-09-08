@@ -136,6 +136,11 @@ function filterForEpisode(results: TorrentResult[], showTitle: string, season: n
   const showWords = showTitle.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim().split(/\s+/);
 
   return results.filter(r => {
+    // Direct downloads resolved specifically for this episode via TMDB are guaranteed matches
+    if (r.source === 'DDL' && r.magnet.startsWith('http-direct:')) {
+      return true;
+    }
+
     let titleLower = r.title.toLowerCase();
     
     // Remove leading [group] tags
@@ -245,7 +250,12 @@ class AutoDownloader {
     console.log(`[AutoDownloader] Searching for: "${query}"`);
 
     try {
-      const results = await searchTorrents(query, { type: 'tv' });
+      const results = await searchTorrents(query, {
+        type: 'tv',
+        tmdbId: ep.tmdbId,
+        season: ep.seasonNumber,
+        episode: ep.episodeNumber,
+      });
 
       if (!results || results.length === 0) {
         console.log(`[AutoDownloader] No results found for "${query}"`);
@@ -319,8 +329,21 @@ class AutoDownloader {
         return false;
       }
 
+      // Format clean filename for direct downloads
+      let customFilename: string | undefined = undefined;
+      if (best.magnet.startsWith('http-direct:')) {
+        const isJunkName = !best.title || /cinejoy|fsl_server|^4k\s*\[/i.test(best.title);
+        if (!isJunkName) {
+          customFilename = best.title.endsWith('.mkv') || best.title.endsWith('.mp4')
+            ? best.title
+            : `${best.title}.mkv`;
+        } else {
+          customFilename = `${ep.showTitle} S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')} [${best.quality || '1080p'}].mkv`;
+        }
+      }
+
       // Start the download
-      const download = await downloadManager.addDownload(best.magnet);
+      const download = await downloadManager.addDownload(best.magnet, undefined, undefined, customFilename);
 
       // Upsert into episode_releases
       db.prepare(`

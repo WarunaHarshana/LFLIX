@@ -31,8 +31,22 @@ export async function GET(req: Request) {
             return NextResponse.json({ results: [], error: 'Invalid year' }, { status: 400 });
         }
 
+        const tmdbIdParam = searchParams.get('tmdbId')?.trim();
+        const seasonParam = searchParams.get('season')?.trim();
+        const episodeParam = searchParams.get('episode')?.trim();
+
+        const tmdbId = tmdbIdParam ? parseInt(tmdbIdParam, 10) : undefined;
+        const season = seasonParam ? parseInt(seasonParam, 10) : undefined;
+        const episode = episodeParam ? parseInt(episodeParam, 10) : undefined;
+
         const type = typeParam as 'movie' | 'tv' | undefined;
-        const diagnostics = await searchTorrentsWithDiagnostics(query, { year: yearParam, type });
+        const diagnostics = await searchTorrentsWithDiagnostics(query, {
+            year: yearParam,
+            type,
+            tmdbId: Number.isFinite(tmdbId) ? tmdbId : undefined,
+            season: Number.isFinite(season) ? season : undefined,
+            episode: Number.isFinite(episode) ? episode : undefined,
+        });
         const filteredResults = goodOnly && type === 'movie'
             ? diagnostics.results.filter(isGoodMovieReleaseQuality)
             : diagnostics.results;

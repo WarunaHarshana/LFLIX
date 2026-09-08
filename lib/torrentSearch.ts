@@ -3,6 +3,7 @@
  */
 
 import { recordSourceHealth } from './sourceHealth';
+import { fetchCinejoyDirectDownloads } from './cinejoy';
 
 export interface TorrentResult {
     title: string;
@@ -122,7 +123,13 @@ type InternetArchiveMetadataResponse = {
     };
 };
 
-type SearchOptions = { year?: string; type?: 'movie' | 'tv' };
+export type SearchOptions = {
+    year?: string;
+    type?: 'movie' | 'tv';
+    tmdbId?: number;
+    season?: number;
+    episode?: number;
+};
 type SearchCacheEntry = { ts: number; data: TorrentSearchDiagnostics };
 
 // Standard trackers for magnet links
@@ -268,8 +275,8 @@ export function isGoodMovieReleaseQuality(result: Pick<TorrentResult, 'title' | 
         return true;
     }
 
-    // YTS, TorrentsCSV, 1337x, EZTV only publish finished movie encodes, so a resolution-tagged result is acceptable.
-    if ((result.source === 'YTS' || result.source === 'TorrentsCSV' || result.source === '1337x' || result.source === 'EZTV') && /\b(?:720p|1080p|2160p|4k|uhd)\b/i.test(haystack)) {
+    // YTS, TorrentsCSV, 1337x, EZTV, and DDL publish finished digital encodes, so a resolution-tagged result is acceptable.
+    if ((result.source === 'YTS' || result.source === 'TorrentsCSV' || result.source === '1337x' || result.source === 'EZTV' || result.source === 'DDL') && /\b(?:720p|1080p|2160p|4k|uhd)\b/i.test(haystack)) {
         return true;
     }
 
@@ -926,6 +933,9 @@ function getSearchCacheKey(title: string, options?: SearchOptions): string {
         title: normalizeTitle(title),
         year: options?.year || '',
         type: options?.type || '',
+        tmdbId: options?.tmdbId || '',
+        season: options?.season || '',
+        episode: options?.episode || '',
     });
 }
 
@@ -1351,12 +1361,53 @@ async function searchInternetArchive(query: string): Promise<TorrentResult[]> {
     }
 }
 
-async function searchDirectDownloads(query: string, type?: 'movie' | 'tv'): Promise<TorrentResult[]> {
-    const settled = await Promise.allSettled([
+async function searchDirectDownloads(
+    query: string,
+    type?: 'movie' | 'tv',
+    options?: SearchOptions
+): Promise<TorrentResult[]> {
+    const tasks: Promise<TorrentResult[]>[] = [
         searchOpenDirectory(query, type),
         searchInternetArchive(query),
-    ]);
-    const results = settled.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
+    ];
+
+    if (options?.tmdbId && options.tmdbId > 0) {
+        tasks.push(
+            (async () => {
+                try {
+                    const cleanTitle = query.replace(/\s+s\d+e\d+.*$/i, '').trim() || query;
+                    const downloads = await fetchCinejoyDirectDownloads(
+                        options.tmdbId!,
+                        options.type || (options.season ? 'tv' : 'movie'),
+                        options.season,
+                        options.episode,
+                        {
+                            title: cleanTitle,
+                            year: options.year,
+                            season: options.season,
+                            episode: options.episode,
+                        }
+                    );
+                    return downloads.map((dl) => ({
+                        title: dl.name,
+                        magnet: `http-direct:${dl.url}`,
+                        size: dl.size,
+                        sizeBytes: dl.sizeBytes,
+                        seeds: 0,
+                        leeches: 0,
+                        quality: dl.qualityLabel,
+                        source: 'DDL',
+                    }));
+                } catch (e) {
+                    console.error('[TorrentSearch] DDL provider fetch error:', e);
+                    return [];
+                }
+            })()
+        );
+    }
+
+    const settled = await Promise.allSettled(tasks);
+    const results = settled.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
     return dedupeDirectDownloadResults(results).slice(0, 100);
 }
 
@@ -1906,7 +1957,7 @@ export async function searchTorrentsWithDiagnostics(
         runSource('1337x', 11000, () => search1337x(query, options), { query }),
         runSource('Knaben', 9000, () => searchKnaben(query), { query }),
         runSource('Nyaa', 10000, () => searchNyaa(query), { query }),
-        runSource('DDL', 14000, () => searchDirectDownloads(title, options?.type), { query: title }),
+        runSource('DDL', 14000, () => searchDirectDownloads(title, options?.type, options), { query: title }),
     ]);
 
     const psaResults = psaSource.results;
@@ -1959,8 +2010,13 @@ export async function searchTorrentsWithDiagnostics(
     // Filter by relevance to search query — removes random/unrelated results
     const relevant = filterByRelevance(unique, title, 25, { year: options?.year, type: options?.type });
 
-    // Apply the same relevance/year filtering to DDL fallback results.
-    const relevantDdl = filterByRelevance(ddlResults, title, 15, { year: options?.year, type: options?.type });
+    // Apply the same relevance/year filtering to DDL fallback results, preserving verified TMDB direct stream results
+    const relevantDdl = ddlResults.filter(r => {
+        if (options?.tmdbId && r.magnet.startsWith('http-direct:')) {
+            return true;
+        }
+        return filterByRelevance([r], title, 15, { year: options?.year, type: options?.type }).length > 0;
+    });
 
     // Deduplicate merged result set.
     const merged = [...relevant, ...relevantDdl];

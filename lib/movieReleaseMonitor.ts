@@ -264,6 +264,7 @@ class MovieReleaseMonitor {
     const results = await searchTorrents(searchTitle, {
       type: 'movie',
       year: movie.year || undefined,
+      tmdbId: movie.tmdbId,
     });
 
     // Upsert movie_releases row
