@@ -87,9 +87,30 @@ export async function GET(req: NextRequest) {
       'Cache-Control': 'public, max-age=3600',
     };
 
-    if (contentType) responseHeaders['Content-Type'] = contentType;
+    let effectiveContentType = contentType;
+    const pathname = parsedUrl.pathname.toLowerCase();
+    if (
+      pathname.endsWith('.html') ||
+      pathname.endsWith('.m4s') ||
+      pathname.endsWith('.mp4') ||
+      pathname.includes('video_') ||
+      pathname.includes('audio_') ||
+      contentType.includes('text/html')
+    ) {
+      effectiveContentType = 'video/mp4';
+    } else if (pathname.endsWith('.ts')) {
+      effectiveContentType = 'video/mp2t';
+    }
+
+    if (effectiveContentType) responseHeaders['Content-Type'] = effectiveContentType;
+
+    const contentEncoding = upstreamRes.headers.get('content-encoding');
     const contentLength = upstreamRes.headers.get('content-length');
-    if (contentLength) responseHeaders['Content-Length'] = contentLength;
+    // Only forward content-length if fetch did not decompress the body (e.g. uncompressed)
+    if (contentLength && !contentEncoding) {
+      responseHeaders['Content-Length'] = contentLength;
+    }
+
     const contentRange = upstreamRes.headers.get('content-range');
     if (contentRange) responseHeaders['Content-Range'] = contentRange;
     const acceptRanges = upstreamRes.headers.get('accept-ranges');

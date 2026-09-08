@@ -44,7 +44,30 @@ export function rankServersByQuality<T extends RankableServer>(servers: T[]): T[
       return reachableDiff;
     }
 
-    // 2. Confirmed availability beats merely-assumed availability.
+    // 2. Cinejoy Priority (if reachable).
+    // Cinejoy direct HLS streams have priority to play first (Lisbon 4K first, then Nebula).
+    const aIsCinejoy = a.id.startsWith('cinejoy');
+    const bIsCinejoy = b.id.startsWith('cinejoy');
+    if (aIsCinejoy || bIsCinejoy) {
+      if (aIsCinejoy && !bIsCinejoy) return -1;
+      if (!aIsCinejoy && bIsCinejoy) return 1;
+
+      // Both are Cinejoy: prefer higher quality (4K Lisbon > 1080p Nebula)
+      const qualityDiff = QUALITY_RANK[b.qualityHint] - QUALITY_RANK[a.qualityHint];
+      if (qualityDiff !== 0) {
+        return qualityDiff;
+      }
+
+      const latencyA = Number.isFinite(a.latencyMs) ? a.latencyMs : Number.MAX_SAFE_INTEGER;
+      const latencyB = Number.isFinite(b.latencyMs) ? b.latencyMs : Number.MAX_SAFE_INTEGER;
+      if (latencyA !== latencyB) {
+        return latencyA - latencyB;
+      }
+
+      return a.order - b.order;
+    }
+
+    // 3. Confirmed availability beats merely-assumed availability.
     //    A client-rendered host returns the same shell whether or not it has
     //    the title, so its "reachable" is an assumption, not evidence. Ranking
     //    it level with a host whose response actually varied would auto-start

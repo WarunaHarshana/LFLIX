@@ -800,32 +800,55 @@ export async function GET(req: Request) {
     };
 
     responseServers.sort((a, b) => {
-      // 1. Quality Resolution (highest quality first)
-      const qualityDiff = getQualityRank(b.qualityHint) - getQualityRank(a.qualityHint);
-      if (qualityDiff !== 0) {
-        return qualityDiff;
-      }
-
-      // 2. Reachability (reachable first)
+      // 1. Reachability (reachable first)
       const reachableDiff = Number(b.isReachable) - Number(a.isReachable);
       if (reachableDiff !== 0) {
         return reachableDiff;
       }
 
-      // 3. Direct Streams (direct first)
+      // 2. Cinejoy Priority (if reachable)
+      // Cinejoy direct HLS streams play first (Lisbon 4K first, then Nebula 1080p).
+      const aIsCinejoy = a.id.startsWith('cinejoy');
+      const bIsCinejoy = b.id.startsWith('cinejoy');
+      if (aIsCinejoy || bIsCinejoy) {
+        if (aIsCinejoy && !bIsCinejoy) return -1;
+        if (!aIsCinejoy && bIsCinejoy) return 1;
+
+        // Both Cinejoy: prefer higher quality (4K Lisbon > 1080p Nebula)
+        const qualityDiff = getQualityRank(b.qualityHint) - getQualityRank(a.qualityHint);
+        if (qualityDiff !== 0) {
+          return qualityDiff;
+        }
+
+        const latencyA = Number.isFinite(a.latencyMs) ? a.latencyMs : Number.MAX_SAFE_INTEGER;
+        const latencyB = Number.isFinite(b.latencyMs) ? b.latencyMs : Number.MAX_SAFE_INTEGER;
+        if (latencyA !== latencyB) {
+          return latencyA - latencyB;
+        }
+
+        return a.order - b.order;
+      }
+
+      // 3. Quality Resolution (highest quality first)
+      const qualityDiff = getQualityRank(b.qualityHint) - getQualityRank(a.qualityHint);
+      if (qualityDiff !== 0) {
+        return qualityDiff;
+      }
+
+      // 4. Direct Streams (direct first)
       if (a.isDirect !== b.isDirect) {
         if (a.isDirect && a.isReachable) return -1;
         if (b.isDirect && b.isReachable) return 1;
       }
 
-      // 4. Source Tier (best > great > good > ok)
+      // 5. Source Tier (best > great > good > ok)
       const tierRankA = a.tier ? (TIER_RANK[a.tier] ?? 1) : 1;
       const tierRankB = b.tier ? (TIER_RANK[b.tier] ?? 1) : 1;
       if (tierRankB !== tierRankA) {
         return tierRankB - tierRankA;
       }
 
-      // 5. Latency (lower latency first)
+      // 6. Latency (lower latency first)
       const latencyA = Number.isFinite(a.latencyMs) ? a.latencyMs : Number.MAX_SAFE_INTEGER;
       const latencyB = Number.isFinite(b.latencyMs) ? b.latencyMs : Number.MAX_SAFE_INTEGER;
       if (latencyA !== latencyB) {

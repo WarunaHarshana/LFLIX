@@ -23,6 +23,18 @@ export class MemoryCache<T> {
     this.cache.set(key, { data, expiresAt, lastAccessed: Date.now() });
   }
 
+  has(key: string): boolean {
+    const item = this.cache.get(key);
+    if (!item) return false;
+
+    if (Date.now() > item.expiresAt) {
+      this.cache.delete(key);
+      return false;
+    }
+
+    return true;
+  }
+
   get(key: string): T | null {
     const item = this.cache.get(key);
     if (!item) return null;

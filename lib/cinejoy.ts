@@ -123,9 +123,8 @@ export async function resolveCinejoyStream(
   } = params;
 
   const cacheKey = `cinejoy:${server}:${type}:${tmdbId}:${season ?? 1}:${episode ?? 1}`;
-  const cached = cinejoyCache.get(cacheKey);
-  if (cached !== undefined) {
-    return cached;
+  if (cinejoyCache.has(cacheKey)) {
+    return cinejoyCache.get(cacheKey);
   }
 
   try {
@@ -147,7 +146,7 @@ export async function resolveCinejoyStream(
     const encRes = await fetch(
       `${CINEJOY_ENC_DEC_API}/enc-cinejoy?url=${encodeURIComponent(targetUrl)}`,
       {
-        signal: AbortSignal.timeout(3500),
+        signal: AbortSignal.timeout(6000),
       }
     );
 
@@ -171,7 +170,7 @@ export async function resolveCinejoyStream(
       method: 'POST',
       body: Buffer.from(data, 'base64url'),
       headers: CINEJOY_HEADERS,
-      signal: AbortSignal.timeout(3500),
+      signal: AbortSignal.timeout(6000),
     });
 
     if (!gRes.ok) {
@@ -190,7 +189,7 @@ export async function resolveCinejoyStream(
         text: gBuffer.toString('base64url'),
         state,
       }),
-      signal: AbortSignal.timeout(3500),
+      signal: AbortSignal.timeout(6000),
     });
 
     if (!decRes.ok) {

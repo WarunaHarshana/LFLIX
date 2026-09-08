@@ -88,6 +88,25 @@ describe('rankServersByQuality', () => {
     rankServersByQuality(list);
     expect(list.map((s) => s.id)).toEqual(before);
   });
+
+  it('gives priority to reachable Cinejoy servers to play first', () => {
+    const list = [
+      server({ id: 'vidsrc-wtf', qualityHint: '1080p', tier: 'best', latencyMs: 50 }),
+      server({ id: 'vidlink', qualityHint: '2160p', tier: 'great', latencyMs: 30 }),
+      server({ id: 'cinejoy-nebula', qualityHint: '1080p', isDirect: true }),
+      server({ id: 'cinejoy-lisbon', qualityHint: '2160p', isDirect: true }),
+    ];
+    // Cinejoy Lisbon 4K first, Cinejoy Nebula 1080p second, then other servers
+    expect(order(list)).toEqual(['cinejoy-lisbon', 'cinejoy-nebula', 'vidlink', 'vidsrc-wtf']);
+  });
+
+  it('does not prioritize an unreachable Cinejoy server over a reachable one', () => {
+    const list = [
+      server({ id: 'cinejoy-lisbon', qualityHint: '2160p', isDirect: true, isReachable: false }),
+      server({ id: 'flux', qualityHint: '1080p', isReachable: true }),
+    ];
+    expect(order(list)[0]).toBe('flux');
+  });
 });
 
 describe('unverifiable availability', () => {

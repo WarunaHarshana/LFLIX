@@ -502,14 +502,29 @@ export default function VideoPlayer({
           hlsRef.current = hls;
 
           hls.on(Hls.Events.MANIFEST_PARSED, (_e: any, data: any) => {
-            const levels = (data?.levels || []).map((lvl: any, index: number) => ({
-              index,
-              label: lvl.height ? `${lvl.height}p` : `${Math.round((lvl.bitrate || 0) / 1000)}k`,
-              height: lvl.height || 0,
-              bitrate: lvl.bitrate || 0,
-            }));
+            const levels = (data?.levels || []).map((lvl: any, index: number) => {
+              const is4k = (lvl.height && lvl.height >= 2160) || (lvl.width && lvl.width >= 3840);
+              const label = is4k
+                ? '4K (2160p)'
+                : lvl.height
+                  ? `${lvl.height}p`
+                  : `${Math.round((lvl.bitrate || 0) / 1000)}k`;
+              return {
+                index,
+                label,
+                height: lvl.height || 0,
+                bitrate: lvl.bitrate || 0,
+              };
+            });
             levels.sort((x: any, y: any) => y.height - x.height || y.bitrate - x.bitrate);
             setQualityLevels(levels);
+
+            // If a 4K level is available (e.g. Cinejoy Lisbon), prefer 4K quality by default
+            const fourKLevel = levels.find((l: any) => l.height >= 2160);
+            if (fourKLevel) {
+              hls.currentLevel = fourKLevel.index;
+              setPreferredLevel(fourKLevel.index);
+            }
 
             if (initialTime > 0 && videoRef.current) {
               videoRef.current.currentTime = initialTime;
