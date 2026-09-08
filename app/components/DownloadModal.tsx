@@ -50,6 +50,65 @@ type Props = {
     onDownloadStarted?: () => void;
 };
 
+function isDDL(result: TorrentResult): boolean {
+    return result.source === 'DDL' || result.magnet.startsWith('http-direct:');
+}
+
+function qualityColor(q: string): string {
+    const ql = q.toLowerCase();
+    if (ql.includes('2160') || ql.includes('4k')) return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+    if (ql.includes('1080')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+    if (ql.includes('720')) return 'bg-green-500/20 text-green-400 border-green-500/30';
+    return 'bg-neutral-700/50 text-neutral-400 border-neutral-600';
+}
+
+function sourceBadge(result: TorrentResult): { label: string; className: string } {
+    const source = result.source.toUpperCase();
+    if (source === 'DDL') {
+        return { label: '⚡ Direct DDL', className: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold' };
+    }
+    if (source === 'PSA') {
+        return { label: 'PSA', className: 'bg-pink-500/20 text-pink-300 border border-pink-500/40 font-bold' };
+    }
+    if (source === 'YTS') {
+        return { label: 'YTS', className: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' };
+    }
+    return { label: result.source, className: 'bg-neutral-700/50 text-neutral-500' };
+}
+
+/** Extract format tags (HDR, IMAX, Remux, Atmos, etc.) from a title */
+function extractTags(title: string): { label: string; className: string }[] {
+    const tags: { label: string; className: string }[] = [];
+
+    // Video format tags
+    if (/\bDOVI\b|\bDV\b|DOLBY[\s.-]?VISION/i.test(title))
+        tags.push({ label: 'DV', className: 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30' });
+    if (/\bHDR10\+|HDR10PLUS/i.test(title))
+        tags.push({ label: 'HDR10+', className: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' });
+    else if (/\bHDR10\b/i.test(title))
+        tags.push({ label: 'HDR10', className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' });
+    else if (/\bHDR\b/i.test(title))
+        tags.push({ label: 'HDR', className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' });
+    if (/\bIMAX\b/i.test(title))
+        tags.push({ label: 'IMAX', className: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' });
+    if (/\bREMUX\b/i.test(title))
+        tags.push({ label: 'Remux', className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' });
+
+    // Audio format tags
+    if (/\bATMOS\b/i.test(title))
+        tags.push({ label: 'Atmos', className: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' });
+    if (/\bDTS[\s.-]?HD/i.test(title))
+        tags.push({ label: 'DTS-HD', className: 'bg-sky-500/20 text-sky-400 border-sky-500/30' });
+    if (/\bTRUEHD\b|\bTRUE[\s.-]?HD\b/i.test(title))
+        tags.push({ label: 'TrueHD', className: 'bg-sky-500/20 text-sky-400 border-sky-500/30' });
+
+    // If no HDR/DV tag found, label as SDR
+    if (!tags.some(t => ['DV', 'HDR10+', 'HDR10', 'HDR'].includes(t.label)))
+        tags.push({ label: 'SDR', className: 'bg-neutral-600/30 text-neutral-400 border-neutral-600/40' });
+
+    return tags;
+}
+
 export default function DownloadModal({ isOpen, title, year, mediaType, posterPath, watchlistId, tmdbId, season, episode, onClose, onDownloadStarted }: Props) {
     const modalRef = useModalBehavior(isOpen, onClose, { trapFocus: true });
 
@@ -69,14 +128,18 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     const [selectedFolder, setSelectedFolder] = useState<string>('');
     const [sortBy, setSortBy] = useState<SortMode>('seeds');
 
+    const pureTorrentResults = useMemo(() => {
+        return results.filter((r) => !isDDL(r));
+    }, [results]);
+
     const sortedResults = useMemo(() => {
-        const sorted = [...results];
+        const sorted = [...pureTorrentResults];
         switch (sortBy) {
             case 'size_asc': return sorted.sort((a, b) => a.sizeBytes - b.sizeBytes);
             case 'size_desc': return sorted.sort((a, b) => b.sizeBytes - a.sizeBytes);
             default: return sorted.sort((a, b) => b.seeds - a.seeds);
         }
-    }, [results, sortBy]);
+    }, [pureTorrentResults, sortBy]);
 
     // Fetch folders + auto-search on open
     useEffect(() => {
@@ -130,7 +193,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
 
                 // Convert any DDL / http-direct results into DirectDownloadItems and merge into directDownloads
                 const ddlItems: DirectDownloadItem[] = torrentList
-                    .filter((r) => r.source === 'DDL' || r.magnet.startsWith('http-direct:'))
+                    .filter(isDDL)
                     .map((r) => {
                         const rawUrl = r.magnet.replace(/^http-direct:/, '');
                         return {
@@ -262,64 +325,6 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         }
     };
 
-    const qualityColor = (q: string) => {
-        const ql = q.toLowerCase();
-        if (ql.includes('2160') || ql.includes('4k')) return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-        if (ql.includes('1080')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-        if (ql.includes('720')) return 'bg-green-500/20 text-green-400 border-green-500/30';
-        return 'bg-neutral-700/50 text-neutral-400 border-neutral-600';
-    };
-
-    const isDDL = (result: TorrentResult) => result.source === 'DDL';
-
-    const sourceBadge = (result: TorrentResult): { label: string; className: string } => {
-        const source = result.source.toUpperCase();
-        if (source === 'DDL') {
-            return { label: '⚡ Direct DDL', className: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold' };
-        }
-        if (source === 'PSA') {
-            return { label: 'PSA', className: 'bg-pink-500/20 text-pink-300 border border-pink-500/40 font-bold' };
-        }
-        if (source === 'YTS') {
-            return { label: 'YTS', className: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' };
-        }
-        return { label: result.source, className: 'bg-neutral-700/50 text-neutral-500' };
-    };
-
-    /** Extract format tags (HDR, IMAX, Remux, Atmos, etc.) from a title */
-    const extractTags = (title: string): { label: string; className: string }[] => {
-        const t = title.toUpperCase();
-        const tags: { label: string; className: string }[] = [];
-
-        // Video format tags
-        if (/\bDOVI\b|\bDV\b|DOLBY[\s.-]?VISION/i.test(title))
-            tags.push({ label: 'DV', className: 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30' });
-        if (/\bHDR10\+|HDR10PLUS/i.test(title))
-            tags.push({ label: 'HDR10+', className: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' });
-        else if (/\bHDR10\b/i.test(title))
-            tags.push({ label: 'HDR10', className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' });
-        else if (/\bHDR\b/i.test(title))
-            tags.push({ label: 'HDR', className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' });
-        if (/\bIMAX\b/i.test(title))
-            tags.push({ label: 'IMAX', className: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' });
-        if (/\bREMUX\b/i.test(title))
-            tags.push({ label: 'Remux', className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' });
-
-        // Audio format tags
-        if (/\bATMOS\b/i.test(title))
-            tags.push({ label: 'Atmos', className: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' });
-        if (/\bDTS[\s.-]?HD/i.test(title))
-            tags.push({ label: 'DTS-HD', className: 'bg-sky-500/20 text-sky-400 border-sky-500/30' });
-        if (/\bTRUEHD\b|\bTRUE[\s.-]?HD\b/i.test(title))
-            tags.push({ label: 'TrueHD', className: 'bg-sky-500/20 text-sky-400 border-sky-500/30' });
-
-        // If no HDR/DV tag found, label as SDR
-        if (!tags.some(t => ['DV', 'HDR10+', 'HDR10', 'HDR'].includes(t.label)))
-            tags.push({ label: 'SDR', className: 'bg-neutral-600/30 text-neutral-400 border-neutral-600/40' });
-
-        return tags;
-    };
-
     if (!isOpen) return null;
 
     return (
@@ -408,9 +413,9 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                         <span>Torrents</span>
                         {searching ? (
                             <Loader2 className="w-3 h-3 animate-spin ml-1 text-neutral-500" />
-                        ) : results.length > 0 ? (
+                        ) : pureTorrentResults.length > 0 ? (
                             <span className="ml-1 px-1.5 py-0.5 rounded-full bg-neutral-800 text-neutral-300 text-[10px] font-bold border border-neutral-700">
-                                {results.length}
+                                {pureTorrentResults.length}
                             </span>
                         ) : null}
                     </button>
@@ -541,7 +546,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                         onClick={() => setActiveTab('torrents')}
                                         className="mt-3 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-medium rounded-lg transition"
                                     >
-                                        Switch to Torrents ({results.length})
+                                        Switch to Torrents ({pureTorrentResults.length})
                                     </button>
                                 </div>
                             )}
@@ -557,10 +562,10 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                             )}
 
                             {/* Torrent Results */}
-                            {!searching && searched && results.length > 0 && (
+                            {!searching && searched && pureTorrentResults.length > 0 && (
                                 <>
                                     <div className="flex items-center justify-between">
-                                        <h3 className="text-sm font-semibold text-neutral-300">{results.length} torrents found</h3>
+                                        <h3 className="text-sm font-semibold text-neutral-300">{pureTorrentResults.length} torrent{pureTorrentResults.length === 1 ? '' : 's'} found</h3>
                                         <div className="flex items-center gap-1">
                                             <ArrowUpDown className="w-3 h-3 text-neutral-500 mr-0.5" />
                                             {(['seeds', 'size_desc', 'size_asc'] as SortMode[]).map(mode => (
@@ -590,66 +595,19 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                                 <span key={ti} className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${tag.className}`}>{tag.label}</span>
                                                             ))}
                                                             <span className="text-neutral-400">{result.size}</span>
-                                                            {!isDDL(result) && <span className="text-green-500">↑{result.seeds}</span>}
-                                                            {!isDDL(result) && <span className="text-red-400">↓{result.leeches}</span>}
+                                                            <span className="text-green-500">↑{result.seeds}</span>
+                                                            <span className="text-red-400">↓{result.leeches}</span>
                                                             <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
                                                         </div>
                                                     </div>
-                                                    {isDDL(result) ? (
-                                                        <div className="flex items-center gap-1.5 self-end sm:self-center flex-shrink-0">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => copyLink(result.magnet.replace(/^http-direct:/, ''))}
-                                                                className="px-2.5 py-2 bg-neutral-700/80 hover:bg-neutral-700 text-neutral-300 hover:text-white rounded-lg text-xs transition border border-neutral-600/50 flex items-center gap-1"
-                                                                title="Copy direct download link"
-                                                                aria-label="Copy direct download link"
-                                                            >
-                                                                {copiedUrl === result.magnet.replace(/^http-direct:/, '') ? (
-                                                                    <>
-                                                                        <Check className="w-3.5 h-3.5 text-green-400" />
-                                                                        <span className="text-[11px] text-green-400 font-medium">Copied</span>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <Copy className="w-3.5 h-3.5" />
-                                                                        <span className="text-[11px]">Copy</span>
-                                                                    </>
-                                                                )}
-                                                            </button>
-
-                                                            <a
-                                                                href={result.magnet.replace(/^http-direct:/, '')}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                download
-                                                                className="px-2.5 py-2 bg-neutral-700/80 hover:bg-neutral-700 text-white font-medium rounded-lg text-xs flex items-center gap-1.5 transition border border-neutral-600/50"
-                                                                title="Download directly in browser"
-                                                            >
-                                                                <ExternalLink className="w-3.5 h-3.5" />
-                                                                <span className="text-[11px] hidden sm:inline">Browser</span>
-                                                            </a>
-
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => startDownload(result.magnet)}
-                                                                disabled={downloading !== null}
-                                                                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
-                                                                title="Download directly to library folder"
-                                                            >
-                                                                {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                                                                <span>To Library</span>
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => startDownload(result.magnet)}
-                                                            disabled={downloading !== null}
-                                                            className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
-                                                        >
-                                                            {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                                                            Download
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        onClick={() => startDownload(result.magnet)}
+                                                        disabled={downloading !== null}
+                                                        className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-600 text-black font-semibold rounded-lg text-xs flex items-center gap-1.5 transition flex-shrink-0"
+                                                    >
+                                                        {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                                        Download
+                                                    </button>
                                                 </div>
                                             );
                                         })}
@@ -658,7 +616,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                             )}
 
                             {/* No torrent results */}
-                            {!searching && searched && results.length === 0 && !error && (
+                            {!searching && searched && pureTorrentResults.length === 0 && !error && (
                                 <div className="text-center py-8">
                                     <Search className="w-10 h-10 text-neutral-700 mx-auto mb-3" />
                                     <p className="text-neutral-400 text-sm">No torrents found for &quot;{title}&quot;</p>
