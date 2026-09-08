@@ -15,6 +15,7 @@ import {
   isSampleClip,
   isVideoFile,
 } from './mediaNaming';
+import { isItemPartOfActiveDownload } from './mediaOrganizer';
 
 // Re-exported so existing importers (app/api/scan) keep working unchanged.
 export { isVideoFile } from './mediaNaming';
@@ -26,6 +27,9 @@ export function getVideoFiles(dir: string, fileList: string[] = []): string[] {
   for (const file of files) {
     const filePath = path.join(dir, file);
     try {
+      if (isItemPartOfActiveDownload(filePath)) {
+        continue;
+      }
       const stat = fs.statSync(filePath);
       if (stat.isDirectory()) {
         getVideoFiles(filePath, fileList);
@@ -52,6 +56,10 @@ export async function scanFile(filePath: string): Promise<{ added: boolean; erro
 
     if (!fs.existsSync(filePath)) {
       return { added: false, error: 'File not found' };
+    }
+
+    if (isItemPartOfActiveDownload(filePath)) {
+      return { added: false };
     }
 
     const fileName = path.basename(filePath);

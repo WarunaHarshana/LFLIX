@@ -67,6 +67,10 @@ class FolderWatcher {
             // Skip if already indexed
             if (this.isAlreadyIndexed(filePath)) continue;
 
+            // Skip if currently part of an active or paused download
+            const { isItemPartOfActiveDownload } = await import('./mediaOrganizer');
+            if (isItemPartOfActiveDownload(filePath)) continue;
+
             // Find which folder this file belongs to
             const folder = folders.find(f => filePath.startsWith(f.folderPath));
 

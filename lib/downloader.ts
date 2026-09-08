@@ -78,14 +78,12 @@ class DownloadManager {
     // Public recovery method — re-attaches in-progress torrents after a server restart
     async recoverAll(): Promise<void> {
         try {
-            // Only recover downloads that have been stale for more than 30 seconds
-            // (fresh downloads that are still initializing shouldn't be touched).
+            // Re-attach all in-progress torrent downloads on server start that aren't currently active
             const staleDownloads = db.prepare(
                 `SELECT id, magnetUri, status, infoHash, name, downloadPath, startedAt 
                  FROM downloads 
                  WHERE status IN ('metadata', 'downloading', 'stalled') 
-                 AND magnetUri NOT LIKE 'http-direct:%'
-                 AND datetime(COALESCE(stateUpdatedAt, startedAt)) < datetime('now', '-15 seconds')`
+                 AND magnetUri NOT LIKE 'http-direct:%'`
             ).all() as any[];
 
             if (staleDownloads.length === 0) {
@@ -955,9 +953,12 @@ class DownloadManager {
                 }
 
                 const hasMetadata = this.hasTorrentMetadata(torrent);
-                const progress = hasMetadata ? Math.round((torrent.progress || 0) * 10000) / 100 : 0;
+                const isReady = Boolean(torrent.ready);
+                const rawProgress = hasMetadata ? Math.round((torrent.progress || 0) * 10000) / 100 : 0;
+                // While WebTorrent is verifying pieces on disk (before 'ready'), preserve known progress
+                const progress = isReady ? rawProgress : Math.max(rawProgress, record.progress || 0);
                 const downloadSpeed = Math.round(torrent.downloadSpeed || 0);
-                const downloadedSize = torrent.downloaded || 0;
+                const downloadedSize = isReady ? (torrent.downloaded || 0) : Math.max(torrent.downloaded || 0, record.downloadedSize || 0);
                 const totalSize = torrent.length || record.totalSize || 0;
                 const madeProgress = downloadedSize > (record.downloadedSize || 0) || downloadSpeed > 0;
                 const lastProgressAt = record.lastProgressAt ? new Date(record.lastProgressAt).getTime() : Date.now();

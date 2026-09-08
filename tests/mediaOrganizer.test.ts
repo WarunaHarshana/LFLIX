@@ -17,6 +17,7 @@ import {
   organizeLooseMediaInDownloads,
   cleanupJunkDirectory,
   cleanupEmptyMediaDirectories,
+  isItemPartOfActiveDownload,
 } from '@/lib/mediaOrganizer';
 
 describe('mediaOrganizer', () => {
@@ -566,6 +567,94 @@ describe('mediaOrganizer', () => {
       expect(result.organizedShows).toBe(0);
       expect(fs.existsSync(movieFile)).toBe(true);
       expect(fs.existsSync(tvFile)).toBe(true);
+    });
+  });
+
+  describe('active download protection', () => {
+    afterEach(() => {
+      db.prepare("DELETE FROM downloads WHERE magnetUri LIKE 'magnet:?xt=urn:btih:test%'").run();
+    });
+
+    it('isItemPartOfActiveDownload recognizes files and folders belonging to active/paused downloads', () => {
+      db.prepare(`
+        INSERT INTO downloads (magnetUri, name, status, downloadPath) 
+        VALUES ('magnet:?xt=urn:btih:test1&dn=Gladiator.II.2024.1080p', 'Gladiator.II.2024.1080p', 'downloading', ?)
+      `).run(tempDir);
+
+      const folderPath = path.join(tempDir, 'Gladiator.II.2024.1080p');
+      const fileInside = path.join(folderPath, 'Gladiator.II.2024.mkv');
+      const unrelated = path.join(tempDir, 'Some.Other.Movie.2024.mkv');
+
+      expect(isItemPartOfActiveDownload(folderPath)).toBe(true);
+      expect(isItemPartOfActiveDownload(fileInside)).toBe(true);
+      expect(isItemPartOfActiveDownload(unrelated)).toBe(false);
+    });
+
+    it('organizeLooseMoviesInDownloads skips active torrent files and folders', async () => {
+      const activeFolder = path.join(tempDir, 'Inception.2010.1080p');
+      fs.mkdirSync(activeFolder, { recursive: true });
+      const activeVideo = path.join(activeFolder, 'Inception.2010.mkv');
+      fs.writeFileSync(activeVideo, 'partial-data');
+
+      db.prepare(`
+        INSERT INTO downloads (magnetUri, name, status, downloadPath) 
+        VALUES ('magnet:?xt=urn:btih:test2', 'Inception.2010.1080p', 'downloading', ?)
+      `).run(tempDir);
+
+      const looseFinished = path.join(tempDir, 'Dune.2021.1080p.mkv');
+      fs.writeFileSync(looseFinished, 'finished-data');
+
+      const result = await organizeLooseMoviesInDownloads(tempDir);
+
+      // Active download must not be touched or deleted
+      expect(fs.existsSync(activeVideo)).toBe(true);
+      expect(fs.existsSync(activeFolder)).toBe(true);
+
+      // Loose finished file should be organized
+      expect(result.organized).toBe(1);
+      const organizedDune = path.join(tempDir, 'Movies', 'Dune (2021)', 'Dune (2021).mkv');
+      expect(fs.existsSync(organizedDune)).toBe(true);
+    });
+
+    it('organizeLooseTvShowsInDownloads skips active torrent TV episodes and folders', async () => {
+      const activeTvFolder = path.join(tempDir, 'Severance.S01.1080p');
+      fs.mkdirSync(activeTvFolder, { recursive: true });
+      const activeEp = path.join(activeTvFolder, 'Severance.S01E01.mkv');
+      fs.writeFileSync(activeEp, 'partial-tv-data');
+
+      db.prepare(`
+        INSERT INTO downloads (magnetUri, name, status, downloadPath) 
+        VALUES ('magnet:?xt=urn:btih:test3', 'Severance.S01.1080p', 'downloading', ?)
+      `).run(tempDir);
+
+      const looseTvEp = path.join(tempDir, 'Succession.S01E01.mkv');
+      fs.writeFileSync(looseTvEp, 'finished-tv-data');
+
+      const result = await organizeLooseTvShowsInDownloads(tempDir);
+
+      // Active TV download must not be moved or deleted
+      expect(fs.existsSync(activeEp)).toBe(true);
+      expect(fs.existsSync(activeTvFolder)).toBe(true);
+
+      // Loose finished TV episode should be organized
+      expect(result.organized).toBe(1);
+      const organizedSuccession = path.join(tempDir, 'TV Shows', 'Succession', 'Season 1', 'Succession.S01E01.mkv');
+      expect(fs.existsSync(organizedSuccession)).toBe(true);
+    });
+
+    it('cleanupJunkDirectory does not delete directories of active/paused downloads', () => {
+      const activeDir = path.join(tempDir, 'Active.Torrent.2025');
+      fs.mkdirSync(activeDir, { recursive: true });
+      fs.writeFileSync(path.join(activeDir, 'sample.nfo'), 'info');
+
+      db.prepare(`
+        INSERT INTO downloads (magnetUri, name, status, downloadPath) 
+        VALUES ('magnet:?xt=urn:btih:test4', 'Active.Torrent.2025', 'paused', ?)
+      `).run(tempDir);
+
+      const cleaned = cleanupJunkDirectory(activeDir, tempDir);
+      expect(cleaned).toBe(false);
+      expect(fs.existsSync(activeDir)).toBe(true);
     });
   });
 });

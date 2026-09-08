@@ -142,6 +142,91 @@ export function getDownloadRootDir(baseDownloadPath?: string): string {
 }
 
 /**
+ * Check if a file or directory path belongs to an in-progress, paused, or stalled download.
+ * Prevents media organization and file watching routines from moving or deleting partial downloads.
+ */
+export function isItemPartOfActiveDownload(itemPath: string): boolean {
+  if (!itemPath) return false;
+
+  try {
+    const resolvedItem = path.resolve(itemPath).toLowerCase();
+
+    // Query non-completed downloads from database
+    const activeDownloads = db.prepare(`
+      SELECT name, magnetUri, downloadPath 
+      FROM downloads 
+      WHERE status IN ('metadata', 'downloading', 'stalled', 'paused', 'error')
+    `).all() as { name: string | null; magnetUri: string; downloadPath: string | null }[];
+
+    if (!activeDownloads || activeDownloads.length === 0) {
+      return false;
+    }
+
+    const defaultDownloadRoot = path.resolve(getDownloadRootDir()).toLowerCase();
+
+    for (const dl of activeDownloads) {
+      const rootDir = dl.downloadPath ? path.resolve(dl.downloadPath).toLowerCase() : defaultDownloadRoot;
+
+      const candidateNames: string[] = [];
+      if (dl.name && dl.name.trim()) {
+        candidateNames.push(dl.name.trim());
+      }
+
+      // Extract display name (dn) from magnetUri if present
+      if (dl.magnetUri && dl.magnetUri.startsWith('magnet:')) {
+        const dnMatch = dl.magnetUri.match(/[?&]dn=([^&]+)/i);
+        if (dnMatch) {
+          try {
+            const dn = decodeURIComponent(dnMatch[1].replace(/\+/g, ' ')).trim();
+            if (dn && !candidateNames.includes(dn)) {
+              candidateNames.push(dn);
+            }
+          } catch { /* ignore */ }
+        }
+      }
+
+      for (const name of candidateNames) {
+        const candidatePath = path.resolve(rootDir, name).toLowerCase();
+
+        // 1. Exact match (file or folder)
+        if (resolvedItem === candidatePath) {
+          return true;
+        }
+
+        // 2. The item is inside the active download folder
+        if (resolvedItem.startsWith(candidatePath + path.sep)) {
+          return true;
+        }
+
+        // 3. The candidate path is inside the item (e.g. itemPath is the folder containing the download)
+        if (candidatePath.startsWith(resolvedItem + path.sep)) {
+          return true;
+        }
+
+        // 4. Base name match in root download folder (e.g. direct file in download directory)
+        const itemBaseName = path.basename(resolvedItem);
+        const nameBaseName = path.basename(name).toLowerCase();
+        if (itemBaseName === nameBaseName && path.dirname(resolvedItem) === rootDir) {
+          return true;
+        }
+
+        // 5. Base name without extension match (e.g. folder vs file title) in root download folder
+        const itemBaseNoExt = path.basename(resolvedItem, path.extname(resolvedItem));
+        const nameBaseNoExt = path.basename(nameBaseName, path.extname(nameBaseName));
+        if (itemBaseNoExt && itemBaseNoExt === nameBaseNoExt && path.dirname(resolvedItem) === rootDir) {
+          return true;
+        }
+      }
+    }
+  } catch (e) {
+    // If table doesn't exist or DB is busy, fail safely
+    console.warn('[MediaOrganizer] Error checking active downloads:', e);
+  }
+
+  return false;
+}
+
+/**
  * Check if automatic media organization is enabled in database settings.
  * Defaults to true if not explicitly set to 'false' or '0'.
  */
@@ -300,11 +385,16 @@ export async function organizeTvEpisodeFile(
     showTitleHint?: string;
     deleteSourceFolderIfEmpty?: boolean;
     disableAutoOrganizeCheck?: boolean;
+    skipActiveDownloadCheck?: boolean;
   }
 ): Promise<OrganizeResult> {
   try {
     if (!options?.disableAutoOrganizeCheck && !isAutoOrganizeEnabled()) {
       return { moved: false, error: 'Auto-organization is disabled in settings' };
+    }
+
+    if (!options?.skipActiveDownloadCheck && isItemPartOfActiveDownload(filePath)) {
+      return { moved: false, error: 'File is part of an active download' };
     }
 
     if (!fs.existsSync(filePath)) {
@@ -401,11 +491,16 @@ export async function organizeMovieFile(
     deleteSourceFolderIfEmpty?: boolean;
     keepOriginalFileName?: boolean;
     disableAutoOrganizeCheck?: boolean;
+    skipActiveDownloadCheck?: boolean;
   }
 ): Promise<MovieOrganizeResult> {
   try {
     if (!options?.disableAutoOrganizeCheck && !isAutoOrganizeEnabled()) {
       return { moved: false, error: 'Auto-organization is disabled in settings' };
+    }
+
+    if (!options?.skipActiveDownloadCheck && isItemPartOfActiveDownload(filePath)) {
+      return { moved: false, error: 'File is part of an active download' };
     }
 
     if (!fs.existsSync(filePath)) {
@@ -503,9 +598,17 @@ export async function organizeMovieFile(
  * and is inside the downloads directory. Never delete the root downloads folder, TV Shows folder,
  * Movies folder, or user library folders.
  */
-export function cleanupJunkDirectory(dirPath: string, baseDownloadPath?: string): boolean {
+export function cleanupJunkDirectory(
+  dirPath: string,
+  baseDownloadPath?: string,
+  options?: { skipActiveDownloadCheck?: boolean }
+): boolean {
   try {
     if (!fs.existsSync(dirPath)) return false;
+
+    if (!options?.skipActiveDownloadCheck && isItemPartOfActiveDownload(dirPath)) {
+      return false;
+    }
 
     const stat = fs.statSync(dirPath);
     if (!stat.isDirectory()) return false;
@@ -531,8 +634,12 @@ export function cleanupJunkDirectory(dirPath: string, baseDownloadPath?: string)
       return false;
     }
 
-    // Check if there are any remaining valid video files
+    // Check if there are any remaining valid video files or active download files
     const allFiles = getFilesRecursive(resolved);
+    if (!options?.skipActiveDownloadCheck && allFiles.some(f => isItemPartOfActiveDownload(f))) {
+      return false;
+    }
+
     const hasValidVideo = allFiles.some(f => isVideoFile(f) && !isSampleClip(f) && !isExtrasContent(f));
 
     if (hasValidVideo) {
@@ -572,7 +679,7 @@ function getFilesRecursive(dir: string, list: string[] = []): string[] {
 export async function organizeDownloadedItem(
   downloadPath: string,
   torrentNameOrFilename?: string | null,
-  options?: { disableAutoOrganizeCheck?: boolean }
+  options?: { disableAutoOrganizeCheck?: boolean; skipActiveDownloadCheck?: boolean }
 ): Promise<{ organizedFiles: string[]; deletedFolders: string[] }> {
   const organizedFiles: string[] = [];
   const deletedFolders: string[] = [];
@@ -599,6 +706,7 @@ export async function organizeDownloadedItem(
           const result = await organizeTvEpisodeFile(targetDir, {
             baseDownloadPath: downloadPath,
             disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+            skipActiveDownloadCheck: true,
           });
           if (result.moved && result.newPath) {
             organizedFiles.push(result.newPath);
@@ -607,6 +715,7 @@ export async function organizeDownloadedItem(
           const result = await organizeMovieFile(targetDir, {
             baseDownloadPath: downloadPath,
             disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+            skipActiveDownloadCheck: true,
           });
           if (result.moved && result.newPath) {
             organizedFiles.push(result.newPath);
@@ -624,6 +733,7 @@ export async function organizeDownloadedItem(
             baseDownloadPath: downloadPath,
             deleteSourceFolderIfEmpty: false,
             disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+            skipActiveDownloadCheck: true,
           });
           if (result.moved && result.newPath) {
             organizedFiles.push(result.newPath);
@@ -633,6 +743,7 @@ export async function organizeDownloadedItem(
             baseDownloadPath: downloadPath,
             deleteSourceFolderIfEmpty: false,
             disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
+            skipActiveDownloadCheck: true,
           });
           if (result.moved && result.newPath) {
             organizedFiles.push(result.newPath);
@@ -642,7 +753,7 @@ export async function organizeDownloadedItem(
 
       // If this was a subfolder inside downloadPath, cleanup the torrent subfolder
       if (path.resolve(targetDir) !== path.resolve(downloadPath)) {
-        const cleaned = cleanupJunkDirectory(targetDir, downloadPath);
+        const cleaned = cleanupJunkDirectory(targetDir, downloadPath, { skipActiveDownloadCheck: true });
         if (cleaned) {
           deletedFolders.push(targetDir);
         }
@@ -682,6 +793,10 @@ export async function organizeLooseTvShowsInDownloads(
     for (const entry of entries) {
       const fullPath = path.join(downloadRoot, entry);
       try {
+        if (isItemPartOfActiveDownload(fullPath)) {
+          continue;
+        }
+
         const stat = fs.statSync(fullPath);
 
         // Skip the TV Shows folder itself and Movies folder
@@ -696,11 +811,12 @@ export async function organizeLooseTvShowsInDownloads(
 
           // Check if this subfolder has TV episodes
           const files = getFilesRecursive(fullPath);
-          const tvFiles = files.filter(f => isVideoFile(f) && !isSampleClip(f) && !isExtrasContent(f) && detectTvShow(path.basename(f)));
+          const tvFiles = files.filter(f => isVideoFile(f) && !isSampleClip(f) && !isExtrasContent(f) && detectTvShow(path.basename(f)) && !isItemPartOfActiveDownload(f));
 
           if (tvFiles.length > 0) {
             let anyMoved = false;
             for (const file of tvFiles) {
+              if (isItemPartOfActiveDownload(file)) continue;
               const res = await organizeTvEpisodeFile(file, {
                 baseDownloadPath: downloadRoot,
                 disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
@@ -716,7 +832,7 @@ export async function organizeLooseTvShowsInDownloads(
           }
         } else if (stat.isFile() && isVideoFile(fullPath)) {
           // File directly in root download folder
-          if (detectTvShow(entry)) {
+          if (detectTvShow(entry) && !isItemPartOfActiveDownload(fullPath)) {
             const res = await organizeTvEpisodeFile(fullPath, {
               baseDownloadPath: downloadRoot,
               disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
@@ -787,6 +903,10 @@ export async function organizeLooseMoviesInDownloads(
       for (const entry of entries) {
         const fullPath = path.join(searchDir, entry);
         try {
+          if (isItemPartOfActiveDownload(fullPath)) {
+            continue;
+          }
+
           const stat = fs.statSync(fullPath);
 
           if (stat.isDirectory()) {
@@ -805,14 +925,15 @@ export async function organizeLooseMoviesInDownloads(
 
             // Check if this subfolder has movie files (and not TV show files)
             const files = getFilesRecursive(fullPath);
-            const movieFiles = files.filter(f => isVideoFile(f) && !isSampleClip(f) && !isExtrasContent(f) && !detectTvShow(path.basename(f)));
+            const movieFiles = files.filter(f => isVideoFile(f) && !isSampleClip(f) && !isExtrasContent(f) && !detectTvShow(path.basename(f)) && !isItemPartOfActiveDownload(f));
 
             if (movieFiles.length > 0) {
               let anyMoved = false;
               for (const file of movieFiles) {
+                if (isItemPartOfActiveDownload(file)) continue;
                 const res = await organizeMovieFile(file, {
                   baseDownloadPath: downloadRoot,
-                  deleteSourceFolderIfEmpty: true,
+                  deleteSourceFolderIfEmpty: false,
                   disableAutoOrganizeCheck: options?.disableAutoOrganizeCheck,
                 });
                 if (res.moved) {
@@ -826,7 +947,7 @@ export async function organizeLooseMoviesInDownloads(
             }
           } else if (stat.isFile() && isVideoFile(fullPath) && !isSampleClip(fullPath) && !isExtrasContent(fullPath)) {
             // File directly in root download folder or movies directory
-            if (!detectTvShow(entry)) {
+            if (!detectTvShow(entry) && !isItemPartOfActiveDownload(fullPath)) {
               const res = await organizeMovieFile(fullPath, {
                 baseDownloadPath: downloadRoot,
                 deleteSourceFolderIfEmpty: true,

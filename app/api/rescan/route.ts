@@ -2,39 +2,13 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import db, { cleanupOrphanedAutoTracks } from '@/lib/db';
-import { scanFile } from '@/lib/scanner';
+import { scanFile, getVideoFiles } from '@/lib/scanner';
+import { isItemPartOfActiveDownload } from '@/lib/mediaOrganizer';
 import { apiErrorResponse } from '@/lib/apiSecurity';
 import { getSafeErrorMessage } from '@/lib/security';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
-
-const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.wmv', '.flv', '.webm', '.ts'];
-
-function isVideoFile(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase();
-  return VIDEO_EXTENSIONS.includes(ext);
-}
-
-function getVideoFiles(dir: string, fileList: string[] = []): string[] {
-  if (!fs.existsSync(dir)) return fileList;
-  
-  const files = fs.readdirSync(dir);
-  for (const file of files) {
-    const filePath = path.join(dir, file);
-    try {
-      const stat = fs.statSync(filePath);
-      if (stat.isDirectory()) {
-        getVideoFiles(filePath, fileList);
-      } else if (isVideoFile(filePath)) {
-        fileList.push(filePath);
-      }
-    } catch {
-      // ignore access errors
-    }
-  }
-  return fileList;
-}
 
 export async function POST() {
   try {
@@ -73,7 +47,7 @@ export async function POST() {
           .all(`${folderPath}%`) as { id: number; filePath: string }[];
 
         for (const row of movieRows) {
-          if (!fs.existsSync(row.filePath)) {
+          if (!fs.existsSync(row.filePath) || isItemPartOfActiveDownload(row.filePath)) {
             const deleted = db.prepare('DELETE FROM movies WHERE id = ?').run(row.id);
             totalRemoved += deleted.changes;
           }
@@ -84,7 +58,7 @@ export async function POST() {
           .all(`${folderPath}%`) as { id: number; filePath: string }[];
 
         for (const row of episodeRows) {
-          if (!fs.existsSync(row.filePath)) {
+          if (!fs.existsSync(row.filePath) || isItemPartOfActiveDownload(row.filePath)) {
             const deleted = db.prepare('DELETE FROM episodes WHERE id = ?').run(row.id);
             totalRemoved += deleted.changes;
           }
