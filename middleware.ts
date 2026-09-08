@@ -99,7 +99,8 @@ export async function middleware(request: NextRequest) {
     '/api/ping',
     '/api/ip',
     '/api/dlna',
-    '/api/sports/streams/resolve'
+    '/api/sports/streams/resolve',
+    '/api/stream-servers/proxy'
   ];
 
   const isPublic = publicPaths.some(path =>

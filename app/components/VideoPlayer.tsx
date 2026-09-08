@@ -163,6 +163,71 @@ function formatTime(seconds: number): string {
   return `${mm}:${ss}`;
 }
 
+export interface ParsedSubtitleCue {
+  start: number;
+  end: number;
+  text: string;
+}
+
+function parseVttTimestamp(timeStr: string): number {
+  const parts = timeStr.trim().split(':');
+  if (parts.length === 3) {
+    const hours = parseFloat(parts[0]);
+    const minutes = parseFloat(parts[1]);
+    const seconds = parseFloat(parts[2].replace(',', '.'));
+    return (isNaN(hours) ? 0 : hours * 3600) +
+           (isNaN(minutes) ? 0 : minutes * 60) +
+           (isNaN(seconds) ? 0 : seconds);
+  } else if (parts.length === 2) {
+    const minutes = parseFloat(parts[0]);
+    const seconds = parseFloat(parts[1].replace(',', '.'));
+    return (isNaN(minutes) ? 0 : minutes * 60) +
+           (isNaN(seconds) ? 0 : seconds);
+  }
+  return 0;
+}
+
+export function parseWebVTT(vttText: string): ParsedSubtitleCue[] {
+  const cues: ParsedSubtitleCue[] = [];
+  if (!vttText) return cues;
+
+  const cleaned = vttText
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+
+  const blocks = cleaned.split(/\n\s*\n/);
+
+  for (const block of blocks) {
+    const lines = block.trim().split('\n');
+    let timeLineIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes('-->')) {
+        timeLineIdx = i;
+        break;
+      }
+    }
+
+    if (timeLineIdx >= 0) {
+      const match = lines[timeLineIdx].match(/([\d:.,]+)\s*-->\s*([\d:.,]+)/);
+      if (match) {
+        const start = parseVttTimestamp(match[1]);
+        const end = parseVttTimestamp(match[2]);
+        const text = lines
+          .slice(timeLineIdx + 1)
+          .join('\n')
+          .replace(/<[^>]+>/g, '')
+          .trim();
+        if (text && end > start) {
+          cues.push({ start, end, text });
+        }
+      }
+    }
+  }
+
+  return cues;
+}
+
 type Props = {
   src: string;
   title: string;
@@ -217,6 +282,7 @@ export default function VideoPlayer({
   const hideControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastTapTimeRef = useRef<number>(0);
   const singleTapTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isNative = Capacitor.isNativePlatform();
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -249,6 +315,54 @@ export default function VideoPlayer({
   const [subtitleTracks, setSubtitleTracks] = useState<{ id: number; label: string; language: string; url: string }[]>([]);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(0);
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState<number>(-1);
+  const [activeCueText, setActiveCueText] = useState<string>('');
+  const cuesRef = useRef<ParsedSubtitleCue[]>([]);
+
+  const updateActiveCue = useCallback((timeInSeconds: number) => {
+    const cues = cuesRef.current;
+    if (cues.length === 0) {
+      setActiveCueText((prev) => (prev ? '' : prev));
+      return;
+    }
+    const matching = cues.filter((c) => timeInSeconds >= c.start && timeInSeconds <= c.end);
+    const text = matching.map((c) => c.text).join('\n');
+    setActiveCueText((prev) => (prev !== text ? text : prev));
+  }, []);
+
+  // Fetch and parse WebVTT cues for active subtitle track
+  useEffect(() => {
+    if (isNative) return;
+    if (currentSubtitleTrack < 0 || !subtitleTracks[currentSubtitleTrack]) {
+      cuesRef.current = [];
+      setActiveCueText('');
+      return;
+    }
+
+    const track = subtitleTracks[currentSubtitleTrack];
+    let cancelled = false;
+
+    fetch(track.url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      })
+      .then((vttText) => {
+        if (cancelled) return;
+        const parsed = parseWebVTT(vttText);
+        cuesRef.current = parsed;
+        const video = videoRef.current;
+        if (video) {
+          updateActiveCue(video.currentTime);
+        }
+      })
+      .catch((err) => {
+        console.warn('[subtitles] Failed to fetch or parse subtitle track:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSubtitleTrack, subtitleTracks, isNative, updateActiveCue]);
 
   // Subtitle styling & appearance state (adapted from modern high-contrast streaming player styling)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFontOption>('inter');
@@ -491,7 +605,6 @@ export default function VideoPlayer({
   const [didFallback, setDidFallback] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const hlsRef = useRef<any>(null);
-  const isNative = Capacitor.isNativePlatform();
 
   // Helper to build parameterized API URLs forwarding stream tokens
   const buildApiUrl = useCallback(
@@ -752,14 +865,30 @@ export default function VideoPlayer({
     if (isNative) return;
 
     if (subtitles && subtitles.length > 0) {
-      setSubtitleTracks(
-        subtitles.map((t, i) => ({
-          id: i,
-          label: t.label || `Subtitle ${i + 1}`,
-          language: t.language || 'unknown',
-          url: t.url,
-        }))
-      );
+      const mapped = subtitles.map((t, i) => ({
+        id: i,
+        label: t.label || `Subtitle ${i + 1}`,
+        language: t.language || 'unknown',
+        url: t.url,
+      }));
+      setSubtitleTracks(mapped);
+
+      // Auto-select English or preferred track by default
+      try {
+        const prefEnabled = localStorage.getItem('lflix-subtitle-enabled');
+        if (prefEnabled !== 'false') {
+          const prefLang = localStorage.getItem('lflix-subtitle-lang');
+          let chosenIndex = 0;
+          if (prefLang) {
+            const matchIdx = mapped.findIndex((t) => t.language.toLowerCase().startsWith(prefLang.toLowerCase()));
+            if (matchIdx >= 0) chosenIndex = matchIdx;
+          } else {
+            const enIdx = mapped.findIndex((t) => t.language.toLowerCase().startsWith('en') || t.label.toLowerCase().includes('english'));
+            if (enIdx >= 0) chosenIndex = enIdx;
+          }
+          setCurrentSubtitleTrack(chosenIndex);
+        }
+      } catch {}
       return;
     }
 
@@ -778,6 +907,22 @@ export default function VideoPlayer({
           url: t.url,
         }));
         setSubtitleTracks(tracks);
+
+        try {
+          const prefEnabled = localStorage.getItem('lflix-subtitle-enabled');
+          if (prefEnabled !== 'false' && tracks.length > 0) {
+            const prefLang = localStorage.getItem('lflix-subtitle-lang');
+            let chosenIndex = 0;
+            if (prefLang) {
+              const matchIdx = tracks.findIndex((t: any) => t.language.toLowerCase().startsWith(prefLang.toLowerCase()));
+              if (matchIdx >= 0) chosenIndex = matchIdx;
+            } else {
+              const enIdx = tracks.findIndex((t: any) => t.language.toLowerCase().startsWith('en') || t.label.toLowerCase().includes('english'));
+              if (enIdx >= 0) chosenIndex = enIdx;
+            }
+            setCurrentSubtitleTrack(chosenIndex);
+          }
+        } catch {}
 
         if (data.audioTracks && data.audioTracks.length > 0) {
           setAudioTracks(
@@ -807,7 +952,7 @@ export default function VideoPlayer({
     const trackEls = video.querySelectorAll('track');
     trackEls.forEach((el, i) => {
       if (el.track) {
-        el.track.mode = i === currentSubtitleTrack ? 'showing' : 'disabled';
+        el.track.mode = i === currentSubtitleTrack ? 'hidden' : 'disabled';
       }
     });
 
@@ -818,7 +963,7 @@ export default function VideoPlayer({
       } else if (currentSubtitleTrack < subtitleTracks.length) {
         const target = subtitleTracks[currentSubtitleTrack];
         if (i === currentSubtitleTrack || (target && track.label === target.label)) {
-          track.mode = 'showing';
+          track.mode = 'hidden';
         } else {
           track.mode = 'disabled';
         }
@@ -996,6 +1141,7 @@ export default function VideoPlayer({
       if (!isScrubbing) {
         setCurrentTime(video.currentTime);
       }
+      updateActiveCue(video.currentTime);
       if (video.buffered.length > 0) {
         try {
           const cur = video.currentTime;
@@ -1012,6 +1158,12 @@ export default function VideoPlayer({
         }
       }
     };
+    const onSeeked = () => {
+      updateActiveCue(video.currentTime);
+    };
+    const onSeeking = () => {
+      updateActiveCue(video.currentTime);
+    };
 
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
@@ -1019,6 +1171,8 @@ export default function VideoPlayer({
     video.addEventListener('playing', onPlaying);
     video.addEventListener('canplay', onCanPlay);
     video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('seeked', onSeeked);
+    video.addEventListener('seeking', onSeeking);
 
     return () => {
       video.removeEventListener('play', onPlay);
@@ -1027,8 +1181,10 @@ export default function VideoPlayer({
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('seeking', onSeeking);
     };
-  }, [isNative, isScrubbing, onPlaybackReady, scheduleHideControls]);
+  }, [isNative, isScrubbing, onPlaybackReady, scheduleHideControls, updateActiveCue]);
 
   // Playback error handler
   const handleError = () => {
@@ -1214,27 +1370,43 @@ export default function VideoPlayer({
 
   const changeSubtitleTrack = (index: number) => {
     const video = videoRef.current;
-    if (!video) return;
 
-    // 1. Enable/disable HTMLTrackElements directly
-    const trackEls = video.querySelectorAll('track');
-    trackEls.forEach((el, i) => {
-      if (el.track) {
-        el.track.mode = i === index ? 'showing' : 'disabled';
-      }
-    });
+    if (index === -1) {
+      try {
+        localStorage.setItem('lflix-subtitle-enabled', 'false');
+      } catch {}
+      cuesRef.current = [];
+      setActiveCueText('');
+    } else if (subtitleTracks[index]) {
+      try {
+        localStorage.setItem('lflix-subtitle-enabled', 'true');
+        if (subtitleTracks[index].language && subtitleTracks[index].language !== 'unknown') {
+          localStorage.setItem('lflix-subtitle-lang', subtitleTracks[index].language);
+        }
+      } catch {}
+    }
 
-    // 2. Enable/disable video.textTracks
-    for (let i = 0; i < video.textTracks.length; i++) {
-      const track = video.textTracks[i];
-      if (index === -1) {
-        track.mode = 'disabled';
-      } else if (index < subtitleTracks.length) {
-        const target = subtitleTracks[index];
-        if (i === index || (target && track.label === target.label)) {
-          track.mode = 'showing';
-        } else {
+    if (video) {
+      // 1. Enable/disable HTMLTrackElements directly
+      const trackEls = video.querySelectorAll('track');
+      trackEls.forEach((el, i) => {
+        if (el.track) {
+          el.track.mode = i === index ? 'hidden' : 'disabled';
+        }
+      });
+
+      // 2. Enable/disable video.textTracks
+      for (let i = 0; i < video.textTracks.length; i++) {
+        const track = video.textTracks[i];
+        if (index === -1) {
           track.mode = 'disabled';
+        } else if (index < subtitleTracks.length) {
+          const target = subtitleTracks[index];
+          if (i === index || (target && track.label === target.label)) {
+            track.mode = 'hidden';
+          } else {
+            track.mode = 'disabled';
+          }
         }
       }
     }
@@ -1493,6 +1665,38 @@ export default function VideoPlayer({
           ))}
         </video>
       </div>
+
+      {/* ──────────────── Custom High-Legibility Subtitle Overlay ──────────────── */}
+      {activeCueText && currentSubtitleTrack >= 0 && (
+        <div
+          className="absolute left-0 right-0 flex justify-center pointer-events-none z-30 px-4 transition-all duration-200"
+          style={{
+            bottom: showControls ? '6.5rem' : '3rem',
+          }}
+        >
+          <div
+            className="inline-block transition-all select-none"
+            style={{
+              color: subtitleColor,
+              fontFamily: activeSubFont.family,
+              fontSize: activeSubSize.sizeStr,
+              backgroundColor: subtitleBg ? 'rgba(0, 0, 0, 0.75)' : 'transparent',
+              textShadow: subtitleBg
+                ? '0 0 4px #000000, 0 2px 4px rgba(0, 0, 0, 0.9)'
+                : '0 0 4px #000000, 0 2px 4px rgba(0, 0, 0, 0.95), -1px -1px 2px #000000, 1px -1px 2px #000000, -1px 1px 2px #000000, 1px 1px 2px #000000, 0 0 8px #000000',
+              fontWeight: 600,
+              lineHeight: 1.35,
+              padding: '0.25em 0.6em',
+              borderRadius: '4px',
+              textAlign: 'center',
+              maxWidth: '85%',
+              whiteSpace: 'pre-line',
+            }}
+          >
+            {activeCueText}
+          </div>
+        </div>
+      )}
 
       {/* ──────────────── Double Tap Ripple Feedback ──────────────── */}
       {doubleTapFeedback && (

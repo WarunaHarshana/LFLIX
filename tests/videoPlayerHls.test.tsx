@@ -60,7 +60,7 @@ vi.mock('@/lib/mobileConfig', () => ({
   getServerUrl: () => 'http://192.168.1.11:3000',
 }));
 
-import VideoPlayer from '@/app/components/VideoPlayer';
+import VideoPlayer, { parseWebVTT } from '@/app/components/VideoPlayer';
 
 describe('VideoPlayer HLS prioritization', () => {
   beforeEach(() => {
@@ -230,6 +230,66 @@ describe('VideoPlayer HLS prioritization', () => {
     expect(playerContainer).toBeTruthy();
     const styleTag = playerContainer?.querySelector('style');
     expect(styleTag?.textContent).toContain('.lflix-player-container video::cue');
+  });
+
+  it('correctly parses WebVTT cues from string', () => {
+    const vtt = `WEBVTT
+
+1
+00:01:20.500 --> 00:01:25.000
+<i>Welcome</i> to the show!
+Second line of text
+
+2
+00:02:00,100 --> 00:02:03,400
+Another line of subtitles`;
+
+    const cues = parseWebVTT(vtt);
+    expect(cues).toHaveLength(2);
+    expect(cues[0].start).toBeCloseTo(80.5);
+    expect(cues[0].end).toBeCloseTo(85.0);
+    expect(cues[0].text).toBe('Welcome to the show!\nSecond line of text');
+    expect(cues[1].start).toBeCloseTo(120.1);
+    expect(cues[1].end).toBeCloseTo(123.4);
+    expect(cues[1].text).toBe('Another line of subtitles');
+  });
+
+  it('renders active cues in the custom subtitle overlay during playback', async () => {
+    const vtt = `WEBVTT
+
+1
+00:00:01.000 --> 00:00:05.000
+Active Subtitle Text In Overlay`;
+
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => vtt,
+    } as any);
+
+    try {
+      const { findByText, container } = render(
+        <VideoPlayer
+          title="Test Stream"
+          src="https://proxy.example/stream.m3u8"
+          subtitles={[{ label: 'English', url: 'https://proxy.example/sub.vtt', language: 'en' }]}
+          onClose={vi.fn()}
+        />
+      );
+
+      // Simulate video playing at 2 seconds (within cue 1s - 5s)
+      const video = container.querySelector('video');
+      expect(video).toBeTruthy();
+      if (video) {
+        Object.defineProperty(video, 'currentTime', { value: 2, writable: true });
+        fireEvent.timeUpdate(video);
+      }
+
+      // Verify the active cue appears in the overlay
+      expect(await findByText(/Active Subtitle Text In Overlay/i)).toBeTruthy();
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 });
 
