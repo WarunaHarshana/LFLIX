@@ -372,6 +372,7 @@ export interface MediaMetadata {
 type OmdbRatingResponse = {
   Response?: string;
   imdbRating?: string;
+  Ratings?: Array<{ Source: string; Value: string }>;
   Error?: string;
 };
 
@@ -399,13 +400,19 @@ type ImdbSuggestionResponse = {
   d?: ImdbSuggestionItem[];
 };
 
-export async function fetchImdbRatingById(imdbId?: string | null): Promise<number | null> {
-  const apiKey = getOmdbApiKey();
-  if (!apiKey || !imdbId) return null;
+export type ExternalRatingsResult = {
+  imdbRating: number | null;
+  rottenTomatoes: string | null;
+};
 
-  const cacheKey = `omdb-rating-${imdbId}`;
-  const cached = tmdbCache.get(cacheKey) as number | null;
-  if (cached !== null) return cached;
+export async function fetchExternalRatingsById(imdbId?: string | null): Promise<ExternalRatingsResult> {
+  const empty: ExternalRatingsResult = { imdbRating: null, rottenTomatoes: null };
+  const apiKey = getOmdbApiKey();
+  if (!apiKey || !imdbId) return empty;
+
+  const cacheKey = `omdb-ext-ratings-${imdbId}`;
+  const cached = tmdbCache.get(cacheKey) as ExternalRatingsResult | null;
+  if (cached) return cached;
 
   try {
     const url = `https://www.omdbapi.com/?i=${encodeURIComponent(imdbId)}&apikey=${encodeURIComponent(apiKey)}`;
@@ -413,20 +420,42 @@ export async function fetchImdbRatingById(imdbId?: string | null): Promise<numbe
       headers: { 'User-Agent': 'LFLIX/0.3' },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return empty;
 
     const data = await res.json() as OmdbRatingResponse;
-    if (data.Response === 'False' || !data.imdbRating || data.imdbRating === 'N/A') return null;
+    if (data.Response === 'False') return empty;
 
-    const rating = parseFloat(data.imdbRating);
-    if (!Number.isFinite(rating) || rating <= 0) return null;
+    let imdbRating: number | null = null;
+    if (data.imdbRating && data.imdbRating !== 'N/A') {
+      const rating = parseFloat(data.imdbRating);
+      if (Number.isFinite(rating) && rating > 0) {
+        imdbRating = rating;
+      }
+    }
 
-    tmdbCache.set(cacheKey, rating, 24 * 60 * 60 * 1000);
-    return rating;
+    let rottenTomatoes: string | null = null;
+    if (Array.isArray(data.Ratings)) {
+      const rt = data.Ratings.find((r) => r.Source === 'Rotten Tomatoes');
+      if (rt?.Value) {
+        rottenTomatoes = rt.Value;
+      }
+    }
+
+    const result: ExternalRatingsResult = { imdbRating, rottenTomatoes };
+    tmdbCache.set(cacheKey, result, 24 * 60 * 60 * 1000);
+    if (imdbRating !== null) {
+      tmdbCache.set(`omdb-rating-${imdbId}`, imdbRating, 24 * 60 * 60 * 1000);
+    }
+    return result;
   } catch (e) {
-    console.warn(`OMDb rating fetch failed for ${imdbId}:`, e);
-    return null;
+    console.warn(`OMDb external rating fetch failed for ${imdbId}:`, e);
+    return empty;
   }
+}
+
+export async function fetchImdbRatingById(imdbId?: string | null): Promise<number | null> {
+  const ext = await fetchExternalRatingsById(imdbId);
+  return ext.imdbRating;
 }
 
 async function fetchOmdbMovieMetadata(imdbId: string): Promise<Partial<MediaMetadata> | null> {

@@ -25,6 +25,7 @@ import ContentCard, { type ContentItem as DiscoverContentCardItem } from '../../
 import DetailTabNav from '../../../components/DetailTabNav';
 import { useAppStore } from '@/app/store/useAppStore';
 import LiquidDropdown from '../../../components/LiquidDropdown';
+import RottenTomatoesIcon from '../../../components/RottenTomatoesIcon';
 
 const PERSON_SORT_OPTIONS = [
   { id: 'date', name: 'Sort: Date' },
@@ -41,6 +42,7 @@ type TMDBResult = {
   overview: string | null;
   rating: number | null;
   imdbRating?: number | null;
+  rottenTomatoes?: string | null;
   year: string | null;
   popularity: number;
 };
@@ -53,6 +55,7 @@ type MovieDetails = {
   backdropPath: string | null;
   rating: number | null;
   imdbRating?: number | null;
+  rottenTomatoes?: string | null;
   year: string | null;
   runtime: number | null;
   tagline: string | null;
@@ -81,6 +84,7 @@ type CollectionData = {
     overview: string | null;
     rating: number | null;
     imdbRating?: number | null;
+    rottenTomatoes?: string | null;
     year: string | null;
     releaseDate: string | null;
   }[];
@@ -94,6 +98,7 @@ type TVDetails = {
   backdropPath: string | null;
   rating: number | null;
   imdbRating?: number | null;
+  rottenTomatoes?: string | null;
   year: string | null;
   status: string | null;
   tagline: string | null;
@@ -666,19 +671,6 @@ export default function DiscoverDetailPage() {
             </div>
           ) : (
             <div className="w-full">
-              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mb-3.5 text-xs sm:text-sm md:text-base font-semibold">
-                <span className="px-3 py-1 rounded-xl liquid-glass-pill text-amber-300 font-bold border border-amber-400/30 text-xs sm:text-sm shadow-sm">{activeRatingSource} {activeRating?.toFixed(1) || 'N/A'}</span>
-                {activeDetails?.year && <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{activeDetails.year}</span>}
-                {mediaType === 'movie' && movieDetails?.runtime && <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{Math.floor(movieDetails.runtime / 60)}h {movieDetails.runtime % 60}m</span>}
-                {mediaType === 'tv' && tvDetails?.status && <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{tvDetails.status}</span>}
-                {mediaType === 'tv' && tvSeasonCount !== null && tvSeasonCount > 0 && (
-                  <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{tvSeasonCount} Season{tvSeasonCount > 1 ? 's' : ''}</span>
-                )}
-                {mediaType === 'tv' && totalEpisodeCount !== null && (
-                  <span className="px-2.5 py-1 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">{totalEpisodeCount} Episode{totalEpisodeCount > 1 ? 's' : ''}</span>
-                )}
-              </div>
-
               {logoUrl ? (
                 <img
                   src={logoUrl}
@@ -696,6 +688,60 @@ export default function DiscoverDetailPage() {
                   {pageOverview}
                 </p>
               )}
+
+              {/* Metadata Row: Ratings, Year, Duration under Title and Description */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mt-4 text-xs sm:text-sm md:text-base font-semibold">
+                {activeRating != null && activeRating > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill font-bold text-amber-300 border border-amber-400/30 text-xs sm:text-sm shadow-sm">
+                    {activeDetails?.imdbRating ? (
+                      <span className="px-1.5 py-0.5 bg-[#F5C518] text-black font-black text-[10px] rounded-md tracking-tight leading-none">IMDb</span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 font-bold text-[10px] rounded-md tracking-tight border border-amber-400/40 leading-none">TMDB</span>
+                    )}
+                    <span>{activeRating.toFixed(1)}</span>
+                  </span>
+                )}
+
+                {activeDetails?.rottenTomatoes && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-100 font-bold border border-white/15 text-xs sm:text-sm shadow-sm">
+                    <RottenTomatoesIcon
+                      score={parseInt(activeDetails.rottenTomatoes.replace('%', ''), 10) || 100}
+                      className="w-4 h-4 shrink-0"
+                    />
+                    <span>{activeDetails.rottenTomatoes}</span>
+                  </span>
+                )}
+
+                {activeDetails?.year && (
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                    {activeDetails.year}
+                  </span>
+                )}
+
+                {mediaType === 'movie' && movieDetails?.runtime && (
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                    {Math.floor(movieDetails.runtime / 60)}h {movieDetails.runtime % 60}m
+                  </span>
+                )}
+
+                {mediaType === 'tv' && tvDetails?.status && (
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                    {tvDetails.status}
+                  </span>
+                )}
+
+                {mediaType === 'tv' && tvSeasonCount !== null && tvSeasonCount > 0 && (
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                    {tvSeasonCount} Season{tvSeasonCount > 1 ? 's' : ''}
+                  </span>
+                )}
+
+                {mediaType === 'tv' && totalEpisodeCount !== null && (
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                    {totalEpisodeCount} Episode{totalEpisodeCount > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
 
               {genreList.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2.5">
