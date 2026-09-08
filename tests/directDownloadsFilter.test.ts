@@ -6,7 +6,7 @@ import * as cinejoyModule from '@/lib/cinejoy';
 describe('Direct Download Title and Year Filtering', () => {
     describe('isDirectDownloadMatch with Movie ("The Runner", 2026)', () => {
         const queryTitle = 'The Runner';
-        const queryOpts = { year: '2026', mediaType: 'movie' };
+        const queryOpts = { year: '2026', mediaType: 'movie' as const };
 
         it('rejects completely different movies containing query words', () => {
             expect(isDirectDownloadMatch({ name: 'Maze Runner The Scorch Trials 2015 1080p' }, queryTitle, queryOpts)).toBe(false);
@@ -34,7 +34,7 @@ describe('Direct Download Title and Year Filtering', () => {
 
     describe('isDirectDownloadMatch with TV Show ("Fallout", S01E02)', () => {
         const queryTitle = 'Fallout';
-        const queryOpts = { year: '2024', mediaType: 'tv', season: 1, episode: 2 };
+        const queryOpts = { year: '2024', mediaType: 'tv' as const, season: 1, episode: 2 };
 
         it('accepts correct episode file', () => {
             expect(isDirectDownloadMatch({ name: 'Fallout.S01E02.1080p.AMZN.WEB-DL.DDP5.1.Atmos' }, queryTitle, queryOpts)).toBe(true);

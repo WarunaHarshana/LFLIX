@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.13.0
+
+High-speed direct downloads (DDL) architecture, live subtitle overlay engine with customizable typography, stream connection watchdog & auto-failover, frontend code-splitting, and database/scanner performance optimizations.
+
+### Added
+
+- **High-Speed Direct Downloads (DDL)**: Added direct stream and download resolution for movies and TV episodes via Cinejoy and legacy direct web sources (open directories and archives).
+- **Dedicated Direct Downloads Tab**: Separated direct downloads from torrent results in the Download Modal, providing one-click "Browser Download", "Copy Link", and "Save to Library" (server background download) actions.
+- **Direct Download Auto-Downloader Integration**: Integrated direct download sources into the automatic episode downloader and missing episode trackers for instant HTTP acquisition.
+- **High-Throughput Downloader**: Enhanced background HTTP downloader with persistent HTTP/HTTPS keep-alive agents, 4MB chunk buffer streaming, automatic resume capabilities, and dynamic `Content-Disposition` filename extraction.
+- **Live Subtitle Overlay & WebVTT Parser**: Built-in robust WebVTT cue parsing and real-time subtitle overlay engine directly in the browser player, featuring automatic track activation upon stream playback.
+- **Customizable Subtitle Typography & Styling**: Added complete control over subtitle appearance in player settings, including typography font family, scalable font sizes, text and highlight colors, background opacity, text shadows/outlines, and vertical positioning offsets.
+- **Multi-Language Subtitle Proxy**: Enabled automatic multi-language subtitle delivery through the stream proxy with dynamic CORS headers.
+- **Stream Auto-Failover & Connection Watchdog**: Added an intelligent heartbeat monitor and watchdog to direct streams that automatically retries and fails over to alternative servers when a stream disconnects or stalls.
+- **Advanced Title & Year Matching Engine**: Added strict title and release year disambiguation (`lib/titleMatching.ts`) to direct download queries, preventing false positive matches across similar movie titles or different release years.
+
+### Performance
+
+- **Frontend Code-Splitting**: Code-split large components (`VideoPlayer`, `SetupWizard`, `FolderManager`, and `MobileSearchModal`) with Next.js dynamic imports, significantly reducing the initial JavaScript bundle size.
+- **Optimized Component Rendering**: Memoized `ContentCard` and library filtering computations, completely eliminating rendering stutter and UI lag during rapid keyboard navigation.
+- **Optimized Asset Delivery**: Downscaled responsive poster card sizes to `w342` and hero banners to `w1280` for faster Largest Contentful Paint (LCP) and reduced bandwidth consumption.
+- **SQLite MMAP Reads**: Enabled SQLite `mmap_size` for high-throughput memory-mapped disk reads, and guarded startup migrations, deduplication, and language backfills in `lib/db.ts`.
+- **Fast Directory Traversal**: Switched media scanning to `fs.readdirSync({ withFileTypes: true })`, caching active downloads and prepared database statements to cut scan times.
+- **Transcoding Cache**: Reused pre-probed media duration in the transcoding pipeline to prevent redundant `ffprobe` process spawns.
+
+### Fixed
+
+- **Active Download Protection in Media Organizer**: Fixed an issue where active downloads or torrent files were prematurely moved or deleted by background media organization or library rescanning routines.
+- **4K Direct Stream Playback**: Fixed direct 4K stream playback issues and prioritized verified high-speed direct HLS servers in stream server ranking.
+- **Direct Stream Status Reporting**: Fixed stream status reporting and enhanced LiquidDropdown UI behavior.
+
+## v0.12.0
+
+Direct stream lossless 4K playback, subtitle rendering overhaul, destination choice picker, multi-drive scanning, and live TV enhancements.
+
+### Added
+
+- **Direct Stream Lossless 4K Playback**: Added direct streaming and progressive chunk piping for local 4K media without transcoding overhead.
+- **Playback Destination Modal**: Added interactive playback destination picker before playback starts, supporting desktop players (VLC, mpv, MPC-HC, PotPlayer), web browser, and TV remote key controls.
+- **Touch-Friendly Player Controls**: Upgraded web and mobile video player controls with custom touch gestures and responsive seek scrubbing.
+- **Multi-Drive Scanning**: Added support for secondary drives (including `F:\` drive) in folder manager and media scanner.
+
+### Fixed
+
+- **4K HEVC CPU Bottlenecks**: Implemented adaptive software downscaling and fallback playback options to eliminate CPU lag on 4K HEVC files.
+- **Mobile LAN Connectivity**: Resolved mobile black screen and LAN connection issues by prioritizing active LAN IPv4 addresses.
+- **DLNA Episode Browsing**: Fixed DLNA browse crashes and improved TV show episode grouping for Smart TV auto-discovery.
+- **Stream Source Resilience**: Removed dead streaming servers, integrated cinejoy.to API, and improved handling of Cloudflare redirect responses in TimStreams.
+
 ## v0.11.0
 
 Automatic local movie folder organization, companion artwork/subtitle preservation, settings auto-organize toggle, and library ghost card fixes.
