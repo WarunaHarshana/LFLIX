@@ -31,6 +31,43 @@ import { Capacitor } from '@capacitor/core';
 import { CapacitorVideoPlayer } from 'capacitor-video-player';
 import { getServerUrl } from '@/lib/mobileConfig';
 
+export type SubtitleFontOption = 'inter' | 'netflix' | 'montserrat';
+
+export const SUBTITLE_FONTS: { id: SubtitleFontOption; label: string; fontStyle: string; family: string }[] = [
+  {
+    id: 'inter',
+    label: 'Inter',
+    fontStyle: "'Inter', sans-serif",
+    family: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  },
+  {
+    id: 'netflix',
+    label: 'Cinema',
+    fontStyle: "'Netflix Sans', sans-serif",
+    family: "'Netflix Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  },
+  {
+    id: 'montserrat',
+    label: 'Montserrat',
+    fontStyle: "'Montserrat', sans-serif",
+    family: "'Montserrat', system-ui, sans-serif",
+  },
+];
+
+export const SUBTITLE_COLORS = [
+  { label: 'White', value: '#ffffff', bgClass: 'bg-white' },
+  { label: 'Yellow', value: '#e2e535', bgClass: 'bg-[#e2e535]' },
+  { label: 'Blue', value: '#80b1fa', bgClass: 'bg-[#80b1fa]' },
+  { label: 'Green', value: '#10b239', bgClass: 'bg-[#10b239]' },
+];
+
+export const SUBTITLE_SIZES = [
+  { label: '80%', value: 80, sizeStr: 'clamp(0.85rem, 1.8vw, 1.35rem)' },
+  { label: '100%', value: 100, sizeStr: 'clamp(1rem, 2.2vw, 1.65rem)' },
+  { label: '125%', value: 125, sizeStr: 'clamp(1.2rem, 2.7vw, 2rem)' },
+  { label: '150%', value: 150, sizeStr: 'clamp(1.4rem, 3.2vw, 2.4rem)' },
+];
+
 function isLocalSource(url: string): boolean {
   if (!url) return true;
   if (url.startsWith('/')) return true;
@@ -212,6 +249,46 @@ export default function VideoPlayer({
   const [subtitleTracks, setSubtitleTracks] = useState<{ id: number; label: string; language: string; url: string }[]>([]);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(0);
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState<number>(-1);
+
+  // Subtitle styling & appearance state (adapted from modern high-contrast streaming player styling)
+  const [subtitleFont, setSubtitleFont] = useState<SubtitleFontOption>('inter');
+  const [subtitleColor, setSubtitleColor] = useState<string>('#ffffff');
+  const [subtitleSize, setSubtitleSize] = useState<number>(100);
+  const [subtitleBg, setSubtitleBg] = useState<boolean>(true);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('lflix-subtitle-settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.font) setSubtitleFont(parsed.font);
+        if (parsed.color) setSubtitleColor(parsed.color);
+        if (parsed.size) setSubtitleSize(parsed.size);
+        if (typeof parsed.background === 'boolean') setSubtitleBg(parsed.background);
+      }
+    } catch {}
+  }, []);
+
+  const updateSubtitleSetting = (key: 'font' | 'color' | 'size' | 'background', val: any) => {
+    try {
+      const current = {
+        font: subtitleFont,
+        color: subtitleColor,
+        size: subtitleSize,
+        background: subtitleBg,
+        [key]: val,
+      };
+      if (key === 'font') setSubtitleFont(val);
+      if (key === 'color') setSubtitleColor(val);
+      if (key === 'size') setSubtitleSize(val);
+      if (key === 'background') setSubtitleBg(val);
+      localStorage.setItem('lflix-subtitle-settings', JSON.stringify(current));
+    } catch {}
+  };
+
+  const activeSubFont = SUBTITLE_FONTS.find((f) => f.id === subtitleFont) || SUBTITLE_FONTS[0];
+  const activeSubSize = SUBTITLE_SIZES.find((s) => s.value === subtitleSize) || SUBTITLE_SIZES[1];
+
   const [qualityLevels, setQualityLevels] = useState<{ index: number; label: string; height: number; bitrate: number }[]>([]);
   const [activeLevel, setActiveLevel] = useState<number>(-1);
   const [preferredLevel, setPreferredLevel] = useState<number>(-1);
@@ -1363,8 +1440,29 @@ export default function VideoPlayer({
       ref={containerRef}
       onMouseMove={wakeControls}
       onTouchStart={wakeControls}
-      className="fixed inset-0 z-[100] bg-black select-none overflow-hidden touch-none"
+      className="lflix-player-container fixed inset-0 z-[100] bg-black select-none overflow-hidden touch-none"
     >
+      {/* Dynamic Subtitle Style Injection matching modern high-contrast typography */}
+      <style>{`
+        .lflix-player-container video::cue {
+          color: ${subtitleColor} !important;
+          font-family: ${activeSubFont.family} !important;
+          font-size: ${activeSubSize.sizeStr} !important;
+          background-color: ${subtitleBg ? 'rgba(0, 0, 0, 0.75)' : 'transparent'} !important;
+          text-shadow: ${
+            subtitleBg
+              ? '0 0 4px #000000, 0 2px 4px rgba(0, 0, 0, 0.9)'
+              : '0 0 4px #000000, 0 2px 4px rgba(0, 0, 0, 0.95), -1px -1px 2px #000000, 1px -1px 2px #000000, -1px 1px 2px #000000, 1px 1px 2px #000000, 0 0 8px #000000'
+          } !important;
+          line-height: 1.35 !important;
+          font-weight: 600 !important;
+          border-radius: 4px !important;
+          padding: 0.25em 0.6em !important;
+          box-decoration-break: clone !important;
+          -webkit-box-decoration-break: clone !important;
+        }
+      `}</style>
+
       {/* ──────────────── Video Element (Full Bleed) ──────────────── */}
       <div
         className="absolute inset-0 w-full h-full flex items-center justify-center cursor-pointer"
@@ -1867,45 +1965,169 @@ export default function VideoPlayer({
 
               {/* Subtitles Tab */}
               {activeSettingsTab === 'subtitles' && (
-                <div className="space-y-1">
-                  <button
-                    onClick={() => {
-                      changeSubtitleTrack(-1);
-                      setShowSettingsModal(false);
-                    }}
-                    className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
-                      currentSubtitleTrack === -1
-                        ? 'bg-red-950/40 text-red-400 border border-red-800/40'
-                        : 'hover:bg-neutral-800/60 text-neutral-300'
-                    }`}
-                  >
-                    <span className="font-medium">Off</span>
-                    {currentSubtitleTrack === -1 && <Check className="w-4 h-4 text-red-400" />}
-                  </button>
-                  {subtitleTracks.map((track) => (
-                    <button
-                      key={track.id}
-                      onClick={() => {
-                        changeSubtitleTrack(track.id);
-                        setShowSettingsModal(false);
-                      }}
-                      className={`w-full px-4 py-3 rounded-xl text-left text-sm flex items-center justify-between transition ${
-                        currentSubtitleTrack === track.id
-                          ? 'bg-red-950/40 text-red-400 border border-red-800/40'
-                          : 'hover:bg-neutral-800/60 text-neutral-300'
-                      }`}
-                    >
-                      <span className="font-medium">
-                        {track.label} {track.language !== 'unknown' && `(${track.language})`}
+                <div className="space-y-4">
+                  {/* Language Track Selection */}
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2 px-1">
+                      Select Track
+                    </div>
+                    <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                      <button
+                        onClick={() => changeSubtitleTrack(-1)}
+                        className={`w-full px-3 py-2.5 rounded-lg text-left text-sm flex items-center justify-between transition ${
+                          currentSubtitleTrack === -1
+                            ? 'bg-red-950/40 text-red-400 border border-red-800/40'
+                            : 'hover:bg-neutral-800/60 text-neutral-300'
+                        }`}
+                      >
+                        <span className="font-medium">Off</span>
+                        {currentSubtitleTrack === -1 && <Check className="w-4 h-4 text-red-400" />}
+                      </button>
+                      {subtitleTracks.map((track) => (
+                        <button
+                          key={track.id}
+                          onClick={() => changeSubtitleTrack(track.id)}
+                          className={`w-full px-3 py-2.5 rounded-lg text-left text-sm flex items-center justify-between transition ${
+                            currentSubtitleTrack === track.id
+                              ? 'bg-red-950/40 text-red-400 border border-red-800/40'
+                              : 'hover:bg-neutral-800/60 text-neutral-300'
+                          }`}
+                        >
+                          <span className="font-medium truncate">
+                            {track.label} {track.language !== 'unknown' && `(${track.language})`}
+                          </span>
+                          {currentSubtitleTrack === track.id && <Check className="w-4 h-4 text-red-400 shrink-0 ml-2" />}
+                        </button>
+                      ))}
+                      {subtitleTracks.length === 0 && (
+                        <p className="text-center py-2 text-xs text-neutral-500">
+                          No subtitle tracks available for this video.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Subtitle Appearance & Style (High-Legibility Modern Typography) */}
+                  <div className="pt-3 border-t border-neutral-800 space-y-3.5">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-neutral-400 px-1">
+                      Subtitle Appearance
+                    </div>
+
+                    {/* Live Preview Card */}
+                    <div className="relative overflow-hidden rounded-xl bg-neutral-950 border border-neutral-800 p-3 text-center min-h-[60px] flex items-center justify-center shadow-inner">
+                      <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-neutral-700 via-neutral-900 to-black pointer-events-none" />
+                      <span
+                        style={{
+                          color: subtitleColor,
+                          fontFamily: activeSubFont.family,
+                          fontSize: activeSubSize.sizeStr,
+                          backgroundColor: subtitleBg ? 'rgba(0, 0, 0, 0.75)' : 'transparent',
+                          textShadow: subtitleBg
+                            ? '0 0 4px #000000, 0 2px 4px rgba(0, 0, 0, 0.9)'
+                            : '0 0 4px #000000, 0 2px 4px rgba(0, 0, 0, 0.95), -1px -1px 2px #000000, 1px -1px 2px #000000, -1px 1px 2px #000000, 1px 1px 2px #000000, 0 0 8px #000000',
+                          fontWeight: 600,
+                          lineHeight: 1.35,
+                          padding: '0.25em 0.6em',
+                          borderRadius: '4px',
+                          display: 'inline-block',
+                        }}
+                        className="transition-all select-none"
+                      >
+                        Sample Subtitle Text
                       </span>
-                      {currentSubtitleTrack === track.id && <Check className="w-4 h-4 text-red-400" />}
-                    </button>
-                  ))}
-                  {subtitleTracks.length === 0 && (
-                    <p className="text-center py-4 text-xs text-neutral-500">
-                      No subtitle tracks available for this video.
-                    </p>
-                  )}
+                    </div>
+
+                    {/* Font Selector */}
+                    <div>
+                      <span className="text-xs font-semibold text-neutral-400 mb-1.5 block px-1">Font</span>
+                      <div className="grid grid-cols-3 gap-1.5 bg-neutral-900/80 p-1 rounded-xl border border-neutral-800">
+                        {SUBTITLE_FONTS.map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => updateSubtitleSetting('font', f.id)}
+                            style={{ fontFamily: f.fontStyle }}
+                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition ${
+                              subtitleFont === f.id
+                                ? 'bg-neutral-700 text-white shadow'
+                                : 'text-neutral-400 hover:text-neutral-200'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Color Presets */}
+                    <div>
+                      <span className="text-xs font-semibold text-neutral-400 mb-1.5 block px-1">Color</span>
+                      <div className="flex items-center gap-3 px-1">
+                        {SUBTITLE_COLORS.map((c) => (
+                          <button
+                            key={c.value}
+                            type="button"
+                            onClick={() => updateSubtitleSetting('color', c.value)}
+                            title={c.label}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center transition ${c.bgClass} ${
+                              subtitleColor.toLowerCase() === c.value.toLowerCase()
+                                ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-neutral-900 scale-110 shadow-lg'
+                                : 'hover:scale-105 opacity-80 hover:opacity-100 border border-neutral-700'
+                            }`}
+                          >
+                            {subtitleColor.toLowerCase() === c.value.toLowerCase() && (
+                              <Check className="w-3.5 h-3.5 text-black drop-shadow" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Size Selector */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5 px-1">
+                        <span className="text-xs font-semibold text-neutral-400">Size</span>
+                        <span className="text-xs text-neutral-400 font-mono">{subtitleSize}%</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1.5 bg-neutral-900/80 p-1 rounded-xl border border-neutral-800">
+                        {SUBTITLE_SIZES.map((s) => (
+                          <button
+                            key={s.value}
+                            type="button"
+                            onClick={() => updateSubtitleSetting('size', s.value)}
+                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition ${
+                              subtitleSize === s.value
+                                ? 'bg-neutral-700 text-white shadow'
+                                : 'text-neutral-400 hover:text-neutral-200'
+                            }`}
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Background Box Toggle */}
+                    <div className="flex items-center justify-between px-1 py-1">
+                      <div>
+                        <div className="text-xs text-neutral-200 font-medium">Dark Background Box</div>
+                        <div className="text-[11px] text-neutral-500">Translucent background behind text</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateSubtitleSetting('background', !subtitleBg)}
+                        className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
+                          subtitleBg ? 'bg-red-600' : 'bg-neutral-700'
+                        }`}
+                      >
+                        <div
+                          className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                            subtitleBg ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 

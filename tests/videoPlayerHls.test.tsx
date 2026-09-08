@@ -3,7 +3,7 @@
  */
 import { afterEach, test, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, render, waitFor, fireEvent } from '@testing-library/react';
 
 // Mock hls.js
 const mockAttachMedia = vi.fn();
@@ -198,4 +198,38 @@ describe('VideoPlayer HLS prioritization', () => {
     expect(queryByText(/Play in VLC\/MPV/i)).toBeNull();
     expect(queryByLabelText(/Play in MPV \/ VLC/i)).toBeNull();
   });
+
+  it('renders subtitle appearance controls and applies custom cue styles', async () => {
+    const { getByLabelText, getByText, findByText, container } = render(
+      <VideoPlayer
+        title="Test Stream"
+        src="https://proxy.example/stream.m3u8"
+        subtitles={[{ label: 'English', url: 'https://proxy.example/sub.vtt', language: 'en' }]}
+        onClose={vi.fn()}
+      />
+    );
+
+    // Open settings modal
+    const settingsBtn = getByLabelText(/Audio and Subtitles/i);
+    fireEvent.click(settingsBtn);
+
+    // Wait for modal and click Subtitles tab
+    const subTab = await findByText('Subtitles');
+    fireEvent.click(subTab);
+
+    // Verify appearance controls exist
+    expect(await findByText(/Subtitle Appearance/i)).toBeTruthy();
+    expect(getByText(/Sample Subtitle Text/i)).toBeTruthy();
+    expect(getByText(/Inter/i)).toBeTruthy();
+    expect(getByText(/Cinema/i)).toBeTruthy();
+    expect(getByText(/Montserrat/i)).toBeTruthy();
+    expect(getByText(/Dark Background Box/i)).toBeTruthy();
+
+    // Verify player container has lflix-player-container class and cue style tag
+    const playerContainer = container.querySelector('.lflix-player-container');
+    expect(playerContainer).toBeTruthy();
+    const styleTag = playerContainer?.querySelector('style');
+    expect(styleTag?.textContent).toContain('.lflix-player-container video::cue');
+  });
 });
+
