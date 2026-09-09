@@ -84,19 +84,19 @@ export default function LiquidDropdown({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         className={pillClassName || clsx(
-          'w-full flex items-center justify-between gap-2.5 px-4 sm:px-4.5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition-all select-none min-h-[42px] sm:min-h-[44px] cursor-pointer shadow-md',
+          'w-full flex items-center justify-between gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all select-none min-h-[40px] sm:min-h-[42px] cursor-pointer shadow-md whitespace-nowrap',
           isSelectedActive
             ? 'liquid-glass-pill-active font-bold shadow-sm text-white'
             : 'liquid-glass-pill text-neutral-200 hover:text-white'
         )}
       >
-        <span className="truncate drop-shadow-sm flex items-center gap-2">
+        <span className="whitespace-nowrap drop-shadow-sm flex items-center gap-2 min-w-0">
           {icon && <span className="w-4.5 h-4.5 shrink-0 flex items-center justify-center text-neutral-300">{icon}</span>}
-          <span className="truncate">{displayLabel}</span>
+          <span className="whitespace-nowrap">{displayLabel}</span>
         </span>
         <ChevronDown
           className={clsx(
-            'w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 shrink-0',
+            'w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 shrink-0 ml-1.5',
             isOpen
               ? 'rotate-180 text-white'
               : enableHover

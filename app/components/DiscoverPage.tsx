@@ -253,6 +253,28 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
 
     const showingSearch = searchQuery.trim().length >= 2;
 
+    const handleDiscoverTypeChange = (type: 'movie' | 'tv') => {
+        setDiscoverType(type);
+        setSelectedGenre('');
+        setSearchType(type);
+    };
+
+    const handleSearchTypeChange = (type: 'multi' | 'movie' | 'tv') => {
+        setSearchType(type);
+        if (type !== 'multi') {
+            setDiscoverType(type);
+        }
+        if (searchQuery.trim().length >= 2) {
+            searchTMDB(searchQuery, type);
+        }
+    };
+
+    const clearSearch = () => {
+        setSearchQuery('');
+        setSearchResults([]);
+        if (inputRef.current) inputRef.current.focus();
+    };
+
     // Determine items to show in the grid
     const gridItems = showingSearch
         ? searchResults
@@ -265,9 +287,9 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
     return (
         <div className="pt-24 px-4 sm:px-6 md:px-12 pb-28 md:pb-20">
             {/* Header */}
-            <div className="mb-8">
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="p-3 accent-gradient-box rounded-2xl text-white shadow-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                    <div className="p-3 accent-gradient-box rounded-2xl text-white shadow-lg shrink-0">
                         <Globe className="w-7 h-7" />
                     </div>
                     <div>
@@ -278,7 +300,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                 {onSwitchToTorrents && (
                     <button
                         onClick={() => onSwitchToTorrents(searchQuery.trim() || undefined)}
-                        className="mt-3.5 px-4 py-2 liquid-glass-pill border border-white/15 hover:scale-105 transition-all text-sm text-neutral-200 hover:text-white flex items-center gap-2 shadow-lg"
+                        className="self-start sm:self-auto px-4 py-2.5 liquid-glass-pill border border-white/15 hover:scale-105 transition-all text-sm font-medium text-neutral-200 hover:text-white flex items-center gap-2 shadow-lg shrink-0 cursor-pointer"
                     >
                         <Magnet className="w-4 h-4 accent-text" />
                         <span>Switch to Torrents</span>
@@ -286,43 +308,146 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                 )}
             </div>
 
-            {/* Search Bar */}
-            <div className="liquid-glass-base border border-white/15 rounded-3xl p-4 sm:p-6 mb-6 shadow-2xl relative overflow-hidden">
-                <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-white/[0.02] rounded-full blur-3xl pointer-events-none" />
-                <div className="flex flex-col sm:flex-row gap-3 relative z-10">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
-                        <input
-                            ref={inputRef}
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => handleSearchChange(e.target.value)}
-                            placeholder="Search any movie or TV show..."
-                            className="w-full bg-white/[0.04] border border-white/15 focus:border-white/40 focus:bg-white/[0.08] text-white placeholder-neutral-500 rounded-2xl pl-12 pr-10 py-3.5 outline-none transition-all text-sm md:text-base shadow-inner"
-                        />
-                        {searchQuery && (
-                            <button
-                                onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/10 rounded-full transition text-neutral-400 hover:text-white"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-white/[0.04] border border-white/10 rounded-xl w-full sm:w-auto">
-                        {(['multi', 'movie', 'tv'] as const).map((type) => (
-                            <button
-                                key={type}
-                                onClick={() => handleTypeChange(type)}
-                                className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-base font-semibold transition-all min-h-[42px] flex items-center justify-center cursor-pointer ${searchType === type
-                                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
-                                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
-                                    }`}
-                            >
-                                {type === 'multi' ? 'All' : type === 'movie' ? 'Movies' : 'Shows'}
-                            </button>
-                        ))}
-                    </div>
+            {/* Unified Search & Discovery Console */}
+            <div className="liquid-glass-base border border-white/15 rounded-3xl p-3.5 sm:p-5 mb-8 shadow-2xl relative z-20 overflow-visible">
+                {/* Top Tier: Universal Search Bar */}
+                <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400 pointer-events-none" />
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => handleSearchChange(e.target.value)}
+                        placeholder="Search any movie or TV show..."
+                        className="w-full bg-white/[0.04] border border-white/15 focus:border-white/40 focus:bg-white/[0.08] text-white placeholder-neutral-500 rounded-2xl pl-12 pr-11 py-3.5 outline-none transition-all text-sm md:text-base shadow-inner"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={clearSearch}
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/10 rounded-full transition text-neutral-400 hover:text-white cursor-pointer"
+                            aria-label="Clear search"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
+
+                {/* Bottom Tier: Browse Filters OR Search Refinement */}
+                <div className="mt-3.5 pt-3.5 border-t border-white/10">
+                    {!showingSearch ? (
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
+                            {/* Media Type Switcher: Movies / TV Shows (Left-aligned on large screens) */}
+                            <div className="flex items-center gap-2.5 w-full lg:w-auto shrink-0">
+                                <div className="flex liquid-glass-pill p-1 border border-white/10 rounded-2xl w-full sm:w-auto">
+                                    <button
+                                        onClick={() => handleDiscoverTypeChange('movie')}
+                                        className={`flex-1 sm:flex-initial px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 min-w-0 sm:min-w-[110px] justify-center min-h-[40px] cursor-pointer ${
+                                            discoverType === 'movie'
+                                                ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                                : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                                        }`}
+                                    >
+                                        <Film className="w-4 h-4" /> Movies
+                                    </button>
+                                    <button
+                                        onClick={() => handleDiscoverTypeChange('tv')}
+                                        className={`flex-1 sm:flex-initial px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 min-w-0 sm:min-w-[110px] justify-center min-h-[40px] cursor-pointer ${
+                                            discoverType === 'tv'
+                                                ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                                : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                                        }`}
+                                    >
+                                        <Tv className="w-4 h-4" /> TV Shows
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Dropdowns (Genre, Language, Sort) & Clear button (Right-aligned on large screens) */}
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto lg:justify-end shrink-0">
+                                <LiquidDropdown
+                                    label="All Genres"
+                                    title="Select Genre"
+                                    value={selectedGenre}
+                                    onChange={setSelectedGenre}
+                                    options={[{ id: '', name: 'All Genres' }, ...activeGenres]}
+                                    className="flex-1 sm:flex-initial lg:flex-none w-auto min-w-[135px] sm:min-w-[155px]"
+                                    align="left"
+                                    isHighlightActive={Boolean(selectedGenre)}
+                                />
+
+                                <LiquidDropdown
+                                    label="All Languages"
+                                    title="Select Language"
+                                    value={selectedLanguage}
+                                    onChange={setSelectedLanguage}
+                                    options={[{ id: '', name: 'All Languages' }, ...LANGUAGES]}
+                                    className="flex-1 sm:flex-initial lg:flex-none w-auto min-w-[150px] sm:min-w-[175px]"
+                                    align="left"
+                                    isHighlightActive={Boolean(selectedLanguage)}
+                                />
+
+                                <LiquidDropdown
+                                    label="Most Popular"
+                                    title="Sort By"
+                                    value={sortBy}
+                                    onChange={setSortBy}
+                                    options={SORT_OPTIONS}
+                                    className="flex-1 sm:flex-initial lg:flex-none w-auto min-w-[145px] sm:min-w-[165px]"
+                                    align="right"
+                                    isHighlightActive={sortBy !== 'popularity.desc'}
+                                />
+
+                                {isFiltering && (
+                                    <button
+                                        aria-label="Reset Filters"
+                                        onClick={() => { setSelectedGenre(''); setSelectedLanguage(''); setSortBy('popularity.desc'); }}
+                                        className="p-2.5 liquid-glass-pill hover:scale-105 border border-white/15 text-neutral-300 hover:text-white transition shrink-0 cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl"
+                                        title="Reset Filters"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        /* Search Refinement Mode */
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                                <span className="text-xs uppercase tracking-wider font-bold text-neutral-400 shrink-0">Filter:</span>
+                                <div className="flex liquid-glass-pill p-1 border border-white/10 rounded-2xl w-full sm:w-auto">
+                                    {(['multi', 'movie', 'tv'] as const).map((type) => (
+                                        <button
+                                            key={type}
+                                            onClick={() => handleSearchTypeChange(type)}
+                                            className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all min-h-[38px] flex items-center justify-center cursor-pointer ${
+                                                searchType === type
+                                                    ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
+                                                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                                            }`}
+                                        >
+                                            {type === 'multi' ? 'All' : type === 'movie' ? 'Movies' : 'TV Shows'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 justify-between sm:justify-end">
+                                <span className="text-xs sm:text-sm text-neutral-300">
+                                    {searching ? (
+                                        <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin accent-text" /> Searching...</span>
+                                    ) : (
+                                        <span>{searchResults.length} {searchResults.length === 1 ? 'result' : 'results'}</span>
+                                    )}
+                                </span>
+                                <button
+                                    onClick={clearSearch}
+                                    className="text-xs font-semibold text-neutral-400 hover:text-white transition px-2.5 py-1.5 rounded-lg hover:bg-white/10 cursor-pointer flex items-center gap-1"
+                                >
+                                    <X className="w-3.5 h-3.5" /> Clear search
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -333,89 +458,15 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                 </div>
             )}
 
-            {/* Filters Bar (when not searching) */}
-            {!showingSearch && !searching && (
-                <div className="liquid-glass-base border border-white/15 rounded-3xl p-4 sm:p-5 mb-8 shadow-xl relative z-20">
-                    <div className="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-6 relative z-10">
-                        {/* Title / Toggle */}
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:min-w-fit w-full xl:w-auto">
-                            <div className="flex items-center gap-2">
-                                <Filter className="w-5 h-5 accent-text" />
-                                <h2 className="text-xs md:text-sm font-bold uppercase tracking-wider text-neutral-300">Filters</h2>
-                            </div>
-                            <div className="flex liquid-glass-pill p-1 border border-white/10 rounded-xl w-full sm:w-auto">
-                                <button
-                                    onClick={() => { setDiscoverType('movie'); setSelectedGenre(''); }}
-                                    className={`flex-1 sm:flex-initial px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center gap-2 min-w-0 sm:min-w-[110px] justify-center min-h-[42px] cursor-pointer ${discoverType === 'movie' ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40' : 'text-neutral-300 hover:text-white hover:bg-white/5'}`}
-                                >
-                                    <Film className="w-4.5 h-4.5" /> Movies
-                                </button>
-                                <button
-                                    onClick={() => { setDiscoverType('tv'); setSelectedGenre(''); }}
-                                    className={`flex-1 sm:flex-initial px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center gap-2 min-w-0 sm:min-w-[110px] justify-center min-h-[42px] cursor-pointer ${discoverType === 'tv' ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40' : 'text-neutral-300 hover:text-white hover:bg-white/5'}`}
-                                >
-                                    <Tv className="w-4.5 h-4.5" /> TV Shows
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Dropdowns */}
-                        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 flex-1 xl:justify-end w-full">
-                            {/* Genre Filter */}
-                            <LiquidDropdown
-                                label="All Genres"
-                                title="Select Genre"
-                                value={selectedGenre}
-                                onChange={setSelectedGenre}
-                                options={[{ id: '', name: 'All Genres' }, ...activeGenres]}
-                                className="flex-1 min-w-[130px] sm:min-w-[150px]"
-                                align="left"
-                                isHighlightActive={Boolean(selectedGenre)}
-                            />
-
-                            {/* Language Filter */}
-                            <LiquidDropdown
-                                label="All Languages"
-                                title="Select Language"
-                                value={selectedLanguage}
-                                onChange={setSelectedLanguage}
-                                options={[{ id: '', name: 'All Languages' }, ...LANGUAGES]}
-                                className="flex-1 min-w-[130px] sm:min-w-[150px]"
-                                align="left"
-                                isHighlightActive={Boolean(selectedLanguage)}
-                            />
-
-                            {/* Sort Filter */}
-                            <LiquidDropdown
-                                label="Most Popular"
-                                title="Sort By"
-                                value={sortBy}
-                                onChange={setSortBy}
-                                options={SORT_OPTIONS}
-                                className="flex-1 min-w-[140px] sm:min-w-[170px]"
-                                align="right"
-                                isHighlightActive={sortBy !== 'popularity.desc'}
-                            />
-
-                            {/* Clear Filters */}
-                            {isFiltering && (
-                                <button aria-label="Reset Filters"
-                                    onClick={() => { setSelectedGenre(''); setSelectedLanguage(''); setSortBy('popularity.desc'); }}
-                                    className="p-2.5 liquid-glass-pill hover:scale-105 border border-white/15 text-neutral-300 hover:text-white transition flex-shrink-0"
-                                    title="Reset Filters"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Results Header (if filtering/trending) */}
-            {!showingSearch && !searching && (
-                <div className="flex items-center gap-2.5 mb-4">
-                    {isFiltering ? (
+            {/* Section Header */}
+            {!searching && (
+                <div className="flex items-center gap-2.5 mb-5">
+                    {showingSearch ? (
+                        <>
+                            <Search className="w-5 h-5 accent-text" />
+                            <h2 className="text-lg md:text-xl font-bold tracking-tight">Search Results for &quot;{searchQuery}&quot;</h2>
+                        </>
+                    ) : isFiltering ? (
                         <>
                             <Filter className="w-5 h-5 accent-text" />
                             <h2 className="text-lg md:text-xl font-bold tracking-tight">Filtered Results</h2>
@@ -423,17 +474,9 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                     ) : (
                         <>
                             <TrendingUp className="w-5 h-5 text-red-500" />
-                            <h2 className="text-lg md:text-xl font-bold tracking-tight">Trending Now</h2>
+                            <h2 className="text-lg md:text-xl font-bold tracking-tight">Trending {discoverType === 'movie' ? 'Movies' : 'TV Shows'}</h2>
                         </>
                     )}
-                </div>
-            )}
-
-            {/* Search results header */}
-            {showingSearch && !searching && (
-                <div className="flex items-center gap-2 mb-4">
-                    <Search className="w-4 h-4 text-neutral-400" />
-                    <span className="text-sm md:text-base text-neutral-300">{searchResults.length} results for &quot;{searchQuery}&quot;</span>
                 </div>
             )}
 

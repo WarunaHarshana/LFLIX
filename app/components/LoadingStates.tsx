@@ -20,15 +20,15 @@ export function CardGridSkeleton({ count = 8 }: { count?: number }) {
 
 export function HeroSkeleton() {
     return (
-        <div className="relative h-[80vh] min-h-[500px] w-full liquid-glass-base overflow-hidden">
+        <div className="relative h-screen min-h-[640px] md:min-h-[720px] w-full liquid-glass-base overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/40 to-transparent" />
-            <div className="absolute bottom-0 left-0 p-8 sm:p-12 pb-24 space-y-4 max-w-2xl">
-                <div className="h-12 w-80 rounded-2xl liquid-glass-pill bg-white/10 animate-pulse" />
-                <div className="h-4 w-48 rounded-lg bg-white/5 animate-pulse" />
-                <div className="h-16 w-full rounded-xl bg-white/5 animate-pulse" />
+            <div className="absolute bottom-0 left-0 p-6 sm:p-12 md:p-16 lg:p-20 pb-28 sm:pb-36 md:pb-44 lg:pb-52 space-y-5 sm:space-y-6 max-w-4xl">
+                <div className="h-16 sm:h-24 md:h-36 lg:h-44 w-72 sm:w-96 md:w-[480px] rounded-2xl liquid-glass-pill bg-white/10 animate-pulse" />
+                <div className="h-6 sm:h-7 w-56 sm:w-80 rounded-lg bg-white/5 animate-pulse" />
+                <div className="h-16 sm:h-24 w-full rounded-xl bg-white/5 animate-pulse" />
                 <div className="flex gap-4 pt-2">
-                    <div className="h-12 w-32 rounded-xl liquid-glass-pill bg-white/15 animate-pulse" />
-                    <div className="h-12 w-36 rounded-xl liquid-glass-pill bg-white/10 animate-pulse" />
+                    <div className="h-14 sm:h-16 w-36 sm:w-44 rounded-2xl liquid-glass-pill bg-white/15 animate-pulse" />
+                    <div className="h-14 sm:h-16 w-40 sm:w-48 rounded-2xl liquid-glass-pill bg-white/10 animate-pulse" />
                 </div>
             </div>
         </div>

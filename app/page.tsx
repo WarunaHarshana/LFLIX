@@ -21,7 +21,6 @@ import { useHero } from './hooks/useHero';
 import { useDownloads } from './hooks/useDownloads';
 
 // Components — always visible or lightweight (static imports)
-import GenreFilter from './components/GenreFilter';
 import EmptyState from './components/EmptyState';
 import { HeroSkeleton, CardGridSkeleton } from './components/LoadingStates';
 import MobileNav from './components/MobileNav';
@@ -504,17 +503,14 @@ export default function Home() {
             />
           )}
 
-          <div className={clsx(hero.featured ? "pt-6 sm:pt-8" : "pt-24 sm:pt-28", "relative z-20")}>
-            {/* Genre Filter */}
-            {availableGenres.length > 0 && (
-              <GenreFilter genres={availableGenres} selectedGenre={selectedGenre} onSelect={setSelectedGenre} />
-            )}
-
-            {/* Content Grid */}
+          <div className={clsx(hero.featured ? "pt-10 sm:pt-14 md:pt-16" : "pt-24 sm:pt-28", "relative z-20")}>
+            {/* Content Grid with integrated Genre, Language, Grid, and Sort dropdowns */}
             <LibraryGrid
               filteredLibrary={filteredLibrary}
               activeTab={activeTab}
+              genres={availableGenres}
               selectedGenre={selectedGenre}
+              onGenreSelect={setSelectedGenre}
               languages={availableLanguages}
               selectedLanguage={selectedLanguage}
               onLanguageSelect={setSelectedLanguage}
@@ -525,6 +521,13 @@ export default function Home() {
               displayPrefs={displayPrefs}
               onDisplayPrefChange={updateDisplayPref}
               onCardClick={(item) => setSelectedDetail(item)}
+              onPlayClick={(item) => {
+                if (item.type === 'movie') {
+                  playback.playFile('movie', item.id, undefined, item.watchProgress?.progress);
+                } else {
+                  openShow(item);
+                }
+              }}
               onContextMenu={(e, item) => setContextMenu({ x: e.clientX, y: e.clientY, item })}
             />
           </div>

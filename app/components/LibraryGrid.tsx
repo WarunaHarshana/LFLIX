@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { ArrowUpDown, LayoutGrid, Globe, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react';
+import { ArrowUpDown, LayoutGrid, Globe, ChevronDown, Tag } from 'lucide-react';
 import clsx from 'clsx';
+import { motion } from 'framer-motion';
 import ContentCard from './ContentCard';
 import EmptyState from './EmptyState';
 import type { ContentItem } from '@/app/types';
@@ -10,7 +11,9 @@ import type { ContentItem } from '@/app/types';
 type LibraryGridProps = {
   filteredLibrary: ContentItem[];
   activeTab: string;
+  genres?: string[];
   selectedGenre: string | null;
+  onGenreSelect?: (genre: string | null) => void;
   languages?: string[];
   selectedLanguage?: string | null;
   onLanguageSelect?: (lang: string | null) => void;
@@ -26,6 +29,7 @@ type LibraryGridProps = {
   };
   onDisplayPrefChange?: (key: string, value: any) => void;
   onCardClick: (item: ContentItem) => void;
+  onPlayClick?: (item: ContentItem) => void;
   onContextMenu: (e: React.MouseEvent, item: ContentItem) => void;
 };
 
@@ -58,10 +62,86 @@ const GRID_CLASS_MAP: Record<number, string> = {
   10: 'grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10',
 };
 
+type LibraryGridItemProps = {
+  item: ContentItem;
+  index: number;
+  isHoveredItem: boolean;
+  columnCount: number;
+  order: number;
+  isFocused: boolean;
+  showTitle: boolean;
+  showRating: boolean;
+  onCardClick: (item: ContentItem) => void;
+  onPlayClick?: (item: ContentItem) => void;
+  onContextMenu: (e: React.MouseEvent, item: ContentItem) => void;
+  onHover: (index: number) => void;
+  onLeave: (index: number) => void;
+};
+
+const LibraryGridItem = memo(function LibraryGridItem({
+  item,
+  index,
+  isHoveredItem,
+  columnCount,
+  order,
+  isFocused,
+  showTitle,
+  showRating,
+  onCardClick,
+  onPlayClick,
+  onContextMenu,
+  onHover,
+  onLeave,
+}: LibraryGridItemProps) {
+  const handleClick = useCallback(() => onCardClick(item), [onCardClick, item]);
+  const handlePlay = useMemo(() => onPlayClick ? () => onPlayClick(item) : undefined, [onPlayClick, item]);
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    onContextMenu(e, item);
+  }, [onContextMenu, item]);
+  const handleHoverChange = useCallback((hovered: boolean) => {
+    if (hovered) {
+      onHover(index);
+    } else {
+      onLeave(index);
+    }
+  }, [index, onHover, onLeave]);
+
+  return (
+    <motion.div
+      layout={isHoveredItem ? true : "position"}
+      transition={{
+        duration: 0.22,
+        ease: [0.25, 1, 0.5, 1],
+      }}
+      className={clsx(
+        "relative transform-gpu will-change-transform",
+        isHoveredItem && columnCount > 1 ? "col-span-2 z-20" : "col-span-1 z-10",
+        isFocused && "ring-2 ring-white ring-offset-2 ring-offset-black rounded-lg"
+      )}
+      style={{ order }}
+    >
+      <ContentCard
+        item={item}
+        reflowMode={true}
+        isExpanded={isHoveredItem}
+        onHoverChange={handleHoverChange}
+        onClick={handleClick}
+        onPlay={handlePlay}
+        showTitle={showTitle}
+        showRating={showRating}
+        onContextMenu={handleContextMenu}
+      />
+    </motion.div>
+  );
+});
+
 export default function LibraryGrid({
   filteredLibrary,
   activeTab,
+  genres = [],
   selectedGenre,
+  onGenreSelect,
   languages = [],
   selectedLanguage = null,
   onLanguageSelect,
@@ -72,26 +152,60 @@ export default function LibraryGrid({
   displayPrefs,
   onDisplayPrefChange,
   onCardClick,
+  onPlayClick,
   onContextMenu,
 }: LibraryGridProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isGridOpen, setIsGridOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
+  const [isGenreOpen, setIsGenreOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const gridDropdownRef = useRef<HTMLDivElement>(null);
   const langDropdownRef = useRef<HTMLDivElement>(null);
+  const genreDropdownRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [columnCount, setColumnCount] = useState<number>(() => displayPrefs.gridColumns || 8);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    const updateCols = () => {
+      if (!gridRef.current) return;
+      const style = window.getComputedStyle(gridRef.current);
+      const templateColumns = style.getPropertyValue('grid-template-columns');
+      const count = templateColumns.split(' ').filter(Boolean).length;
+      if (count > 0) setColumnCount(count);
+    };
+    updateCols();
+    window.addEventListener('resize', updateCols);
+    return () => window.removeEventListener('resize', updateCols);
+  }, [displayPrefs.gridColumns]);
+
+  useEffect(() => {
+    setHoveredIndex(null);
+  }, [activeTab, selectedGenre, selectedLanguage, sortBy, displayPrefs.gridColumns]);
+
+  const handleHover = useCallback((idx: number) => {
+    setHoveredIndex(idx);
+  }, []);
+
+  const handleLeave = useCallback((idx: number) => {
+    setHoveredIndex((prev) => (prev === idx ? null : prev));
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         setIsOpen(false);
       }
-      if (gridDropdownRef.current && !gridDropdownRef.current.contains(event.target as Node)) {
+      if (gridDropdownRef.current && !gridDropdownRef.current.contains(target)) {
         setIsGridOpen(false);
       }
-      if (langDropdownRef.current && !langDropdownRef.current.contains(event.target as Node)) {
+      if (langDropdownRef.current && !langDropdownRef.current.contains(target)) {
         setIsLangOpen(false);
+      }
+      if (genreDropdownRef.current && !genreDropdownRef.current.contains(target)) {
+        setIsGenreOpen(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -99,12 +213,15 @@ export default function LibraryGrid({
         setIsOpen(false);
         setIsGridOpen(false);
         setIsLangOpen(false);
+        setIsGenreOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
@@ -145,33 +262,126 @@ export default function LibraryGrid({
             ({filteredLibrary.length} items)
           </span>
         </h3>
-        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
-          {/* Language filter dropdown */}
-          {languages.length > 0 && onLanguageSelect && (
-            <div ref={langDropdownRef} className="relative group/lang">
+        {/* Mobile backdrop for open dropdowns */}
+        {(isGenreOpen || isLangOpen || isGridOpen || isOpen) && (
+          <div
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] sm:hidden transition-opacity duration-200"
+            onClick={() => {
+              setIsGenreOpen(false);
+              setIsLangOpen(false);
+              setIsGridOpen(false);
+              setIsOpen(false);
+            }}
+            aria-hidden="true"
+          />
+        )}
+
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5 sm:flex-wrap w-full sm:w-auto">
+          {/* Genre filter dropdown */}
+          {genres.length > 0 && onGenreSelect && (
+            <div ref={genreDropdownRef} className="relative group/genre w-full sm:w-auto">
               <button
-                onClick={() => setIsLangOpen(prev => !prev)}
-                aria-expanded={isLangOpen}
+                onClick={() => {
+                  setIsLangOpen(false);
+                  setIsGridOpen(false);
+                  setIsOpen(false);
+                  setIsGenreOpen(prev => !prev);
+                }}
+                aria-expanded={isGenreOpen}
                 className={clsx(
-                  "flex items-center gap-2 px-4 sm:px-4.5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition-all select-none min-h-[42px] sm:min-h-[44px] cursor-pointer",
-                  selectedLanguage
-                    ? "liquid-glass-pill-active font-bold shadow-sm"
+                  "w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all select-none min-h-[42px] cursor-pointer shadow-md",
+                  selectedGenre
+                    ? "liquid-glass-pill-active font-bold shadow-sm text-white"
                     : "liquid-glass-pill text-neutral-200 hover:text-white"
                 )}
               >
-                <Globe className="w-4.5 h-4.5" />
-                <span className="hidden sm:inline">
-                  {selectedLanguage || 'All Languages'}
+                <span className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <Tag className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-300 shrink-0" />
+                  <span className="truncate max-w-[105px] sm:max-w-none">
+                    {selectedGenre || 'All Genres'}
+                  </span>
                 </span>
-                <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200", isLangOpen ? "rotate-180 text-white" : "group-hover/lang:rotate-180 group-hover/lang:text-white")} />
+                <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 shrink-0 ml-1", isGenreOpen ? "rotate-180 text-white" : "sm:group-hover/genre:rotate-180 sm:group-hover/genre:text-white")} />
               </button>
               <div
                 className={clsx(
-                  "absolute right-0 top-full mt-2 w-52 max-h-[480px] max-h-[75vh] overflow-y-auto scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
-                  isLangOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/lang:opacity-100 group-hover/lang:visible"
+                  "absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-56 sm:w-56 max-w-[calc(100vw-2rem)] max-h-[50vh] sm:max-h-[480px] overflow-y-auto overscroll-contain scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
+                  isGenreOpen ? "opacity-100 visible" : "opacity-0 invisible sm:group-hover/genre:opacity-100 sm:group-hover/genre:visible"
                 )}
               >
-                <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10 sticky top-0 bg-neutral-900/95 backdrop-blur-xl rounded-t-xl">
+                <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10 sticky top-0 bg-neutral-900/95 backdrop-blur-xl rounded-t-xl z-10">
+                  Genres
+                </div>
+                <button
+                  onClick={() => {
+                    onGenreSelect(null);
+                    setIsGenreOpen(false);
+                  }}
+                  className={clsx(
+                    'w-full text-left px-3.5 py-2.5 text-xs sm:text-sm rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item min-h-[40px]',
+                    selectedGenre === null
+                      ? 'liquid-dropdown-item-active'
+                      : 'text-neutral-200 hover:text-white'
+                  )}
+                >
+                  <span className="drop-shadow-sm">All Genres</span>
+                  {selectedGenre === null && <span className="text-xs font-bold">✓</span>}
+                </button>
+                {genres.map((genre) => (
+                  <button
+                    key={genre}
+                    onClick={() => {
+                      onGenreSelect(genre);
+                      setIsGenreOpen(false);
+                    }}
+                    className={clsx(
+                      'w-full text-left px-3.5 py-2.5 text-xs sm:text-sm rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item min-h-[40px]',
+                      selectedGenre === genre
+                        ? 'liquid-dropdown-item-active'
+                        : 'text-neutral-200 hover:text-white'
+                    )}
+                  >
+                    <span className="drop-shadow-sm">{genre}</span>
+                    {selectedGenre === genre && <span className="text-xs font-bold">✓</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Language filter dropdown */}
+          {languages.length > 0 && onLanguageSelect && (
+            <div ref={langDropdownRef} className="relative group/lang w-full sm:w-auto">
+              <button
+                onClick={() => {
+                  setIsGenreOpen(false);
+                  setIsGridOpen(false);
+                  setIsOpen(false);
+                  setIsLangOpen(prev => !prev);
+                }}
+                aria-expanded={isLangOpen}
+                className={clsx(
+                  "w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all select-none min-h-[42px] cursor-pointer shadow-md",
+                  selectedLanguage
+                    ? "liquid-glass-pill-active font-bold shadow-sm text-white"
+                    : "liquid-glass-pill text-neutral-200 hover:text-white"
+                )}
+              >
+                <span className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-300 shrink-0" />
+                  <span className="truncate max-w-[105px] sm:max-w-none">
+                    {selectedLanguage || 'All Languages'}
+                  </span>
+                </span>
+                <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 shrink-0 ml-1", isLangOpen ? "rotate-180 text-white" : "sm:group-hover/lang:rotate-180 sm:group-hover/lang:text-white")} />
+              </button>
+              <div
+                className={clsx(
+                  "absolute right-0 top-full mt-2 w-56 sm:w-56 max-w-[calc(100vw-2rem)] max-h-[50vh] sm:max-h-[480px] overflow-y-auto overscroll-contain scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
+                  isLangOpen ? "opacity-100 visible" : "opacity-0 invisible sm:group-hover/lang:opacity-100 sm:group-hover/lang:visible"
+                )}
+              >
+                <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10 sticky top-0 bg-neutral-900/95 backdrop-blur-xl rounded-t-xl z-10">
                   Language
                 </div>
                 <button
@@ -180,7 +390,7 @@ export default function LibraryGrid({
                     setIsLangOpen(false);
                   }}
                   className={clsx(
-                    'w-full text-left px-3.5 py-2.5 text-sm sm:text-base rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item',
+                    'w-full text-left px-3.5 py-2.5 text-xs sm:text-sm rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item min-h-[40px]',
                     selectedLanguage === null
                       ? 'liquid-dropdown-item-active'
                       : 'text-neutral-200 hover:text-white'
@@ -197,7 +407,7 @@ export default function LibraryGrid({
                       setIsLangOpen(false);
                     }}
                     className={clsx(
-                      'w-full text-left px-3.5 py-2.5 text-sm sm:text-base rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item',
+                      'w-full text-left px-3.5 py-2.5 text-xs sm:text-sm rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item min-h-[40px]',
                       selectedLanguage === lang
                         ? 'liquid-dropdown-item-active'
                         : 'text-neutral-200 hover:text-white'
@@ -212,26 +422,33 @@ export default function LibraryGrid({
           )}
 
           {/* Tiles per row / Grid columns dropdown */}
-          <div ref={gridDropdownRef} className="relative group/grid">
+          <div ref={gridDropdownRef} className="relative group/grid w-full sm:w-auto">
             <button
-              onClick={() => setIsGridOpen(prev => !prev)}
+              onClick={() => {
+                setIsGenreOpen(false);
+                setIsLangOpen(false);
+                setIsOpen(false);
+                setIsGridOpen(prev => !prev);
+              }}
               aria-expanded={isGridOpen}
               title="Tiles per row"
-              className="flex items-center gap-2 px-4 sm:px-4.5 py-2 sm:py-2.5 liquid-glass-pill rounded-xl text-sm sm:text-base font-semibold text-neutral-200 hover:text-white transition-all select-none min-h-[42px] sm:min-h-[44px] cursor-pointer"
+              className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 sm:px-4 py-2 sm:py-2.5 liquid-glass-pill rounded-xl text-xs sm:text-sm font-semibold text-neutral-200 hover:text-white transition-all select-none min-h-[42px] cursor-pointer shadow-md"
             >
-              <LayoutGrid className="w-4.5 h-4.5" />
-              <span className="hidden sm:inline">
-                {currentColumns} tiles
+              <span className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <LayoutGrid className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-300 shrink-0" />
+                <span className="truncate max-w-[105px] sm:max-w-none">
+                  {currentColumns} tiles
+                </span>
               </span>
-              <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200", isGridOpen ? "rotate-180 text-white" : "group-hover/grid:rotate-180 group-hover/grid:text-white")} />
+              <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 shrink-0 ml-1", isGridOpen ? "rotate-180 text-white" : "sm:group-hover/grid:rotate-180 sm:group-hover/grid:text-white")} />
             </button>
             <div
               className={clsx(
-                "absolute right-0 top-full mt-2 w-48 max-h-[480px] max-h-[75vh] overflow-y-auto scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
-                isGridOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/grid:opacity-100 group-hover/grid:visible"
+                "absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-52 sm:w-48 max-w-[calc(100vw-2rem)] max-h-[50vh] sm:max-h-[480px] overflow-y-auto overscroll-contain scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
+                isGridOpen ? "opacity-100 visible" : "opacity-0 invisible sm:group-hover/grid:opacity-100 sm:group-hover/grid:visible"
               )}
             >
-              <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10">
+              <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10 sticky top-0 bg-neutral-900/95 backdrop-blur-xl rounded-t-xl z-10">
                 Tiles Per Row
               </div>
               {GRID_COLUMNS_OPTIONS.map((opt) => (
@@ -242,7 +459,7 @@ export default function LibraryGrid({
                     setIsGridOpen(false);
                   }}
                   className={clsx(
-                    'w-full text-left px-3.5 py-2.5 text-sm sm:text-base rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item',
+                    'w-full text-left px-3.5 py-2.5 text-xs sm:text-sm rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item min-h-[40px]',
                     currentColumns === opt.value
                       ? 'liquid-dropdown-item-active'
                       : 'text-neutral-200 hover:text-white'
@@ -256,25 +473,33 @@ export default function LibraryGrid({
           </div>
 
           {/* Sort dropdown */}
-          <div ref={dropdownRef} className="relative group/sort">
+          <div ref={dropdownRef} className="relative group/sort w-full sm:w-auto">
             <button
-              onClick={() => setIsOpen(prev => !prev)}
+              onClick={() => {
+                setIsGenreOpen(false);
+                setIsLangOpen(false);
+                setIsOpen(false);
+                setIsGridOpen(false);
+                setIsOpen(prev => !prev);
+              }}
               aria-expanded={isOpen}
-              className="flex items-center gap-2 px-4 sm:px-4.5 py-2 sm:py-2.5 liquid-glass-pill rounded-xl text-sm sm:text-base font-semibold text-neutral-200 hover:text-white transition-all select-none min-h-[42px] sm:min-h-[44px] cursor-pointer"
+              className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-2 px-3 sm:px-4 py-2 sm:py-2.5 liquid-glass-pill rounded-xl text-xs sm:text-sm font-semibold text-neutral-200 hover:text-white transition-all select-none min-h-[42px] cursor-pointer shadow-md"
             >
-              <ArrowUpDown className="w-4.5 h-4.5" />
-              <span className="hidden sm:inline">
-                {sortLabel}
+              <span className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <ArrowUpDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-300 shrink-0" />
+                <span className="truncate max-w-[105px] sm:max-w-none">
+                  {sortLabel}
+                </span>
               </span>
-              <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200", isOpen ? "rotate-180 text-white" : "group-hover/sort:rotate-180 group-hover/sort:text-white")} />
+              <ChevronDown className={clsx("w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 shrink-0 ml-1", isOpen ? "rotate-180 text-white" : "sm:group-hover/sort:rotate-180 sm:group-hover/sort:text-white")} />
             </button>
             <div
               className={clsx(
-                "absolute right-0 top-full mt-2 w-52 max-h-[480px] max-h-[75vh] overflow-y-auto scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
-                isOpen ? "opacity-100 visible" : "opacity-0 invisible group-hover/sort:opacity-100 group-hover/sort:visible"
+                "absolute right-0 top-full mt-2 w-56 sm:w-52 max-w-[calc(100vw-2rem)] max-h-[50vh] sm:max-h-[480px] overflow-y-auto overscroll-contain scrollbar-thin liquid-glass-menu rounded-2xl shadow-2xl p-1.5 transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']",
+                isOpen ? "opacity-100 visible" : "opacity-0 invisible sm:group-hover/sort:opacity-100 sm:group-hover/sort:visible"
               )}
             >
-              <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10">
+              <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10 sticky top-0 bg-neutral-900/95 backdrop-blur-xl rounded-t-xl z-10">
                 Sort By
               </div>
               {SORT_OPTIONS.map((opt) => (
@@ -285,7 +510,7 @@ export default function LibraryGrid({
                     setIsOpen(false);
                   }}
                   className={clsx(
-                    'w-full text-left px-3.5 py-2.5 text-sm sm:text-base rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item',
+                    'w-full text-left px-3.5 py-2.5 text-xs sm:text-sm rounded-xl transition-all flex items-center justify-between font-medium cursor-pointer liquid-dropdown-item min-h-[40px]',
                     sortBy === opt.value
                       ? 'liquid-dropdown-item-active'
                       : 'text-neutral-200 hover:text-white'
@@ -314,26 +539,40 @@ export default function LibraryGrid({
           ref={gridRef}
           className={clsx("grid gap-4", gridColumnsClass)}
         >
-          {filteredLibrary.map((item, index) => (
-            <div
-              key={`${item.type}-${item.id}`}
-              className={clsx(
-                "transition-all duration-200",
-                focusedIndex === index && "ring-2 ring-white ring-offset-2 ring-offset-black rounded-lg"
-              )}
-            >
-              <ContentCard
+          {filteredLibrary.map((item, index) => {
+            const isHoveredItem = hoveredIndex === index;
+            const isHoveredLastCol =
+              hoveredIndex !== null &&
+              columnCount > 1 &&
+              (hoveredIndex % columnCount === columnCount - 1);
+
+            const order = isHoveredLastCol
+              ? index === hoveredIndex
+                ? hoveredIndex - 1
+                : index === hoveredIndex - 1
+                ? hoveredIndex
+                : index
+              : index;
+
+            return (
+              <LibraryGridItem
+                key={`${item.type}-${item.id}`}
                 item={item}
-                onClick={() => onCardClick(item)}
+                index={index}
+                isHoveredItem={isHoveredItem}
+                columnCount={columnCount}
+                order={order}
+                isFocused={focusedIndex === index}
                 showTitle={displayPrefs.showTitles}
                 showRating={displayPrefs.showRatings}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  onContextMenu(e, item);
-                }}
+                onCardClick={onCardClick}
+                onPlayClick={onPlayClick}
+                onContextMenu={onContextMenu}
+                onHover={handleHover}
+                onLeave={handleLeave}
               />
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
