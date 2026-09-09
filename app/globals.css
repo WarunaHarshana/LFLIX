@@ -396,14 +396,14 @@ body {
   animation: slideUp 0.6s ease-out both;
 }
 
-/* Fast card content reveal */
+/* Smooth Prime Video-style card content reveal */
 @keyframes cardReveal {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-card-reveal {
-  animation: cardReveal 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: cardReveal 0.8s cubic-bezier(0.25, 0.1, 0.25, 1) 0.2s both;
 }
 
 /* Hero crossfade transition */
@@ -888,7 +888,7 @@ body {
 }
 
 .liquid-sheen-effect:hover::after {
-  animation: liquidSheen 0.85s ease-out;
+  animation: liquidSheen 2.5s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 /* Frosted Recessed Glass Input */

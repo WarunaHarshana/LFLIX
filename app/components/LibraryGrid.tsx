@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react';
 import { ArrowUpDown, LayoutGrid, Globe, ChevronDown, Tag } from 'lucide-react';
 import clsx from 'clsx';
-import { motion } from 'framer-motion';
 import ContentCard from './ContentCard';
 import EmptyState from './EmptyState';
 import type { ContentItem } from '@/app/types';
@@ -67,7 +66,6 @@ type LibraryGridItemProps = {
   index: number;
   isHoveredItem: boolean;
   columnCount: number;
-  order: number;
   isFocused: boolean;
   showTitle: boolean;
   showRating: boolean;
@@ -83,7 +81,6 @@ const LibraryGridItem = memo(function LibraryGridItem({
   index,
   isHoveredItem,
   columnCount,
-  order,
   isFocused,
   showTitle,
   showRating,
@@ -107,23 +104,20 @@ const LibraryGridItem = memo(function LibraryGridItem({
     }
   }, [index, onHover, onLeave]);
 
+  const isLastCol = columnCount > 1 && (index % columnCount === columnCount - 1);
+
   return (
-    <motion.div
-      layout={isHoveredItem ? true : "position"}
-      transition={{
-        duration: 0.22,
-        ease: [0.25, 1, 0.5, 1],
-      }}
+    <div
       className={clsx(
-        "relative transform-gpu will-change-transform",
-        isHoveredItem && columnCount > 1 ? "col-span-2 z-20" : "col-span-1 z-10",
+        "relative col-span-1",
+        isHoveredItem ? "z-40" : "z-10",
         isFocused && "ring-2 ring-white ring-offset-2 ring-offset-black rounded-lg"
       )}
-      style={{ order }}
     >
       <ContentCard
         item={item}
-        reflowMode={true}
+        reflowMode={false}
+        horizontalOrigin={isLastCol ? 'right' : 'left'}
         isExpanded={isHoveredItem}
         onHoverChange={handleHoverChange}
         onClick={handleClick}
@@ -132,7 +126,7 @@ const LibraryGridItem = memo(function LibraryGridItem({
         showRating={showRating}
         onContextMenu={handleContextMenu}
       />
-    </motion.div>
+    </div>
   );
 });
 
@@ -170,6 +164,18 @@ export default function LibraryGrid({
   useEffect(() => {
     const updateCols = () => {
       if (!gridRef.current) return;
+      const children = Array.from(gridRef.current.children) as HTMLElement[];
+      if (children.length > 0) {
+        const firstTop = children[0].offsetTop;
+        let cols = 0;
+        while (cols < children.length && children[cols].offsetTop === firstTop) {
+          cols++;
+        }
+        if (cols > 0) {
+          setColumnCount(cols);
+          return;
+        }
+      }
       const style = window.getComputedStyle(gridRef.current);
       const templateColumns = style.getPropertyValue('grid-template-columns');
       const count = templateColumns.split(' ').filter(Boolean).length;
@@ -178,7 +184,7 @@ export default function LibraryGrid({
     updateCols();
     window.addEventListener('resize', updateCols);
     return () => window.removeEventListener('resize', updateCols);
-  }, [displayPrefs.gridColumns]);
+  }, [displayPrefs.gridColumns, filteredLibrary.length]);
 
   useEffect(() => {
     setHoveredIndex(null);
@@ -542,18 +548,6 @@ export default function LibraryGrid({
         >
           {filteredLibrary.map((item, index) => {
             const isHoveredItem = hoveredIndex === index;
-            const isHoveredLastCol =
-              hoveredIndex !== null &&
-              columnCount > 1 &&
-              (hoveredIndex % columnCount === columnCount - 1);
-
-            const order = isHoveredLastCol
-              ? index === hoveredIndex
-                ? hoveredIndex - 1
-                : index === hoveredIndex - 1
-                ? hoveredIndex
-                : index
-              : index;
 
             return (
               <LibraryGridItem
@@ -562,7 +556,6 @@ export default function LibraryGrid({
                 index={index}
                 isHoveredItem={isHoveredItem}
                 columnCount={columnCount}
-                order={order}
                 isFocused={focusedIndex === index}
                 showTitle={displayPrefs.showTitles}
                 showRating={displayPrefs.showRatings}

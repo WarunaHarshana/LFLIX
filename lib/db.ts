@@ -425,6 +425,187 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_stream_tokens_expiresAt ON stream_tokens(expiresAt);
 `);
 
+/**
+ * Deduplicates episode records that share the same (showId, seasonNumber, episodeNumber)
+ * or case-insensitive filePath (e.g. on Windows when folders are rescanned with different casing).
+ * Safely preserves user watch progress by migrating it to the retained episode record.
+ */
+export function deduplicateEpisodes(): { removedCount: number } {
+  let removedCount = 0;
+  try {
+    // Pass 1: Group by showId, seasonNumber, episodeNumber
+    const duplicateGroups = db.prepare(`
+      SELECT showId, seasonNumber, episodeNumber, count(*) as count
+      FROM episodes
+      WHERE showId IS NOT NULL AND seasonNumber IS NOT NULL AND episodeNumber IS NOT NULL
+      GROUP BY showId, seasonNumber, episodeNumber
+      HAVING count > 1
+    `).all() as { showId: number; seasonNumber: number; episodeNumber: number }[];
+
+    for (const group of duplicateGroups) {
+      const rows = db.prepare(`
+        SELECT id, filePath, fileName, title, stillPath, overview, rating, voteCount,
+               isHDR, resolution, videoCodec, audioCodec, audioChannels, bitrate, duration, fileSize
+        FROM episodes
+        WHERE showId = ? AND seasonNumber = ? AND episodeNumber = ?
+        ORDER BY id ASC
+      `).all(group.showId, group.seasonNumber, group.episodeNumber) as any[];
+
+      if (rows.length <= 1) continue;
+
+      // Retain the row that has watch history; if multiple or none, pick the lowest ID
+      let keepRow = rows[0];
+      let bestHistoryScore = -1;
+
+      for (const row of rows) {
+        const history = db.prepare('SELECT id, progress, completed FROM watch_history WHERE episodeId = ?').get(row.id) as { id: number; progress: number; completed: number } | undefined;
+        let score = 0;
+        if (history) {
+          score = 100 + (history.completed ? 50 : 0) + (history.progress || 0);
+        }
+        if (score > bestHistoryScore) {
+          bestHistoryScore = score;
+          keepRow = row;
+        }
+      }
+
+      const delRows = rows.filter(r => r.id !== keepRow.id);
+
+      for (const del of delRows) {
+        const keepHist = db.prepare('SELECT id, progress, completed FROM watch_history WHERE episodeId = ?').get(keepRow.id) as { id: number; progress: number; completed: number } | undefined;
+        const delHist = db.prepare('SELECT id, progress, completed FROM watch_history WHERE episodeId = ?').get(del.id) as { id: number; progress: number; completed: number } | undefined;
+
+        if (delHist && !keepHist) {
+          db.prepare('UPDATE watch_history SET episodeId = ? WHERE id = ?').run(keepRow.id, delHist.id);
+        } else if (delHist && keepHist) {
+          if ((delHist.completed && !keepHist.completed) || (delHist.progress > keepHist.progress)) {
+            db.prepare('DELETE FROM watch_history WHERE id = ?').run(keepHist.id);
+            db.prepare('UPDATE watch_history SET episodeId = ? WHERE id = ?').run(keepRow.id, delHist.id);
+          } else {
+            db.prepare('DELETE FROM watch_history WHERE id = ?').run(delHist.id);
+          }
+        }
+
+        // Delete duplicate episode row first so UNIQUE constraints on filePath are satisfied
+        db.prepare('DELETE FROM episodes WHERE id = ?').run(del.id);
+        removedCount++;
+
+        // Update keepRow with the best available metadata or media info
+        db.prepare(`
+          UPDATE episodes SET 
+            filePath = ?,
+            fileName = ?,
+            stillPath = COALESCE(stillPath, ?),
+            overview = COALESCE(overview, ?),
+            rating = COALESCE(rating, ?),
+            voteCount = COALESCE(voteCount, ?),
+            resolution = COALESCE(resolution, ?),
+            videoCodec = COALESCE(videoCodec, ?),
+            audioCodec = COALESCE(audioCodec, ?),
+            audioChannels = COALESCE(audioChannels, ?),
+            bitrate = COALESCE(bitrate, ?),
+            duration = COALESCE(duration, ?),
+            fileSize = COALESCE(fileSize, ?)
+          WHERE id = ?
+        `).run(
+          del.filePath, del.fileName,
+          del.stillPath, del.overview, del.rating, del.voteCount,
+          del.resolution, del.videoCodec, del.audioCodec, del.audioChannels,
+          del.bitrate, del.duration, del.fileSize,
+          keepRow.id
+        );
+      }
+    }
+
+    // Pass 2: Check any duplicate LOWER(filePath)
+    const pathDuplicates = db.prepare(`
+      SELECT LOWER(filePath) as lowerPath, count(*) as count
+      FROM episodes
+      GROUP BY LOWER(filePath)
+      HAVING count > 1
+    `).all() as { lowerPath: string }[];
+
+    for (const group of pathDuplicates) {
+      const rows = db.prepare(`
+        SELECT id, filePath FROM episodes WHERE LOWER(filePath) = ? ORDER BY id ASC
+      `).all(group.lowerPath) as { id: number; filePath: string }[];
+
+      if (rows.length <= 1) continue;
+      const keepRow = rows[0];
+      for (let i = 1; i < rows.length; i++) {
+        const del = rows[i];
+        const keepHist = db.prepare('SELECT id FROM watch_history WHERE episodeId = ?').get(keepRow.id) as { id: number } | undefined;
+        const delHist = db.prepare('SELECT id FROM watch_history WHERE episodeId = ?').get(del.id) as { id: number } | undefined;
+        if (delHist && !keepHist) {
+          db.prepare('UPDATE watch_history SET episodeId = ? WHERE id = ?').run(keepRow.id, delHist.id);
+        } else if (delHist) {
+          db.prepare('DELETE FROM watch_history WHERE id = ?').run(delHist.id);
+        }
+        db.prepare('DELETE FROM episodes WHERE id = ?').run(del.id);
+        removedCount++;
+      }
+    }
+  } catch (err) {
+    console.error('[DB] Error deduplicating episodes:', err);
+  }
+  return { removedCount };
+}
+
+/**
+ * Deduplicates movie records that share the same case-insensitive filePath.
+ */
+export function deduplicateMovies(): { removedCount: number } {
+  let removedCount = 0;
+  try {
+    const pathDuplicates = db.prepare(`
+      SELECT LOWER(filePath) as lowerPath, count(*) as count
+      FROM movies
+      GROUP BY LOWER(filePath)
+      HAVING count > 1
+    `).all() as { lowerPath: string }[];
+
+    for (const group of pathDuplicates) {
+      const rows = db.prepare(`
+        SELECT id, filePath FROM movies WHERE LOWER(filePath) = ? ORDER BY id ASC
+      `).all(group.lowerPath) as { id: number; filePath: string }[];
+
+      if (rows.length <= 1) continue;
+      const keepRow = rows[0];
+      for (let i = 1; i < rows.length; i++) {
+        const del = rows[i];
+        const keepHist = db.prepare('SELECT id FROM watch_history WHERE contentType = "movie" AND contentId = ?').get(keepRow.id) as { id: number } | undefined;
+        const delHist = db.prepare('SELECT id FROM watch_history WHERE contentType = "movie" AND contentId = ?').get(del.id) as { id: number } | undefined;
+        if (delHist && !keepHist) {
+          db.prepare('UPDATE watch_history SET contentId = ? WHERE id = ?').run(keepRow.id, delHist.id);
+        } else if (delHist) {
+          db.prepare('DELETE FROM watch_history WHERE id = ?').run(delHist.id);
+        }
+        db.prepare('DELETE FROM movies WHERE id = ?').run(del.id);
+        removedCount++;
+      }
+    }
+  } catch (err) {
+    console.error('[DB] Error deduplicating movies:', err);
+  }
+  return { removedCount };
+}
+
+// Clean up duplicate records before creating unique indexes
+deduplicateEpisodes();
+deduplicateMovies();
+
+try {
+  db.exec(`
+    DROP INDEX IF EXISTS idx_episodes_season_episode;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_show_season_ep ON episodes(showId, seasonNumber, episodeNumber);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_filePath_nocase ON episodes(filePath COLLATE NOCASE);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_filePath_nocase ON movies(filePath COLLATE NOCASE);
+  `);
+} catch (error) {
+  console.warn('[DB] Failed to create unique indexes for media paths:', error);
+}
+
+
 function initializeFullTextSearch(): void {
   const ftsSchemaVersion = '1';
 

@@ -25,14 +25,14 @@ let checkEpStmt: any = null;
 
 function getCheckMovieStmt() {
   if (!checkMovieStmt) {
-    checkMovieStmt = db.prepare('SELECT id, title, tmdbId, posterPath, resolution FROM movies WHERE filePath = ?');
+    checkMovieStmt = db.prepare('SELECT id, title, tmdbId, posterPath, resolution, filePath FROM movies WHERE filePath = ? COLLATE NOCASE');
   }
   return checkMovieStmt;
 }
 
 function getCheckEpStmt() {
   if (!checkEpStmt) {
-    checkEpStmt = db.prepare('SELECT id, resolution, title, stillPath, rating, showId, seasonNumber, episodeNumber FROM episodes WHERE filePath = ?');
+    checkEpStmt = db.prepare('SELECT id, resolution, title, stillPath, rating, showId, seasonNumber, episodeNumber, filePath FROM episodes WHERE filePath = ? COLLATE NOCASE');
   }
   return checkEpStmt;
 }
@@ -87,8 +87,26 @@ export async function scanFile(filePath: string, activeDownloads?: ActiveDownloa
     const fileName = path.basename(filePath);
 
     // Check if already indexed using cached prepared statements
-    const movieExists = getCheckMovieStmt().get(filePath) as { id: number; title: string | null; tmdbId: number | null; posterPath: string | null; resolution: string | null } | undefined;
-    const epExists = getCheckEpStmt().get(filePath) as { id: number; resolution: string | null; title: string | null; stillPath: string | null; rating: number | null; showId: number; seasonNumber: number; episodeNumber: number } | undefined;
+    const movieExists = getCheckMovieStmt().get(filePath) as { id: number; title: string | null; tmdbId: number | null; posterPath: string | null; resolution: string | null; filePath: string } | undefined;
+    const epExists = getCheckEpStmt().get(filePath) as { id: number; resolution: string | null; title: string | null; stillPath: string | null; rating: number | null; showId: number; seasonNumber: number; episodeNumber: number; filePath: string } | undefined;
+
+    // Keep stored path in sync with actual disk casing
+    if (movieExists && movieExists.filePath && movieExists.filePath !== filePath) {
+      try {
+        db.prepare('UPDATE movies SET filePath = ?, fileName = ? WHERE id = ?').run(filePath, fileName, movieExists.id);
+        movieExists.filePath = filePath;
+      } catch (e) {
+        console.warn('[Scanner] Failed to update movie path casing:', e);
+      }
+    }
+    if (epExists && epExists.filePath && epExists.filePath !== filePath) {
+      try {
+        db.prepare('UPDATE episodes SET filePath = ?, fileName = ? WHERE id = ?').run(filePath, fileName, epExists.id);
+        epExists.filePath = filePath;
+      } catch (e) {
+        console.warn('[Scanner] Failed to update episode path casing:', e);
+      }
+    }
 
     if (movieExists || epExists) {
       // Check if media info or episode metadata needs updating
@@ -240,6 +258,49 @@ export async function scanFile(filePath: string, activeDownloads?: ActiveDownloa
         tvInfo.season,
         tvInfo.episode
       );
+
+      // Check if this show already has an episode record for this season & episodeNumber
+      const existingEpisode = db.prepare(`
+        SELECT id, filePath, title, stillPath, rating, resolution
+        FROM episodes 
+        WHERE showId = ? AND seasonNumber = ? AND episodeNumber = ?
+      `).get(showId, tvInfo.season, tvInfo.episode) as {
+        id: number;
+        filePath: string;
+        title: string | null;
+        stillPath: string | null;
+        rating: number | null;
+        resolution: string | null;
+      } | undefined;
+
+      if (existingEpisode) {
+        // Episode already exists (e.g. replaced file, moved file, or different path casing)
+        db.prepare(`UPDATE episodes SET 
+          filePath = ?,
+          fileName = ?,
+          isHDR = ?,
+          resolution = COALESCE(?, resolution),
+          videoCodec = COALESCE(?, videoCodec),
+          audioCodec = COALESCE(audioCodec, ?),
+          audioChannels = COALESCE(audioChannels, ?),
+          bitrate = COALESCE(?, bitrate),
+          duration = COALESCE(?, duration),
+          fileSize = COALESCE(?, fileSize),
+          title = CASE WHEN title IS NULL OR title = '' OR title LIKE 'S%E%' OR title LIKE 'Episode %' THEN COALESCE(?, title) ELSE title END,
+          overview = COALESCE(overview, ?),
+          stillPath = COALESCE(stillPath, ?),
+          rating = COALESCE(rating, ?),
+          voteCount = COALESCE(voteCount, ?)
+          WHERE id = ?`)
+          .run(
+            filePath, fileName, isHDR,
+            resolution || null, videoCodec || null, audioCodec || null, audioChannels || null,
+            mediaInfo?.bitrate || null, mediaInfo?.duration || null, mediaInfo?.fileSize || null,
+            epMeta.title, epMeta.overview, epMeta.stillPath, epMeta.rating, epMeta.voteCount,
+            existingEpisode.id
+          );
+        return { added: false };
+      }
 
       // Insert episode with TMDB metadata and media info
       db.prepare(`INSERT OR IGNORE INTO episodes 

@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { Film, Tv, Play, Info, X } from 'lucide-react';
 import clsx from 'clsx';
 import TMDBImage from './TMDBImage';
@@ -48,6 +48,7 @@ type Props = {
     showTitle?: boolean;
     showRating?: boolean;
     reflowMode?: boolean;
+    horizontalOrigin?: 'left' | 'right';
     isExpanded?: boolean;
     onHoverChange?: (hovered: boolean) => void;
 };
@@ -61,12 +62,13 @@ function ContentCard({
     showTitle = true,
     showRating = true,
     reflowMode = false,
+    horizontalOrigin: propHorizontalOrigin,
     isExpanded: controlledIsExpanded,
     onHoverChange,
 }: Props) {
     const cardRef = useRef<HTMLDivElement>(null);
     const expandedCardRef = useRef<HTMLDivElement>(null);
-    const [horizontalOrigin, setHorizontalOrigin] = useState<'left' | 'right'>('left');
+    const [horizontalOrigin, setHorizontalOrigin] = useState<'left' | 'right'>(propHorizontalOrigin || 'left');
     const [internalIsHovered, setInternalIsHovered] = useState(false);
     const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
     const leaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -157,6 +159,24 @@ function ContentCard({
         : 0;
     const displayRating = item.imdbRating ?? item.rating;
 
+    const updateOrigin = useCallback(() => {
+        if (!cardRef.current) return;
+        const rect = cardRef.current.getBoundingClientRect();
+        const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        const neededWidth = rect.width * 2 + 16;
+        if (rect.left + neededWidth > viewportWidth - 20) {
+            setHorizontalOrigin('right');
+        } else {
+            setHorizontalOrigin(propHorizontalOrigin || 'left');
+        }
+    }, [propHorizontalOrigin]);
+
+    useEffect(() => {
+        if (propHorizontalOrigin) {
+            setHorizontalOrigin(propHorizontalOrigin);
+        }
+    }, [propHorizontalOrigin]);
+
     const handleMouseEnter = () => {
         // Cancel any pending leave timer immediately when mouse enters or stays inside
         if (leaveTimerRef.current) {
@@ -164,15 +184,8 @@ function ContentCard({
             leaveTimerRef.current = null;
         }
 
-        if (!reflowMode && cardRef.current) {
-            const rect = cardRef.current.getBoundingClientRect();
-            const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-            const neededWidth = rect.width * 2 + 16;
-            if (rect.left + neededWidth > viewportWidth - 10) {
-                setHorizontalOrigin('right');
-            } else {
-                setHorizontalOrigin('left');
-            }
+        if (!reflowMode) {
+            updateOrigin();
         }
 
         if (activeExpanded) return;
@@ -180,7 +193,7 @@ function ContentCard({
         if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
         hoverTimerRef.current = setTimeout(() => {
             setHoverState(true);
-        }, 90);
+        }, 300);
     };
 
     const handleMouseLeave = (e?: React.MouseEvent) => {
@@ -200,12 +213,12 @@ function ContentCard({
             }
         }
 
-        // Debounce leave with a 100ms grace window to prevent edge-flicker or ping-pong loops
+        // Debounce leave with a 150ms grace window to prevent edge-flicker or ping-pong loops
         if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
         leaveTimerRef.current = setTimeout(() => {
             setHoverState(false);
             leaveTimerRef.current = null;
-        }, 100);
+        }, 150);
     };
 
     const handleCardClick = (e: React.MouseEvent) => {
@@ -216,15 +229,8 @@ function ContentCard({
         if ((isTouchEvent || lacksHover) && !activeExpanded) {
             e.stopPropagation();
             triggerHaptic('light');
-            if (!reflowMode && cardRef.current) {
-                const rect = cardRef.current.getBoundingClientRect();
-                const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-                const neededWidth = rect.width * 2 + 16;
-                if (rect.left + neededWidth > viewportWidth - 10) {
-                    setHorizontalOrigin('right');
-                } else {
-                    setHorizontalOrigin('left');
-                }
+            if (!reflowMode) {
+                updateOrigin();
             }
             setHoverState(true);
             return;
@@ -284,7 +290,8 @@ function ContentCard({
                 "relative select-none",
                 reflowMode
                     ? (activeExpanded ? "w-full h-full aspect-[4/3] z-20" : "aspect-[2/3] w-full z-10")
-                    : (clsx("aspect-[2/3] w-full", activeExpanded ? "z-[999]" : "z-10"))
+                    : (clsx("aspect-[2/3] w-full", activeExpanded ? "z-[999]" : "z-10")),
+                "transition-all duration-[850ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]"
             )}
         >
             {/* 1. RESTING CARD (Vertical 2:3 Portrait - Stays strictly in grid cell) */}
@@ -293,11 +300,11 @@ function ContentCard({
                 onContextMenu={onContextMenu}
                 className={clsx(
                     "relative w-full h-full rounded-2xl overflow-hidden cursor-pointer",
-                    "liquid-card liquid-sheen-effect shadow-md border border-white/10",
-                    reflowMode ? "transition-opacity duration-200" : "transition-all duration-300 ease-out",
+                    "liquid-card shadow-md border border-white/10",
+                    "transition-all duration-[850ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
                     activeExpanded
-                        ? (reflowMode ? "hidden" : "opacity-0 scale-95 pointer-events-none")
-                        : "opacity-100 scale-100",
+                        ? "opacity-0 scale-95 pointer-events-none"
+                        : "opacity-100 scale-100 pointer-events-auto",
                     "active:scale-[0.97]"
                 )}
             >
@@ -338,14 +345,6 @@ function ContentCard({
                     </span>
                 )}
 
-                {/* Rating badge (if not watched) */}
-                {(!item.watchProgress || item.watchProgress.completed !== 1) && showRating && displayRating != null && displayRating > 0 && (
-                    <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-black/70 backdrop-blur-sm border border-white/15 z-20 pointer-events-none shadow-sm">
-                        <span className="text-[#F5C518] text-[10px] font-black">IMDb</span>
-                        <span className="text-white text-xs font-bold">{displayRating.toFixed(1)}</span>
-                    </div>
-                )}
-
                 {/* Glowing liquid progress bar */}
                 {showProgress && progressPercent > 0 && progressPercent < 95 && (
                     <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60 backdrop-blur-sm z-20">
@@ -353,17 +352,6 @@ function ContentCard({
                             className="h-full bg-gradient-to-r from-red-600 via-rose-500 to-amber-400 transition-all rounded-r-full shadow-[0_0_10px_rgba(244,63,94,0.8)]"
                             style={{ width: `${progressPercent}%` }}
                         />
-                    </div>
-                )}
-
-                {/* Resting title overlay */}
-                {showTitle && (
-                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent z-10 pointer-events-none">
-                        <p className="text-xs sm:text-sm font-bold text-white truncate drop-shadow-md">{item.title}</p>
-                        <div className="flex items-center justify-between text-[11px] text-neutral-300 font-medium mt-0.5">
-                            <span>{item.type === 'movie' ? 'Movie' : 'TV Series'}</span>
-                            {year && <span>{year}</span>}
-                        </div>
                     </div>
                 )}
             </div>
@@ -381,20 +369,20 @@ function ContentCard({
                 className={clsx(
                     reflowMode
                         ? clsx(
-                            "relative w-full h-full",
-                            activeExpanded ? "pointer-events-auto opacity-100 scale-100 block" : "pointer-events-none opacity-0 scale-95 hidden"
+                            "absolute inset-0 w-full h-full",
+                            activeExpanded ? "pointer-events-auto opacity-100 scale-100" : "pointer-events-none opacity-0 scale-95"
                         )
                         : clsx(
-                            "!absolute top-0 h-full !z-[1000] w-[calc(200%+1rem)] max-w-[calc(100vw-2rem)]",
+                            "!absolute top-0 h-full w-[calc(200%+1rem)] max-w-[calc(100vw-2rem)]",
                             horizontalOrigin === 'left' ? "left-0 origin-top-left" : "right-0 origin-top-right",
-                            activeExpanded ? "pointer-events-auto opacity-100 scale-100" : "pointer-events-none opacity-0 scale-95"
+                            activeExpanded
+                                ? "!z-[1000] pointer-events-auto opacity-100 scale-100"
+                                : "!z-0 pointer-events-none opacity-0 scale-95"
                         ),
-                    reflowMode
-                        ? "transition-opacity duration-200 ease-out"
-                        : "transition-all duration-300 ease-[cubic-bezier(0.2,0,0.2,1)]",
+                    "transition-all duration-[850ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
                     "rounded-2xl overflow-hidden bg-[#121218]/95 backdrop-blur-md border border-white/20",
                     "shadow-[0_20px_45px_rgba(0,0,0,0.9),0_0_20px_rgba(255,255,255,0.1)]",
-                    "liquid-sheen-effect",
+                    activeExpanded && "liquid-sheen-effect",
                     "cursor-pointer"
                 )}
             >
@@ -408,7 +396,7 @@ function ContentCard({
                             fill
                             sizes="(max-width: 1200px) 50vw, 35vw"
                             className={clsx(
-                                "w-full h-full object-cover object-center transition-transform duration-500 ease-out",
+                                "w-full h-full object-cover object-center transition-transform duration-[1400ms] ease-out",
                                 activeExpanded ? "scale-105" : "scale-100"
                             )}
                         />
@@ -423,8 +411,8 @@ function ContentCard({
                 </div>
 
                 {/* Dark Cinematic Gradient Vignette matching HeroSection */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/70 via-50% to-transparent pointer-events-none" />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/35 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/75 via-55% to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/40 to-transparent pointer-events-none" />
 
                 {/* Mobile / Touch explicit close button */}
                 <button
@@ -434,7 +422,10 @@ function ContentCard({
                         triggerHaptic('light');
                         setHoverState(false);
                     }}
-                    className="!absolute top-2 right-2 z-40 w-7 h-7 rounded-full liquid-glass-pill bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer transition sm:hidden shadow-md border border-white/20"
+                    className={clsx(
+                        "!absolute top-2 right-2 z-40 w-7 h-7 rounded-full liquid-glass-pill bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer transition sm:hidden shadow-md border border-white/20",
+                        activeExpanded ? "pointer-events-auto" : "pointer-events-none"
+                    )}
                     aria-label="Close preview"
                 >
                     <X className="w-3.5 h-3.5 text-neutral-300 hover:text-white" />
@@ -462,21 +453,21 @@ function ContentCard({
 
                 {/* Expanded Card Content & Controls with Snappy Reveal Animation */}
                 <div className={clsx(
-                    "absolute inset-0 p-3 sm:p-4 md:p-5 flex flex-col justify-end z-20 pointer-events-auto",
-                    activeExpanded && "animate-card-reveal"
+                    "absolute inset-0 p-4 sm:p-5 md:p-6 flex flex-col justify-end z-20",
+                    activeExpanded ? "pointer-events-auto animate-card-reveal" : "pointer-events-none"
                 )}>
                     {/* Proper Logo / Title Icon or Styled Heading */}
                     {logoUrl ? (
-                        <div className="relative mb-1 sm:mb-2 shrink-0">
+                        <div className="relative mb-1.5 sm:mb-2.5 shrink-0">
                             <TMDBImage
                                 src={logoUrl}
                                 alt={item.title}
                                 width={360}
                                 height={110}
-                                className="h-7 sm:h-9 md:h-11 max-w-[70%] sm:max-w-[75%] w-auto object-contain object-left drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]"
+                                className="h-9 sm:h-12 md:h-14 lg:h-16 max-w-[75%] sm:max-w-[80%] w-auto object-contain object-left drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]"
                                 fallback={
                                     showTitle ? (
-                                        <h3 className="text-sm sm:text-base md:text-lg font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] leading-tight tracking-tight text-white line-clamp-1">
+                                        <h3 className="text-base sm:text-lg md:text-xl font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] leading-tight tracking-tight text-white line-clamp-1">
                                             {item.title}
                                         </h3>
                                     ) : null
@@ -485,43 +476,43 @@ function ContentCard({
                         </div>
                     ) : (
                         showTitle && (
-                            <h3 className="text-sm sm:text-base md:text-lg font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] leading-tight tracking-tight text-white line-clamp-1 mb-1 sm:mb-2">
+                            <h3 className="text-base sm:text-lg md:text-xl font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] leading-tight tracking-tight text-white line-clamp-1 mb-1.5 sm:mb-2.5">
                                 {item.title}
                             </h3>
                         )
                     )}
 
                     {/* Metadata line with liquid glass pills */}
-                    <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs font-semibold flex-wrap mb-1.5 sm:mb-2">
-                        <span className="liquid-glass-pill px-2 py-0.5 rounded-md sm:rounded-lg uppercase tracking-wider text-[9px] sm:text-[10px] text-neutral-100 font-bold border border-white/20 shadow-sm">
+                    <div className="flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm font-semibold flex-wrap mb-2 sm:mb-2.5">
+                        <span className="liquid-glass-pill px-2.5 py-1 rounded-lg sm:rounded-xl uppercase tracking-wider text-[10px] sm:text-xs text-neutral-100 font-extrabold border border-white/20 shadow-sm">
                             {item.type === 'show' ? 'TV Series' : 'Movie'}
                         </span>
                         {showRating && displayRating != null && displayRating > 0 && (
                             <span
-                                className="inline-flex items-center overflow-hidden rounded-md sm:rounded-lg border border-[#F5C518]/80 bg-black/75 shadow-sm"
+                                className="inline-flex items-center overflow-hidden rounded-lg sm:rounded-xl border border-[#F5C518]/80 bg-black/75 shadow-sm"
                                 aria-label={`IMDb rating ${displayRating.toFixed(1)}`}
                             >
-                                <span className="bg-[#F5C518] px-1.5 py-0.5 text-[9px] sm:text-[10px] font-black text-black">IMDb</span>
-                                <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold text-white">{displayRating.toFixed(1)}</span>
+                                <span className="bg-[#F5C518] px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-black text-black">IMDb</span>
+                                <span className="px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold text-white">{displayRating.toFixed(1)}</span>
                             </span>
                         )}
                         {year && (
-                            <span className="text-neutral-200 drop-shadow text-[10px] sm:text-xs font-semibold">
+                            <span className="text-neutral-200 drop-shadow text-xs sm:text-sm font-bold">
                                 {year}
                             </span>
                         )}
                         {item.isHDR && (
-                            <span className="liquid-glass-pill px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 text-[9px] sm:text-[10px] rounded-md sm:rounded-lg font-bold border border-yellow-500/50 shadow-[0_0_12px_rgba(234,179,8,0.25)]">
+                            <span className="liquid-glass-pill px-2 py-0.5 sm:py-1 bg-yellow-500/20 text-yellow-300 text-[10px] sm:text-xs rounded-lg sm:rounded-xl font-bold border border-yellow-500/50 shadow-[0_0_12px_rgba(234,179,8,0.25)]">
                                 HDR
                             </span>
                         )}
                         {item.resolution && (
-                            <span className="liquid-glass-pill px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-[9px] sm:text-[10px] rounded-md sm:rounded-lg font-bold border border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.25)]">
+                            <span className="liquid-glass-pill px-2 py-0.5 sm:py-1 bg-blue-500/20 text-blue-300 text-[10px] sm:text-xs rounded-lg sm:rounded-xl font-bold border border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.25)]">
                                 {item.resolution === '2160p' ? '4K' : item.resolution}
                             </span>
                         )}
                         {item.genres && (
-                            <span className="text-neutral-300 drop-shadow text-[10px] sm:text-[11px] font-medium truncate max-w-[130px] sm:max-w-[180px]">
+                            <span className="text-neutral-300 drop-shadow text-xs sm:text-sm font-medium truncate max-w-[160px] sm:max-w-[220px]">
                                 {item.genres.split(',').slice(0, 2).join(' • ')}
                             </span>
                         )}
@@ -529,13 +520,13 @@ function ContentCard({
 
                     {/* Synopsis */}
                     {item.overview && (
-                        <p className="text-[11px] sm:text-xs md:text-sm text-neutral-100/95 drop-shadow-md leading-relaxed line-clamp-2 mb-2 sm:mb-3 font-normal">
+                        <p className="text-xs sm:text-sm md:text-[15px] text-neutral-100/95 drop-shadow-md leading-relaxed line-clamp-2 sm:line-clamp-3 mb-2.5 sm:mb-3.5 font-normal">
                             {item.overview}
                         </p>
                     )}
 
                     {/* Banner-style Liquid Action Buttons */}
-                    <div className="flex items-center gap-2 sm:gap-2.5 pt-0.5">
+                    <div className="flex items-center gap-2.5 sm:gap-3.5 pt-1">
                         <button
                             type="button"
                             onClick={(e) => {
@@ -547,11 +538,11 @@ function ContentCard({
                                     onClick();
                                 }
                             }}
-                            className="liquid-btn-primary px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 font-extrabold rounded-xl sm:rounded-2xl flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs md:text-sm tracking-tight shadow-xl hover:scale-105 active:scale-95 transition cursor-pointer whitespace-nowrap shrink-0"
+                            className="liquid-btn-primary px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 font-extrabold rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm md:text-base tracking-tight shadow-xl hover:scale-105 active:scale-95 transition cursor-pointer whitespace-nowrap shrink-0"
                             title={item.type === 'show' ? "View Episodes" : "Play"}
                             aria-label={`${item.type === 'show' ? 'View episodes for' : 'Play'} ${item.title}`}
                         >
-                            <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-black text-black" />
+                            <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-black text-black" />
                             <span>{item.type === 'show' ? 'View Episodes' : 'Play'}</span>
                         </button>
 
@@ -562,11 +553,11 @@ function ContentCard({
                                 triggerHaptic('light');
                                 onClick();
                             }}
-                            className="liquid-btn-secondary px-2.5 sm:px-3.5 md:px-4 py-1.5 sm:py-2 font-bold rounded-xl sm:rounded-2xl flex items-center gap-1.5 text-[11px] sm:text-xs md:text-sm tracking-tight shadow-md hover:scale-105 active:scale-95 transition cursor-pointer whitespace-nowrap shrink-0"
+                            className="liquid-btn-secondary px-3.5 sm:px-4.5 md:px-5 py-2 sm:py-2.5 font-bold rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm md:text-base tracking-tight shadow-md hover:scale-105 active:scale-95 transition cursor-pointer whitespace-nowrap shrink-0"
                             title="More Info"
                             aria-label={`More info about ${item.title}`}
                         >
-                            <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            <Info className="w-4 h-4 sm:w-5 sm:h-5" />
                             <span>More Info</span>
                         </button>
                     </div>
