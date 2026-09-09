@@ -144,9 +144,11 @@ export default function NotificationBell() {
   // Close panel on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
+      const target = e.target;
       if (
-        panelRef.current && !panelRef.current.contains(e.target as Node) &&
-        buttonRef.current && !buttonRef.current.contains(e.target as Node)
+        target instanceof Node &&
+        panelRef.current && !panelRef.current.contains(target) &&
+        buttonRef.current && !buttonRef.current.contains(target)
       ) {
         setIsOpen(false);
       }

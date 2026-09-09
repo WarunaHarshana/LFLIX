@@ -98,10 +98,14 @@ function ContentCard({
     useEffect(() => {
         if (!activeExpanded) return;
         const handleOutsideInteraction = (e: MouseEvent | TouchEvent) => {
-            const target = e.target as Node;
-            const isInsideCard = cardRef.current?.contains(target);
-            const isInsideExpanded = expandedCardRef.current?.contains(target);
-            if (!isInsideCard && !isInsideExpanded) {
+            const target = e.target;
+            if (target instanceof Node) {
+                const isInsideCard = cardRef.current?.contains(target);
+                const isInsideExpanded = expandedCardRef.current?.contains(target);
+                if (!isInsideCard && !isInsideExpanded) {
+                    setHoverState(false);
+                }
+            } else {
                 setHoverState(false);
             }
         };
@@ -186,8 +190,8 @@ function ContentCard({
         }
 
         // Check if pointer moved into cardRef or expandedCardRef
-        if (e?.relatedTarget) {
-            const nextTarget = e.relatedTarget as Node | null;
+        const nextTarget = e?.relatedTarget;
+        if (nextTarget instanceof Node) {
             if (
                 (cardRef.current && cardRef.current.contains(nextTarget)) ||
                 (expandedCardRef.current && expandedCardRef.current.contains(nextTarget))

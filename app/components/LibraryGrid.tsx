@@ -194,7 +194,8 @@ export default function LibraryGrid({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as Node;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
       if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         setIsOpen(false);
       }
