@@ -17,8 +17,10 @@ import {
   RotateCw,
   Plus,
   Settings,
+  ArrowLeft,
 } from 'lucide-react';
 import { apiUrl } from '@/lib/mobileConfig';
+import { triggerHaptic } from '@/lib/haptics';
 import { Search } from 'lucide-react';
 import MobileConnectModal from './MobileConnectModal';
 import DlnaModal from './DlnaModal';
@@ -54,6 +56,7 @@ type DetailTabNavProps = {
   settingsHref?: string;
   hdrDisplaySupported?: boolean;
   onLogout?: () => void | Promise<void>;
+  onBack?: () => void;
 };
 
 const tabs: Array<{ id: TabId; label: string; icon?: 'discover' | 'live' | 'watchlist' }> = [
@@ -83,6 +86,7 @@ export default function DetailTabNav({
   settingsHref = '/settings',
   hdrDisplaySupported: hdrDisplaySupportedProp,
   onLogout,
+  onBack,
 }: DetailTabNavProps) {
   const router = useRouter();
   const [internalShowMobileConnect, setInternalShowMobileConnect] = useState(false);
@@ -245,7 +249,20 @@ export default function DetailTabNav({
   return (
     <>
       <nav className="fixed top-0 left-0 right-0 w-full z-40 px-6 sm:px-8 lg:px-10 py-4 sm:py-5 items-center justify-between hidden md:flex transition-all duration-300 bg-gradient-to-b from-black/65 via-black/20 to-transparent">
-        <div className="flex items-center gap-6 lg:gap-8">
+        <div className="flex items-center gap-4 lg:gap-6">
+          {onBack && (
+            <button
+              onClick={() => {
+                triggerHaptic('light');
+                onBack();
+              }}
+              className="h-10 w-10 sm:h-11 sm:w-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 text-neutral-200 hover:text-white hover:scale-105 active:scale-95 transition-all inline-flex items-center justify-center shadow-xl backdrop-blur-xl cursor-pointer shrink-0"
+              title="Back"
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
           <h1 className="text-3xl sm:text-4xl font-black accent-text tracking-tighter select-none drop-shadow-md">LFLIX</h1>
           
           {/* Navigation Tabs */}

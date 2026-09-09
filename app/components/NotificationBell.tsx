@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Bell, Check, CheckCheck, Trash2, X, Download, Tv, Film, AlertCircle } from 'lucide-react';
 import { useNotifications, Notification } from '../hooks/useNotifications';
+import { triggerHaptic } from '@/lib/haptics';
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -61,25 +63,39 @@ function getNotificationBadgeStyle(type: string): string {
 function NotificationItem({
   notification,
   onMarkRead,
+  onClose,
 }: {
   notification: Notification;
   onMarkRead: (id: number) => void;
+  onClose: () => void;
 }) {
+  const router = useRouter();
   const posterUrl = notification.posterPath
     ? `https://image.tmdb.org/t/p/w92${notification.posterPath}`
     : null;
 
+  const handleClick = () => {
+    triggerHaptic('light');
+    if (!notification.read) {
+      onMarkRead(notification.id);
+    }
+    if (notification.actionUrl) {
+      router.push(notification.actionUrl);
+      onClose();
+    }
+  };
+
   return (
     <div
-      className={`relative flex items-start gap-3.5 p-3 rounded-2xl transition-all duration-200 cursor-pointer group ${
+      className={`relative flex items-start gap-3.5 p-3 sm:p-3.5 rounded-2xl transition-all duration-200 cursor-pointer group active:scale-[0.98] ${
         notification.read
           ? 'bg-white/[0.02] border border-white/5 opacity-65 hover:opacity-100 hover:bg-white/[0.06] hover:border-white/15'
           : 'bg-white/[0.06] border border-white/12 hover:bg-white/[0.12] hover:border-white/25 shadow-sm'
       }`}
-      onClick={() => !notification.read && onMarkRead(notification.id)}
+      onClick={handleClick}
     >
       {/* Poster thumbnail */}
-      <div className="shrink-0 w-11 h-16 rounded-xl overflow-hidden border border-white/15 shadow-md bg-neutral-900 relative group-hover:scale-105 transition-transform duration-200">
+      <div className="shrink-0 w-11 sm:w-12 h-16 sm:h-17 rounded-xl overflow-hidden border border-white/15 shadow-md bg-neutral-900 relative group-hover:scale-105 transition-transform duration-200">
         {posterUrl ? (
           <img src={posterUrl} alt="" className="w-full h-full object-cover" />
         ) : (
@@ -100,7 +116,7 @@ function NotificationItem({
             <span className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.9)] shrink-0 animate-pulse" />
           )}
         </div>
-        <p className="text-sm font-medium text-neutral-100 group-hover:text-white leading-snug mt-1.5 line-clamp-2">
+        <p className="text-xs sm:text-sm font-medium text-neutral-100 group-hover:text-white leading-snug mt-1.5 line-clamp-2">
           {notification.message}
         </p>
         <span className="text-[11px] font-medium text-neutral-400 mt-1.5 block">
@@ -163,8 +179,11 @@ export default function NotificationBell() {
       {/* Bell button */}
       <button
         ref={buttonRef}
-        onClick={() => setIsOpen(!isOpen)}
-        className="liquid-glass-pill relative p-2.5 sm:p-3 rounded-xl transition-all duration-200 group cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
+        onClick={() => {
+          triggerHaptic('selection');
+          setIsOpen(!isOpen);
+        }}
+        className="liquid-glass-pill relative p-2.5 sm:p-3 rounded-xl transition-all duration-200 group cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95"
         aria-label="Notifications"
         id="notification-bell"
       >
@@ -183,82 +202,106 @@ export default function NotificationBell() {
 
       {/* Notification panel */}
       {isOpen && (
-        <div
-          ref={panelRef}
-          className="absolute right-0 top-full mt-3 w-[calc(100vw-24px)] sm:w-[400px] max-w-[400px] max-h-[540px] liquid-glass-base rounded-3xl border border-white/15 shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] backdrop-blur-2xl overflow-hidden z-[200] flex flex-col animate-in zoom-in-95 duration-200"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/[0.03] backdrop-blur-md shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 liquid-orb bg-white/10 border border-white/15 flex items-center justify-center text-white shrink-0">
-                <Bell size={15} />
-              </div>
-              <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-                Notifications
-                {unreadCount > 0 && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/40 px-2.5 py-0.5 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.3)]">
-                    {unreadCount} new
-                  </span>
-                )}
-              </h3>
+        <>
+          {/* Mobile Backdrop */}
+          <div
+            className="sm:hidden fixed inset-0 bg-black/70 backdrop-blur-md z-[140] animate-fadeIn"
+            onClick={() => {
+              triggerHaptic('light');
+              setIsOpen(false);
+            }}
+          />
+
+          <div
+            ref={panelRef}
+            className="fixed left-3 right-3 top-[calc(4.25rem+env(safe-area-inset-top,0px))] max-h-[calc(100dvh-5.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] sm:fixed-none sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-3 sm:w-[420px] sm:max-w-[420px] sm:max-h-[560px] liquid-glass-base rounded-3xl border border-white/15 shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] backdrop-blur-2xl overflow-hidden z-[150] flex flex-col animate-in zoom-in-95 duration-200"
+          >
+            {/* Mobile Sheet Grab Handle */}
+            <div className="sm:hidden pt-2.5 pb-1 flex justify-center pointer-events-none shrink-0">
+              <div className="w-10 h-1 rounded-full bg-white/30" />
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {unreadCount > 0 && (
-                <button
-                  aria-label="Mark all as read"
-                  onClick={handleMarkAllRead}
-                  className="w-8 h-8 liquid-orb bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white flex items-center justify-center transition cursor-pointer"
-                  title="Mark all as read"
-                >
-                  <CheckCheck size={15} />
-                </button>
-              )}
-              {notifications.length > 0 && (
-                <button
-                  aria-label="Clear all"
-                  onClick={clearAll}
-                  className="w-8 h-8 liquid-orb bg-white/5 hover:bg-rose-500/20 text-neutral-300 hover:text-rose-300 flex items-center justify-center transition cursor-pointer"
-                  title="Clear all"
-                >
-                  <Trash2 size={15} />
-                </button>
-              )}
-              <button
-                aria-label="Close notifications"
-                onClick={() => setIsOpen(false)}
-                className="w-8 h-8 liquid-orb bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white flex items-center justify-center transition cursor-pointer"
-              >
-                <X size={15} />
-              </button>
-            </div>
-          </div>
-
-          {/* Notification list */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin p-3">
-            {notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-14 h-14 liquid-orb bg-white/5 border border-white/10 flex items-center justify-center text-neutral-400 mb-3 shadow-lg">
-                  <Bell size={24} className="opacity-60" />
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-3.5 border-b border-white/10 bg-white/[0.03] backdrop-blur-md shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 liquid-orb bg-white/10 border border-white/15 flex items-center justify-center text-white shrink-0">
+                  <Bell size={15} />
                 </div>
-                <p className="text-sm font-bold text-white">All caught up!</p>
-                <p className="text-xs text-neutral-400 mt-1 max-w-[220px] leading-relaxed">
-                  Track shows and movies to get notified when new releases arrive
-                </p>
+                <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                  Notifications
+                  {unreadCount > 0 && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/40 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.3)]">
+                      {unreadCount} new
+                    </span>
+                  )}
+                </h3>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {notifications.map((notif) => (
+
+              <div className="flex items-center gap-1.5">
+                {unreadCount > 0 && (
+                  <button
+                    aria-label="Mark all as read"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      handleMarkAllRead();
+                    }}
+                    className="w-8 h-8 liquid-orb bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white flex items-center justify-center transition cursor-pointer active:scale-95"
+                    title="Mark all as read"
+                  >
+                    <CheckCheck size={15} />
+                  </button>
+                )}
+                {notifications.length > 0 && (
+                  <button
+                    aria-label="Clear all"
+                    onClick={() => {
+                      triggerHaptic('medium');
+                      clearAll();
+                    }}
+                    className="w-8 h-8 liquid-orb bg-white/5 hover:bg-rose-500/20 text-neutral-300 hover:text-rose-300 flex items-center justify-center transition cursor-pointer active:scale-95"
+                    title="Clear all"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+                <button
+                  aria-label="Close notifications"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    setIsOpen(false);
+                  }}
+                  className="w-8 h-8 liquid-orb bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white flex items-center justify-center transition cursor-pointer active:scale-95"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+
+            {/* Notification list */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+              {notifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-14 h-14 liquid-orb bg-white/5 border border-white/10 flex items-center justify-center text-neutral-400 mb-3 shadow-lg">
+                    <Bell size={24} className="opacity-60" />
+                  </div>
+                  <p className="text-sm font-bold text-white">All caught up!</p>
+                  <p className="text-xs text-neutral-400 mt-1 max-w-[220px] leading-relaxed">
+                    Track shows and movies to get notified when new releases arrive
+                  </p>
+                </div>
+              ) : (
+                notifications.map((notif) => (
                   <NotificationItem
                     key={notif.id}
                     notification={notif}
                     onMarkRead={handleMarkRead}
+                    onClose={() => setIsOpen(false)}
                   />
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

@@ -633,10 +633,10 @@ export default function DiscoverDetailPage() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-white overflow-x-hidden">
-      <DetailTabNav activeTab="discover" />
+      <DetailTabNav activeTab="discover" onBack={handleBack} />
 
-      {/* Fixed Top Navigation Bar: Back button on top-left, Trailer controls on top-right */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pointer-events-none md:px-6 md:pt-6">
+      {/* Mobile Top Navigation Bar: Back button on top-left, Trailer controls on top-right */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pointer-events-none">
         <button
           onClick={handleBack}
           className="pointer-events-auto h-10 w-10 sm:h-11 sm:w-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 text-neutral-200 hover:text-white hover:scale-105 active:scale-95 transition-all inline-flex items-center justify-center shadow-xl backdrop-blur-xl cursor-pointer"
@@ -649,7 +649,10 @@ export default function DiscoverDetailPage() {
         <div className="pointer-events-auto flex items-center gap-2">
           <button
             aria-label={heroPaused ? 'Play background' : 'Pause background'}
-            onClick={() => setHeroPaused((prev) => !prev)}
+            onClick={() => {
+              triggerHaptic('light');
+              setHeroPaused((prev) => !prev);
+            }}
             className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer backdrop-blur-xl"
             title={heroPaused ? 'Play background' : 'Pause background'}
           >
@@ -657,7 +660,10 @@ export default function DiscoverDetailPage() {
           </button>
           <button
             aria-label={heroMuted ? 'Unmute background' : 'Mute background'}
-            onClick={() => setHeroMuted((prev) => !prev)}
+            onClick={() => {
+              triggerHaptic('light');
+              setHeroMuted((prev) => !prev);
+            }}
             className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer backdrop-blur-xl"
             title={heroMuted ? 'Unmute background' : 'Mute background'}
           >
@@ -681,7 +687,7 @@ export default function DiscoverDetailPage() {
 
         {heroTrailerUrl && (
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[max(120vw,calc(75vh*16/9))] h-[max(75vh,calc(120vw*9/16))] scale-[1.35] sm:scale-[1.25] md:w-[max(120vw,calc(120vh*16/9))] md:h-[max(120vh,calc(120vw*9/16))] md:scale-105">
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[max(120vw,calc(75vh*16/9))] h-[max(75vh,calc(120vw*9/16))] scale-[1.36] md:w-[max(125vw,calc(125vh*16/9))] md:h-[max(125vh,calc(125vw*9/16))] md:scale-[1.36]">
               <iframe
                 src={`${heroTrailerUrl}&playsinline=1&enablejsapi=1`}
                 title={`${pageTitle} Trailer Background`}
@@ -694,8 +700,36 @@ export default function DiscoverDetailPage() {
           </div>
         )}
 
-        <div className="hidden md:block absolute inset-0 bg-gradient-to-r from-black/85 via-black/35 to-transparent pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/60 to-transparent pointer-events-none" />
+        <div className="hidden md:block absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 via-40% to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/35 via-25% to-transparent pointer-events-none" />
+
+        {/* Desktop Trailer Controls (md: and up) */}
+        {heroTrailerUrl && (
+          <div className="hidden md:flex absolute bottom-12 lg:bottom-16 right-6 lg:right-10 z-30 items-center gap-2.5">
+            <button
+              aria-label={heroPaused ? 'Play background' : 'Pause background'}
+              onClick={() => {
+                triggerHaptic('light');
+                setHeroPaused((prev) => !prev);
+              }}
+              className="w-11 h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer backdrop-blur-xl"
+              title={heroPaused ? 'Play background' : 'Pause background'}
+            >
+              {heroPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+            </button>
+            <button
+              aria-label={heroMuted ? 'Unmute background' : 'Mute background'}
+              onClick={() => {
+                triggerHaptic('light');
+                setHeroMuted((prev) => !prev);
+              }}
+              className="w-11 h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer backdrop-blur-xl"
+              title={heroMuted ? 'Unmute background' : 'Mute background'}
+            >
+              {heroMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
+          </div>
+        )}
 
         {/* Mobile Hero Floating Bottom Info (Cinejoy Style) */}
         <div className="md:hidden relative z-20 w-full px-4 pb-4 flex flex-col items-center text-center">
@@ -800,7 +834,7 @@ export default function DiscoverDetailPage() {
         </div>
 
         {/* Desktop Hero Content (md: and up) */}
-        <div className="hidden md:flex relative z-20 flex-1 px-8 lg:px-16 pt-24 lg:pt-36 flex-col items-start justify-center max-w-4xl pb-16">
+        <div className="hidden md:flex relative z-20 flex-1 px-8 lg:px-12 xl:px-14 pt-24 lg:pt-28 flex-col items-start justify-center max-w-3xl lg:max-w-4xl xl:max-w-5xl pb-14 lg:pb-16">
           {loadingDetails ? (
             <div className="flex items-center gap-3 text-neutral-300 pb-12">
               <Loader2 className="w-6 h-6 animate-spin" />
@@ -812,24 +846,24 @@ export default function DiscoverDetailPage() {
                 <img
                   src={logoUrl}
                   alt={pageTitle}
-                  className="h-16 lg:h-24 w-auto max-w-[92%] object-contain drop-shadow-[0_8px_30px_rgba(0,0,0,0.8)]"
+                  className="h-16 sm:h-20 md:h-24 lg:h-28 xl:h-32 w-auto max-w-[85%] max-h-36 object-contain drop-shadow-[0_6px_24px_rgba(0,0,0,0.8)]"
                 />
               ) : (
-                <h1 className="text-5xl lg:text-7xl font-black leading-[0.95] tracking-tight uppercase text-white drop-shadow-[0_8px_30px_rgba(0,0,0,0.8)]">
+                <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-black leading-[0.95] tracking-tight uppercase text-white drop-shadow-[0_6px_24px_rgba(0,0,0,0.8)]">
                   {pageTitle}
                 </h1>
               )}
 
               {pageOverview && (
-                <p className="mt-4 text-base lg:text-lg text-neutral-100 max-w-2xl leading-relaxed line-clamp-4 drop-shadow-md">
+                <p className="mt-4 text-sm sm:text-base lg:text-lg text-neutral-200 max-w-xl lg:max-w-2xl leading-relaxed line-clamp-3 lg:line-clamp-4 drop-shadow-sm font-normal">
                   {pageOverview}
                 </p>
               )}
 
               {/* Metadata Row */}
-              <div className="flex flex-wrap items-center gap-2.5 mt-4 text-sm lg:text-base font-semibold">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mt-4 text-xs sm:text-sm font-semibold">
                 {activeRating != null && activeRating > 0 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill font-bold text-amber-300 border border-amber-400/30 text-sm shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill font-bold text-amber-300 border border-amber-400/30 text-xs sm:text-sm shadow-sm">
                     {activeDetails?.imdbRating ? (
                       <span className="px-1.5 py-0.5 bg-[#F5C518] text-black font-black text-[10px] rounded-md tracking-tight leading-none">IMDb</span>
                     ) : (
@@ -840,7 +874,7 @@ export default function DiscoverDetailPage() {
                 )}
 
                 {activeDetails?.rottenTomatoes && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-100 font-bold border border-white/15 text-sm shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-100 font-bold border border-white/15 text-xs sm:text-sm shadow-sm">
                     <RottenTomatoesIcon
                       score={parseInt(activeDetails.rottenTomatoes.replace('%', ''), 10) || 100}
                       className="w-4 h-4 shrink-0"
@@ -850,40 +884,40 @@ export default function DiscoverDetailPage() {
                 )}
 
                 {activeDetails?.year && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
                     {activeDetails.year}
                   </span>
                 )}
 
                 {mediaType === 'movie' && movieDetails?.runtime && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
                     {Math.floor(movieDetails.runtime / 60)}h {movieDetails.runtime % 60}m
                   </span>
                 )}
 
                 {mediaType === 'tv' && tvDetails?.status && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
                     {tvDetails.status}
                   </span>
                 )}
 
                 {mediaType === 'tv' && tvSeasonCount !== null && tvSeasonCount > 0 && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
                     {tvSeasonCount} Season{tvSeasonCount > 1 ? 's' : ''}
                   </span>
                 )}
 
                 {mediaType === 'tv' && totalEpisodeCount !== null && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
                     {totalEpisodeCount} Episode{totalEpisodeCount > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
 
               {genreList.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2.5">
+                <div className="mt-3.5 flex flex-wrap gap-2">
                   {genreList.map((genre) => (
-                    <span key={genre} className="text-sm px-3.5 py-1.5 rounded-xl liquid-glass-pill border border-white/15 text-neutral-200 font-medium shadow-sm">
+                    <span key={genre} className="text-xs sm:text-sm px-3 py-1 rounded-xl liquid-glass-pill border border-white/15 text-neutral-200 font-medium shadow-sm">
                       {genre}
                     </span>
                   ))}
@@ -891,29 +925,29 @@ export default function DiscoverDetailPage() {
               )}
 
               {heroCast.length > 0 && (
-                <div className="mt-5 w-full max-w-3xl">
-                  <p className="text-sm font-bold tracking-wider uppercase text-neutral-300 mb-2.5 drop-shadow-sm">Cast & Crew</p>
-                  <div className="grid grid-cols-2 xl:grid-cols-3 gap-2.5">
+                <div className="mt-4 w-full max-w-2xl lg:max-w-3xl">
+                  <p className="text-xs sm:text-sm font-bold tracking-wider uppercase text-neutral-300 mb-2.5 drop-shadow-sm">Cast & Crew</p>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
                     {heroCast.slice(0, 6).map((member) => (
                       <button
                         key={member.id}
                         onClick={() => openPerson(member.id)}
-                        className="w-full flex items-center gap-3 rounded-2xl liquid-glass-card border border-white/10 hover:border-white/25 px-3.5 py-2.5 transition-all duration-200 hover:scale-[1.02] shadow-md cursor-pointer group text-left"
+                        className="w-full flex items-center gap-2.5 sm:gap-3 rounded-xl sm:rounded-2xl liquid-glass-card border border-white/10 hover:border-white/25 px-3 py-2 sm:px-3.5 sm:py-2.5 transition-all duration-200 hover:scale-[1.02] shadow-md cursor-pointer group text-left"
                       >
                         {member.profilePath ? (
                           <img
-                            src={`https://image.tmdb.org/t/p/w92${member.profilePath}`}
+                            src={`https://image.tmdb.org/t/p/w185${member.profilePath}`}
                             alt={member.name}
-                            className="w-11 h-11 rounded-full object-cover ring-1 ring-white/20 group-hover:ring-white/40 transition shrink-0"
+                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover ring-1 ring-white/20 group-hover:ring-white/40 transition shrink-0 shadow-sm"
                           />
                         ) : (
-                          <div className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center ring-1 ring-white/20 shrink-0">
+                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/10 flex items-center justify-center ring-1 ring-white/20 shrink-0">
                             <User className="w-5 h-5 text-neutral-400" />
                           </div>
                         )}
-                        <div className="text-left min-w-0">
-                          <p className="text-sm font-semibold text-neutral-100 group-hover:text-white leading-tight truncate">{member.name}</p>
-                          <p className="text-xs text-neutral-400 leading-tight truncate mt-0.5">{member.character}</p>
+                        <div className="text-left min-w-0 flex-1">
+                          <p className="text-xs sm:text-sm font-semibold text-neutral-100 group-hover:text-white leading-tight truncate">{member.name}</p>
+                          <p className="text-[11px] sm:text-xs text-neutral-400 leading-tight truncate mt-0.5">{member.character}</p>
                         </div>
                       </button>
                     ))}
@@ -921,7 +955,7 @@ export default function DiscoverDetailPage() {
                 </div>
               )}
 
-              <div className="mt-6 flex items-center gap-3">
+              <div className="mt-5 flex items-center gap-2.5 sm:gap-3 flex-wrap">
                 <button
                   onClick={() => {
                     triggerHaptic('medium');
@@ -938,7 +972,7 @@ export default function DiscoverDetailPage() {
                       });
                     }
                   }}
-                  className="liquid-btn-primary px-6 py-3.5 rounded-2xl text-base font-bold inline-flex items-center justify-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer min-h-[44px]"
+                  className="liquid-btn-primary px-6 py-3 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold inline-flex items-center justify-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer min-h-[44px]"
                 >
                   <Play className="w-4.5 h-4.5 fill-black" /> Watch Now
                 </button>
@@ -948,7 +982,7 @@ export default function DiscoverDetailPage() {
                     triggerHaptic('light');
                     setTrailerModal({ title: pageTitle });
                   }}
-                  className="w-12 h-12 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 inline-flex items-center justify-center shadow-lg transition-all text-neutral-200 hover:text-white cursor-pointer shrink-0"
+                  className="w-11 h-11 rounded-xl sm:rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 inline-flex items-center justify-center shadow-lg transition-all text-neutral-200 hover:text-white cursor-pointer shrink-0"
                   title="Watch trailer"
                 >
                   <Play className="w-4.5 h-4.5" />
@@ -959,7 +993,7 @@ export default function DiscoverDetailPage() {
                     triggerHaptic('selection');
                     handleWatchlistToggle();
                   }}
-                  className={`w-12 h-12 rounded-2xl border transition-all inline-flex items-center justify-center shadow-lg cursor-pointer shrink-0 ${
+                  className={`w-11 h-11 rounded-xl sm:rounded-2xl border transition-all inline-flex items-center justify-center shadow-lg cursor-pointer shrink-0 ${
                     isInWatchlist
                       ? 'liquid-glass-pill-active border-white/40 text-white font-bold'
                       : 'liquid-glass-pill border-white/20 text-neutral-200 hover:text-white hover:scale-105 active:scale-95'
@@ -967,7 +1001,13 @@ export default function DiscoverDetailPage() {
                   title={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
                   disabled={watchlistBusy}
                 >
-                  {watchlistBusy ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : isInWatchlist ? <Check className="w-4.5 h-4.5" /> : <Plus className="w-4.5 h-4.5" />}
+                  {watchlistBusy ? (
+                    <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                  ) : isInWatchlist ? (
+                    <Check className="w-4.5 h-4.5" />
+                  ) : (
+                    <Plus className="w-4.5 h-4.5" />
+                  )}
                 </button>
 
                 <button
@@ -981,7 +1021,7 @@ export default function DiscoverDetailPage() {
                       tmdbId: activeDetails?.id || tmdbId || undefined,
                     });
                   }}
-                  className="liquid-glass-pill px-5 py-3.5 rounded-2xl border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 text-white font-semibold text-base inline-flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer min-h-[44px]"
+                  className="liquid-glass-pill px-5 py-3 rounded-xl sm:rounded-2xl border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 text-white font-semibold text-sm sm:text-base inline-flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer min-h-[44px]"
                 >
                   <Download className="w-4.5 h-4.5" /> Download
                 </button>
