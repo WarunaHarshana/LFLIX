@@ -28,6 +28,7 @@ function getLanDevOrigins(): string[] {
 const isExport = process.env.NEXT_EXPORT === '1';
 
 const nextConfig: NextConfig = {
+  devIndicators: false,
   allowedDevOrigins: getLanDevOrigins(),
   // Static export for mobile app (Capacitor)
   // Set NEXT_EXPORT=1 to build static files, otherwise normal build for web

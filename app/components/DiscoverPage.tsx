@@ -263,7 +263,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
     const activeGenres = discoverType === 'movie' ? MOVIE_GENRES : TV_GENRES;
 
     return (
-        <div className="pt-24 px-6 md:px-12 pb-20">
+        <div className="pt-24 px-4 sm:px-6 md:px-12 pb-28 md:pb-20">
             {/* Header */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
@@ -287,7 +287,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
             </div>
 
             {/* Search Bar */}
-            <div className="liquid-glass-base border border-white/15 rounded-3xl p-6 mb-6 shadow-2xl relative overflow-hidden">
+            <div className="liquid-glass-base border border-white/15 rounded-3xl p-4 sm:p-6 mb-6 shadow-2xl relative overflow-hidden">
                 <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-white/[0.02] rounded-full blur-3xl pointer-events-none" />
                 <div className="flex flex-col sm:flex-row gap-3 relative z-10">
                     <div className="relative flex-1">
@@ -299,7 +299,6 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                             onChange={(e) => handleSearchChange(e.target.value)}
                             placeholder="Search any movie or TV show..."
                             className="w-full bg-white/[0.04] border border-white/15 focus:border-white/40 focus:bg-white/[0.08] text-white placeholder-neutral-500 rounded-2xl pl-12 pr-10 py-3.5 outline-none transition-all text-sm md:text-base shadow-inner"
-                            autoFocus
                         />
                         {searchQuery && (
                             <button
@@ -310,17 +309,17 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                             </button>
                         )}
                     </div>
-                    <div className="flex gap-1.5 p-1 bg-white/[0.04] border border-white/10 rounded-xl self-start sm:self-auto">
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-white/[0.04] border border-white/10 rounded-xl w-full sm:w-auto">
                         {(['multi', 'movie', 'tv'] as const).map((type) => (
                             <button
                                 key={type}
                                 onClick={() => handleTypeChange(type)}
-                                className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition-all min-h-[42px] cursor-pointer ${searchType === type
+                                className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-base font-semibold transition-all min-h-[42px] flex items-center justify-center cursor-pointer ${searchType === type
                                     ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40'
                                     : 'text-neutral-300 hover:text-white hover:bg-white/5'
                                     }`}
                             >
-                                {type === 'multi' ? 'All' : type === 'movie' ? 'Movies' : 'TV Shows'}
+                                {type === 'multi' ? 'All' : type === 'movie' ? 'Movies' : 'Shows'}
                             </button>
                         ))}
                     </div>
@@ -339,21 +338,21 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                 <div className="liquid-glass-base border border-white/15 rounded-3xl p-4 sm:p-5 mb-8 shadow-xl relative z-20">
                     <div className="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-6 relative z-10">
                         {/* Title / Toggle */}
-                        <div className="flex items-center gap-4 sm:min-w-fit">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:min-w-fit w-full xl:w-auto">
                             <div className="flex items-center gap-2">
                                 <Filter className="w-5 h-5 accent-text" />
                                 <h2 className="text-xs md:text-sm font-bold uppercase tracking-wider text-neutral-300">Filters</h2>
                             </div>
-                            <div className="flex liquid-glass-pill p-1 border border-white/10 rounded-xl">
+                            <div className="flex liquid-glass-pill p-1 border border-white/10 rounded-xl w-full sm:w-auto">
                                 <button
                                     onClick={() => { setDiscoverType('movie'); setSelectedGenre(''); }}
-                                    className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center gap-2 min-w-[110px] justify-center min-h-[42px] cursor-pointer ${discoverType === 'movie' ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40' : 'text-neutral-300 hover:text-white hover:bg-white/5'}`}
+                                    className={`flex-1 sm:flex-initial px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center gap-2 min-w-0 sm:min-w-[110px] justify-center min-h-[42px] cursor-pointer ${discoverType === 'movie' ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40' : 'text-neutral-300 hover:text-white hover:bg-white/5'}`}
                                 >
                                     <Film className="w-4.5 h-4.5" /> Movies
                                 </button>
                                 <button
                                     onClick={() => { setDiscoverType('tv'); setSelectedGenre(''); }}
-                                    className={`px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center gap-2 min-w-[110px] justify-center min-h-[42px] cursor-pointer ${discoverType === 'tv' ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40' : 'text-neutral-300 hover:text-white hover:bg-white/5'}`}
+                                    className={`flex-1 sm:flex-initial px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center gap-2 min-w-0 sm:min-w-[110px] justify-center min-h-[42px] cursor-pointer ${discoverType === 'tv' ? 'liquid-glass-pill-active font-bold shadow-md text-white border-white/40' : 'text-neutral-300 hover:text-white hover:bg-white/5'}`}
                                 >
                                     <Tv className="w-4.5 h-4.5" /> TV Shows
                                 </button>
@@ -361,7 +360,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                         </div>
 
                         {/* Dropdowns */}
-                        <div className="flex flex-wrap items-center gap-3 flex-1 xl:justify-end">
+                        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 flex-1 xl:justify-end w-full">
                             {/* Genre Filter */}
                             <LiquidDropdown
                                 label="All Genres"
@@ -369,7 +368,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 value={selectedGenre}
                                 onChange={setSelectedGenre}
                                 options={[{ id: '', name: 'All Genres' }, ...activeGenres]}
-                                className="min-w-[150px]"
+                                className="flex-1 min-w-[130px] sm:min-w-[150px]"
                                 align="left"
                                 isHighlightActive={Boolean(selectedGenre)}
                             />
@@ -381,7 +380,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 value={selectedLanguage}
                                 onChange={setSelectedLanguage}
                                 options={[{ id: '', name: 'All Languages' }, ...LANGUAGES]}
-                                className="min-w-[150px]"
+                                className="flex-1 min-w-[130px] sm:min-w-[150px]"
                                 align="left"
                                 isHighlightActive={Boolean(selectedLanguage)}
                             />
@@ -393,7 +392,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                                 value={sortBy}
                                 onChange={setSortBy}
                                 options={SORT_OPTIONS}
-                                className="min-w-[170px]"
+                                className="flex-1 min-w-[140px] sm:min-w-[170px]"
                                 align="right"
                                 isHighlightActive={sortBy !== 'popularity.desc'}
                             />

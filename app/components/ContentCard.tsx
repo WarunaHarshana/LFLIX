@@ -3,6 +3,7 @@
 import { memo } from 'react';
 import { Film, Tv, Play } from 'lucide-react';
 import TMDBImage from './TMDBImage';
+import { triggerHaptic } from '@/lib/haptics';
 
 type WatchProgress = {
     progress: number;
@@ -48,9 +49,12 @@ function ContentCard({ item, onClick, onContextMenu, showProgress = true, showTi
 
     return (
         <div
-            onClick={onClick}
+            onClick={(e) => {
+                triggerHaptic('light');
+                onClick();
+            }}
             onContextMenu={onContextMenu}
-            className="group relative aspect-[2/3] rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.04] hover:z-30 liquid-card liquid-sheen-effect shadow-md hover:shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_24px_rgba(255,255,255,0.12)]"
+            className="group relative aspect-[2/3] rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.04] active:scale-[0.97] hover:z-30 liquid-card liquid-sheen-effect shadow-md hover:shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_24px_rgba(255,255,255,0.12)]"
         >
             {item.posterPath ? (
                 <TMDBImage

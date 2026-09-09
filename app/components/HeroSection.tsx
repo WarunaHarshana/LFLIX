@@ -50,7 +50,7 @@ export default function HeroSection({
         <div className="absolute inset-0 bg-gradient-to-r from-[var(--background)]/80 via-[var(--background)]/25 to-transparent" />
       </div>
 
-      <div className="absolute bottom-0 left-0 p-8 sm:p-14 md:p-16 pb-16 sm:pb-20 space-y-5 max-w-3xl z-10 animate-slideUp" key={`hero-info-${heroIndex}`}>
+      <div className="absolute bottom-0 left-0 p-5 sm:p-10 md:p-16 pb-16 sm:pb-20 space-y-3.5 sm:space-y-5 max-w-3xl z-10 animate-slideUp" key={`hero-info-${heroIndex}`}>
         {featuredLogoUrl ? (
           <TMDBImage
             src={featuredLogoUrl}
@@ -61,9 +61,9 @@ export default function HeroSection({
             className="h-16 sm:h-20 md:h-24 lg:h-28 max-w-[90%] w-auto object-contain drop-shadow-2xl"
           />
         ) : (
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black drop-shadow-2xl leading-tight tracking-tight text-white">{featured.title}</h2>
+          <h2 className="text-3xl sm:text-5xl md:text-6xl font-black drop-shadow-2xl leading-tight tracking-tight text-white">{featured.title}</h2>
         )}
-        <div className="flex items-center gap-2.5 text-sm sm:text-base font-semibold flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 text-xs sm:text-base font-semibold flex-wrap">
           <span className="liquid-glass-pill px-3 py-1 rounded-lg uppercase tracking-wider text-xs sm:text-sm text-neutral-200 font-bold border border-white/10">
             {featured.type}
           </span>
@@ -76,7 +76,7 @@ export default function HeroSection({
               <span className="px-2.5 py-1 text-xs sm:text-sm font-bold text-white">{displayRating.toFixed(1)}</span>
             </span>
           )}
-          <span className="text-neutral-200 drop-shadow text-sm sm:text-base">{featured.year || (featured.firstAirDate ? featured.firstAirDate.substring(0, 4) : '')}</span>
+          <span className="text-neutral-200 drop-shadow text-xs sm:text-base">{featured.year || (featured.firstAirDate ? featured.firstAirDate.substring(0, 4) : '')}</span>
           {featured.isHDR && (
             <span className="liquid-glass-pill px-2.5 py-1 bg-yellow-500/15 text-yellow-300 text-xs sm:text-sm rounded-lg font-bold tracking-wide border border-yellow-500/40 shadow-[0_0_12px_rgba(234,179,8,0.2)]">
               HDR
@@ -94,24 +94,24 @@ export default function HeroSection({
             <span className="liquid-glass-pill px-2.5 py-1 bg-amber-500/15 text-amber-300 text-xs sm:text-sm rounded-lg font-bold tracking-wide border border-amber-500/40">{featured.audioChannels}</span>
           )}
           {featured.genres && (
-            <span className="text-neutral-200/90 drop-shadow text-sm sm:text-base">{featured.genres.split(',').slice(0, 2).join(' • ')}</span>
+            <span className="text-neutral-200/90 drop-shadow text-xs sm:text-base">{featured.genres.split(',').slice(0, 2).join(' • ')}</span>
           )}
         </div>
         {featured.overview && (
-          <p className="text-base sm:text-lg md:text-xl text-neutral-100 drop-shadow-md leading-relaxed line-clamp-3 max-w-2xl">{featured.overview}</p>
+          <p className="text-sm sm:text-lg md:text-xl text-neutral-100 drop-shadow-md leading-relaxed line-clamp-3 max-w-2xl">{featured.overview}</p>
         )}
-        <div className="flex gap-4 pt-2">
+        <div className="flex flex-wrap sm:flex-nowrap gap-3 sm:gap-4 pt-1 sm:pt-2">
           {featured.type === 'movie' ? (
             <>
               <button
                 onClick={onPlay}
-                className="liquid-btn-primary px-9 py-4 font-extrabold rounded-2xl flex items-center gap-3 text-lg sm:text-xl tracking-tight shadow-xl hover:scale-105 transition cursor-pointer"
+                className="liquid-btn-primary px-6 py-3 sm:px-9 sm:py-4 font-extrabold rounded-2xl flex items-center gap-2.5 sm:gap-3 text-base sm:text-xl tracking-tight shadow-xl hover:scale-105 transition cursor-pointer"
               >
-                <Play className="w-6 h-6 fill-black" /> Play
+                <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-black" /> Play
               </button>
               <button
                 onClick={onMoreInfo}
-                className="liquid-btn-secondary px-8 py-4 font-bold rounded-2xl flex items-center gap-2.5 text-lg sm:text-xl tracking-tight hover:scale-105 transition cursor-pointer"
+                className="liquid-btn-secondary px-5 py-3 sm:px-8 sm:py-4 font-bold rounded-2xl flex items-center gap-2 sm:gap-2.5 text-base sm:text-xl tracking-tight hover:scale-105 transition cursor-pointer"
               >
                 More Info
               </button>
@@ -120,13 +120,13 @@ export default function HeroSection({
             <>
               <button
                 onClick={onViewEpisodes}
-                className="liquid-btn-primary px-9 py-4 font-extrabold rounded-2xl flex items-center gap-3 text-lg sm:text-xl tracking-tight shadow-xl hover:scale-105 transition cursor-pointer"
+                className="liquid-btn-primary px-6 py-3 sm:px-9 sm:py-4 font-extrabold rounded-2xl flex items-center gap-2.5 sm:gap-3 text-base sm:text-xl tracking-tight shadow-xl hover:scale-105 transition cursor-pointer"
               >
-                <Play className="w-6 h-6 fill-black" /> View Episodes
+                <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-black" /> View Episodes
               </button>
               <button
                 onClick={onMoreInfo}
-                className="liquid-btn-secondary px-8 py-4 font-bold rounded-2xl flex items-center gap-2.5 text-lg sm:text-xl tracking-tight hover:scale-105 transition cursor-pointer"
+                className="liquid-btn-secondary px-5 py-3 sm:px-8 sm:py-4 font-bold rounded-2xl flex items-center gap-2 sm:gap-2.5 text-base sm:text-xl tracking-tight hover:scale-105 transition cursor-pointer"
               >
                 More Info
               </button>
@@ -137,7 +137,7 @@ export default function HeroSection({
 
       {/* Liquid indicator dots */}
       {heroCandidates.length > 1 && (
-        <div className="absolute bottom-8 right-10 sm:right-14 flex items-center gap-2 z-10 p-2 rounded-full liquid-glass-dock">
+        <div className="absolute bottom-6 sm:bottom-8 right-4 sm:right-10 md:right-14 flex items-center gap-1.5 sm:gap-2 z-10 p-1.5 sm:p-2 rounded-full liquid-glass-dock">
           {heroCandidates.map((_, i) => {
             const isActive = (heroIndex % heroCandidates.length) === i;
             return (

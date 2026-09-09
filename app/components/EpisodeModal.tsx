@@ -6,6 +6,7 @@ import StreamServerModal from './StreamServerModal';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import ToastNotification from './ToastNotification';
 import { useToast } from '@/app/hooks/useToast';
+import { triggerHaptic } from '@/lib/haptics';
 
 type Episode = {
     id: number;
@@ -196,15 +197,31 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
             role="dialog"
             aria-modal="true"
             aria-label="Episodes"
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4 md:p-6"
-            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+            className="fixed inset-0 z-[100] bg-neutral-950 sm:bg-black/80 sm:backdrop-blur-xl sm:flex sm:items-center sm:justify-center p-0 sm:p-4 md:p-6 overflow-y-auto sm:overflow-hidden"
+            onClick={(e) => { if (e.target === e.currentTarget) { triggerHaptic('light'); onClose(); } }}
         >
+            {/* Ambient Backdrop Glow Aura (Apple Vision Pro dynamic color bleed) */}
+            {(show.backdropPath || show.posterPath) && (
+                <div className="hidden sm:block absolute -inset-10 -z-10 rounded-3xl overflow-hidden opacity-35 ambient-glow-aura pointer-events-none transition-opacity duration-700">
+                    <img
+                        src={`https://image.tmdb.org/t/p/w300${show.backdropPath || show.posterPath}`}
+                        alt=""
+                        className="w-full h-full object-cover scale-125"
+                    />
+                </div>
+            )}
+
             <div
-                className="relative w-full max-w-3xl xl:max-w-4xl max-h-[90vh] liquid-glass-base rounded-3xl border border-white/15 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)]"
+                className="relative w-full min-h-[100dvh] sm:min-h-0 sm:max-w-3xl xl:max-w-4xl sm:max-h-[90vh] bg-neutral-950 sm:liquid-glass-base rounded-none sm:rounded-3xl sm:border sm:border-white/15 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 sm:shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)]"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header with backdrop */}
-                <div className="relative h-64 sm:h-72 shrink-0">
+                <div className="relative h-48 sm:h-64 md:h-72 shrink-0">
+                    {/* Mobile Sheet Grab Handle */}
+                    <div className="sm:hidden absolute top-2 left-0 right-0 z-30 flex justify-center pointer-events-none">
+                        <div className="w-10 h-1 rounded-full bg-white/35 backdrop-blur-md shadow-sm" />
+                    </div>
+
                     {/* Show the episode still if one is selected, otherwise show backdrop */}
                     {selectedEpisode?.stillPath ? (
                         <img
@@ -219,16 +236,21 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             alt=""
                         />
                     ) : null}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[rgba(16,16,22,0.92)] via-[rgba(16,16,22,0.3)] to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[rgba(16,16,22,0.95)] via-[rgba(16,16,22,0.4)] to-transparent" />
 
+                    {/* Single Close button (Top-Right) */}
                     <button
-                        onClick={onClose}
-                        className="absolute top-4 right-4 p-2.5 liquid-orb bg-black/40 text-white transition z-20"
+                        onClick={() => {
+                            triggerHaptic('light');
+                            onClose();
+                        }}
+                        aria-label="Close"
+                        className="absolute top-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:top-4 right-4 p-2.5 sm:p-2 liquid-orb bg-black/60 sm:bg-black/40 border border-white/20 sm:border-white/10 text-white transition z-30 hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
                     >
                         <X className="w-5 h-5" />
                     </button>
 
-                    <div className="absolute bottom-6 left-8 right-8">
+                    <div className="absolute bottom-4 sm:bottom-6 left-4 right-4 sm:left-8 sm:right-8">
                         {selectedEpisode ? (
                             <>
                                 <button
@@ -287,7 +309,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             </>
                         ) : (
                             <>
-                                <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white drop-shadow-md">{show.title}</h2>
+                                <h2 className="text-2xl sm:text-4xl font-black tracking-tight text-white drop-shadow-md">{show.title}</h2>
                                 {displayRating != null && displayRating > 0 && (
                                     <div className="flex items-center gap-2 mt-2.5">
                                         <span className="inline-flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/40 text-amber-300 px-3 py-1 rounded-xl text-xs font-bold shadow-[0_0_12px_rgba(245,158,11,0.25)]">
@@ -304,7 +326,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
 
                 {/* Episode Detail View */}
                 {selectedEpisode ? (
-                    <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-8 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:pb-8">
                         {/* Play Button */}
                         <div className="flex gap-3 mb-6">
                             <button
@@ -452,12 +474,15 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                         {/* Season Tabs */}
                         {seasons.length > 1 && (
                             <div className="px-4 sm:px-8 py-3.5 border-b border-white/10">
-                                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-white/10">
+                                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none mask-fade-right scroll-snap-x">
                                     {seasons.map(({ season }) => (
                                         <button
                                             key={season}
-                                            onClick={() => setActiveSeason(season)}
-                                            className={`px-4 py-1.5 rounded-full text-sm transition-all whitespace-nowrap cursor-pointer select-none ${activeSeason === season
+                                            onClick={() => {
+                                                triggerHaptic('selection');
+                                                setActiveSeason(season);
+                                            }}
+                                            className={`px-4 py-1.5 rounded-full text-sm transition-all whitespace-nowrap cursor-pointer select-none shrink-0 scroll-snap-align-start active:scale-95 ${activeSeason === season
                                                 ? 'liquid-glass-pill-active font-bold shadow-sm'
                                                 : 'liquid-glass-pill text-neutral-300 hover:text-white font-medium'
                                                 }`}
@@ -531,7 +556,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                         )}
 
                         {/* Episode List */}
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-8 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:pb-8">
                             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                                 <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                                     <ChevronDown className="w-4 h-4 text-neutral-400" />

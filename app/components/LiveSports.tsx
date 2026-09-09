@@ -999,53 +999,83 @@ export default function LiveSports({ onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label="Live sports"
-      className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 overflow-y-auto"
+      className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[100] overflow-y-auto"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="min-h-screen bg-gradient-to-b from-neutral-950 via-black to-neutral-950">
         {/* Header Bar */}
         <div className="fixed top-0 left-0 right-0 z-50 bg-black/60 backdrop-blur-2xl border-b border-white/10 pt-[env(safe-area-inset-top)]">
           <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-12 py-3 sm:py-4">
-            <div className="flex items-center justify-between gap-3">
-              {/* Left Title & Back Button */}
-              <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-                <button
-                  type="button"
-                  aria-label="Back"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onClose();
-                  }}
-                  className="p-2 sm:p-2.5 liquid-glass-pill hover:scale-105 border border-white/15 rounded-full transition-all text-neutral-300 hover:text-white cursor-pointer shadow-md"
-                  title="Close Live Sports"
-                >
-                  <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-                </button>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+              <div className="flex items-center justify-between w-full sm:w-auto">
+                {/* Left Title & Back Button */}
+                <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
+                  <button
+                    type="button"
+                    aria-label="Back"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onClose();
+                    }}
+                    className="p-2 sm:p-2.5 liquid-glass-pill hover:scale-105 border border-white/15 rounded-full transition-all text-neutral-300 hover:text-white cursor-pointer shadow-md"
+                    title="Close Live Sports"
+                  >
+                    <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </button>
 
-                <div className="flex items-center gap-3">
-                  <div className="p-2 sm:p-2.5 bg-white/[0.04] border border-white/15 rounded-2xl text-red-500 shadow-lg shadow-red-600/10">
-                    <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white">Live Sports</h1>
-                      {activeTab === 'live' && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/60 border border-red-500/40 text-red-400 text-[10px] font-bold uppercase tracking-wider">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-                          <span>{rawMatches.length} Live</span>
-                        </span>
-                      )}
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="p-2 sm:p-2.5 bg-white/[0.04] border border-white/15 rounded-2xl text-red-500 shadow-lg shadow-red-600/10">
+                      <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
-                    <p className="text-neutral-400 text-xs hidden sm:block">
-                      {activeTab === 'live' ? 'Watch active broadcasts live' : `${rawMatches.length} events scheduled today`}
-                    </p>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h1 className="text-base sm:text-2xl font-black tracking-tight text-white">Live Sports</h1>
+                        {activeTab === 'live' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/60 border border-red-500/40 text-red-400 text-[10px] font-bold uppercase tracking-wider">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                            <span>{rawMatches.length} Live</span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-neutral-400 text-xs hidden sm:block">
+                        {activeTab === 'live' ? 'Watch active broadcasts live' : `${rawMatches.length} events scheduled today`}
+                      </p>
+                    </div>
                   </div>
+                </div>
+
+                {/* Right Action Buttons (mobile top row) */}
+                <div className="flex sm:hidden items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    aria-label="Refresh match list"
+                    onClick={() => fetchMatches(true)}
+                    disabled={isRefreshing || loading}
+                    className="p-2 liquid-glass-pill hover:scale-105 border border-white/15 rounded-full transition-all text-neutral-300 hover:text-white cursor-pointer shadow-md disabled:opacity-50"
+                    title="Refresh matches"
+                  >
+                    <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-red-400' : ''}`} />
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-label="Close"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onClose();
+                    }}
+                    className="p-2 liquid-glass-pill hover:scale-105 border border-white/15 rounded-full transition-all text-neutral-300 hover:text-white cursor-pointer shadow-md"
+                    title="Close Live Sports"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
               {/* Center Instant Search Bar */}
-              <div className="flex-1 max-w-md mx-2 sm:mx-6">
+              <div className="w-full sm:flex-1 sm:max-w-md sm:mx-6">
                 <div className="relative w-full">
                   <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
@@ -1068,8 +1098,8 @@ export default function LiveSports({ onClose }: Props) {
                 </div>
               </div>
 
-              {/* Right Action Buttons */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Right Action Buttons (desktop) */}
+              <div className="hidden sm:flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   aria-label="Refresh match list"
@@ -1099,7 +1129,7 @@ export default function LiveSports({ onClose }: Props) {
           </div>
         </div>
 
-        <div className="pt-24 pb-12">
+        <div className="pt-28 sm:pt-24 pb-12">
           <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-12">
             {/* Active Stream Player Theater Mode */}
             {selectedMatch && selectedStream && (

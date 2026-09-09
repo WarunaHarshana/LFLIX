@@ -115,8 +115,8 @@ export default function LibraryGrid({
 
   return (
     <div className="px-4 md:px-12 pb-16 relative z-20">
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+        <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2.5 sm:gap-3 flex-wrap">
           {activeTab === 'all' ? 'My Library' : activeTab === 'movie' ? 'Movies' : 'TV Shows'}
           {selectedGenre && (
             <span className="text-sm sm:text-base font-medium px-3.5 py-1 liquid-glass-pill rounded-xl text-neutral-200 flex items-center">
@@ -145,7 +145,7 @@ export default function LibraryGrid({
             ({filteredLibrary.length} items)
           </span>
         </h3>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
           {/* Language filter dropdown */}
           {languages.length > 0 && onLanguageSelect && (
             <div ref={langDropdownRef} className="relative group/lang">

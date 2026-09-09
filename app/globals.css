@@ -1014,4 +1014,43 @@ video::cue {
   -webkit-box-decoration-break: clone;
 }
 
+/* ──────────────── Modern Web UX & Visual Polish ──────────────── */
+
+/* Soft edge horizontal fade for carousels (Apple TV / Cinejoy style) */
+.mask-fade-right {
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+/* Soft edge dual fade (left + right) */
+.mask-fade-x {
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+}
+
+/* Soft edge bottom fade for scrollable containers */
+.mask-fade-bottom {
+  -webkit-mask-image: linear-gradient(to bottom, black 88%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 88%, transparent 100%);
+}
+
+/* Fluid Touch Scroll Snap */
+.scroll-snap-x {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scroll-snap-align-start {
+  scroll-snap-align: start;
+}
+
+/* Ambient Backdrop Glow Aura */
+.ambient-glow-aura {
+  filter: blur(80px);
+  -webkit-filter: blur(80px);
+  transform: translateZ(0);
+  pointer-events: none;
+}
+
+
 

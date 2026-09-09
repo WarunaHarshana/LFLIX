@@ -450,7 +450,7 @@ export default function Home() {
 
   // ──────────────────── Render ────────────────────
   return (
-    <main className="min-h-screen bg-[var(--background)] text-white font-sans selection:bg-red-900 pb-20 md:pb-0">
+    <main className="min-h-screen bg-[var(--background)] text-white font-sans selection:bg-red-900 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-0">
 
       {/* Navbar */}
       <DetailTabNav
@@ -793,17 +793,21 @@ export default function Home() {
       )}
 
       {/* Mobile Navigation */}
-      <MobileNav
-        activeTab={activeTab}
-        onTabChange={switchTab}
-        onShowQR={() => setShowMobileConnect(true)}
-        onShowSettings={() => window.location.href = '/settings'}
-        onShowSearch={() => setShowMobileSearch(true)}
-        onShowLiveSports={() => setShowLiveSports(true)}
-      />
+      {!selectedDetail && !selectedShow && !showLiveSports && !playback.videoPlayer && (
+        <>
+          <MobileNav
+            activeTab={activeTab}
+            onTabChange={switchTab}
+            onShowQR={() => setShowMobileConnect(true)}
+            onShowSettings={() => window.location.href = '/settings'}
+            onShowSearch={() => setShowMobileSearch(true)}
+            onShowLiveSports={() => setShowLiveSports(true)}
+          />
 
-      {/* Floating QR Button (Mobile) */}
-      <FloatingQRButton />
+          {/* Floating QR Button (Mobile) */}
+          <FloatingQRButton />
+        </>
+      )}
 
       {/* Live Sports Modal */}
       {showLiveSports && <LiveSports onClose={() => setShowLiveSports(false)} />}

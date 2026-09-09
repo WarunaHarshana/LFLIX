@@ -185,7 +185,7 @@ export default function NotificationBell() {
       {isOpen && (
         <div
           ref={panelRef}
-          className="absolute right-0 top-full mt-3 w-[360px] sm:w-[410px] max-h-[540px] liquid-glass-base rounded-3xl border border-white/15 shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] backdrop-blur-2xl overflow-hidden z-[200] flex flex-col animate-in zoom-in-95 duration-200"
+          className="absolute right-0 top-full mt-3 w-[calc(100vw-24px)] sm:w-[400px] max-w-[400px] max-h-[540px] liquid-glass-base rounded-3xl border border-white/15 shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] backdrop-blur-2xl overflow-hidden z-[200] flex flex-col animate-in zoom-in-95 duration-200"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/[0.03] backdrop-blur-md shrink-0">

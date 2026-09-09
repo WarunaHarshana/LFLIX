@@ -426,28 +426,67 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       role="dialog"
       aria-modal="true"
       aria-label="Stream servers"
-      className="fixed inset-0 z-[90] bg-black flex flex-col"
+      className="fixed inset-0 z-[110] bg-black flex flex-col"
       onClick={(e) => e.stopPropagation()}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 liquid-glass-dock border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 liquid-orb bg-blue-500/20 border-blue-500/35 text-blue-400 flex items-center justify-center shrink-0">
-            <Globe className="w-4 h-4" />
+      <div className="flex flex-col md:flex-row md:items-center justify-between px-4 sm:px-6 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-3 pb-2.5 sm:pb-3 liquid-glass-dock border-b border-white/10 shrink-0 gap-2.5">
+        {/* Top row / Left section: Title, TV stepper, and Mobile Close */}
+        <div className="flex items-center justify-between gap-3 min-w-0 w-full md:w-auto">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 liquid-orb bg-blue-500/20 border-blue-500/35 text-blue-400 flex items-center justify-center shrink-0">
+              <Globe className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-base font-bold text-white tracking-tight truncate max-w-[180px] sm:max-w-xs md:max-w-md">{title}</h2>
+              {type === 'tv' && season && episode && (
+                <p className="text-[11px] sm:text-xs text-neutral-400">
+                  Season {season} · Episode {episode}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="min-w-0">
-            <h2 className="text-base font-bold text-white tracking-tight truncate">{title}</h2>
-            {type === 'tv' && season && episode && (
-              <p className="text-xs text-neutral-400">
-                Season {season} · Episode {episode}
-              </p>
+
+          <div className="flex items-center gap-2 md:hidden">
+            {type === 'tv' && onNavigateEpisode && (
+              <div className="flex items-center rounded-full liquid-glass-pill p-0.5 overflow-hidden border border-white/10">
+                <button
+                  aria-label="Previous episode"
+                  title="Previous episode"
+                  disabled={!canGoPrevEpisode}
+                  onClick={() => onNavigateEpisode('prev')}
+                  className="px-2 py-1 text-xs font-medium text-neutral-200 hover:bg-white/10 disabled:opacity-35 transition cursor-pointer"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="px-1 text-[10px] text-neutral-400 font-mono select-none">
+                  S{season ?? 1}E{episode ?? 1}
+                </span>
+                <button
+                  aria-label="Next episode"
+                  title="Next episode"
+                  disabled={!canGoNextEpisode}
+                  onClick={() => onNavigateEpisode('next')}
+                  className="px-2 py-1 text-xs font-medium text-neutral-200 hover:bg-white/10 disabled:opacity-35 transition cursor-pointer"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             )}
+            <button aria-label="Close"
+              onClick={onClose}
+              className="p-1.5 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Controls row: scrollable/wrap on mobile, aligned on desktop */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-0.5 md:pb-0 w-full md:w-auto">
           {type === 'tv' && onNavigateEpisode && (
-            <div className="flex items-center rounded-full liquid-glass-pill p-0.5 overflow-hidden mr-1 border border-white/10">
+            <div className="hidden md:flex items-center rounded-full liquid-glass-pill p-0.5 overflow-hidden mr-1 border border-white/10">
               <button
                 aria-label="Previous episode"
                 title="Previous episode"
@@ -474,7 +513,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
 
           <button aria-label="Show or hide source list"
             onClick={() => setShowSources((prev) => !prev)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition cursor-pointer flex-shrink-0 ${
               showSources ? 'liquid-glass-pill-active text-white' : 'liquid-glass-pill text-neutral-300 hover:text-white'
             }`}
             title="Show or hide source list"
@@ -489,7 +528,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               setIframeBootstrapped(false);
               setPlaybackReady(false);
             }}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer flex-shrink-0 ${
               vpnMode
                 ? 'bg-blue-500/25 border border-blue-400/40 text-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.3)]'
                 : 'liquid-glass-pill text-neutral-300 hover:text-white'
@@ -506,7 +545,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               setIframeBootstrapped(false);
               setPlaybackReady(false);
             }}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer flex-shrink-0 ${
               sandboxEnabled
                 ? 'bg-emerald-500/25 border border-emerald-400/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
                 : 'liquid-glass-pill text-neutral-300 hover:text-white'
@@ -517,7 +556,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
           </button>
           <button aria-label="Refresh server checks"
             onClick={() => void fetchServers({ refresh: true })}
-            className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
+            className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer flex-shrink-0"
             title="Refresh server checks"
           >
             <RefreshCw className="w-4 h-4" />
@@ -532,7 +571,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               }
             }}
             disabled={!hasAlternateServer}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 flex-shrink-0 ${
               hasAlternateServer
                 ? 'liquid-glass-pill text-neutral-200 hover:text-white cursor-pointer'
                 : 'opacity-40 text-neutral-500 cursor-not-allowed border border-white/5'
@@ -546,7 +585,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
               href={displayUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
+              className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer flex-shrink-0"
               title="Open in new tab"
             >
               <ExternalLink className="w-4 h-4" />
@@ -554,7 +593,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
           )}
           <button aria-label="Close"
             onClick={onClose}
-            className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
+            className="hidden md:inline-flex p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer flex-shrink-0"
             title="Close"
           >
             <X className="w-5 h-5" />

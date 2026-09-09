@@ -23,6 +23,7 @@ import DownloadModal from '../../../components/DownloadModal';
 import TrailerModal from '../../../components/TrailerModal';
 import ContentCard, { type ContentItem as DiscoverContentCardItem } from '../../../components/ContentCard';
 import DetailTabNav from '../../../components/DetailTabNav';
+import { triggerHaptic } from '@/lib/haptics';
 import { useAppStore } from '@/app/store/useAppStore';
 import LiquidDropdown from '../../../components/LiquidDropdown';
 import RottenTomatoesIcon from '../../../components/RottenTomatoesIcon';
@@ -201,6 +202,7 @@ export default function DiscoverDetailPage() {
   const [trailer, setTrailer] = useState<TrailerData | null>(null);
   const [heroMuted, setHeroMuted] = useState(true);
   const [heroPaused, setHeroPaused] = useState(false);
+  const [overviewExpanded, setOverviewExpanded] = useState(false);
 
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
@@ -619,51 +621,186 @@ export default function DiscoverDetailPage() {
   }, [tvDetails?.seasons]);
 
   const handleBack = () => {
-    useAppStore.getState().setActiveTab('discover');
-    useAppStore.getState().setDiscoverMode('online');
-    router.push('/?tab=discover');
+    triggerHaptic('light');
+    if (typeof window !== 'undefined' && (window.history.state?.idx > 0 || window.history.length > 1)) {
+      router.back();
+    } else {
+      useAppStore.getState().setActiveTab('discover');
+      useAppStore.getState().setDiscoverMode('online');
+      router.push('/?tab=discover');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-white">
+    <div className="min-h-screen bg-[var(--background)] text-white overflow-x-hidden">
       <DetailTabNav activeTab="discover" />
-      <section className="relative min-h-screen overflow-hidden border-b border-neutral-900 flex flex-col">
-        <div className="absolute inset-0 bg-black" />
 
+      {/* Fixed Top Navigation Bar: Back button on top-left, Trailer controls on top-right */}
+      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pointer-events-none md:px-6 md:pt-6">
         <button
           onClick={handleBack}
-          className="absolute left-4 top-20 z-40 h-11 w-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 text-neutral-200 hover:text-white hover:scale-105 transition-all inline-flex items-center justify-center shadow-xl backdrop-blur-xl md:left-6 md:top-26 cursor-pointer"
-          title="Back to Discover"
-          aria-label="Back to Discover"
+          className="pointer-events-auto h-10 w-10 sm:h-11 sm:w-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 text-neutral-200 hover:text-white hover:scale-105 active:scale-95 transition-all inline-flex items-center justify-center shadow-xl backdrop-blur-xl cursor-pointer"
+          title="Back"
+          aria-label="Back"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        {heroTrailerUrl ? (
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute left-1/2 top-1/2 h-[145%] w-[290%] -translate-x-1/2 -translate-y-1/2 sm:w-[240%] md:w-[190%] lg:w-[170%]">
+        <div className="pointer-events-auto flex items-center gap-2">
+          <button
+            aria-label={heroPaused ? 'Play background' : 'Pause background'}
+            onClick={() => setHeroPaused((prev) => !prev)}
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer backdrop-blur-xl"
+            title={heroPaused ? 'Play background' : 'Pause background'}
+          >
+            {heroPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+          </button>
+          <button
+            aria-label={heroMuted ? 'Unmute background' : 'Mute background'}
+            onClick={() => setHeroMuted((prev) => !prev)}
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer backdrop-blur-xl"
+            title={heroMuted ? 'Unmute background' : 'Mute background'}
+          >
+            {heroMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      <section className="relative h-[58vh] min-h-[460px] max-h-[580px] sm:h-[65vh] sm:min-h-[520px] sm:max-h-[640px] md:h-auto md:min-h-screen md:max-h-none overflow-hidden border-b border-neutral-900 flex flex-col justify-end md:justify-start">
+        <div className="absolute inset-0 bg-black" />
+
+        {backdropPath && (
+          <img
+            src={`https://image.tmdb.org/t/p/original${backdropPath}`}
+            alt=""
+            className={`absolute inset-0 w-full h-full object-cover animate-heroFade transition-opacity duration-700 ${
+              heroTrailerUrl ? 'opacity-0 pointer-events-none' : 'opacity-88'
+            }`}
+          />
+        )}
+
+        {heroTrailerUrl && (
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[max(120vw,calc(75vh*16/9))] h-[max(75vh,calc(120vw*9/16))] scale-[1.35] sm:scale-[1.25] md:w-[max(120vw,calc(120vh*16/9))] md:h-[max(120vh,calc(120vw*9/16))] md:scale-105">
               <iframe
-                src={heroTrailerUrl}
+                src={`${heroTrailerUrl}&playsinline=1&enablejsapi=1`}
                 title={`${pageTitle} Trailer Background`}
-                className="h-full w-full pointer-events-none opacity-88"
-                allow="autoplay; encrypted-media; picture-in-picture; fullscreen *"
+                className="h-full w-full pointer-events-none opacity-100"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                 referrerPolicy="strict-origin-when-cross-origin"
                 allowFullScreen
               />
             </div>
           </div>
-        ) : backdropPath ? (
-          <img
-            src={`https://image.tmdb.org/t/p/original${backdropPath}`}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover opacity-88 animate-heroFade"
-          />
-        ) : null}
+        )}
 
-        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/20 to-transparent pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/25 to-transparent pointer-events-none" />
+        <div className="hidden md:block absolute inset-0 bg-gradient-to-r from-black/85 via-black/35 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/60 to-transparent pointer-events-none" />
 
-        <div className="relative z-20 flex-1 px-6 sm:px-10 md:px-14 lg:px-16 pt-36 sm:pt-42 md:pt-48 lg:pt-52 flex flex-col items-start justify-start pb-12 sm:pb-16 md:pb-20 max-w-4xl">
+        {/* Mobile Hero Floating Bottom Info (Cinejoy Style) */}
+        <div className="md:hidden relative z-20 w-full px-4 pb-4 flex flex-col items-center text-center">
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt={pageTitle}
+              className="h-12 sm:h-16 w-auto max-w-[85%] max-h-16 object-contain drop-shadow-[0_4px_20px_rgba(0,0,0,0.9)] mb-1.5"
+            />
+          ) : (
+            <h1 className="text-2xl sm:text-3xl font-black text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.9)] tracking-tight leading-tight mb-1">
+              {pageTitle}
+            </h1>
+          )}
+
+          {/* Genre Subtitle */}
+          {genreList.length > 0 && (
+            <p className="text-xs sm:text-sm text-neutral-300 font-medium drop-shadow-md mb-3.5 flex items-center justify-center gap-1.5 flex-wrap">
+              {genreList.slice(0, 3).join(' • ')}
+            </p>
+          )}
+
+          {/* Centered Action Buttons Bar */}
+          <div className="flex items-center justify-center gap-2.5 w-full max-w-xs">
+            <button
+              onClick={() => {
+                triggerHaptic('medium');
+                if (!tmdbId || !activeDetails) return;
+                if (mediaType === 'movie') {
+                  setStreamModal({ tmdbId, type: 'movie', title: activeDetails.title });
+                } else {
+                  setStreamModal({
+                    tmdbId,
+                    type: 'tv',
+                    title: `${activeDetails.title} - S${selectedSeason || 1}E${tvFirstPlayableEpisode}`,
+                    season: selectedSeason || 1,
+                    episode: tvFirstPlayableEpisode,
+                  });
+                }
+              }}
+              className="flex-1 bg-white hover:bg-neutral-200 active:scale-95 text-black font-bold py-2.5 px-5 rounded-full flex items-center justify-center gap-2 shadow-2xl transition text-sm cursor-pointer min-h-[42px]"
+            >
+              <Play className="w-4 h-4 fill-black" />
+              Play
+            </button>
+
+            <button
+              aria-label={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
+              onClick={() => {
+                triggerHaptic('selection');
+                handleWatchlistToggle();
+              }}
+              disabled={watchlistBusy}
+              className={`w-11 h-11 rounded-full border transition-all inline-flex items-center justify-center shadow-lg cursor-pointer shrink-0 ${
+                isInWatchlist
+                  ? 'liquid-glass-pill-active border-white/40 text-white font-bold'
+                  : 'liquid-glass-pill border-white/20 text-neutral-200 hover:text-white hover:scale-105 active:scale-95'
+              } ${watchlistBusy ? 'opacity-70 cursor-not-allowed' : ''}`}
+              title={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
+            >
+              {watchlistBusy ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isInWatchlist ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+            </button>
+
+            <button
+              aria-label="Download"
+              onClick={() => {
+                triggerHaptic('light');
+                setDownloadModal({
+                  title: pageTitle,
+                  year: activeDetails?.year || null,
+                  mediaType,
+                  posterPath: activeDetails?.posterPath || null,
+                  tmdbId: activeDetails?.id || tmdbId || undefined,
+                });
+              }}
+              className="w-11 h-11 rounded-full liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 text-neutral-200 hover:text-white inline-flex items-center justify-center shadow-lg transition cursor-pointer shrink-0"
+              title="Download"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+
+            {trailer && (
+              <button
+                aria-label="Watch trailer"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setTrailerModal({ title: pageTitle });
+                }}
+                className="w-11 h-11 rounded-full liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 text-neutral-200 hover:text-white inline-flex items-center justify-center shadow-lg transition cursor-pointer shrink-0"
+                title="Watch trailer"
+              >
+                <PlayCircle className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop Hero Content (md: and up) */}
+        <div className="hidden md:flex relative z-20 flex-1 px-8 lg:px-16 pt-24 lg:pt-36 flex-col items-start justify-center max-w-4xl pb-16">
           {loadingDetails ? (
             <div className="flex items-center gap-3 text-neutral-300 pb-12">
               <Loader2 className="w-6 h-6 animate-spin" />
@@ -675,24 +812,24 @@ export default function DiscoverDetailPage() {
                 <img
                   src={logoUrl}
                   alt={pageTitle}
-                  className="h-14 sm:h-20 md:h-24 lg:h-28 w-auto max-w-[92%] object-contain drop-shadow-[0_8px_30px_rgba(0,0,0,0.8)]"
+                  className="h-16 lg:h-24 w-auto max-w-[92%] object-contain drop-shadow-[0_8px_30px_rgba(0,0,0,0.8)]"
                 />
               ) : (
-                <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black leading-[0.95] tracking-tight uppercase text-white drop-shadow-[0_8px_30px_rgba(0,0,0,0.8)]">
+                <h1 className="text-5xl lg:text-7xl font-black leading-[0.95] tracking-tight uppercase text-white drop-shadow-[0_8px_30px_rgba(0,0,0,0.8)]">
                   {pageTitle}
                 </h1>
               )}
 
               {pageOverview && (
-                <p className="mt-4 text-base sm:text-lg md:text-xl text-neutral-100 max-w-2xl leading-relaxed line-clamp-4 drop-shadow-md">
+                <p className="mt-4 text-base lg:text-lg text-neutral-100 max-w-2xl leading-relaxed line-clamp-4 drop-shadow-md">
                   {pageOverview}
                 </p>
               )}
 
-              {/* Metadata Row: Ratings, Year, Duration under Title and Description */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mt-4 text-xs sm:text-sm md:text-base font-semibold">
+              {/* Metadata Row */}
+              <div className="flex flex-wrap items-center gap-2.5 mt-4 text-sm lg:text-base font-semibold">
                 {activeRating != null && activeRating > 0 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill font-bold text-amber-300 border border-amber-400/30 text-xs sm:text-sm shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill font-bold text-amber-300 border border-amber-400/30 text-sm shadow-sm">
                     {activeDetails?.imdbRating ? (
                       <span className="px-1.5 py-0.5 bg-[#F5C518] text-black font-black text-[10px] rounded-md tracking-tight leading-none">IMDb</span>
                     ) : (
@@ -703,7 +840,7 @@ export default function DiscoverDetailPage() {
                 )}
 
                 {activeDetails?.rottenTomatoes && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-100 font-bold border border-white/15 text-xs sm:text-sm shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-100 font-bold border border-white/15 text-sm shadow-sm">
                     <RottenTomatoesIcon
                       score={parseInt(activeDetails.rottenTomatoes.replace('%', ''), 10) || 100}
                       className="w-4 h-4 shrink-0"
@@ -713,31 +850,31 @@ export default function DiscoverDetailPage() {
                 )}
 
                 {activeDetails?.year && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
                     {activeDetails.year}
                   </span>
                 )}
 
                 {mediaType === 'movie' && movieDetails?.runtime && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
                     {Math.floor(movieDetails.runtime / 60)}h {movieDetails.runtime % 60}m
                   </span>
                 )}
 
                 {mediaType === 'tv' && tvDetails?.status && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
                     {tvDetails.status}
                   </span>
                 )}
 
                 {mediaType === 'tv' && tvSeasonCount !== null && tvSeasonCount > 0 && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
                     {tvSeasonCount} Season{tvSeasonCount > 1 ? 's' : ''}
                   </span>
                 )}
 
                 {mediaType === 'tv' && totalEpisodeCount !== null && (
-                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-xs sm:text-sm font-medium">
+                  <span className="px-3 py-1.5 rounded-xl liquid-glass-pill text-neutral-200 border border-white/10 text-sm font-medium">
                     {totalEpisodeCount} Episode{totalEpisodeCount > 1 ? 's' : ''}
                   </span>
                 )}
@@ -746,7 +883,7 @@ export default function DiscoverDetailPage() {
               {genreList.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2.5">
                   {genreList.map((genre) => (
-                    <span key={genre} className="text-xs sm:text-sm px-3.5 py-1.5 rounded-xl liquid-glass-pill border border-white/15 text-neutral-200 font-medium shadow-sm">
+                    <span key={genre} className="text-sm px-3.5 py-1.5 rounded-xl liquid-glass-pill border border-white/15 text-neutral-200 font-medium shadow-sm">
                       {genre}
                     </span>
                   ))}
@@ -755,9 +892,9 @@ export default function DiscoverDetailPage() {
 
               {heroCast.length > 0 && (
                 <div className="mt-5 w-full max-w-3xl">
-                  <p className="text-xs sm:text-sm font-bold tracking-wider uppercase text-neutral-300 mb-2.5 drop-shadow-sm">Cast & Crew</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
-                    {heroCast.map((member) => (
+                  <p className="text-sm font-bold tracking-wider uppercase text-neutral-300 mb-2.5 drop-shadow-sm">Cast & Crew</p>
+                  <div className="grid grid-cols-2 xl:grid-cols-3 gap-2.5">
+                    {heroCast.slice(0, 6).map((member) => (
                       <button
                         key={member.id}
                         onClick={() => openPerson(member.id)}
@@ -767,16 +904,16 @@ export default function DiscoverDetailPage() {
                           <img
                             src={`https://image.tmdb.org/t/p/w92${member.profilePath}`}
                             alt={member.name}
-                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover ring-1 ring-white/20 group-hover:ring-white/40 transition shrink-0"
+                            className="w-11 h-11 rounded-full object-cover ring-1 ring-white/20 group-hover:ring-white/40 transition shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/10 flex items-center justify-center ring-1 ring-white/20 shrink-0">
+                          <div className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center ring-1 ring-white/20 shrink-0">
                             <User className="w-5 h-5 text-neutral-400" />
                           </div>
                         )}
                         <div className="text-left min-w-0">
-                          <p className="text-sm sm:text-base font-semibold text-neutral-100 group-hover:text-white leading-tight truncate">{member.name}</p>
-                          <p className="text-xs sm:text-sm text-neutral-400 leading-tight truncate mt-0.5">{member.character}</p>
+                          <p className="text-sm font-semibold text-neutral-100 group-hover:text-white leading-tight truncate">{member.name}</p>
+                          <p className="text-xs text-neutral-400 leading-tight truncate mt-0.5">{member.character}</p>
                         </div>
                       </button>
                     ))}
@@ -784,9 +921,10 @@ export default function DiscoverDetailPage() {
                 </div>
               )}
 
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-6 flex items-center gap-3">
                 <button
                   onClick={() => {
+                    triggerHaptic('medium');
                     if (!tmdbId || !activeDetails) return;
                     if (mediaType === 'movie') {
                       setStreamModal({ tmdbId, type: 'movie', title: activeDetails.title });
@@ -800,25 +938,31 @@ export default function DiscoverDetailPage() {
                       });
                     }
                   }}
-                  className="liquid-btn-primary px-6 py-3.5 rounded-2xl text-sm sm:text-base font-bold inline-flex items-center gap-2.5 shadow-xl hover:scale-105 transition-all cursor-pointer"
+                  className="liquid-btn-primary px-6 py-3.5 rounded-2xl text-base font-bold inline-flex items-center justify-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer min-h-[44px]"
                 >
                   <Play className="w-4.5 h-4.5 fill-black" /> Watch Now
                 </button>
 
                 <button aria-label="Watch trailer"
-                  onClick={() => setTrailerModal({ title: pageTitle })}
-                  className="w-12 h-12 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 inline-flex items-center justify-center shadow-lg transition-all text-neutral-200 hover:text-white cursor-pointer"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    setTrailerModal({ title: pageTitle });
+                  }}
+                  className="w-12 h-12 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 inline-flex items-center justify-center shadow-lg transition-all text-neutral-200 hover:text-white cursor-pointer shrink-0"
                   title="Watch trailer"
                 >
                   <Play className="w-4.5 h-4.5" />
                 </button>
 
                 <button aria-label={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
-                  onClick={handleWatchlistToggle}
-                  className={`w-12 h-12 rounded-2xl border transition-all inline-flex items-center justify-center shadow-lg cursor-pointer ${
+                  onClick={() => {
+                    triggerHaptic('selection');
+                    handleWatchlistToggle();
+                  }}
+                  className={`w-12 h-12 rounded-2xl border transition-all inline-flex items-center justify-center shadow-lg cursor-pointer shrink-0 ${
                     isInWatchlist
                       ? 'liquid-glass-pill-active border-white/40 text-white font-bold'
-                      : 'liquid-glass-pill border-white/20 text-neutral-200 hover:text-white hover:scale-105'
+                      : 'liquid-glass-pill border-white/20 text-neutral-200 hover:text-white hover:scale-105 active:scale-95'
                   } ${watchlistBusy ? 'opacity-70 cursor-not-allowed' : ''}`}
                   title={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
                   disabled={watchlistBusy}
@@ -827,18 +971,20 @@ export default function DiscoverDetailPage() {
                 </button>
 
                 <button
-                  onClick={() => setDownloadModal({
-                    title: pageTitle,
-                    year: activeDetails?.year || null,
-                    mediaType,
-                    posterPath: activeDetails?.posterPath || null,
-                    tmdbId: activeDetails?.id || tmdbId || undefined,
-                  })}
-                  className="liquid-glass-pill px-5 py-3.5 rounded-2xl border border-white/20 hover:border-white/40 hover:scale-105 text-white font-semibold text-sm sm:text-base inline-flex items-center gap-2.5 shadow-lg transition-all cursor-pointer"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    setDownloadModal({
+                      title: pageTitle,
+                      year: activeDetails?.year || null,
+                      mediaType,
+                      posterPath: activeDetails?.posterPath || null,
+                      tmdbId: activeDetails?.id || tmdbId || undefined,
+                    });
+                  }}
+                  className="liquid-glass-pill px-5 py-3.5 rounded-2xl border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 text-white font-semibold text-base inline-flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer min-h-[44px]"
                 >
                   <Download className="w-4.5 h-4.5" /> Download
                 </button>
-
               </div>
 
               {trailerLoading && !heroTrailerUrl && (
@@ -850,26 +996,119 @@ export default function DiscoverDetailPage() {
           )}
         </div>
 
-        <div className="absolute right-3 md:right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2.5">
-          <button aria-label={heroPaused ? 'Play background' : 'Pause background'}
-            onClick={() => setHeroPaused((prev) => !prev)}
-            className="w-11 h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer"
-            title={heroPaused ? 'Play background' : 'Pause background'}
-          >
-            {heroPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-          </button>
-          <button aria-label={heroMuted ? 'Unmute background' : 'Mute background'}
-            onClick={() => setHeroMuted((prev) => !prev)}
-            className="w-11 h-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 hover:scale-105 inline-flex items-center justify-center shadow-xl text-neutral-200 hover:text-white transition-all cursor-pointer"
-            title={heroMuted ? 'Unmute background' : 'Mute background'}
-          >
-            {heroMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-          </button>
-        </div>
-
       </section>
 
-      <main className="px-6 md:px-12 py-6 md:py-8 space-y-10">
+      <main className="px-4 sm:px-6 md:px-12 py-5 md:py-8 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-16 space-y-8">
+        {/* Mobile Detail Section (Cinejoy Style) */}
+        <div className="md:hidden space-y-3.5">
+          {/* Metadata Row: Year • Runtime/Seasons • Badges */}
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-neutral-300">
+            {activeDetails?.year && (
+              <span>{activeDetails.year}</span>
+            )}
+
+            {mediaType === 'movie' && movieDetails?.runtime && (
+              <>
+                <span className="text-neutral-500">•</span>
+                <span>{Math.floor(movieDetails.runtime / 60)}h {movieDetails.runtime % 60}m</span>
+              </>
+            )}
+
+            {mediaType === 'tv' && tvSeasonCount !== null && tvSeasonCount > 0 && (
+              <>
+                <span className="text-neutral-500">•</span>
+                <span>{tvSeasonCount} Season{tvSeasonCount > 1 ? 's' : ''}</span>
+              </>
+            )}
+
+            {mediaType === 'tv' && tvDetails?.status && (
+              <span className="px-2 py-0.5 rounded-md bg-white/10 text-neutral-300 text-[10px] font-medium border border-white/10">
+                {tvDetails.status}
+              </span>
+            )}
+
+            {/* Rating Badges */}
+            {activeRating != null && activeRating > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg liquid-glass-pill font-bold text-amber-300 border border-amber-400/30 text-xs shadow-sm">
+                {activeDetails?.imdbRating ? (
+                  <span className="px-1 py-0.5 bg-[#F5C518] text-black font-black text-[9px] rounded tracking-tight leading-none">IMDb</span>
+                ) : (
+                  <span className="px-1 py-0.5 bg-amber-500/20 text-amber-300 font-bold text-[9px] rounded tracking-tight border border-amber-400/40 leading-none">TMDB</span>
+                )}
+                <span>{activeRating.toFixed(1)}</span>
+              </span>
+            )}
+
+            {activeDetails?.rottenTomatoes && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg liquid-glass-pill text-neutral-100 font-bold border border-white/15 text-xs shadow-sm">
+                <RottenTomatoesIcon
+                  score={parseInt(activeDetails.rottenTomatoes.replace('%', ''), 10) || 100}
+                  className="w-3.5 h-3.5 shrink-0"
+                />
+                <span>{activeDetails.rottenTomatoes}</span>
+              </span>
+            )}
+          </div>
+
+          {/* Starring line */}
+          {heroCast.length > 0 && (
+            <p className="text-xs text-neutral-400">
+              <span className="text-neutral-500 font-medium">Starring: </span>
+              {heroCast.slice(0, 3).map((c) => c.name).join(', ')}
+            </p>
+          )}
+
+          {/* Overview / Storyline with Read More toggle */}
+          {pageOverview && (
+            <div className="pt-0.5">
+              <p className={`text-xs sm:text-sm text-neutral-300 leading-relaxed ${overviewExpanded ? '' : 'line-clamp-3'}`}>
+                {pageOverview}
+              </p>
+              {pageOverview.length > 150 && (
+                <button
+                  onClick={() => setOverviewExpanded(!overviewExpanded)}
+                  className="text-xs font-bold text-neutral-400 hover:text-white mt-1.5 transition cursor-pointer"
+                >
+                  {overviewExpanded ? 'Read Less' : 'Read More'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Cast & Crew Horizontal Scroll on Mobile */}
+          {heroCast.length > 0 && (
+            <div className="pt-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2.5">Cast & Crew</p>
+              <div className="flex gap-2.5 overflow-x-auto pb-2 custom-scrollbar mask-fade-right scroll-snap-x">
+                {heroCast.map((member) => (
+                  <button
+                    key={member.id}
+                    onClick={() => openPerson(member.id)}
+                    className="flex-shrink-0 w-20 flex flex-col items-center text-center cursor-pointer group scroll-snap-align-start"
+                  >
+                    {member.profilePath ? (
+                      <img
+                        src={`https://image.tmdb.org/t/p/w185${member.profilePath}`}
+                        alt={member.name}
+                        className="w-14 h-14 rounded-full object-cover ring-2 ring-white/15 group-hover:ring-white/40 transition shadow-md"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-full bg-white/10 ring-2 ring-white/15 flex items-center justify-center">
+                        <User className="w-6 h-6 text-neutral-400" />
+                      </div>
+                    )}
+                    <p className="text-[11px] font-semibold text-neutral-200 group-hover:text-white mt-1.5 line-clamp-1 w-full leading-tight">
+                      {member.name}
+                    </p>
+                    <p className="text-[10px] text-neutral-500 line-clamp-1 w-full leading-tight mt-0.5">
+                      {member.character}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         {mediaType === 'tv' && tvDetails && (
           <section className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -921,10 +1160,10 @@ export default function DiscoverDetailPage() {
                         <img
                           src={`https://image.tmdb.org/t/p/w300${ep.stillPath}`}
                           alt=""
-                          className="w-full md:w-44 h-26 object-cover rounded-xl border border-white/10 shadow-sm shrink-0"
+                          className="w-full md:w-44 aspect-video object-cover rounded-xl border border-white/10 shadow-sm shrink-0"
                         />
                       ) : (
-                        <div className="w-full md:w-44 h-26 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-neutral-500 font-bold shrink-0">
+                        <div className="w-full md:w-44 aspect-video bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-neutral-500 font-bold shrink-0">
                           E{ep.episodeNumber}
                         </div>
                       )}
@@ -996,19 +1235,19 @@ export default function DiscoverDetailPage() {
               {collectionData ? `Part of ${collectionData.name}` : 'Loading Collection...'}
             </h2>
             {loadingCollection ? (
-              <div className="flex gap-3 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar">
+              <div className="flex gap-3 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar mask-fade-right scroll-snap-x">
                 {Array.from({ length: 6 }).map((_, idx) => (
-                  <div key={idx} className="w-36 sm:w-44 shrink-0 rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                  <div key={idx} className="w-36 sm:w-44 shrink-0 rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse scroll-snap-align-start">
                     <div className="aspect-[2/3] bg-neutral-800" />
                   </div>
                 ))}
               </div>
             ) : collectionData && (
-              <div className="flex gap-3 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar">
+              <div className="flex gap-3 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar mask-fade-right scroll-snap-x">
                 {collectionData.parts.map((part) => {
                   const isCurrent = part.tmdbId === tmdbId;
                   return (
-                    <div key={part.tmdbId} className={`w-36 sm:w-44 shrink-0 ${isCurrent ? 'ring-2 ring-blue-500 rounded-xl scale-[1.02] transition-transform' : ''}`}>
+                    <div key={part.tmdbId} className={`w-36 sm:w-44 shrink-0 scroll-snap-align-start ${isCurrent ? 'ring-2 ring-blue-500 rounded-xl scale-[1.02] transition-transform' : ''}`}>
                       <ContentCard
                         item={{
                           id: part.tmdbId,
@@ -1062,22 +1301,26 @@ export default function DiscoverDetailPage() {
       </main>
 
       {personModalOpen && (
-        <div className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
-          <div className="w-full max-w-4xl max-h-[90vh] liquid-glass-menu border border-white/15 rounded-3xl overflow-hidden flex flex-col shadow-2xl backdrop-blur-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-white/10 flex items-center justify-between sticky top-0 bg-neutral-900/90 backdrop-blur-xl z-10">
+        <div className="fixed inset-0 z-[110] bg-neutral-950 sm:bg-black/80 sm:backdrop-blur-md sm:flex sm:items-center sm:justify-center p-0 sm:p-4 overflow-y-auto sm:overflow-hidden" onClick={() => setPersonModalOpen(false)}>
+          <div className="w-full min-h-[100dvh] sm:min-h-0 sm:max-w-4xl sm:max-h-[90vh] bg-neutral-950 sm:liquid-glass-menu sm:border sm:border-white/15 rounded-none sm:rounded-3xl overflow-hidden flex flex-col shadow-2xl backdrop-blur-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between sticky top-0 bg-neutral-900/90 backdrop-blur-xl z-10 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:pt-5">
               <div>
                 <h3 className="text-xl font-bold">Cast Filmography</h3>
                 {personData && <p className="text-xs text-neutral-400 mt-1">{personData.name}</p>}
               </div>
               <button
-                onClick={() => setPersonModalOpen(false)}
+                onClick={() => {
+                  triggerHaptic('light');
+                  setPersonModalOpen(false);
+                }}
+                aria-label="Close"
                 className="p-2.5 liquid-glass-pill hover:scale-105 border border-white/15 rounded-full text-neutral-300 hover:text-white transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto flex-1 custom-scrollbar">
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 custom-scrollbar pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:pb-5">
               {loadingPerson && (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-7 h-7 animate-spin text-neutral-400" />

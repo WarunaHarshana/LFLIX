@@ -9,6 +9,7 @@ import ContentCard, { type ContentItem as DiscoverContentCardItem } from './Cont
 import TMDBImage from './TMDBImage';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import LiquidDropdown from './LiquidDropdown';
+import { triggerHaptic } from '@/lib/haptics';
 
 const QUALITY_OPTIONS = [
     { id: 'best', name: 'Best Available' },
@@ -417,13 +418,29 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
     };
 
     return (
-        <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Title details" className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <div ref={modalRef as React.RefObject<HTMLDivElement>} role="dialog" aria-modal="true" aria-label="Title details" className="fixed inset-0 z-[100] bg-neutral-950 sm:bg-black/80 sm:backdrop-blur-xl sm:flex sm:items-center sm:justify-center p-0 sm:p-4 overflow-y-auto sm:overflow-hidden" onClick={(e) => { if (e.target === e.currentTarget) { triggerHaptic('light'); onClose(); } }}>
+            {/* Ambient Backdrop Glow Aura (Apple Vision Pro dynamic color bleed) */}
+            {(item.backdropPath || item.posterPath) && (
+                <div className="hidden sm:block absolute -inset-10 -z-10 rounded-3xl overflow-hidden opacity-35 ambient-glow-aura pointer-events-none transition-opacity duration-700">
+                    <img
+                        src={`https://image.tmdb.org/t/p/w300${item.backdropPath || item.posterPath}`}
+                        alt=""
+                        className="w-full h-full object-cover scale-125"
+                    />
+                </div>
+            )}
+
             <div
-                className="relative w-full max-w-4xl max-h-[90vh] liquid-glass-base rounded-3xl overflow-hidden shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] animate-in zoom-in-95 duration-200 flex flex-col"
+                className="relative w-full min-h-[100dvh] sm:min-h-0 sm:max-w-4xl sm:max-h-[90vh] bg-neutral-950 sm:liquid-glass-base rounded-none sm:rounded-3xl overflow-hidden sm:shadow-[0_25px_70px_rgba(0,0,0,0.85),0_0_30px_rgba(255,255,255,0.08)] animate-in zoom-in-95 duration-200 flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Backdrop Header */}
-                <div className="relative h-64 sm:h-80 shrink-0">
+                <div className="relative min-h-[300px] sm:min-h-0 sm:h-72 md:h-80 shrink-0">
+                    {/* Mobile Sheet Grab Handle */}
+                    <div className="sm:hidden absolute top-2 left-0 right-0 z-30 flex justify-center pointer-events-none">
+                        <div className="w-10 h-1 rounded-full bg-white/35 backdrop-blur-md shadow-sm" />
+                    </div>
+
                     {(item.backdropPath || item.posterPath) ? (
                         <TMDBImage
                             src={item.backdropPath || item.posterPath}
@@ -437,13 +454,17 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                     ) : (
                         <div className="w-full h-full bg-neutral-800" />
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[rgba(10,10,14,0.92)] via-[rgba(10,10,14,0.3)] to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[rgba(10,10,14,0.95)] via-[rgba(10,10,14,0.4)] to-transparent" />
                     <div className="absolute inset-0 bg-gradient-to-r from-[rgba(10,10,14,0.75)] via-[rgba(10,10,14,0.2)] to-transparent" />
 
-                    {/* Close button */}
+                    {/* Single Close button (Top-Right) */}
                     <button
-                        onClick={onClose}
-                        className="absolute top-4 right-4 p-2 liquid-orb bg-black/40 text-white transition z-20 hover:scale-105"
+                        onClick={() => {
+                            triggerHaptic('light');
+                            onClose();
+                        }}
+                        aria-label="Close"
+                        className="absolute top-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:top-4 right-4 p-2.5 sm:p-2 liquid-orb bg-black/60 sm:bg-black/40 border border-white/20 sm:border-white/10 text-white transition z-30 hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
                     >
                         <X className="w-4 h-4" />
                     </button>
@@ -521,30 +542,42 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                             <div className="flex gap-2 sm:gap-3 mt-3 flex-wrap">
                                 {item.type === 'movie' ? (
                                     <button
-                                        onClick={onPlay}
-                                        className="liquid-btn-primary px-5 sm:px-6 py-2.5 font-bold rounded-xl flex items-center gap-2 text-xs sm:text-sm shadow-xl hover:scale-105 transition"
+                                        onClick={() => {
+                                            triggerHaptic('medium');
+                                            onPlay();
+                                        }}
+                                        className="liquid-btn-primary px-5 sm:px-6 py-2.5 font-bold rounded-xl flex items-center gap-2 text-xs sm:text-sm shadow-xl hover:scale-105 active:scale-95 transition cursor-pointer"
                                     >
                                         <Play className="w-4 h-4 fill-black" />
                                         {progressPercent > 0 && progressPercent < 95 ? 'Resume' : 'Play'}
                                     </button>
                                 ) : (
                                     <button
-                                        onClick={onViewEpisodes}
-                                        className="liquid-btn-primary px-5 sm:px-6 py-2.5 font-bold rounded-xl flex items-center gap-2 text-xs sm:text-sm shadow-xl hover:scale-105 transition"
+                                        onClick={() => {
+                                            triggerHaptic('medium');
+                                            if (onViewEpisodes) onViewEpisodes();
+                                        }}
+                                        className="liquid-btn-primary px-5 sm:px-6 py-2.5 font-bold rounded-xl flex items-center gap-2 text-xs sm:text-sm shadow-xl hover:scale-105 active:scale-95 transition cursor-pointer"
                                     >
                                         <Play className="w-4 h-4 fill-black" /> View Episodes
                                     </button>
                                 )}
                                 <button
-                                    onClick={() => setShowTrailer(true)}
-                                    className="liquid-btn-secondary px-4 sm:px-5 py-2.5 font-semibold rounded-xl flex items-center gap-2 text-xs sm:text-sm hover:scale-105 transition"
+                                    onClick={() => {
+                                        triggerHaptic('light');
+                                        setShowTrailer(true);
+                                    }}
+                                    className="liquid-btn-secondary px-4 sm:px-5 py-2.5 font-semibold rounded-xl flex items-center gap-2 text-xs sm:text-sm hover:scale-105 active:scale-95 transition cursor-pointer"
                                 >
                                     <PlayCircle className="w-4 h-4 text-white" /> Trailer
                                 </button>
                                 {item.tmdbId && (
                                     <button
-                                        onClick={() => setShowStreamServers(true)}
-                                        className="liquid-btn-secondary px-4 sm:px-5 py-2.5 font-semibold rounded-xl flex items-center gap-2 text-xs sm:text-sm hover:scale-105 transition text-sky-300 border-sky-500/30"
+                                        onClick={() => {
+                                            triggerHaptic('light');
+                                            setShowStreamServers(true);
+                                        }}
+                                        className="liquid-btn-secondary px-4 sm:px-5 py-2.5 font-semibold rounded-xl flex items-center gap-2 text-xs sm:text-sm hover:scale-105 active:scale-95 transition text-sky-300 border-sky-500/30 cursor-pointer"
                                     >
                                         <Globe className="w-4 h-4 text-sky-400" /> Watch Online
                                     </button>
@@ -596,7 +629,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                 </div>
 
                 {/* Content Body */}
-                <div className="p-4 sm:p-6 pt-3 sm:pl-44 overflow-y-auto flex-1">
+                <div className="p-4 sm:p-6 pt-3 sm:pl-44 overflow-y-auto flex-1 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:pb-6">
                     {/* Watch Progress */}
                     {item.type === 'movie' && progressPercent > 0 && progressPercent < 95 && item.watchProgress && (
                         <div className="mb-5">
@@ -658,12 +691,15 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                     {activeDetails?.cast && activeDetails.cast.length > 0 && (
                         <div className="mb-5">
                             <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2.5">Cast</h3>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex gap-2 overflow-x-auto pb-2 sm:flex-wrap mask-fade-right scroll-snap-x scrollbar-none">
                                 {activeDetails.cast.map((c, i) => (
                                     <button
                                         key={`${c.id}-${i}`}
-                                        onClick={() => openPerson(c.id)}
-                                        className="flex items-center gap-2.5 liquid-glass-pill hover:bg-white/15 rounded-xl px-3 py-1.5 transition"
+                                        onClick={() => {
+                                            triggerHaptic('light');
+                                            openPerson(c.id);
+                                        }}
+                                        className="flex items-center gap-2.5 liquid-glass-pill hover:bg-white/15 rounded-xl px-3 py-1.5 transition shrink-0 scroll-snap-align-start cursor-pointer active:scale-95"
                                     >
                                         {c.profilePath && (
                                              <TMDBImage src={c.profilePath} alt="" tmdbSize="w45" width={28} height={28} className="w-7 h-7 rounded-full object-cover shadow-sm" />
@@ -686,19 +722,19 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                 {collectionData ? `Part of ${collectionData.name}` : 'Loading Collection...'}
                             </h3>
                             {loadingCollection ? (
-                                <div className="flex gap-2 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar">
+                                <div className="flex gap-2.5 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar mask-fade-right scroll-snap-x">
                                     {Array.from({ length: 4 }).map((_, idx) => (
-                                        <div key={idx} className="w-28 sm:w-36 shrink-0 rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse">
+                                        <div key={idx} className="w-28 sm:w-36 shrink-0 rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900/60 animate-pulse scroll-snap-align-start">
                                             <div className="aspect-[2/3] bg-neutral-800" />
                                         </div>
                                     ))}
                                 </div>
                             ) : collectionData && (
-                                <div className="flex gap-2 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar">
+                                <div className="flex gap-2.5 overflow-x-auto pt-2 px-1 -mx-1 pb-4 custom-scrollbar mask-fade-right scroll-snap-x">
                                     {collectionData.parts.map((part) => {
                                         const isCurrent = part.tmdbId === item.tmdbId;
                                         return (
-                                            <div key={part.tmdbId} className={`w-28 sm:w-36 shrink-0 ${isCurrent ? 'ring-2 ring-blue-500 rounded-xl scale-[1.02] transition-transform' : ''}`}>
+                                            <div key={part.tmdbId} className={`w-28 sm:w-36 shrink-0 scroll-snap-align-start ${isCurrent ? 'ring-2 ring-blue-500 rounded-xl scale-[1.02] transition-transform' : ''}`}>
                                                 <ContentCard
                                                     item={{
                                                         id: part.tmdbId,
@@ -806,25 +842,29 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
 
             {/* Person Modal */}
             {personModalOpen && (
-                <div role="dialog" aria-modal="true" aria-label="Cast member details" className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setPersonModalOpen(false)}>
+                <div role="dialog" aria-modal="true" aria-label="Cast member details" className="fixed inset-0 z-[110] bg-neutral-950 sm:bg-black/80 sm:backdrop-blur-md sm:flex sm:items-center sm:justify-center p-0 sm:p-4 overflow-y-auto sm:overflow-hidden" onClick={() => setPersonModalOpen(false)}>
                     <div
-                        className="w-full max-w-4xl max-h-[90vh] liquid-glass-base border border-white/15 rounded-3xl overflow-hidden flex flex-col shadow-[0_25px_70px_rgba(0,0,0,0.85)] animate-in zoom-in-95 duration-200"
+                        className="w-full min-h-[100dvh] sm:min-h-0 sm:max-w-4xl sm:max-h-[90vh] bg-neutral-950 sm:liquid-glass-base sm:border sm:border-white/15 rounded-none sm:rounded-3xl overflow-hidden flex flex-col shadow-[0_25px_70px_rgba(0,0,0,0.85)] animate-in zoom-in-95 duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="p-5 border-b border-white/10 flex items-center justify-between">
+                        <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:pt-5">
                             <div>
                                 <h3 className="text-xl font-bold tracking-tight text-white">Cast Filmography</h3>
                                 {personData && <p className="text-xs text-neutral-400 mt-1">{personData.name}</p>}
                             </div>
                             <button
-                                onClick={() => setPersonModalOpen(false)}
-                                className="p-2 liquid-orb text-neutral-300 hover:text-white transition cursor-pointer"
+                                onClick={() => {
+                                    triggerHaptic('light');
+                                    setPersonModalOpen(false);
+                                }}
+                                aria-label="Close"
+                                className="p-2.5 sm:p-2 liquid-orb bg-black/60 sm:bg-black/40 border border-white/20 sm:border-white/10 text-white transition hover:scale-105 active:scale-95 cursor-pointer"
                             >
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
-                        <div className="p-5 overflow-y-auto flex-1">
+                        <div className="p-4 sm:p-5 overflow-y-auto flex-1 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:pb-5">
                             {loadingPerson && (
                                 <div>
                                     <div className="flex gap-4 mb-5 animate-pulse">
