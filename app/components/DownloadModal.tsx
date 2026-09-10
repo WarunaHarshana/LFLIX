@@ -154,8 +154,9 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         });
     }, [directDownloads, title, year, mediaType, season, episode]);
 
-    // Check Google Drive availability once on mount
+    // Check Google Drive availability only when modal opens
     useEffect(() => {
+        if (!isOpen) return;
         let cancelled = false;
         const fetchGdrive = async () => {
             try {
@@ -172,7 +173,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         };
         fetchGdrive();
         return () => { cancelled = true; };
-    }, []);
+    }, [isOpen]);
 
     // Fetch folders + auto-search on open
     useEffect(() => {

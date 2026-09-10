@@ -10,12 +10,17 @@
  *   - Progress tracking via rclone stats output
  */
 
-import { spawn, execSync, ChildProcess } from 'child_process';
+import { spawn, execSync, exec, ChildProcess } from 'child_process';
+import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import db from './db';
 import { detectTvShow } from './mediaNaming';
 import { extractYear, cleanFilename } from './metadata';
+
+const execAsync = promisify(exec);
+let cachedStatus: { status: GdriveStatus; timestamp: number } | null = null;
+let cachedUsage: { usage: { used: string; total: string; free: string } | null; timestamp: number } | null = null;
 
 /**
  * Get available free space on a local directory path in bytes.
@@ -212,21 +217,53 @@ function parseProgressLine(line: string): UploadProgress | null {
 /**
  * Get the current status of Google Drive integration.
  */
-export async function getStatus(): Promise<GdriveStatus> {
+export async function getStatus(forceRefresh = false): Promise<GdriveStatus> {
+    const now = Date.now();
+    if (!forceRefresh && cachedStatus && (now - cachedStatus.timestamp < 30000)) {
+        return cachedStatus.status;
+    }
+
     const config = getGdriveConfig();
-    const rcloneOk = isRcloneInstalled();
-    const remoteOk = rcloneOk ? remoteExists(config.remote) : false;
+    if (!config.enabled) {
+        const disabledStatus: GdriveStatus = {
+            configured: false,
+            rcloneInstalled: false,
+            remoteExists: false,
+            connected: false,
+            mounted: false,
+            mountPath: config.mountPath,
+            remote: config.remote,
+            basePath: config.basePath,
+        };
+        cachedStatus = { status: disabledStatus, timestamp: now };
+        return disabledStatus;
+    }
+
+    let rcloneOk = false;
+    let remoteOk = false;
     const mounted = isMounted(config.mountDrive);
+
+    try {
+        await execAsync('rclone version', { timeout: 3000 });
+        rcloneOk = true;
+    } catch { /* ignore */ }
+
+    if (rcloneOk) {
+        try {
+            const { stdout } = await execAsync('rclone listremotes', { timeout: 3000 });
+            remoteOk = stdout.includes(`${config.remote}:`);
+        } catch { /* ignore */ }
+    }
 
     let connected = mounted;
     if (!connected && remoteOk) {
         try {
-            execSync(`rclone lsd "${config.remote}:" --max-depth 0`, { stdio: 'pipe', timeout: 25000 });
+            await execAsync(`rclone lsd "${config.remote}:" --max-depth 0`, { timeout: 6000 });
             connected = true;
         } catch { /* ignore */ }
     }
 
-    return {
+    const status: GdriveStatus = {
         configured: config.enabled && rcloneOk && remoteOk,
         rcloneInstalled: rcloneOk,
         remoteExists: remoteOk,
@@ -236,6 +273,9 @@ export async function getStatus(): Promise<GdriveStatus> {
         remote: config.remote,
         basePath: config.basePath,
     };
+
+    cachedStatus = { status, timestamp: now };
+    return status;
 }
 
 /**
@@ -582,21 +622,30 @@ export function unmountDrive(): { success: boolean; message: string } {
 /**
  * Get Google Drive usage/quota info.
  */
-export async function getDriveUsage(): Promise<{ used: string; total: string; free: string } | null> {
+export async function getDriveUsage(forceRefresh = false): Promise<{ used: string; total: string; free: string } | null> {
+    const now = Date.now();
+    if (!forceRefresh && cachedUsage && (now - cachedUsage.timestamp < 60000)) {
+        return cachedUsage.usage;
+    }
+
     const config = getGdriveConfig();
+    if (!config.enabled) return null;
+
     try {
-        const output = execSync(`rclone about "${config.remote}:" --json`, { stdio: 'pipe', timeout: 15000 }).toString();
-        const info = JSON.parse(output);
+        const { stdout } = await execAsync(`rclone about "${config.remote}:" --json`, { timeout: 6000 });
+        const info = JSON.parse(stdout);
         const format = (bytes: number) => {
             if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`;
             if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
             return `${(bytes / 1e6).toFixed(1)} MB`;
         };
-        return {
+        const usage = {
             used: format(info.used || 0),
             total: format(info.total || 0),
             free: format(info.free || 0),
         };
+        cachedUsage = { usage, timestamp: now };
+        return usage;
     } catch {
         return null;
     }
