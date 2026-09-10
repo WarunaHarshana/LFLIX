@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import path from 'path';
 import db from '@/lib/db';
 import { validateExistingDirectory, validatePlayerExecutable } from '@/lib/security';
 import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
@@ -8,7 +9,10 @@ import { isTmdbConfigured } from '@/lib/metadata';
 export const dynamic = 'force-dynamic';
 
 // Valid setting keys to prevent injection
-const VALID_SETTINGS = ['vlcPath', 'tmdbApiKey', 'omdbApiKey', 'downloadPath', 'autoOrganize'];
+const VALID_SETTINGS = [
+    'vlcPath', 'tmdbApiKey', 'omdbApiKey', 'downloadPath', 'autoOrganize',
+    'gdriveEnabled', 'gdriveRemote', 'gdriveBasePath', 'gdriveTempPath', 'gdriveMountPath', 'gdriveMountDrive',
+];
 
 // Validate the configured player path points at a real, recognised player binary
 const validateVlcPath = validatePlayerExecutable;
@@ -68,6 +72,22 @@ export async function POST(req: Request) {
                 return NextResponse.json({ error: validation.error }, { status: 400 });
             }
             settings.downloadPath = validation.path;
+        }
+
+        // Create gdriveTempPath if it doesn't exist (unlike downloadPath, it's OK to create)
+        if (settings.gdriveTempPath) {
+            const tempPath = String(settings.gdriveTempPath).trim();
+            if (!path.isAbsolute(tempPath)) {
+                return NextResponse.json({ error: 'Torrent temp path must be absolute' }, { status: 400 });
+            }
+            try {
+                const fs = await import('fs');
+                if (!fs.existsSync(tempPath)) {
+                    fs.mkdirSync(tempPath, { recursive: true });
+                }
+            } catch (e: any) {
+                return NextResponse.json({ error: `Cannot create temp path: ${e.message}` }, { status: 400 });
+            }
         }
 
         const updateSetting = db.prepare(`

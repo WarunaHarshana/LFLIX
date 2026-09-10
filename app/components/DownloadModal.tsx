@@ -2,7 +2,7 @@
 
 import type React from 'react';
 import { useState, useEffect, useMemo } from 'react';
-import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown, Zap, Copy, Check, ExternalLink } from 'lucide-react';
+import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown, Zap, Copy, Check, ExternalLink, Cloud, CloudUpload } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import LiquidDropdown from './LiquidDropdown';
 import { isDirectDownloadMatch } from '@/lib/titleMatching';
@@ -129,6 +129,8 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     const [folders, setFolders] = useState<ScannedFolder[]>([]);
     const [selectedFolder, setSelectedFolder] = useState<string>('');
     const [sortBy, setSortBy] = useState<SortMode>('seeds');
+    const [gdriveMode, setGdriveMode] = useState(false);
+    const [gdriveAvailable, setGdriveAvailable] = useState(false);
 
     const pureTorrentResults = useMemo(() => {
         return results.filter((r) => !isDDL(r));
@@ -144,10 +146,33 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     }, [pureTorrentResults, sortBy]);
 
     const filteredDirectDownloads = useMemo(() => {
-        return directDownloads.filter((d) =>
-            isDirectDownloadMatch(d, title, { year, mediaType, season, episode })
-        );
+        return directDownloads.filter((d) => {
+            if (d.provider !== 'ddl' && d.source?.includes('CINEJOY')) {
+                return true;
+            }
+            return isDirectDownloadMatch(d, title, { year, mediaType, season, episode });
+        });
     }, [directDownloads, title, year, mediaType, season, episode]);
+
+    // Check Google Drive availability once on mount
+    useEffect(() => {
+        let cancelled = false;
+        const fetchGdrive = async () => {
+            try {
+                const res = await fetch('/api/gdrive');
+                if (!cancelled && res.ok) {
+                    const data = await res.json();
+                    if (data.rcloneInstalled || data.remoteExists || data.configured || data.enabled) {
+                        setGdriveAvailable(true);
+                        const defaultMode = localStorage.getItem('lflix-gdrive-default');
+                        if (defaultMode === 'true') setGdriveMode(true);
+                    }
+                }
+            } catch { /* ignore */ }
+        };
+        fetchGdrive();
+        return () => { cancelled = true; };
+    }, []);
 
     // Fetch folders + auto-search on open
     useEffect(() => {
@@ -168,7 +193,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             setCopiedUrl(null);
             setActiveTab('direct');
         };
-    }, [isOpen, title, tmdbId, season, episode]);
+    }, [isOpen, title, tmdbId, year, mediaType, season, episode]);
 
     const fetchFolders = async () => {
         try {
@@ -243,11 +268,16 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         }
     };
 
-    const startDownload = async (magnetUri: string) => {
-        setDownloading(magnetUri);
+    const startDownload = async (magnetUri: string, forceTarget?: 'local' | 'gdrive') => {
+        const isDrive = forceTarget === 'gdrive' || (forceTarget === undefined && gdriveMode);
+        setDownloading(isDrive ? `${magnetUri}:gdrive` : magnetUri);
         try {
             const body: any = { magnetUri, watchlistId };
-            if (selectedFolder) body.downloadPath = selectedFolder;
+            if (isDrive) {
+                body.target = 'gdrive';
+            } else if (selectedFolder) {
+                body.downloadPath = selectedFolder;
+            }
             const res = await fetch('/api/downloads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -283,32 +313,43 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             if (episode) params.set('episode', String(episode));
 
             const res = await fetch(`/api/direct-downloads?${params.toString()}`);
+            if (res.status && res.status >= 400) {
+                console.warn('[DownloadModal] Direct downloads request returned status', res.status);
+                return;
+            }
             const data = await res.json();
             if (data.success && Array.isArray(data.downloads)) {
-                const validDownloads = (data.downloads as DirectDownloadItem[]).filter((d) =>
-                    isDirectDownloadMatch(d, title, { year, mediaType, season, episode })
-                );
+                const validDownloads = (data.downloads as DirectDownloadItem[]).filter((d) => {
+                    if (d.provider !== 'ddl' && d.source?.includes('CINEJOY')) {
+                        return true;
+                    }
+                    return isDirectDownloadMatch(d, title, { year, mediaType, season, episode });
+                });
                 setDirectDownloads((prev) => {
                     const existingUrls = new Set(validDownloads.map((d: DirectDownloadItem) => d.url));
                     const previousNonDuplicates = prev
                         .filter((p) => !existingUrls.has(p.url))
-                        .filter((p) => isDirectDownloadMatch(p, title, { year, mediaType, season, episode }));
+                        .filter((p) => {
+                            if (p.provider !== 'ddl' && p.source?.includes('CINEJOY')) return true;
+                            return isDirectDownloadMatch(p, title, { year, mediaType, season, episode });
+                        });
                     return [...validDownloads, ...previousNonDuplicates];
                 });
                 if (validDownloads.length > 0) {
                     setActiveTab('direct');
                 }
             }
-        } catch {
-            // Keep any existing merged DDL downloads
+        } catch (err) {
+            console.error('[DownloadModal] Direct downloads search failed:', err);
         } finally {
             setSearchingDirect(false);
             setSearchedDirect(true);
         }
     };
 
-    const startDirectDownload = async (item: DirectDownloadItem) => {
-        setDownloading(item.url);
+    const startDirectDownload = async (item: DirectDownloadItem, forceTarget?: 'local' | 'gdrive') => {
+        const isDrive = forceTarget === 'gdrive' || (forceTarget === undefined && gdriveMode);
+        setDownloading(isDrive ? `${item.url}:gdrive` : item.url);
         try {
             let cleanFilename = '';
             const isJunkName = !item.name ||
@@ -333,7 +374,11 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                 watchlistId,
                 filename: cleanFilename,
             };
-            if (selectedFolder) body.downloadPath = selectedFolder;
+            if (isDrive) {
+                body.target = 'gdrive';
+            } else if (selectedFolder) {
+                body.downloadPath = selectedFolder;
+            }
             const res = await fetch('/api/downloads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -389,25 +434,56 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                     </button>
                 </div>
 
-                {/* Folder Chooser */}
-                {folders.length > 0 && (
-                    <div className="px-5 py-3 border-b border-white/10 bg-white/[0.02]">
-                        <label className="text-xs text-neutral-300 font-medium flex items-center gap-1.5 mb-1.5">
-                            <Folder className="w-3.5 h-3.5 text-blue-400" />
-                            Save to library folder:
-                        </label>
-                        <LiquidDropdown
-                            label="Select Folder"
-                            title="Save Location"
-                            options={folders.map((f) => ({
-                                id: f.path,
-                                name: `${f.path} (${f.contentType})`,
-                            }))}
-                            value={selectedFolder}
-                            onChange={(val) => setSelectedFolder(val)}
-                            className="w-full"
-                            menuWidth="w-full"
-                        />
+                {/* Folder Chooser & GDrive Toggle */}
+                {(folders.length > 0 || gdriveAvailable) && (
+                    <div className="px-5 py-3 border-b border-white/10 bg-white/[0.02] flex items-center justify-between gap-4">
+                        <div className="flex-1">
+                            {!gdriveMode && folders.length > 0 && (
+                                <>
+                                    <label className="text-xs text-neutral-300 font-medium flex items-center gap-1.5 mb-1.5">
+                                        <Folder className="w-3.5 h-3.5 text-blue-400" />
+                                        Save to library folder:
+                                    </label>
+                                    <LiquidDropdown
+                                        label="Select Folder"
+                                        title="Save Location"
+                                        options={folders.map((f) => ({
+                                            id: f.path,
+                                            name: `${f.path} (${f.contentType})`,
+                                        }))}
+                                        value={selectedFolder}
+                                        onChange={(val) => setSelectedFolder(val)}
+                                        className="w-full"
+                                        menuWidth="w-full"
+                                    />
+                                </>
+                            )}
+                            {gdriveMode && (
+                                <div className="h-full flex items-center py-1">
+                                    <div className="flex items-center gap-2.5 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-300 shadow-sm w-full">
+                                        <Cloud className="w-5 h-5 flex-shrink-0" />
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="text-sm font-bold truncate">☁️ Google Drive</span>
+                                            <span className="text-[10px] text-blue-400/80 truncate">Downloading to remote drive</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {gdriveAvailable && (
+                            <button
+                                onClick={() => {
+                                    const newVal = !gdriveMode;
+                                    setGdriveMode(newVal);
+                                    localStorage.setItem('lflix-gdrive-default', newVal ? 'true' : 'false');
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl transition flex-shrink-0 self-end mb-[1px] ${gdriveMode ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold shadow-md' : 'bg-white/5 text-neutral-400 border border-white/10 hover:bg-white/10 font-semibold'}`}
+                            >
+                                <CloudUpload className="w-4 h-4" />
+                                <span className="text-xs hidden sm:block">Drive</span>
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -563,11 +639,26 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                         type="button"
                                                         onClick={() => startDirectDownload(item)}
                                                         disabled={downloading !== null}
-                                                        className="px-3.5 py-2 liquid-btn-primary rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md disabled:opacity-50"
+                                                        className="px-3 py-2 liquid-btn-primary rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md disabled:opacity-50"
                                                         title="Download directly to library folder"
                                                     >
                                                         {downloading === item.url ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                                                         <span>Save to Library</span>
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => startDirectDownload(item, 'gdrive')}
+                                                        disabled={downloading !== null}
+                                                        className="px-3 py-2 bg-blue-600/85 hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md shadow-blue-500/15 hover:shadow-blue-500/30 disabled:opacity-50 border border-blue-400/30"
+                                                        title="Download directly to Google Drive (Zero local disk)"
+                                                    >
+                                                        {downloading === `${item.url}:gdrive` ? (
+                                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        ) : (
+                                                            <CloudUpload className="w-3.5 h-3.5" />
+                                                        )}
+                                                        <span>To Drive</span>
                                                     </button>
                                                 </div>
                                             </div>
@@ -641,14 +732,27 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                             <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        onClick={() => startDownload(result.magnet)}
-                                                        disabled={downloading !== null}
-                                                        className="px-3.5 py-2 liquid-btn-primary rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md disabled:opacity-50"
-                                                    >
-                                                        {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                                                        Download
-                                                    </button>
+                                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                                        <button
+                                                            onClick={() => startDownload(result.magnet)}
+                                                            disabled={downloading !== null}
+                                                            className="px-3 py-2 liquid-btn-primary rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md disabled:opacity-50"
+                                                            title="Download to local library folder"
+                                                        >
+                                                            {downloading === result.magnet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                                            <span>Download</span>
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => startDownload(result.magnet, 'gdrive')}
+                                                            disabled={downloading !== null}
+                                                            className="px-3 py-2 bg-blue-600/85 hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md shadow-blue-500/15 hover:shadow-blue-500/30 disabled:opacity-50 border border-blue-400/30"
+                                                            title="Download torrent to Google Drive"
+                                                        >
+                                                            {downloading === `${result.magnet}:gdrive` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CloudUpload className="w-3.5 h-3.5" />}
+                                                            <span>To Drive</span>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             );
                                         })}
@@ -681,9 +785,17 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                     <button
                                         onClick={() => manualMagnet.trim() && startDownload(manualMagnet.trim())}
                                         disabled={!manualMagnet.trim().startsWith('magnet:') || downloading !== null}
-                                        className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-600 text-white font-medium rounded-lg text-sm transition flex items-center gap-1.5"
+                                        className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-600 text-white font-medium rounded-lg text-sm transition flex items-center gap-1.5 cursor-pointer"
                                     >
                                         <ArrowDown className="w-4 h-4" /> Go
+                                    </button>
+                                    <button
+                                        onClick={() => manualMagnet.trim() && startDownload(manualMagnet.trim(), 'gdrive')}
+                                        disabled={!manualMagnet.trim().startsWith('magnet:') || downloading !== null}
+                                        className="px-4 py-2 bg-blue-600/90 hover:bg-blue-500 disabled:bg-neutral-800 disabled:text-neutral-600 text-white font-medium rounded-lg text-sm transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-500/15 border border-blue-400/30"
+                                        title="Download magnet directly to Google Drive"
+                                    >
+                                        <CloudUpload className="w-4 h-4" /> To Drive
                                     </button>
                                 </div>
                             </div>

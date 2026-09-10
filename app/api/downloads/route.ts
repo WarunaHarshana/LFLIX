@@ -59,9 +59,23 @@ export async function POST(req: Request) {
         const limited = rateLimit(req, 'downloads-write', { windowMs: 60 * 1000, max: 30 });
         if (limited) return limited;
 
-        const { magnetUri, httpUrl, watchlistId, downloadPath, torrentBase64, filename } = await readJsonObject(req, 2 * 1024 * 1024);
+        const { magnetUri, httpUrl, watchlistId, downloadPath, torrentBase64, filename, target } = await readJsonObject(req, 2 * 1024 * 1024);
         const validatedDownloadPath = getValidatedDownloadPath(downloadPath);
         const parsedWatchlistId = watchlistId ? parsePositiveInt(watchlistId) ?? undefined : undefined;
+        const downloadTarget = target === 'gdrive' ? 'gdrive' as const : 'local' as const;
+
+        // Validate GDrive is configured when target is gdrive
+        if (downloadTarget === 'gdrive') {
+            try {
+                const { getGdriveConfig } = await import('@/lib/gdriveUploader');
+                const config = getGdriveConfig();
+                if (!config.enabled) {
+                    return NextResponse.json({ error: 'Google Drive is not enabled. Enable it in Settings.' }, { status: 400 });
+                }
+            } catch (e: any) {
+                return NextResponse.json({ error: `Google Drive error: ${e.message}` }, { status: 500 });
+            }
+        }
 
         let uri = typeof magnetUri === 'string' ? magnetUri.trim() : null;
         if (!uri && typeof httpUrl === 'string') {
@@ -127,7 +141,7 @@ export async function POST(req: Request) {
         }
 
         const customFilename = typeof filename === 'string' && filename.trim() ? sanitizeFilename(filename.trim()) : undefined;
-        const download = await downloadManager.addDownload(uri, parsedWatchlistId, validatedDownloadPath, customFilename);
+        const download = await downloadManager.addDownload(uri, parsedWatchlistId, validatedDownloadPath, customFilename, downloadTarget);
         return NextResponse.json({ success: true, download });
     } catch (e) {
         console.error('Download error:', e);

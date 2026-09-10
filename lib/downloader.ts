@@ -22,7 +22,7 @@ const downloadHttpAgent = new http.Agent({
     maxSockets: 64,
 });
 
-type DownloadStatus = 'metadata' | 'downloading' | 'stalled' | 'completed' | 'error' | 'paused';
+type DownloadStatus = 'metadata' | 'downloading' | 'stalled' | 'uploading' | 'completed' | 'error' | 'paused';
 
 // Download record type
 export interface DownloadRecord {
@@ -37,6 +37,7 @@ export interface DownloadRecord {
     totalSize: number;
     downloadedSize: number;
     downloadPath: string | null;
+    target?: 'local' | 'gdrive';
     errorMessage: string | null;
     retryCount: number;
     lastProgressAt: string | null;
@@ -50,6 +51,8 @@ class DownloadManager {
     private progressTimers: Map<number, NodeJS.Timeout> = new Map();
     private metadataTimers: Map<number, NodeJS.Timeout> = new Map();
     private httpAbortControllers: Map<number, AbortController> = new Map();
+    private gdriveProcesses: Map<number, any> = new Map();
+    private aria2Processes: Map<number, any> = new Map();
     private readonly maxHttpRetries = 3;
     private readonly maxTorrentMetadataRetries = 3;
     private readonly metadataTimeoutMs = 45 * 1000;
@@ -90,6 +93,13 @@ class DownloadManager {
     // Public recovery method — re-attaches in-progress torrents after a server restart
     async recoverAll(): Promise<void> {
         try {
+            // Pause any in-progress HTTP downloads from previous session since processes do not survive restart
+            db.prepare(`
+                UPDATE downloads
+                SET status = 'paused', downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP
+                WHERE status IN ('downloading', 'uploading') AND magnetUri LIKE 'http-direct:%'
+            `).run();
+
             // Re-attach all in-progress torrent downloads on server start that aren't currently active
             const staleDownloads = db.prepare(
                 `SELECT id, magnetUri, status, infoHash, name, downloadPath, startedAt 
@@ -334,9 +344,15 @@ class DownloadManager {
         }, delayMs);
     }
 
-    // Start a new download (auto-detects torrent vs HTTP)
-    async addDownload(magnetUri: string, watchlistId?: number, customPath?: string, customFilename?: string): Promise<DownloadRecord> {
-        console.log(`[DownloadManager] addDownload called for: ${magnetUri.substring(0, 30)}...`);
+    // Start a new download (auto-detects torrent vs HTTP, supports gdrive target)
+    async addDownload(magnetUri: string, watchlistId?: number, customPath?: string, customFilename?: string, target: 'local' | 'gdrive' = 'local'): Promise<DownloadRecord> {
+        console.log(`[DownloadManager] addDownload called for: ${magnetUri.substring(0, 30)}... target=${target}`);
+
+        // Google Drive DDL: stream directly from URL to GDrive via rclone copyurl
+        if (target === 'gdrive' && magnetUri.startsWith('http-direct:')) {
+            return this.addGdriveHttpDownload(magnetUri.replace('http-direct:', ''), customFilename, watchlistId);
+        }
+
         // Detect HTTP direct download
         if (magnetUri.startsWith('http-direct:')) {
             const url = magnetUri.replace('http-direct:', '');
@@ -384,17 +400,28 @@ class DownloadManager {
             if (!filename || filename === 'download' || (hasProviderJunk && /cinejoy|fsl_server/i.test(filename))) {
                 filename = `download_${Date.now()}.mkv`;
             }
-            return this.addHttpDownload(url, filename, watchlistId, customPath);
+            return this.addHttpDownload(url, filename, watchlistId, customPath, target);
         }
 
-        const downloadPath = customPath || this.getDownloadPath();
+        // For GDrive torrent downloads, use temp path
+        let downloadPath = customPath || this.getDownloadPath();
+        if (target === 'gdrive') {
+            try {
+                const { getGdriveConfig } = await import('./gdriveUploader');
+                const config = getGdriveConfig();
+                downloadPath = config.tempPath;
+                if (!fs.existsSync(downloadPath)) {
+                    fs.mkdirSync(downloadPath, { recursive: true });
+                }
+            } catch { /* fallback to default download path */ }
+        }
 
         // Insert DB record
         const stmt = db.prepare(`
-      INSERT INTO downloads (magnetUri, watchlistId, status, downloadPath, retryCount, lastProgressAt, stateUpdatedAt)
-      VALUES (?, ?, 'metadata', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO downloads (magnetUri, watchlistId, status, downloadPath, retryCount, lastProgressAt, stateUpdatedAt, target)
+      VALUES (?, ?, 'metadata', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
     `);
-        const result = stmt.run(magnetUri, watchlistId || null, downloadPath);
+        const result = stmt.run(magnetUri, watchlistId || null, downloadPath, target);
         const downloadId = Number(result.lastInsertRowid);
 
         await this.startTorrentDownload(downloadId, magnetUri, downloadPath);
@@ -403,7 +430,7 @@ class DownloadManager {
     }
 
     // Start an HTTP direct download
-    private async addHttpDownload(url: string, filename: string, watchlistId?: number, customPath?: string): Promise<DownloadRecord> {
+    private async addHttpDownload(url: string, filename: string, watchlistId?: number, customPath?: string, target: 'local' | 'gdrive' = 'local'): Promise<DownloadRecord> {
         const downloadPath = customPath || this.getDownloadPath();
         if (!fs.existsSync(downloadPath)) {
             fs.mkdirSync(downloadPath, { recursive: true });
@@ -414,11 +441,21 @@ class DownloadManager {
 
         // Insert DB record
         const stmt = db.prepare(`
-      INSERT INTO downloads (magnetUri, name, watchlistId, status, downloadPath, retryCount, lastProgressAt, stateUpdatedAt)
-      VALUES (?, ?, ?, 'downloading', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO downloads (magnetUri, name, watchlistId, status, downloadPath, retryCount, lastProgressAt, stateUpdatedAt, target)
+      VALUES (?, ?, ?, 'downloading', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
     `);
-        const result = stmt.run(magnetUriStored, filename, watchlistId || null, downloadPath);
+        const result = stmt.run(magnetUriStored, filename, watchlistId || null, downloadPath, target);
         const downloadId = Number(result.lastInsertRowid);
+
+        try {
+            const { isAria2Available } = await import('./aria2Downloader');
+            if (isAria2Available()) {
+                await this.startAria2HttpDownload(downloadId, url, filename, downloadPath, target);
+                return this.getDownload(downloadId)!;
+            }
+        } catch (aria2Err) {
+            console.warn('[DownloadManager] Aria2 check failed, falling back to HTTP stream:', aria2Err);
+        }
 
         const abortController = new AbortController();
         this.httpAbortControllers.set(downloadId, abortController);
@@ -619,25 +656,89 @@ class DownloadManager {
 
                         this.clearTimer(downloadId);
                         this.httpAbortControllers.delete(downloadId);
-                        try {
-                            db.prepare(`
-                                UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
-                                downloadedSize = ?, totalSize = ?, completedAt = CURRENT_TIMESTAMP,
-                                stateUpdatedAt = CURRENT_TIMESTAMP
-                                WHERE id = ? AND status = 'downloading'
-                            `).run(downloadedBytes, totalBytes || downloadedBytes, downloadId);
-                        } catch { /* ignore */ }
 
-                        // Automatically organize TV show episode into TV Shows/<Show Name>/Season <N>/
-                        (async () => {
+                        if (target === 'gdrive') {
+                            // Upload to Google Drive and delete local temp copy
+                            (async () => {
+                                try {
+                                    db.prepare(`
+                                        UPDATE downloads SET status = 'uploading', progress = 0, downloadSpeed = 0,
+                                        downloadedSize = ?, totalSize = ?, stateUpdatedAt = CURRENT_TIMESTAMP
+                                        WHERE id = ?
+                                    `).run(downloadedBytes, totalBytes || downloadedBytes, downloadId);
+
+                                    const { getOrganizedRemotePath, uploadFile, getGdriveConfig } = await import('./gdriveUploader');
+                                    const gdriveConfig = getGdriveConfig();
+                                    const remoteDest = getOrganizedRemotePath(filename);
+                                    const mountedPath = path.join(gdriveConfig.mountPath, remoteDest);
+
+                                    console.log(`[DownloadManager] Staged download complete. Uploading to Google Drive: ${remoteDest}`);
+
+                                    const proc = uploadFile(
+                                        filePath,
+                                        remoteDest,
+                                        (progress) => {
+                                            try {
+                                                db.prepare(`
+                                                    UPDATE downloads
+                                                    SET progress = ?, lastProgressAt = CURRENT_TIMESTAMP
+                                                    WHERE id = ? AND (status = 'uploading' OR status = 'downloading')
+                                                `).run(progress.percent, downloadId);
+                                            } catch { /* ignore */ }
+                                        },
+                                        (success, error) => {
+                                            this.gdriveProcesses.delete(downloadId);
+                                            if (success) {
+                                                try {
+                                                    db.prepare(`
+                                                        UPDATE downloads
+                                                        SET status = 'completed', progress = 100, downloadSpeed = 0,
+                                                            downloadPath = ?, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
+                                                        WHERE id = ?
+                                                    `).run(mountedPath, downloadId);
+                                                } catch { /* ignore */ }
+                                                this.triggerRescan();
+                                            } else {
+                                                try {
+                                                    db.prepare(`
+                                                        UPDATE downloads
+                                                        SET status = 'error', errorMessage = ?, downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP
+                                                        WHERE id = ?
+                                                    `).run(error || 'Google Drive upload failed', downloadId);
+                                                } catch { /* ignore */ }
+                                            }
+                                        }
+                                    );
+                                    this.gdriveProcesses.set(downloadId, proc);
+                                } catch (uploadErr: any) {
+                                    db.prepare(`
+                                        UPDATE downloads
+                                        SET status = 'error', errorMessage = ?, downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP
+                                        WHERE id = ?
+                                    `).run(uploadErr?.message || 'Failed to start Google Drive upload', downloadId);
+                                }
+                            })();
+                        } else {
                             try {
-                                const { organizeDownloadedItem } = await import('./mediaOrganizer');
-                                await organizeDownloadedItem(downloadPath, filename);
-                            } catch (orgErr) {
-                                console.warn('[DownloadManager] Auto-organize failed for HTTP download:', orgErr);
-                            }
-                            this.triggerRescan();
-                        })();
+                                db.prepare(`
+                                    UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
+                                    downloadedSize = ?, totalSize = ?, completedAt = CURRENT_TIMESTAMP,
+                                    stateUpdatedAt = CURRENT_TIMESTAMP
+                                    WHERE id = ? AND status = 'downloading'
+                                `).run(downloadedBytes, totalBytes || downloadedBytes, downloadId);
+                            } catch { /* ignore */ }
+
+                            // Automatically organize TV show episode into TV Shows/<Show Name>/Season <N>/
+                            (async () => {
+                                try {
+                                    const { organizeDownloadedItem } = await import('./mediaOrganizer');
+                                    await organizeDownloadedItem(downloadPath, filename);
+                                } catch (orgErr) {
+                                    console.warn('[DownloadManager] Auto-organize failed for HTTP download:', orgErr);
+                                }
+                                this.triggerRescan();
+                            })();
+                        }
                     });
 
                     response.pipe(activeFileStream);
@@ -674,12 +775,304 @@ class DownloadManager {
         return this.getDownload(downloadId)!;
     }
 
+    // Start an aria2 high-performance multi-connection HTTP download
+    private async startAria2HttpDownload(
+        downloadId: number,
+        url: string,
+        filename: string,
+        downloadPath: string,
+        target: 'local' | 'gdrive' = 'local'
+    ): Promise<void> {
+        const { startAria2Download } = await import('./aria2Downloader');
+        const filePath = path.join(downloadPath, filename);
+
+        let referer = 'https://cinejoy.to/';
+        try {
+            const parsed = new URL(url);
+            if (!parsed.hostname.includes('shegu.st') && !parsed.hostname.includes('workers.dev') && !parsed.hostname.includes('cloudflarestorage.com')) {
+                referer = `${parsed.origin}/`;
+            }
+        } catch { /* ignore */ }
+
+        try {
+            const proc = startAria2Download({
+                url,
+                downloadDir: downloadPath,
+                filename,
+                maxConnections: 16,
+                referer,
+                onProgress: (prog) => {
+                    try {
+                        db.prepare(`
+                            UPDATE downloads
+                            SET progress = ?,
+                                downloadSpeed = ?,
+                                downloadedSize = ?,
+                                totalSize = CASE WHEN ? > 0 THEN ? ELSE totalSize END,
+                                lastProgressAt = CASE WHEN ? > 0 THEN CURRENT_TIMESTAMP ELSE lastProgressAt END
+                            WHERE id = ? AND status = 'downloading'
+                        `).run(
+                            prog.percent,
+                            prog.speedBytes,
+                            prog.downloadedBytes,
+                            prog.totalBytes,
+                            prog.totalBytes,
+                            prog.speedBytes,
+                            downloadId
+                        );
+                    } catch { /* ignore */ }
+                },
+                onComplete: async (success, error) => {
+                    this.aria2Processes.delete(downloadId);
+                    const current = this.getDownload(downloadId);
+                    if (!current || current.status === 'paused') {
+                        return;
+                    }
+
+                    if (success) {
+                        if (target === 'gdrive') {
+                            try {
+                                let downloadedBytes = 0;
+                                try {
+                                    if (fs.existsSync(filePath)) {
+                                        downloadedBytes = fs.statSync(filePath).size;
+                                    }
+                                } catch { /* ignore */ }
+
+                                db.prepare(`
+                                    UPDATE downloads SET status = 'uploading', progress = 0, downloadSpeed = 0,
+                                    downloadedSize = COALESCE(NULLIF(downloadedSize, 0), ?),
+                                    totalSize = COALESCE(NULLIF(totalSize, 0), ?),
+                                    stateUpdatedAt = CURRENT_TIMESTAMP
+                                    WHERE id = ?
+                                `).run(downloadedBytes, downloadedBytes, downloadId);
+
+                                const { getOrganizedRemotePath, uploadFile, getGdriveConfig } = await import('./gdriveUploader');
+                                const gdriveConfig = getGdriveConfig();
+                                const remoteDest = getOrganizedRemotePath(filename);
+                                const mountedPath = path.join(gdriveConfig.mountPath, remoteDest);
+
+                                console.log(`[DownloadManager] Aria2 staged download complete. Uploading to Google Drive: ${remoteDest}`);
+
+                                const uploadProc = uploadFile(
+                                    filePath,
+                                    remoteDest,
+                                    (progress) => {
+                                        try {
+                                            db.prepare(`
+                                                UPDATE downloads
+                                                SET progress = ?, lastProgressAt = CURRENT_TIMESTAMP
+                                                WHERE id = ? AND (status = 'uploading' OR status = 'downloading')
+                                            `).run(progress.percent, downloadId);
+                                        } catch { /* ignore */ }
+                                    },
+                                    (upSuccess, upError) => {
+                                        this.gdriveProcesses.delete(downloadId);
+                                        if (upSuccess) {
+                                            try {
+                                                db.prepare(`
+                                                    UPDATE downloads
+                                                    SET status = 'completed', progress = 100, downloadSpeed = 0,
+                                                        downloadPath = ?, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
+                                                    WHERE id = ?
+                                                `).run(mountedPath, downloadId);
+                                            } catch { /* ignore */ }
+                                            this.triggerRescan();
+                                        } else {
+                                            try {
+                                                db.prepare(`
+                                                    UPDATE downloads
+                                                    SET status = 'error', errorMessage = ?, downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP
+                                                    WHERE id = ?
+                                                `).run(upError || 'Google Drive upload failed', downloadId);
+                                            } catch { /* ignore */ }
+                                        }
+                                    }
+                                );
+                                this.gdriveProcesses.set(downloadId, uploadProc);
+                            } catch (uploadErr: any) {
+                                db.prepare(`
+                                    UPDATE downloads
+                                    SET status = 'error', errorMessage = ?, downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP
+                                    WHERE id = ?
+                                `).run(uploadErr?.message || 'Failed to start Google Drive upload', downloadId);
+                            }
+                        } else {
+                            let fileSize = 0;
+                            try {
+                                if (fs.existsSync(filePath)) {
+                                    fileSize = fs.statSync(filePath).size;
+                                }
+                            } catch { /* ignore */ }
+
+                            try {
+                                db.prepare(`
+                                    UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
+                                    downloadedSize = COALESCE(NULLIF(downloadedSize, 0), ?),
+                                    totalSize = COALESCE(NULLIF(totalSize, 0), ?),
+                                    completedAt = CURRENT_TIMESTAMP,
+                                    stateUpdatedAt = CURRENT_TIMESTAMP
+                                    WHERE id = ? AND status = 'downloading'
+                                `).run(fileSize, fileSize, downloadId);
+                            } catch { /* ignore */ }
+
+                            try {
+                                const { organizeDownloadedItem } = await import('./mediaOrganizer');
+                                await organizeDownloadedItem(downloadPath, filename);
+                            } catch (orgErr) {
+                                console.warn('[DownloadManager] Auto-organize failed for Aria2 download:', orgErr);
+                            }
+                            this.triggerRescan();
+                        }
+                    } else {
+                        try {
+                            db.prepare(`
+                                UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0,
+                                stateUpdatedAt = CURRENT_TIMESTAMP
+                                WHERE id = ? AND status = 'downloading'
+                            `).run(error || 'Aria2 download failed', downloadId);
+                        } catch { /* ignore */ }
+                    }
+                },
+            });
+
+            this.aria2Processes.set(downloadId, proc);
+        } catch (err: any) {
+            console.error('[DownloadManager] Failed to spawn Aria2 process:', err);
+            db.prepare(`
+                UPDATE downloads SET status = 'error', errorMessage = ?, downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `).run(err?.message || 'Failed to start aria2c', downloadId);
+        }
+    }
+
+    // Start a Google Drive HTTP direct download (streams directly to Google Drive via rclone copyurl)
+    private async addGdriveHttpDownload(url: string, customFilename?: string, watchlistId?: number): Promise<DownloadRecord> {
+        let filename = customFilename ? sanitizeFilename(customFilename) : '';
+        if (!filename) {
+            try {
+                const parsed = new URL(url);
+                const pathName = parsed.pathname.split('/').filter(Boolean).pop();
+                if (pathName && pathName.includes('.')) {
+                    filename = sanitizeFilename(decodeURIComponent(pathName));
+                }
+            } catch { /* ignore */ }
+        }
+        if (!filename || filename === 'download') {
+            filename = `download_${Date.now()}.mkv`;
+        }
+
+        const { getOrganizedRemotePath, uploadUrl, getGdriveConfig, getFreeSpaceBytes } = await import('./gdriveUploader');
+        const config = getGdriveConfig();
+        const tempPath = config.tempPath;
+        const canUseTemp = Boolean(tempPath && getFreeSpaceBytes(tempPath) > 5 * 1024 * 1024 * 1024); // at least 5GB free
+
+        if (canUseTemp) {
+            console.log(`[GDrive] Staging HTTP direct download via local temp: ${tempPath}`);
+            return this.addHttpDownload(url, filename, watchlistId, tempPath, 'gdrive');
+        }
+
+        const remoteDest = getOrganizedRemotePath(filename);
+        const mountedPath = path.join(config.mountPath, remoteDest);
+        const magnetUriStored = `http-direct:${url}`;
+
+        const stmt = db.prepare(`
+            INSERT INTO downloads (magnetUri, name, watchlistId, status, downloadPath, retryCount, lastProgressAt, stateUpdatedAt, target)
+            VALUES (?, ?, ?, 'downloading', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'gdrive')
+        `);
+        const result = stmt.run(magnetUriStored, filename, watchlistId || null, mountedPath);
+        const downloadId = Number(result.lastInsertRowid);
+
+        const proc = uploadUrl(
+            url,
+            remoteDest,
+            (progress) => {
+                try {
+                    let speedBytes = 0;
+                    let downloaded = 0;
+                    let total = 0;
+                    if (progress.speed) {
+                        const sm = progress.speed.match(/([\d.]+)\s*(B|KB|KiB|MB|MiB|GB|GiB)/i);
+                        if (sm) {
+                            const val = parseFloat(sm[1]);
+                            const unit = sm[2].toUpperCase().replace('IB', 'B');
+                            const mults: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3 };
+                            speedBytes = Math.round(val * (mults[unit] || 1));
+                        }
+                    }
+                    if (progress.transferred && progress.transferred.includes('/')) {
+                        const [dStr, tStr] = progress.transferred.split('/');
+                        const dm = dStr.match(/([\d.]+)\s*(B|KB|KiB|MB|MiB|GB|GiB|TB)/i);
+                        const tm = tStr.match(/([\d.]+)\s*(B|KB|KiB|MB|MiB|GB|GiB|TB)/i);
+                        const mults: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+                        if (dm) downloaded = Math.round(parseFloat(dm[1]) * (mults[dm[2].toUpperCase().replace('IB', 'B')] || 1));
+                        if (tm) total = Math.round(parseFloat(tm[1]) * (mults[tm[2].toUpperCase().replace('IB', 'B')] || 1));
+                    }
+
+                    db.prepare(`
+                        UPDATE downloads
+                        SET progress = ?,
+                            downloadSpeed = CASE WHEN ? > 0 THEN ? ELSE downloadSpeed END,
+                            downloadedSize = CASE WHEN ? > 0 THEN ? ELSE downloadedSize END,
+                            totalSize = CASE WHEN ? > 0 THEN ? ELSE totalSize END,
+                            lastProgressAt = CURRENT_TIMESTAMP
+                        WHERE id = ? AND status = 'downloading'
+                    `).run(progress.percent, speedBytes, speedBytes, downloaded, downloaded, total, total, downloadId);
+                } catch { /* ignore */ }
+            },
+            (success, error) => {
+                this.gdriveProcesses.delete(downloadId);
+                if (success) {
+                    try {
+                        db.prepare(`
+                            UPDATE downloads
+                            SET status = 'completed', progress = 100, downloadSpeed = 0,
+                                completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        `).run(downloadId);
+                    } catch { /* ignore */ }
+                    this.triggerRescan();
+                } else {
+                    try {
+                        db.prepare(`
+                            UPDATE downloads
+                            SET status = 'error', errorMessage = ?, downloadSpeed = 0,
+                                stateUpdatedAt = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        `).run(error || 'Google Drive upload failed', downloadId);
+                    } catch { /* ignore */ }
+                }
+            }
+        );
+
+        this.gdriveProcesses.set(downloadId, proc);
+        return this.getDownload(downloadId)!;
+    }
+
     // Pause a download
     async pauseDownload(downloadId: number): Promise<boolean> {
         const record = this.getDownload(downloadId);
-        if (!record || (!this.isTorrentActiveStatus(record.status) && record.status !== 'downloading')) return false;
+        if (!record || (!this.isTorrentActiveStatus(record.status) && record.status !== 'downloading' && record.status !== 'uploading')) return false;
 
         this.clearTimer(downloadId);
+
+        // Handle active GDrive processes (rclone copyurl / moveto)
+        const gdriveProc = this.gdriveProcesses.get(downloadId);
+        if (gdriveProc) {
+            try { gdriveProc.kill(); } catch { /* ignore */ }
+            this.gdriveProcesses.delete(downloadId);
+            db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP WHERE id = ?").run(downloadId);
+            return true;
+        }
+
+        // Handle active Aria2 processes
+        const aria2Proc = this.aria2Processes.get(downloadId);
+        if (aria2Proc) {
+            try { aria2Proc.kill(); } catch { /* ignore */ }
+            this.aria2Processes.delete(downloadId);
+            db.prepare("UPDATE downloads SET status = 'paused', downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP WHERE id = ?").run(downloadId);
+            return true;
+        }
 
         // Handle HTTP downloads
         if (record.magnetUri.startsWith('http-direct:')) {
@@ -719,16 +1112,39 @@ class DownloadManager {
             return false;
         }
 
-        // Handle HTTP downloads — restart from scratch (no resume support)
+        // Handle HTTP downloads
         if (record.magnetUri.startsWith('http-direct:')) {
             const url = record.magnetUri.replace('http-direct:', '');
             const filename = record.name || decodeURIComponent(url.split('/').pop() || 'download');
+            const target = record.target || 'local';
+            const downloadPath = record.downloadPath || (target === 'gdrive' ? (await import('./gdriveUploader')).getGdriveConfig().tempPath : this.getDownloadPath());
+
+            try {
+                const { isAria2Available } = await import('./aria2Downloader');
+                if (isAria2Available()) {
+                    db.prepare(`
+                        UPDATE downloads
+                        SET status = 'downloading', downloadSpeed = 0, errorMessage = NULL, stateUpdatedAt = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    `).run(downloadId);
+                    await this.startAria2HttpDownload(downloadId, url, filename, downloadPath, target);
+                    return true;
+                }
+            } catch (aria2Err) {
+                console.warn('[DownloadManager] Aria2 resume check failed:', aria2Err);
+            }
+
+            // Fallback when aria2 is not available: restart from scratch (no resume support)
             if (record.downloadPath && record.name) {
                 const filePath = path.join(record.downloadPath, record.name);
                 try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch { /* ignore */ }
             }
             db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
-            await this.addHttpDownload(url, filename, record.watchlistId || undefined, record.downloadPath || undefined);
+            if (record.target === 'gdrive') {
+                await this.addGdriveHttpDownload(url, filename, record.watchlistId || undefined);
+            } else {
+                await this.addHttpDownload(url, filename, record.watchlistId || undefined, record.downloadPath || undefined, target);
+            }
             return true;
         }
 
@@ -813,6 +1229,7 @@ class DownloadManager {
 
         if (record.downloadPath && record.name) {
             candidates.push(path.join(record.downloadPath, record.name));
+            candidates.push(path.join(record.downloadPath, `${record.name}.aria2`));
         }
         if (record.downloadPath && record.infoHash) {
             candidates.push(path.join(record.downloadPath, record.infoHash));
@@ -820,6 +1237,7 @@ class DownloadManager {
         // Fallback: project downloads folder
         if (record.name) {
             candidates.push(path.join(process.cwd(), 'downloads', record.name));
+            candidates.push(path.join(process.cwd(), 'downloads', `${record.name}.aria2`));
         }
         if (record.infoHash) {
             candidates.push(path.join(process.cwd(), 'downloads', record.infoHash));
@@ -921,6 +1339,20 @@ class DownloadManager {
         // Clear progress timer
         this.clearTimer(downloadId);
 
+        // Cancel active Aria2 process if running
+        const aria2Proc = this.aria2Processes.get(downloadId);
+        if (aria2Proc) {
+            try { aria2Proc.kill(); } catch { /* ignore */ }
+            this.aria2Processes.delete(downloadId);
+        }
+
+        // Cancel active GDrive process if running
+        const gdriveProc = this.gdriveProcesses.get(downloadId);
+        if (gdriveProc) {
+            try { gdriveProc.kill(); } catch { /* ignore */ }
+            this.gdriveProcesses.delete(downloadId);
+        }
+
         // Handle HTTP downloads
         if (record.magnetUri.startsWith('http-direct:')) {
             const controller = this.httpAbortControllers.get(downloadId);
@@ -1014,7 +1446,7 @@ class DownloadManager {
     // Get active download count
     getActiveCount(): number {
         try {
-            const result = db.prepare("SELECT COUNT(*) as count FROM downloads WHERE status IN ('metadata', 'downloading', 'stalled')").get() as { count: number };
+            const result = db.prepare("SELECT COUNT(*) as count FROM downloads WHERE status IN ('metadata', 'downloading', 'stalled', 'uploading')").get() as { count: number };
             return result?.count || 0;
         } catch {
             return 0;
@@ -1111,13 +1543,8 @@ class DownloadManager {
 
         torrent.on('done', async () => {
             this.clearTimer(downloadId);
-            try {
-                db.prepare(`
-            UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
-            downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `).run(downloadId);
-            } catch { /* ignore */ }
+            const record = this.getDownload(downloadId);
+            const isGdriveTarget = record?.target === 'gdrive';
 
             const torrentName = torrent.name;
             const torrentPath = torrent.path || this.getDownloadPath();
@@ -1127,6 +1554,108 @@ class DownloadManager {
                 await new Promise<void>((resolve) => {
                     torrent.destroy({ destroyStore: false }, () => resolve());
                 });
+            } catch { /* ignore */ }
+
+            if (isGdriveTarget) {
+                try {
+                    db.prepare(`
+                        UPDATE downloads SET status = 'uploading', progress = 0, downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    `).run(downloadId);
+
+                    const { organizeDownloadedItem, getFilesRecursive } = await import('./mediaOrganizer');
+                    const { isVideoFile } = await import('./mediaNaming');
+                    const orgResult = await organizeDownloadedItem(torrentPath, torrentName, { disableAutoOrganizeCheck: false });
+
+                    const { uploadFile, getOrganizedRemotePath } = await import('./gdriveUploader');
+
+                    let filesToUpload: string[] = [];
+                    if (orgResult.organizedFiles && orgResult.organizedFiles.length > 0) {
+                        filesToUpload = orgResult.organizedFiles;
+                    } else {
+                        const targetDir = torrentName ? path.join(torrentPath, torrentName) : torrentPath;
+                        if (fs.existsSync(targetDir)) {
+                            if (fs.statSync(targetDir).isFile()) {
+                                filesToUpload = [targetDir];
+                            } else {
+                                filesToUpload = getFilesRecursive(targetDir).filter(f => isVideoFile(f));
+                            }
+                        }
+                    }
+
+                    if (filesToUpload.length === 0) {
+                        db.prepare(`
+                            UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
+                            downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        `).run(downloadId);
+                        this.triggerRescan();
+                        return;
+                    }
+
+                    for (let i = 0; i < filesToUpload.length; i++) {
+                        const file = filesToUpload[i];
+                        let remoteRel = path.relative(torrentPath, file).replace(/\\/g, '/');
+                        if (!remoteRel.startsWith('Movies/') && !remoteRel.startsWith('TV Shows/')) {
+                            remoteRel = getOrganizedRemotePath(path.basename(file));
+                        }
+
+                        await new Promise<void>((resolve) => {
+                            const proc = uploadFile(
+                                file,
+                                remoteRel,
+                                (prog) => {
+                                    const overallProgress = Math.round(((i + (prog.percent / 100)) / filesToUpload.length) * 100);
+                                    try {
+                                        db.prepare(`
+                                            UPDATE downloads SET progress = ?, lastProgressAt = CURRENT_TIMESTAMP
+                                            WHERE id = ? AND status = 'uploading'
+                                        `).run(overallProgress, downloadId);
+                                    } catch { /* ignore */ }
+                                },
+                                (success, err) => {
+                                    this.gdriveProcesses.delete(downloadId);
+                                    if (!success) {
+                                        console.error(`[DownloadManager] GDrive upload error for ${file}:`, err);
+                                    }
+                                    resolve();
+                                }
+                            );
+                            this.gdriveProcesses.set(downloadId, proc);
+                        });
+                    }
+
+                    // Clean up any remaining empty folders in temp
+                    try {
+                        const targetDir = torrentName ? path.join(torrentPath, torrentName) : torrentPath;
+                        if (fs.existsSync(targetDir) && targetDir !== torrentPath) {
+                            fs.rmSync(targetDir, { recursive: true, force: true });
+                        }
+                    } catch { /* ignore */ }
+
+                    db.prepare(`
+                        UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
+                        downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    `).run(downloadId);
+
+                    this.triggerRescan();
+                } catch (gdriveErr: any) {
+                    console.error('[DownloadManager] GDrive upload processing failed:', gdriveErr);
+                    db.prepare(`
+                        UPDATE downloads SET status = 'error', errorMessage = ?, stateUpdatedAt = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    `).run(gdriveErr?.message || 'Failed to upload to Google Drive', downloadId);
+                }
+                return;
+            }
+
+            try {
+                db.prepare(`
+            UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
+            downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).run(downloadId);
             } catch { /* ignore */ }
 
             // Automatically move TV show video files into TV Shows/<Show Name>/Season <N>/

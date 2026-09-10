@@ -149,7 +149,7 @@ export function getActiveDownloads(): ActiveDownloadItem[] {
     activeDownloadsStmt = db.prepare(`
       SELECT name, magnetUri, downloadPath 
       FROM downloads 
-      WHERE status IN ('metadata', 'downloading', 'stalled', 'paused', 'error')
+      WHERE status IN ('metadata', 'downloading', 'stalled', 'paused', 'error', 'uploading')
     `);
   }
   return activeDownloadsStmt.all() as ActiveDownloadItem[];
@@ -668,7 +668,7 @@ export function cleanupJunkDirectory(
   }
 }
 
-function getFilesRecursive(dir: string, list: string[] = []): string[] {
+export function getFilesRecursive(dir: string, list: string[] = []): string[] {
   if (!fs.existsSync(dir)) return list;
   try {
     const entries = fs.readdirSync(dir);

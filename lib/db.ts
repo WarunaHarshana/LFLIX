@@ -282,7 +282,7 @@ const VALID_COLUMNS: Record<string, string[]> = {
   watch_history: ['completed'],
   scanned_folders: ['contentType'],
   watchlist: ['trackRelease', 'imdbRating'],
-  downloads: ['retryCount', 'lastProgressAt', 'stateUpdatedAt'],
+  downloads: ['retryCount', 'lastProgressAt', 'stateUpdatedAt', 'target'],
   settings: []
 };
 
@@ -354,6 +354,7 @@ addColumnIfNotExists('watchlist', 'imdbRating', 'REAL');
 addColumnIfNotExists('downloads', 'retryCount', 'INTEGER DEFAULT 0');
 addColumnIfNotExists('downloads', 'lastProgressAt', 'DATETIME');
 addColumnIfNotExists('downloads', 'stateUpdatedAt', 'DATETIME');
+addColumnIfNotExists('downloads', 'target', "TEXT DEFAULT 'local'");
 
 try {
   db.prepare(`

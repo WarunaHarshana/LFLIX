@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder, Globe, ArrowUpDown, TrendingUp, Film, Tv } from 'lucide-react';
+import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder, Globe, ArrowUpDown, TrendingUp, Film, Tv, Cloud, CloudUpload } from 'lucide-react';
 import LiquidDropdown from './LiquidDropdown';
 
 type TrendingItem = {
@@ -73,6 +73,8 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
     const [sortBy, setSortBy] = useState<SortMode>('seeds');
     const [resolvingDetails, setResolvingDetails] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const [gdriveMode, setGdriveMode] = useState(false);
+    const [gdriveAvailable, setGdriveAvailable] = useState(false);
 
     // Trending state
     const [trendingMovies, setTrendingMovies] = useState<TrendingItem[]>([]);
@@ -95,7 +97,20 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
     useEffect(() => {
         fetchFolders();
         fetchTrending();
+        fetchGdrive();
     }, []);
+
+    const fetchGdrive = async () => {
+        try {
+            const res = await fetch('/api/gdrive');
+            const data = await res.json();
+            if (data.configured && data.enabled) {
+                setGdriveAvailable(true);
+                const defaultMode = localStorage.getItem('lflix-gdrive-default');
+                if (defaultMode === 'true') setGdriveMode(true);
+            }
+        } catch { /* ignore */ }
+    };
 
     const fetchTrending = async () => {
         setLoadingTrending(true);
@@ -169,13 +184,20 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
         void executeSearch(initialQuery);
     }, [initialQuery]);
 
-    const startDownload = async (magnetUri: string) => {
-        setDownloading(magnetUri);
+    const startDownload = async (magnetUri: string, forceTarget?: 'local' | 'gdrive') => {
+        const isDrive = forceTarget === 'gdrive' || (forceTarget === undefined && gdriveMode);
+        setDownloading(isDrive ? `${magnetUri}:gdrive` : magnetUri);
         try {
+            const body: any = { magnetUri };
+            if (isDrive) {
+                body.target = 'gdrive';
+            } else if (selectedFolder) {
+                body.downloadPath = selectedFolder;
+            }
             const res = await fetch('/api/downloads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ magnetUri, downloadPath: selectedFolder || undefined })
+                body: JSON.stringify(body)
             });
             const data = await res.json();
             if (data.success) {
@@ -347,25 +369,53 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                 )}
             </div>
 
-            {/* Folder Chooser */}
-            {folders.length > 0 && (
-                <div className="liquid-glass-base border border-white/15 rounded-3xl p-5 mb-6 shadow-xl">
-                    <label className="text-xs md:text-sm text-neutral-300 font-semibold flex items-center gap-2 mb-2.5">
-                        <Folder className="w-4 h-4 text-blue-400" />
-                        Save downloads to:
-                    </label>
-                    <LiquidDropdown
-                        label="Select Folder"
-                        title="Destination Folder"
-                        options={folders.map((f) => ({
-                            id: f.path,
-                            name: `${f.path} (${f.contentType})`,
-                        }))}
-                        value={selectedFolder}
-                        onChange={(val) => setSelectedFolder(val)}
-                        className="w-full"
-                        menuWidth="w-full"
-                    />
+            {/* Folder Chooser & GDrive Toggle */}
+            {(folders.length > 0 || gdriveAvailable) && (
+                <div className="liquid-glass-base border border-white/15 rounded-3xl p-5 mb-6 shadow-xl flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                        {!gdriveMode && folders.length > 0 && (
+                            <>
+                                <label className="text-xs md:text-sm text-neutral-300 font-semibold flex items-center gap-2 mb-2.5">
+                                    <Folder className="w-4 h-4 text-blue-400" />
+                                    Save downloads to:
+                                </label>
+                                <LiquidDropdown
+                                    label="Select Folder"
+                                    title="Destination Folder"
+                                    options={folders.map((f) => ({
+                                        id: f.path,
+                                        name: `${f.path} (${f.contentType})`,
+                                    }))}
+                                    value={selectedFolder}
+                                    onChange={(val) => setSelectedFolder(val)}
+                                    className="w-full"
+                                    menuWidth="w-full"
+                                />
+                            </>
+                        )}
+                        {gdriveMode && (
+                            <div className="flex items-center gap-3 p-4 bg-blue-500/10 border border-blue-500/30 rounded-2xl text-blue-300">
+                                <Cloud className="w-6 h-6 flex-shrink-0" />
+                                <div className="flex flex-col min-w-0">
+                                    <span className="text-base font-bold truncate">☁️ Google Drive</span>
+                                    <span className="text-xs text-blue-400/80 truncate">Downloading to remote drive</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    {gdriveAvailable && (
+                        <button
+                            onClick={() => {
+                                const newVal = !gdriveMode;
+                                setGdriveMode(newVal);
+                                localStorage.setItem('lflix-gdrive-default', newVal ? 'true' : 'false');
+                            }}
+                            className={`flex flex-col items-center justify-center p-3 sm:px-6 rounded-2xl transition-all shadow-md flex-shrink-0 min-w-[72px] sm:min-w-[88px] h-full ${gdriveMode ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold' : 'bg-white/[0.04] text-neutral-400 border border-white/10 hover:bg-white/10'}`}
+                        >
+                            <CloudUpload className="w-6 h-6 mb-1" />
+                            <span className="text-xs uppercase tracking-wider font-semibold">Drive</span>
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -480,6 +530,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                             ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default'
                                             : 'liquid-btn-primary shadow-md hover:scale-105'
                                             }`}
+                                        title="Download to local library"
                                     >
                                         {downloading === result.magnet ? (
                                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -489,6 +540,20 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                             <Download className="w-3.5 h-3.5" />
                                         )}
                                         {!isStarted && downloading !== result.magnet && 'Download'}
+                                    </button>
+
+                                    <button
+                                        onClick={() => startDownload(result.magnet, 'gdrive')}
+                                        disabled={downloading !== null || isStarted}
+                                        className="flex-1 sm:flex-initial justify-center px-3.5 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer min-h-[38px] bg-blue-600/85 hover:bg-blue-600 text-white shadow-md shadow-blue-500/15 hover:shadow-blue-500/30 hover:scale-105 border border-blue-400/30 disabled:opacity-50"
+                                        title="Download torrent to Google Drive"
+                                    >
+                                        {downloading === `${result.magnet}:gdrive` ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <CloudUpload className="w-3.5 h-3.5" />
+                                        )}
+                                        <span>To Drive</span>
                                     </button>
                                 </div>
                             </div>
