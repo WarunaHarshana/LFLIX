@@ -48,4 +48,21 @@ describe('Google Drive Uploader', () => {
             expect(result).toBe('TV Shows/SpecialShowEpisode.mkv');
         });
     });
+
+    describe('getRcloneBinaryPath', () => {
+        it('returns string or null without throwing', async () => {
+            const { getRcloneBinaryPath } = await import('../lib/gdriveUploader');
+            const result = getRcloneBinaryPath();
+            expect(result === null || typeof result === 'string').toBe(true);
+        });
+    });
+
+    describe('isWinFspInstalled', () => {
+        it('returns boolean without throwing', async () => {
+            const { isWinFspInstalled } = await import('../lib/gdriveUploader');
+            const result = isWinFspInstalled();
+            expect(typeof result).toBe('boolean');
+        });
+    });
 });
+

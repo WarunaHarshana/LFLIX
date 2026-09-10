@@ -83,6 +83,7 @@ export interface GdriveConfig {
 export interface GdriveStatus {
     configured: boolean;
     rcloneInstalled: boolean;
+    winFspInstalled: boolean;
     remoteExists: boolean;
     connected: boolean;
     mounted: boolean;
@@ -140,11 +141,66 @@ export function getGdriveConfig(): GdriveConfig {
     return config;
 }
 
-// ── Rclone Helpers ──────────────────────────────────────────────────────────
+// ── Rclone & WinFsp Helpers ──────────────────────────────────────────────────
 
-function isRcloneInstalled(): boolean {
+/**
+ * Locate the rclone executable (checks bundled bin/rclone.exe first, then PATH, then standard Windows dirs).
+ */
+export function getRcloneBinaryPath(): string | null {
+    // 1. Check local bin folder
+    const localBin = path.join(process.cwd(), 'bin', process.platform === 'win32' ? 'rclone.exe' : 'rclone');
+    if (fs.existsSync(localBin)) {
+        return localBin;
+    }
+
+    // 2. Check system PATH
     try {
-        execSync('rclone version', { stdio: 'pipe', timeout: 5000 });
+        const cmd = process.platform === 'win32' ? 'where.exe rclone' : 'which rclone';
+        const stdout = execSync(cmd, { stdio: 'pipe', timeout: 3000 }).toString().trim();
+        const firstPath = stdout.split(/\r?\n/)[0]?.trim();
+        if (firstPath && fs.existsSync(firstPath)) {
+            return firstPath;
+        }
+    } catch { /* ignore */ }
+
+    // 3. Fallbacks for common Windows install locations
+    if (process.platform === 'win32') {
+        const commonPaths = [
+            'C:\\Rclone\\rclone.exe',
+            'C:\\Program Files\\Rclone\\rclone.exe',
+            'C:\\Program Files (x86)\\Rclone\\rclone.exe',
+        ];
+        const localAppData = process.env.LOCALAPPDATA;
+        if (localAppData) {
+            commonPaths.push(path.join(localAppData, 'Microsoft', 'WinGet', 'Links', 'rclone.exe'));
+        }
+        for (const p of commonPaths) {
+            if (fs.existsSync(p)) return p;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Check if WinFsp is installed (required on Windows for rclone mount to map a drive letter).
+ */
+export function isWinFspInstalled(): boolean {
+    if (process.platform !== 'win32') return true;
+    const paths = [
+        'C:\\Program Files (x86)\\WinFsp\\bin\\winfsp-x64.dll',
+        'C:\\Program Files\\WinFsp\\bin\\winfsp-x64.dll',
+        'C:\\Program Files (x86)\\WinFsp\\bin\\winfsp-x86.dll',
+        'C:\\Program Files\\WinFsp\\bin\\winfsp-x86.dll',
+    ];
+    return paths.some(p => fs.existsSync(p));
+}
+
+export function isRcloneInstalled(): boolean {
+    const bin = getRcloneBinaryPath();
+    if (!bin) return false;
+    try {
+        execSync(`"${bin}" version`, { stdio: 'pipe', timeout: 5000 });
         return true;
     } catch {
         return false;
@@ -152,8 +208,10 @@ function isRcloneInstalled(): boolean {
 }
 
 function remoteExists(remoteName: string): boolean {
+    const bin = getRcloneBinaryPath();
+    if (!bin) return false;
     try {
-        const output = execSync('rclone listremotes', { stdio: 'pipe', timeout: 5000 }).toString();
+        const output = execSync(`"${bin}" listremotes`, { stdio: 'pipe', timeout: 5000 }).toString();
         return output.includes(`${remoteName}:`);
     } catch {
         return false;
@@ -224,10 +282,14 @@ export async function getStatus(forceRefresh = false): Promise<GdriveStatus> {
     }
 
     const config = getGdriveConfig();
+    const winFspOk = isWinFspInstalled();
+    const rcloneBin = getRcloneBinaryPath();
+
     if (!config.enabled) {
         const disabledStatus: GdriveStatus = {
             configured: false,
-            rcloneInstalled: false,
+            rcloneInstalled: Boolean(rcloneBin),
+            winFspInstalled: winFspOk,
             remoteExists: false,
             connected: false,
             mounted: false,
@@ -243,22 +305,24 @@ export async function getStatus(forceRefresh = false): Promise<GdriveStatus> {
     let remoteOk = false;
     const mounted = isMounted(config.mountDrive);
 
-    try {
-        await execAsync('rclone version', { timeout: 3000 });
-        rcloneOk = true;
-    } catch { /* ignore */ }
-
-    if (rcloneOk) {
+    if (rcloneBin) {
         try {
-            const { stdout } = await execAsync('rclone listremotes', { timeout: 3000 });
+            await execAsync(`"${rcloneBin}" version`, { timeout: 3000 });
+            rcloneOk = true;
+        } catch { /* ignore */ }
+    }
+
+    if (rcloneOk && rcloneBin) {
+        try {
+            const { stdout } = await execAsync(`"${rcloneBin}" listremotes`, { timeout: 3000 });
             remoteOk = stdout.includes(`${config.remote}:`);
         } catch { /* ignore */ }
     }
 
     let connected = mounted;
-    if (!connected && remoteOk) {
+    if (!connected && remoteOk && rcloneBin) {
         try {
-            await execAsync(`rclone lsd "${config.remote}:" --max-depth 0`, { timeout: 6000 });
+            await execAsync(`"${rcloneBin}" lsd "${config.remote}:" --max-depth 0`, { timeout: 6000 });
             connected = true;
         } catch { /* ignore */ }
     }
@@ -266,6 +330,7 @@ export async function getStatus(forceRefresh = false): Promise<GdriveStatus> {
     const status: GdriveStatus = {
         configured: config.enabled && rcloneOk && remoteOk,
         rcloneInstalled: rcloneOk,
+        winFspInstalled: winFspOk,
         remoteExists: remoteOk,
         connected,
         mounted,
@@ -283,16 +348,17 @@ export async function getStatus(forceRefresh = false): Promise<GdriveStatus> {
  */
 export async function testConnection(): Promise<{ success: boolean; message: string }> {
     const config = getGdriveConfig();
+    const rcloneBin = getRcloneBinaryPath();
 
-    if (!isRcloneInstalled()) {
-        return { success: false, message: 'rclone is not installed. Download from https://rclone.org/downloads/' };
+    if (!rcloneBin || !isRcloneInstalled()) {
+        return { success: false, message: 'rclone is not installed. Download from https://rclone.org/downloads/ or run Setup-Auto.bat' };
     }
     if (!remoteExists(config.remote)) {
-        return { success: false, message: `Rclone remote "${config.remote}" not found. Run "rclone config" to set up your Google Drive remote.` };
+        return { success: false, message: `Rclone remote "${config.remote}" not found. Run "${rcloneBin} config" to set up your Google Drive remote.` };
     }
 
     try {
-        execSync(`rclone lsd "${config.remote}:" --max-depth 0`, { stdio: 'pipe', timeout: 15000 });
+        execSync(`"${rcloneBin}" lsd "${config.remote}:" --max-depth 0`, { stdio: 'pipe', timeout: 15000 });
         return { success: true, message: `Connected to Google Drive via remote "${config.remote}"` };
     } catch (err: any) {
         return { success: false, message: `Connection failed: ${err.message || 'Unknown error'}` };
@@ -304,11 +370,15 @@ export async function testConnection(): Promise<{ success: boolean; message: str
  */
 export async function setupFolders(): Promise<{ success: boolean; message: string }> {
     const config = getGdriveConfig();
+    const rcloneBin = getRcloneBinaryPath();
+    if (!rcloneBin) {
+        return { success: false, message: 'rclone is not installed. Download from https://rclone.org/downloads/ or run Setup-Auto.bat' };
+    }
     const remotePath = (p: string) => `${config.remote}:${config.basePath}/${p}`;
 
     try {
-        execSync(`rclone mkdir "${remotePath('Movies')}"`, { stdio: 'pipe', timeout: 15000 });
-        execSync(`rclone mkdir "${remotePath('TV Shows')}"`, { stdio: 'pipe', timeout: 15000 });
+        execSync(`"${rcloneBin}" mkdir "${remotePath('Movies')}"`, { stdio: 'pipe', timeout: 15000 });
+        execSync(`"${rcloneBin}" mkdir "${remotePath('TV Shows')}"`, { stdio: 'pipe', timeout: 15000 });
         return { success: true, message: 'Created Movies and TV Shows folders on Google Drive' };
     } catch (err: any) {
         return { success: false, message: `Failed to create folders: ${err.message || 'Unknown error'}` };
@@ -377,18 +447,19 @@ export function uploadUrl(
     onComplete?: (success: boolean, error?: string) => void,
 ): ChildProcess {
     const config = getGdriveConfig();
+    const rcloneBin = getRcloneBinaryPath() || 'rclone';
     const remoteDest = `${config.remote}:${config.basePath}/${destPath}`;
 
     // Ensure parent directory exists
     const parentDir = path.dirname(destPath);
     try {
-        execSync(`rclone mkdir "${config.remote}:${config.basePath}/${parentDir}"`, { stdio: 'pipe', timeout: 10000 });
+        execSync(`"${rcloneBin}" mkdir "${config.remote}:${config.basePath}/${parentDir}"`, { stdio: 'pipe', timeout: 10000 });
     } catch { /* ignore — rclone copyurl creates dirs */ }
 
     console.log(`[GDrive] Streaming URL to: ${remoteDest}`);
     console.log(`[GDrive] Source: ${sourceUrl.substring(0, 100)}...`);
 
-    const proc = spawn('rclone', [
+    const proc = spawn(rcloneBin, [
         'copyurl',
         sourceUrl,
         remoteDest,
@@ -452,18 +523,19 @@ export function uploadFile(
     onComplete?: (success: boolean, error?: string) => void,
 ): ChildProcess {
     const config = getGdriveConfig();
+    const rcloneBin = getRcloneBinaryPath() || 'rclone';
     const remoteDest = `${config.remote}:${config.basePath}/${destPath}`;
 
     // Ensure parent directory exists
     const parentDir = path.dirname(destPath);
     try {
-        execSync(`rclone mkdir "${config.remote}:${config.basePath}/${parentDir}"`, { stdio: 'pipe', timeout: 10000 });
+        execSync(`"${rcloneBin}" mkdir "${config.remote}:${config.basePath}/${parentDir}"`, { stdio: 'pipe', timeout: 10000 });
     } catch { /* ignore */ }
 
     console.log(`[GDrive] Uploading file: ${localPath}`);
     console.log(`[GDrive]   → ${remoteDest}`);
 
-    const proc = spawn('rclone', [
+    const proc = spawn(rcloneBin, [
         'moveto',
         localPath,
         remoteDest,
@@ -525,9 +597,14 @@ export function mountDrive(
     onError?: (error: string) => void,
 ): ChildProcess | null {
     const config = getGdriveConfig();
+    const rcloneBin = getRcloneBinaryPath();
 
-    if (!isRcloneInstalled()) {
-        onError?.('rclone is not installed');
+    if (!rcloneBin || !isRcloneInstalled()) {
+        onError?.('rclone is not installed. Download from https://rclone.org/downloads/ or run Setup-Auto.bat');
+        return null;
+    }
+    if (process.platform === 'win32' && !isWinFspInstalled()) {
+        onError?.('WinFsp is required to mount Google Drive as a Windows drive letter. Please run Setup-Auto.bat or install WinFsp from https://winfsp.dev/');
         return null;
     }
     if (!remoteExists(config.remote)) {
@@ -541,7 +618,7 @@ export function mountDrive(
 
     console.log(`[GDrive] Mounting ${config.remote}: → ${config.mountDrive}`);
 
-    const proc = spawn('rclone', [
+    const proc = spawn(rcloneBin, [
         'mount',
         `${config.remote}:`,
         config.mountDrive,
@@ -599,6 +676,7 @@ export function mountDrive(
  */
 export function unmountDrive(): { success: boolean; message: string } {
     const config = getGdriveConfig();
+    const rcloneBin = getRcloneBinaryPath();
 
     try {
         // On Windows, use taskkill to stop the rclone mount process
@@ -609,9 +687,11 @@ export function unmountDrive(): { success: boolean; message: string } {
     } catch { /* ignore — process might not exist */ }
 
     // Also try the rclone rc method
-    try {
-        execSync('rclone rc mount/unmountall', { stdio: 'pipe', timeout: 5000 });
-    } catch { /* ignore */ }
+    if (rcloneBin) {
+        try {
+            execSync(`"${rcloneBin}" rc mount/unmountall`, { stdio: 'pipe', timeout: 5000 });
+        } catch { /* ignore */ }
+    }
 
     // Verify
     setTimeout(() => { /* give it a moment */ }, 1000);
@@ -631,8 +711,11 @@ export async function getDriveUsage(forceRefresh = false): Promise<{ used: strin
     const config = getGdriveConfig();
     if (!config.enabled) return null;
 
+    const rcloneBin = getRcloneBinaryPath();
+    if (!rcloneBin) return null;
+
     try {
-        const { stdout } = await execAsync(`rclone about "${config.remote}:" --json`, { timeout: 6000 });
+        const { stdout } = await execAsync(`"${rcloneBin}" about "${config.remote}:" --json`, { timeout: 6000 });
         const info = JSON.parse(stdout);
         const format = (bytes: number) => {
             if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`;

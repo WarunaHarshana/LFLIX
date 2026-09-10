@@ -61,3 +61,7 @@ lflix.db
 # Old test output
 test_out.txt
 cookies.txt
+
+# Downloaded tools
+bin/rclone.exe
+bin/*.zip
