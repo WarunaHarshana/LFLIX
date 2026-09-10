@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye, Palette, Activity, Cloud, CloudUpload, CheckCircle, XCircle, FolderPlus } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye, Palette, Activity, Cloud, CloudUpload, CheckCircle, XCircle, FolderPlus, Copy } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from '../components/ThemeProvider';
 
@@ -17,6 +17,11 @@ type Settings = {
     gdriveTempPath?: string;
     gdriveMountDrive?: string;
     gdriveMountPath?: string;
+    cloudEnabled?: string;
+    cloudProvider?: string;
+    cloudWorkerUrl?: string;
+    cloudWorkerToken?: string;
+    gdriveDownloadMode?: 'local_upload' | 'cloud_container';
 };
 
 // Component for refresh metadata button
@@ -108,6 +113,11 @@ export default function SettingsPage() {
         gdriveTempPath: '',
         gdriveMountDrive: 'Z:',
         gdriveMountPath: 'Z:\\Media',
+        gdriveDownloadMode: 'local_upload',
+        cloudEnabled: 'false',
+        cloudProvider: 'headless',
+        cloudWorkerUrl: '',
+        cloudWorkerToken: '',
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -115,6 +125,11 @@ export default function SettingsPage() {
     const [tmdbConfigured, setTmdbConfigured] = useState(true);
     const [gdriveStatus, setGdriveStatus] = useState<any>(null);
     const [gdriveActionLoading, setGdriveActionLoading] = useState<string | null>(null);
+    const [cloudStatus, setCloudStatus] = useState<any>(null);
+    const [testingCloud, setTestingCloud] = useState(false);
+    const [cloudTestResult, setCloudTestResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [copiedRcloneSecret, setCopiedRcloneSecret] = useState(false);
+    const [copyingRclone, setCopyingRclone] = useState(false);
 
     const { theme, setTheme, accent, setAccent, isMounted } = useTheme();
 
@@ -145,6 +160,7 @@ export default function SettingsPage() {
     useEffect(() => {
         fetchSettings();
         fetchGdriveStatus();
+        fetchCloudStatus();
     }, []);
 
     const fetchGdriveStatus = async () => {
@@ -156,6 +172,63 @@ export default function SettingsPage() {
             }
         } catch (e) {
             console.error('Failed to load GDrive status', e);
+        }
+    };
+
+    const fetchCloudStatus = async () => {
+        try {
+            const res = await fetch('/api/cloud');
+            if (res.ok) {
+                const data = await res.json();
+                setCloudStatus(data.status);
+            }
+        } catch (e) {
+            console.error('Failed to load Cloud status', e);
+        }
+    };
+
+    const handleTestCloudConnection = async () => {
+        setTestingCloud(true);
+        setCloudTestResult(null);
+        try {
+            const res = await fetch('/api/cloud', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'test', workerUrl: settings.cloudWorkerUrl })
+            });
+            const data = await res.json();
+            setCloudTestResult({
+                success: data.success,
+                message: data.status?.message || (data.success ? 'Worker is online & connected!' : 'Connection failed')
+            });
+            if (data.status) setCloudStatus(data.status);
+        } catch (e: any) {
+            setCloudTestResult({ success: false, message: e.message || 'Connection failed' });
+        } finally {
+            setTestingCloud(false);
+        }
+    };
+
+    const handleCopyRcloneSecret = async () => {
+        setCopyingRclone(true);
+        try {
+            const res = await fetch('/api/cloud', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'export-rclone' })
+            });
+            const data = await res.json();
+            if (data.success && data.base64) {
+                await navigator.clipboard.writeText(data.base64);
+                setCopiedRcloneSecret(true);
+                setTimeout(() => setCopiedRcloneSecret(false), 3000);
+            } else {
+                alert(data.error || 'Failed to export local rclone config. Please ensure rclone is configured.');
+            }
+        } catch {
+            alert('Failed to copy rclone config to clipboard');
+        } finally {
+            setCopyingRclone(false);
         }
     };
 
@@ -224,6 +297,11 @@ export default function SettingsPage() {
                 gdriveTempPath: data.gdriveTempPath || '',
                 gdriveMountDrive: data.gdriveMountDrive || 'Z:',
                 gdriveMountPath: data.gdriveMountPath || 'Z:\\Media',
+                gdriveDownloadMode: (data.gdriveDownloadMode as any) || (data.cloudEnabled === 'true' ? 'cloud_container' : 'local_upload'),
+                cloudEnabled: data.cloudEnabled !== undefined ? String(data.cloudEnabled) : 'false',
+                cloudProvider: 'headless',
+                cloudWorkerUrl: data.cloudWorkerUrl || '',
+                cloudWorkerToken: data.cloudWorkerToken || '',
             });
             setTmdbConfigured(data.tmdbConfigured !== false);
         } catch (e) {
@@ -374,13 +452,16 @@ export default function SettingsPage() {
                     </div>
                 </section>
 
-                {/* Google Drive Integration */}
+                {/* ☁️ Google Drive & Cloud Download Integration */}
                 <section className="liquid-glass-base rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
                     <div className="p-6 border-b border-white/10 flex items-center gap-3 bg-white/[0.02]">
                         <div className="w-8 h-8 rounded-lg liquid-glass-pill flex items-center justify-center">
                             <Cloud className="w-4 h-4 text-[#4285f4]" />
                         </div>
-                        <h2 className="text-lg font-semibold tracking-wide">☁️ Google Drive</h2>
+                        <div>
+                            <h2 className="text-lg font-semibold tracking-wide">☁️ Google Drive & Cloud Downloads</h2>
+                            <p className="text-xs text-neutral-400 mt-0.5">Stream and download movies, shows, and torrents directly into your Google Drive</p>
+                        </div>
                     </div>
                     <div className="p-6 space-y-6">
                         <label className="flex items-center justify-between cursor-pointer group">
@@ -389,12 +470,20 @@ export default function SettingsPage() {
                                     Enable Google Drive Downloads
                                 </div>
                                 <div className="text-xs text-neutral-400 mt-1 leading-relaxed">
-                                    Download directly to Google Drive via rclone mount. Requires rclone installed and configured.
+                                    Enable downloading directly into Google Drive (either through local PC Rclone mount or 24/7 Headless Cloud Container).
                                 </div>
                             </div>
                             <button
                                 type="button"
-                                onClick={() => handleGdriveChange('gdriveEnabled', settings.gdriveEnabled === 'true' ? 'false' : 'true')}
+                                onClick={() => {
+                                    const nextEnabled = settings.gdriveEnabled === 'true' ? 'false' : 'true';
+                                    handleGdriveChange('gdriveEnabled', nextEnabled);
+                                    if (nextEnabled === 'false') {
+                                        setSettings(prev => ({ ...prev, cloudEnabled: 'false' }));
+                                    } else if (settings.gdriveDownloadMode === 'cloud_container') {
+                                        setSettings(prev => ({ ...prev, cloudEnabled: 'true' }));
+                                    }
+                                }}
                                 className={`w-12 h-7 rounded-full p-0.5 border transition-all duration-300 relative flex-shrink-0 ${
                                     settings.gdriveEnabled === 'true'
                                         ? 'bg-[#4285f4] border-[#4285f4] shadow-[0_0_14px_rgba(66,133,244,0.4)]'
@@ -408,128 +497,345 @@ export default function SettingsPage() {
                         </label>
 
                         <div className={`space-y-6 transition-opacity duration-300 ${settings.gdriveEnabled === 'true' ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm text-neutral-300 font-medium mb-2">Rclone Remote Name</label>
-                                    <input
-                                        type="text"
-                                        value={settings.gdriveRemote || ''}
-                                        onChange={(e) => handleGdriveChange('gdriveRemote', e.target.value)}
-                                        className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-[#4285f4]"
-                                        placeholder="gdrive"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm text-neutral-300 font-medium mb-2">Base Path on Drive</label>
-                                    <input
-                                        type="text"
-                                        value={settings.gdriveBasePath || ''}
-                                        onChange={(e) => handleGdriveChange('gdriveBasePath', e.target.value)}
-                                        className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-[#4285f4]"
-                                        placeholder="Media"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm text-neutral-300 font-medium mb-2">Mount Drive Letter</label>
-                                    <input
-                                        type="text"
-                                        value={settings.gdriveMountDrive || ''}
-                                        onChange={(e) => handleGdriveChange('gdriveMountDrive', e.target.value)}
-                                        className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-[#4285f4]"
-                                        placeholder="Z:"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm text-neutral-300 font-medium mb-2">Mount Path</label>
-                                    <input
-                                        type="text"
-                                        value={settings.gdriveMountPath || ''}
-                                        disabled
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none text-neutral-400 font-mono text-sm"
-                                        placeholder="Z:\Media"
-                                    />
-                                </div>
-                            </div>
-
+                            {/* Choose Download Engine Mode */}
                             <div>
-                                <label className="block text-sm text-neutral-300 font-medium mb-2">Torrent Temp Folder (Local)</label>
-                                <input
-                                    type="text"
-                                    value={settings.gdriveTempPath || ''}
-                                    onChange={(e) => handleGdriveChange('gdriveTempPath', e.target.value)}
-                                    className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-[#4285f4]"
-                                    placeholder="C:\TorrentTemp"
-                                />
-                                <p className="text-xs text-neutral-400 mt-2">
-                                    Local directory to hold active torrent downloads before copying to the mounted drive. Highly recommended to avoid direct-to-cloud write throttling.
-                                </p>
+                                <label className="block text-sm text-neutral-300 font-semibold mb-2.5">
+                                    Select Download & Upload Method:
+                                </label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Option 1: Direct via PC & Auto-Upload */}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSettings(prev => ({
+                                                ...prev,
+                                                gdriveDownloadMode: 'local_upload',
+                                                cloudEnabled: 'false',
+                                            }));
+                                            localStorage.setItem('lflix-gdrive-default', 'true');
+                                            localStorage.setItem('lflix-cloud-default', 'false');
+                                        }}
+                                        className={`p-5 rounded-2xl border text-left transition flex flex-col justify-between relative cursor-pointer ${
+                                            settings.gdriveDownloadMode !== 'cloud_container'
+                                                ? 'bg-blue-600/15 border-blue-500/60 shadow-[0_0_25px_rgba(66,133,244,0.15)] ring-1 ring-blue-500/30'
+                                                : 'bg-white/[0.03] border-white/10 text-neutral-400 hover:border-white/20'
+                                        }`}
+                                    >
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400">
+                                                        <HardDrive className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-bold text-sm text-white block">💻 Download via PC & Auto-Upload</span>
+                                                        <span className="text-[11px] text-blue-400 font-medium">Local Rclone Mount</span>
+                                                    </div>
+                                                </div>
+                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                                                    settings.gdriveDownloadMode !== 'cloud_container'
+                                                        ? 'border-blue-500 bg-blue-500 text-white'
+                                                        : 'border-white/20'
+                                                }`}>
+                                                    {settings.gdriveDownloadMode !== 'cloud_container' && (
+                                                        <div className="w-2 h-2 rounded-full bg-white" />
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-neutral-300 leading-relaxed mt-2.5">
+                                                Downloads files directly on this PC (e.g. to temporary folder), then automatically moves and uploads them to Google Drive via the local Rclone mount.
+                                            </p>
+                                        </div>
+                                        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-neutral-400">
+                                            <span>• Uses local PC disk</span>
+                                            <span>• Uses home upload broadband</span>
+                                        </div>
+                                    </button>
+
+                                    {/* Option 2: Headless Cloud Container */}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSettings(prev => ({
+                                                ...prev,
+                                                gdriveDownloadMode: 'cloud_container',
+                                                cloudEnabled: 'true',
+                                            }));
+                                            localStorage.setItem('lflix-cloud-default', 'true');
+                                            localStorage.setItem('lflix-gdrive-default', 'false');
+                                        }}
+                                        className={`p-5 rounded-2xl border text-left transition flex flex-col justify-between relative cursor-pointer ${
+                                            settings.gdriveDownloadMode === 'cloud_container'
+                                                ? 'bg-purple-600/15 border-purple-500/60 shadow-[0_0_25px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/30'
+                                                : 'bg-white/[0.03] border-white/10 text-neutral-400 hover:border-white/20'
+                                        }`}
+                                    >
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400">
+                                                        <Cloud className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-bold text-sm text-white block">☁️ Headless Cloud Container</span>
+                                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 uppercase font-bold">24/7 Free</span>
+                                                        </div>
+                                                        <span className="text-[11px] text-purple-400 font-medium">Hugging Face Spaces Docker</span>
+                                                    </div>
+                                                </div>
+                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                                                    settings.gdriveDownloadMode === 'cloud_container'
+                                                        ? 'border-purple-500 bg-purple-500 text-white'
+                                                        : 'border-white/20'
+                                                }`}>
+                                                    {settings.gdriveDownloadMode === 'cloud_container' && (
+                                                        <div className="w-2 h-2 rounded-full bg-white" />
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-neutral-300 leading-relaxed mt-2.5">
+                                                Downloads and streams directly inside a free 24/7 headless Docker container in the cloud straight into Google Drive. Zero load on your home PC or internet.
+                                            </p>
+                                        </div>
+                                        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-emerald-400 font-medium">
+                                            <span>✨ 0 bytes local disk</span>
+                                            <span>✨ 0 bytes broadband upload</span>
+                                        </div>
+                                    </button>
+                                </div>
                             </div>
 
-                            <div className="pt-4 border-t border-white/10">
-                                <div className="flex flex-col gap-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            {(gdriveStatus?.connected || gdriveStatus?.mounted) ? (
-                                                <div className="flex items-center gap-2 text-emerald-400">
-                                                    <CheckCircle className="w-5 h-5" />
-                                                    <span className="text-sm font-medium">{gdriveStatus?.mounted ? 'Mounted & Connected' : 'Connected'}</span>
+                            {/* Option 1 Settings: Local PC Rclone Mount */}
+                            {settings.gdriveDownloadMode !== 'cloud_container' && (
+                                <div className="space-y-6 pt-2 border-t border-white/10">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm text-neutral-300 font-medium mb-2">Rclone Remote Name</label>
+                                            <input
+                                                type="text"
+                                                value={settings.gdriveRemote || ''}
+                                                onChange={(e) => handleGdriveChange('gdriveRemote', e.target.value)}
+                                                className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-[#4285f4]"
+                                                placeholder="gdrive"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-neutral-300 font-medium mb-2">Base Path on Drive</label>
+                                            <input
+                                                type="text"
+                                                value={settings.gdriveBasePath || ''}
+                                                onChange={(e) => handleGdriveChange('gdriveBasePath', e.target.value)}
+                                                className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-[#4285f4]"
+                                                placeholder="Media"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm text-neutral-300 font-medium mb-2">Mount Drive Letter</label>
+                                            <input
+                                                type="text"
+                                                value={settings.gdriveMountDrive || ''}
+                                                onChange={(e) => handleGdriveChange('gdriveMountDrive', e.target.value)}
+                                                className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-[#4285f4]"
+                                                placeholder="Z:"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-neutral-300 font-medium mb-2">Mount Path</label>
+                                            <input
+                                                type="text"
+                                                value={settings.gdriveMountPath || ''}
+                                                disabled
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none text-neutral-400 font-mono text-sm"
+                                                placeholder="Z:\Media"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm text-neutral-300 font-medium mb-2">Torrent Temp Folder (Local)</label>
+                                        <input
+                                            type="text"
+                                            value={settings.gdriveTempPath || ''}
+                                            onChange={(e) => handleGdriveChange('gdriveTempPath', e.target.value)}
+                                            className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-[#4285f4]"
+                                            placeholder="C:\TorrentTemp"
+                                        />
+                                        <p className="text-xs text-neutral-400 mt-2">
+                                            Local directory to hold active torrent downloads before moving to the mounted drive.
+                                        </p>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-white/10">
+                                        <div className="flex flex-col gap-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    {(gdriveStatus?.connected || gdriveStatus?.mounted) ? (
+                                                        <div className="flex items-center gap-2 text-emerald-400">
+                                                            <CheckCircle className="w-5 h-5" />
+                                                            <span className="text-sm font-medium">{gdriveStatus?.mounted ? 'Mounted & Connected' : 'Connected'}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2 text-red-400">
+                                                            <XCircle className="w-5 h-5" />
+                                                            <span className="text-sm font-medium">Disconnected</span>
+                                                        </div>
+                                                    )}
+                                                    {gdriveStatus?.usage && (
+                                                        <span className="text-sm text-neutral-400 ml-4 border-l border-white/10 pl-4">
+                                                            Storage: {gdriveStatus.usage.used} / {gdriveStatus.usage.total} ({gdriveStatus.usage.free} free)
+                                                        </span>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <div className="flex items-center gap-2 text-red-400">
-                                                    <XCircle className="w-5 h-5" />
-                                                    <span className="text-sm font-medium">Disconnected</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleGdriveAction('test')}
+                                                    disabled={gdriveActionLoading === 'test'}
+                                                    className="px-4 py-2 rounded-xl liquid-glass-pill text-sm font-medium hover:bg-white/10 transition flex items-center gap-2 cursor-pointer"
+                                                >
+                                                    <CloudUpload className={`w-4 h-4 ${gdriveActionLoading === 'test' ? 'animate-pulse' : ''}`} />
+                                                    Test Connection
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleGdriveAction('setup')}
+                                                    disabled={gdriveActionLoading === 'setup'}
+                                                    className="px-4 py-2 rounded-xl liquid-glass-pill text-sm font-medium hover:bg-white/10 transition flex items-center gap-2 cursor-pointer"
+                                                >
+                                                    <FolderPlus className={`w-4 h-4 ${gdriveActionLoading === 'setup' ? 'animate-pulse' : ''}`} />
+                                                    Setup Folders
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleGdriveAction(gdriveStatus?.mounted ? 'unmount' : 'mount')}
+                                                    disabled={gdriveActionLoading === 'mount' || gdriveActionLoading === 'unmount'}
+                                                    className="px-4 py-2 rounded-xl liquid-glass-pill text-sm font-medium hover:bg-white/10 transition flex items-center gap-2 cursor-pointer"
+                                                >
+                                                    <HardDrive className={`w-4 h-4 ${(gdriveActionLoading === 'mount' || gdriveActionLoading === 'unmount') ? 'animate-pulse' : ''}`} />
+                                                    {gdriveStatus?.mounted ? 'Unmount Drive' : 'Mount Drive'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleGdriveAddLibrary}
+                                                    disabled={gdriveActionLoading === 'add-library'}
+                                                    className="px-4 py-2 rounded-xl liquid-glass-pill text-sm font-medium hover:bg-[#4285f4]/20 hover:text-[#4285f4] transition flex items-center gap-2 cursor-pointer"
+                                                >
+                                                    <Folder className={`w-4 h-4 ${gdriveActionLoading === 'add-library' ? 'animate-pulse' : ''}`} />
+                                                    Auto-add Library Folders
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Option 2 Settings: Headless Cloud Container (Hugging Face Spaces) */}
+                            {settings.gdriveDownloadMode === 'cloud_container' && (
+                                <div className="space-y-6 pt-2 border-t border-white/10">
+                                    {/* Cloud Container Quickstart Walkthrough Card */}
+                                    <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-semibold text-purple-200 flex items-center gap-2">
+                                                <span>🚀 2-Minute Setup with Render.com (100% Free Docker & No Credit Card):</span>
+                                            </span>
+                                            <a
+                                                href="https://render.com"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="px-3 py-1 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-semibold border border-purple-500/30 transition flex items-center gap-1.5"
+                                            >
+                                                Open Render ↗
+                                            </a>
+                                        </div>
+                                        <ol className="text-xs text-neutral-300 space-y-2 list-decimal list-inside leading-relaxed">
+                                            <li>Sign up for a free account at <strong>render.com</strong> (no credit card needed).</li>
+                                            <li>Click <strong>New +</strong> $\rightarrow$ <strong>Web Service</strong> and select <strong>Docker</strong> runtime using the <code className="text-purple-300 font-mono">cloud-worker/</code> folder in your repository.</li>
+                                            <li>Select the <strong>Free</strong> instance plan ($0/month, 750 free hours).</li>
+                                            <li className="flex flex-wrap items-center gap-2">
+                                                <span>Under Environment Variables, add <code className="text-purple-300 font-mono">RCLONE_CONFIG_BASE64</code>:</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCopyRcloneSecret}
+                                                    disabled={copyingRclone}
+                                                    className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 font-semibold text-[11px] transition flex items-center gap-1.5 cursor-pointer"
+                                                >
+                                                    {copiedRcloneSecret ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                                    {copiedRcloneSecret ? 'Copied Secret to Clipboard!' : '📋 Copy Rclone Secret'}
+                                                </button>
+                                            </li>
+                                            <li>Deploy and copy your free service URL (e.g. <code className="text-purple-300 font-mono">https://lflix-worker.onrender.com</code>) and paste it below.</li>
+                                        </ol>
+                                        <p className="text-[11px] text-neutral-400 pt-1 border-t border-white/5">
+                                            💡 <em>Also compatible with any Docker hosting provider (Render, Railway, self-hosted VPS, or Hugging Face Pro).</em>
+                                        </p>
+                                    </div>
+
+                                    {/* Worker URL & Token */}
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm text-neutral-300 font-medium mb-2">
+                                                Cloud Worker Direct URL
+                                            </label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="text"
+                                                    value={settings.cloudWorkerUrl || ''}
+                                                    onChange={(e) => setSettings(prev => ({ ...prev, cloudWorkerUrl: e.target.value }))}
+                                                    className="flex-1 liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-purple-400"
+                                                    placeholder="https://your-lflix-worker.onrender.com"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleTestCloudConnection}
+                                                    disabled={testingCloud || !settings.cloudWorkerUrl}
+                                                    className="px-5 py-3 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 font-semibold text-sm transition disabled:opacity-50 flex items-center gap-2 flex-shrink-0 cursor-pointer"
+                                                >
+                                                    <RefreshCw className={`w-4 h-4 ${testingCloud ? 'animate-spin' : ''}`} />
+                                                    {testingCloud ? 'Testing...' : 'Test Connection'}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm text-neutral-300 font-medium mb-2">
+                                                Worker Secret Token / API Key <span className="text-xs text-neutral-500 font-normal">(Optional — matches LFLIX_API_KEY secret)</span>
+                                            </label>
+                                            <input
+                                                type="password"
+                                                value={settings.cloudWorkerToken || ''}
+                                                onChange={(e) => setSettings(prev => ({ ...prev, cloudWorkerToken: e.target.value }))}
+                                                className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30 focus:border-purple-400"
+                                                placeholder="Optional secret token"
+                                            />
+                                        </div>
+
+                                        {/* Status readout */}
+                                        <div className="p-4 rounded-2xl liquid-glass-pill flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-3 h-3 rounded-full flex-shrink-0 ${cloudStatus?.online ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.6)]'}`} />
+                                                <div>
+                                                    <div className="font-semibold text-white">
+                                                        {cloudStatus?.online ? 'Cloud Worker: Online' : 'Cloud Worker: Offline'}
+                                                    </div>
+                                                    <div className="text-xs text-neutral-400 mt-0.5">
+                                                        {cloudTestResult?.message || cloudStatus?.message || (cloudStatus?.online ? 'Ready for 24/7 high-speed cloud downloads' : 'Connect your cloud container to begin')}
+                                                    </div>
                                                 </div>
-                                            )}
-                                            {gdriveStatus?.usage && (
-                                                <span className="text-sm text-neutral-400 ml-4 border-l border-white/10 pl-4">
-                                                    Storage: {gdriveStatus.usage.used} / {gdriveStatus.usage.total} ({gdriveStatus.usage.free} free)
+                                            </div>
+                                            {cloudStatus?.online && (cloudStatus.rcloneConfigured || cloudStatus.driveMounted) && (
+                                                <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 self-start sm:self-center">
+                                                    Google Drive Authenticated
                                                 </span>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleGdriveAction('test')}
-                                            disabled={gdriveActionLoading === 'test'}
-                                            className="px-4 py-2 rounded-xl liquid-glass-pill text-sm font-medium hover:bg-white/10 transition flex items-center gap-2"
-                                        >
-                                            <CloudUpload className={`w-4 h-4 ${gdriveActionLoading === 'test' ? 'animate-pulse' : ''}`} />
-                                            Test Connection
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleGdriveAction('setup')}
-                                            disabled={gdriveActionLoading === 'setup'}
-                                            className="px-4 py-2 rounded-xl liquid-glass-pill text-sm font-medium hover:bg-white/10 transition flex items-center gap-2"
-                                        >
-                                            <FolderPlus className={`w-4 h-4 ${gdriveActionLoading === 'setup' ? 'animate-pulse' : ''}`} />
-                                            Setup Folders
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleGdriveAction(gdriveStatus?.mounted ? 'unmount' : 'mount')}
-                                            disabled={gdriveActionLoading === 'mount' || gdriveActionLoading === 'unmount'}
-                                            className="px-4 py-2 rounded-xl liquid-glass-pill text-sm font-medium hover:bg-white/10 transition flex items-center gap-2"
-                                        >
-                                            <HardDrive className={`w-4 h-4 ${(gdriveActionLoading === 'mount' || gdriveActionLoading === 'unmount') ? 'animate-pulse' : ''}`} />
-                                            {gdriveStatus?.mounted ? 'Unmount Drive' : 'Mount Drive'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={handleGdriveAddLibrary}
-                                            disabled={gdriveActionLoading === 'add-library'}
-                                            className="px-4 py-2 rounded-xl liquid-glass-pill text-sm font-medium hover:bg-[#4285f4]/20 hover:text-[#4285f4] transition flex items-center gap-2"
-                                        >
-                                            <Folder className={`w-4 h-4 ${gdriveActionLoading === 'add-library' ? 'animate-pulse' : ''}`} />
-                                            Auto-add Library Folders
-                                        </button>
-                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </section>

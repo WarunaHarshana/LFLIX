@@ -16,6 +16,7 @@ type DownloadItem = {
     totalSize: number;
     downloadedSize: number;
     downloadPath: string | null;
+    target?: 'local' | 'gdrive' | 'cloud';
     errorMessage: string | null;
     retryCount?: number;
     lastProgressAt?: string | null;
@@ -169,29 +170,34 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
 
     const downloadStatusText = (dl: DownloadItem) => {
         const isHttp = dl.magnetUri?.startsWith('http-direct:');
+        const isCloud = dl.target === 'cloud';
         if (dl.status === 'metadata') {
+            if (isCloud) return 'Connecting to cloud container...';
             if (isHttp) return 'Connecting to server...';
             return dl.retryCount && dl.retryCount > 0
                 ? `Loading metadata · retry ${dl.retryCount}/3`
                 : 'Loading metadata';
         }
         if (dl.status === 'stalled') {
+            if (isCloud) return 'Cloud worker stalled · retrying...';
             return isHttp ? 'Stalled · reconnecting...' : 'Stalled · waiting for peers';
         }
         if (dl.status !== 'downloading') return null;
         if (dl.totalSize === 0 && dl.progress === 0) {
+            if (isCloud) return 'Starting cloud upload...';
             return isHttp ? 'Connecting to stream...' : 'Finding metadata/peers';
         }
         if (dl.downloadSpeed === 0) {
+            if (isCloud) return 'Transferring in Cloud...';
             return isHttp ? 'Connecting / Buffering...' : 'Waiting for peers';
         }
         return formatSpeed(dl.downloadSpeed);
     };
 
-    const statusIcon = (status: string) => {
+    const statusIcon = (status: string, target?: string) => {
         switch (status) {
-            case 'metadata': return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
-            case 'downloading': return <ArrowDown className="w-4 h-4 text-blue-400 animate-bounce" />;
+            case 'metadata': return <Loader2 className={`w-4 h-4 ${target === 'cloud' ? 'text-purple-400' : 'text-blue-400'} animate-spin`} />;
+            case 'downloading': return <ArrowDown className={`w-4 h-4 ${target === 'cloud' ? 'text-purple-400' : 'text-blue-400'} animate-bounce`} />;
             case 'stalled': return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
             case 'completed': return <CheckCircle className="w-4 h-4 text-green-400" />;
             case 'error': return <AlertCircle className="w-4 h-4 text-red-400" />;
@@ -200,7 +206,9 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
         }
     };
 
-    const progressColor = (status: string) => {
+    const progressColor = (status: string, target?: string) => {
+        if (target === 'cloud' && status === 'downloading') return 'bg-purple-500';
+        if (target === 'cloud' && status === 'metadata') return 'bg-purple-400';
         switch (status) {
             case 'metadata': return 'bg-blue-400';
             case 'downloading': return 'bg-blue-500';
@@ -279,12 +287,20 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                     >
                                     {/* Name + status */}
                                     <div className="flex items-start gap-2.5 mb-2">
-                                        {statusIcon(dl.status)}
+                                        {statusIcon(dl.status, dl.target)}
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-semibold truncate text-white">{dl.name || 'Loading metadata...'}</p>
+                                            <div className="flex items-center gap-1.5 mb-0.5">
+                                                <p className="text-sm font-semibold truncate text-white">{dl.name || 'Loading metadata...'}</p>
+                                                {dl.target === 'cloud' && (
+                                                    <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[10px] font-bold shrink-0">☁️ Cloud</span>
+                                                )}
+                                                {dl.target === 'gdrive' && (
+                                                    <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 text-[10px] font-bold shrink-0">☁️ Drive</span>
+                                                )}
+                                            </div>
                                             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-400 mt-0.5 font-medium">
                                                 {(dl.status === 'metadata' || dl.status === 'downloading' || dl.status === 'stalled') && (
-                                                    <span className={dl.status === 'stalled' ? 'text-yellow-400' : 'text-blue-400'}>{downloadStatusText(dl)}</span>
+                                                    <span className={dl.status === 'stalled' ? 'text-yellow-400' : (dl.target === 'cloud' ? 'text-purple-400' : 'text-blue-400')}>{downloadStatusText(dl)}</span>
                                                 )}
                                                 {dl.totalSize > 0 && (
                                                     <span>{formatBytes(dl.downloadedSize)} / {formatBytes(dl.totalSize)}</span>
@@ -346,7 +362,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                     {dl.status !== 'error' && (
                                         <div className="w-full bg-white/[0.08] backdrop-blur-sm rounded-full h-2 overflow-hidden border border-white/10 p-[1px]">
                                             <div
-                                                className={`h-full rounded-full transition-all duration-500 relative shadow-sm ${progressColor(dl.status)}`}
+                                                className={`h-full rounded-full transition-all duration-500 relative shadow-sm ${progressColor(dl.status, dl.target)}`}
                                                 style={{ width: `${Math.min(dl.progress, 100)}%` }}
                                             >
                                                 {dl.progress > 0 && dl.progress < 100 && (

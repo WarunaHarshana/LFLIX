@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
 const VALID_SETTINGS = [
     'vlcPath', 'tmdbApiKey', 'omdbApiKey', 'downloadPath', 'autoOrganize',
     'gdriveEnabled', 'gdriveRemote', 'gdriveBasePath', 'gdriveTempPath', 'gdriveMountPath', 'gdriveMountDrive',
+    'cloudEnabled', 'cloudProvider', 'cloudWorkerUrl', 'cloudWorkerToken', 'gdriveDownloadMode',
 ];
 
 // Validate the configured player path points at a real, recognised player binary

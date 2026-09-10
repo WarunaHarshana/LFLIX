@@ -131,6 +131,8 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     const [sortBy, setSortBy] = useState<SortMode>('seeds');
     const [gdriveMode, setGdriveMode] = useState(false);
     const [gdriveAvailable, setGdriveAvailable] = useState(false);
+    const [cloudMode, setCloudMode] = useState(false);
+    const [cloudAvailable, setCloudAvailable] = useState(false);
 
     const pureTorrentResults = useMemo(() => {
         return results.filter((r) => !isDDL(r));
@@ -154,7 +156,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         });
     }, [directDownloads, title, year, mediaType, season, episode]);
 
-    // Check Google Drive availability only when modal opens
+    // Check Google Drive and Cloud Downloader availability only when modal opens
     useEffect(() => {
         if (!isOpen) return;
         let cancelled = false;
@@ -171,7 +173,24 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                 }
             } catch { /* ignore */ }
         };
+        const fetchCloud = async () => {
+            try {
+                const res = await fetch('/api/cloud');
+                if (!cancelled && res.ok) {
+                    const data = await res.json();
+                    if (data.config?.enabled || data.status?.online || data.status?.configured) {
+                        setCloudAvailable(true);
+                        const defaultCloud = localStorage.getItem('lflix-cloud-default');
+                        if (defaultCloud === 'true') {
+                            setCloudMode(true);
+                            setGdriveMode(false);
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+        };
         fetchGdrive();
+        fetchCloud();
         return () => { cancelled = true; };
     }, [isOpen]);
 
@@ -269,14 +288,15 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         }
     };
 
-    const startDownload = async (magnetUri: string, forceTarget?: 'local' | 'gdrive') => {
-        const isDrive = forceTarget === 'gdrive' || (forceTarget === undefined && gdriveMode);
-        setDownloading(isDrive ? `${magnetUri}:gdrive` : magnetUri);
+    const startDownload = async (magnetUri: string, forceTarget?: 'local' | 'gdrive' | 'cloud') => {
+        const isCloud = forceTarget === 'cloud' || (forceTarget === undefined && cloudMode);
+        const isDrive = !isCloud && (forceTarget === 'gdrive' || (forceTarget === undefined && gdriveMode));
+        const targetMode = isCloud ? 'cloud' : (isDrive ? 'gdrive' : 'local');
+
+        setDownloading(targetMode !== 'local' ? `${magnetUri}:${targetMode}` : magnetUri);
         try {
-            const body: any = { magnetUri, watchlistId };
-            if (isDrive) {
-                body.target = 'gdrive';
-            } else if (selectedFolder) {
+            const body: any = { magnetUri, watchlistId, target: targetMode };
+            if (!isDrive && !isCloud && selectedFolder) {
                 body.downloadPath = selectedFolder;
             }
             const res = await fetch('/api/downloads', {
@@ -348,9 +368,12 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         }
     };
 
-    const startDirectDownload = async (item: DirectDownloadItem, forceTarget?: 'local' | 'gdrive') => {
-        const isDrive = forceTarget === 'gdrive' || (forceTarget === undefined && gdriveMode);
-        setDownloading(isDrive ? `${item.url}:gdrive` : item.url);
+    const startDirectDownload = async (item: DirectDownloadItem, forceTarget?: 'local' | 'gdrive' | 'cloud') => {
+        const isCloud = forceTarget === 'cloud' || (forceTarget === undefined && cloudMode);
+        const isDrive = !isCloud && (forceTarget === 'gdrive' || (forceTarget === undefined && gdriveMode));
+        const targetMode = isCloud ? 'cloud' : (isDrive ? 'gdrive' : 'local');
+
+        setDownloading(targetMode !== 'local' ? `${item.url}:${targetMode}` : item.url);
         try {
             let cleanFilename = '';
             const isJunkName = !item.name ||
@@ -374,10 +397,9 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                 httpUrl: item.url,
                 watchlistId,
                 filename: cleanFilename,
+                target: targetMode,
             };
-            if (isDrive) {
-                body.target = 'gdrive';
-            } else if (selectedFolder) {
+            if (!isDrive && !isCloud && selectedFolder) {
                 body.downloadPath = selectedFolder;
             }
             const res = await fetch('/api/downloads', {
@@ -435,11 +457,11 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                     </button>
                 </div>
 
-                {/* Folder Chooser & GDrive Toggle */}
-                {(folders.length > 0 || gdriveAvailable) && (
+                {/* Folder Chooser & GDrive / Cloud Toggle */}
+                {(folders.length > 0 || gdriveAvailable || cloudAvailable) && (
                     <div className="px-5 py-3 border-b border-white/10 bg-white/[0.02] flex items-center justify-between gap-4">
                         <div className="flex-1">
-                            {!gdriveMode && folders.length > 0 && (
+                            {!gdriveMode && !cloudMode && folders.length > 0 && (
                                 <>
                                     <label className="text-xs text-neutral-300 font-medium flex items-center gap-1.5 mb-1.5">
                                         <Folder className="w-3.5 h-3.5 text-blue-400" />
@@ -464,27 +486,57 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                     <div className="flex items-center gap-2.5 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-300 shadow-sm w-full">
                                         <Cloud className="w-5 h-5 flex-shrink-0" />
                                         <div className="flex flex-col min-w-0">
-                                            <span className="text-sm font-bold truncate">☁️ Google Drive</span>
-                                            <span className="text-[10px] text-blue-400/80 truncate">Downloading to remote drive</span>
+                                            <span className="text-sm font-bold truncate">☁️ Google Drive (Local Rclone)</span>
+                                            <span className="text-[10px] text-blue-400/80 truncate">Mounts to remote drive via local rclone</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {cloudMode && (
+                                <div className="h-full flex items-center py-1">
+                                    <div className="flex items-center gap-2.5 px-3 py-2 bg-purple-500/10 border border-purple-500/30 rounded-xl text-purple-300 shadow-sm w-full">
+                                        <Cloud className="w-5 h-5 flex-shrink-0 text-purple-400" />
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="text-sm font-bold truncate">⚡ Cloud-to-Cloud Upload</span>
+                                            <span className="text-[10px] text-purple-400/80 truncate">0 local disk & 0 local bandwidth (Headless Cloud Container)</span>
                                         </div>
                                     </div>
                                 </div>
                             )}
                         </div>
                         
-                        {gdriveAvailable && (
-                            <button
-                                onClick={() => {
-                                    const newVal = !gdriveMode;
-                                    setGdriveMode(newVal);
-                                    localStorage.setItem('lflix-gdrive-default', newVal ? 'true' : 'false');
-                                }}
-                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl transition flex-shrink-0 self-end mb-[1px] ${gdriveMode ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold shadow-md' : 'bg-white/5 text-neutral-400 border border-white/10 hover:bg-white/10 font-semibold'}`}
-                            >
-                                <CloudUpload className="w-4 h-4" />
-                                <span className="text-xs hidden sm:block">Drive</span>
-                            </button>
-                        )}
+                        <div className="flex items-center gap-2 self-end mb-[1px]">
+                            {cloudAvailable && (
+                                <button
+                                    onClick={() => {
+                                        const newVal = !cloudMode;
+                                        setCloudMode(newVal);
+                                        if (newVal) setGdriveMode(false);
+                                        localStorage.setItem('lflix-cloud-default', newVal ? 'true' : 'false');
+                                    }}
+                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl transition flex-shrink-0 ${cloudMode ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 font-bold shadow-md' : 'bg-white/5 text-neutral-400 border border-white/10 hover:bg-white/10 font-semibold'}`}
+                                    title="Cloud-to-Cloud: Stream or download directly in cloud container straight to Drive"
+                                >
+                                    <Cloud className="w-4 h-4" />
+                                    <span className="text-xs hidden sm:block">Cloud Worker</span>
+                                </button>
+                            )}
+                            {gdriveAvailable && (
+                                <button
+                                    onClick={() => {
+                                        const newVal = !gdriveMode;
+                                        setGdriveMode(newVal);
+                                        if (newVal) setCloudMode(false);
+                                        localStorage.setItem('lflix-gdrive-default', newVal ? 'true' : 'false');
+                                    }}
+                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl transition flex-shrink-0 ${gdriveMode ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold shadow-md' : 'bg-white/5 text-neutral-400 border border-white/10 hover:bg-white/10 font-semibold'}`}
+                                    title="Mount to Drive via local Rclone"
+                                >
+                                    <CloudUpload className="w-4 h-4" />
+                                    <span className="text-xs hidden sm:block">Drive</span>
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
 
@@ -661,6 +713,23 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                         )}
                                                         <span>To Drive</span>
                                                     </button>
+
+                                                    {cloudAvailable && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => startDirectDownload(item, 'cloud')}
+                                                            disabled={downloading !== null}
+                                                            className="px-3 py-2 bg-purple-600/85 hover:bg-purple-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md shadow-purple-500/15 hover:shadow-purple-500/30 disabled:opacity-50 border border-purple-400/30"
+                                                            title="Cloud-to-Cloud: Stream direct download straight into Google Drive with 0 local disk/network"
+                                                        >
+                                                            {downloading === `${item.url}:cloud` ? (
+                                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                            ) : (
+                                                                <Cloud className="w-3.5 h-3.5" />
+                                                            )}
+                                                            <span>To Cloud</span>
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -748,11 +817,23 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                             onClick={() => startDownload(result.magnet, 'gdrive')}
                                                             disabled={downloading !== null}
                                                             className="px-3 py-2 bg-blue-600/85 hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md shadow-blue-500/15 hover:shadow-blue-500/30 disabled:opacity-50 border border-blue-400/30"
-                                                            title="Download torrent to Google Drive"
+                                                            title="Download torrent to Google Drive via local Rclone"
                                                         >
                                                             {downloading === `${result.magnet}:gdrive` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CloudUpload className="w-3.5 h-3.5" />}
                                                             <span>To Drive</span>
                                                         </button>
+
+                                                        {cloudAvailable && (
+                                                            <button
+                                                                onClick={() => startDownload(result.magnet, 'cloud')}
+                                                                disabled={downloading !== null}
+                                                                className="px-3 py-2 bg-purple-600/85 hover:bg-purple-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md shadow-purple-500/15 hover:shadow-purple-500/30 disabled:opacity-50 border border-purple-400/30"
+                                                                title="Cloud-to-Cloud: Download in cloud container straight to Google Drive (0 local disk/network)"
+                                                            >
+                                                                {downloading === `${result.magnet}:cloud` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
+                                                                <span>To Cloud</span>
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
@@ -798,6 +879,16 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                     >
                                         <CloudUpload className="w-4 h-4" /> To Drive
                                     </button>
+                                    {cloudAvailable && (
+                                        <button
+                                            onClick={() => manualMagnet.trim() && startDownload(manualMagnet.trim(), 'cloud')}
+                                            disabled={!manualMagnet.trim().startsWith('magnet:') || downloading !== null}
+                                            className="px-4 py-2 bg-purple-600/90 hover:bg-purple-500 disabled:bg-neutral-800 disabled:text-neutral-600 text-white font-medium rounded-lg text-sm transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-purple-500/15 border border-purple-400/30"
+                                            title="Download magnet directly to Google Drive via Cloud Worker"
+                                        >
+                                            <Cloud className="w-4 h-4" /> To Cloud
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </>

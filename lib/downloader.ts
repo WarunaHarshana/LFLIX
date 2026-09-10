@@ -37,7 +37,7 @@ export interface DownloadRecord {
     totalSize: number;
     downloadedSize: number;
     downloadPath: string | null;
-    target?: 'local' | 'gdrive';
+    target?: 'local' | 'gdrive' | 'cloud';
     errorMessage: string | null;
     retryCount: number;
     lastProgressAt: string | null;
@@ -93,23 +93,39 @@ class DownloadManager {
     // Public recovery method — re-attaches in-progress torrents after a server restart
     async recoverAll(): Promise<void> {
         try {
-            // Pause any in-progress HTTP downloads from previous session since processes do not survive restart
+            // Pause any in-progress local/gdrive HTTP downloads from previous session since local processes do not survive restart
             db.prepare(`
                 UPDATE downloads
                 SET status = 'paused', downloadSpeed = 0, stateUpdatedAt = CURRENT_TIMESTAMP
-                WHERE status IN ('downloading', 'uploading') AND magnetUri LIKE 'http-direct:%'
+                WHERE status IN ('downloading', 'uploading') 
+                  AND magnetUri LIKE 'http-direct:%'
+                  AND (target IS NULL OR target != 'cloud')
             `).run();
 
-            // Re-attach all in-progress torrent downloads on server start that aren't currently active
+            // If there are active cloud downloads, start cloud sync
+            try {
+                const activeCloud = db.prepare(
+                    `SELECT COUNT(*) as count FROM downloads 
+                     WHERE status IN ('metadata', 'downloading', 'uploading') 
+                       AND target = 'cloud'`
+                ).get() as { count: number };
+                if (activeCloud?.count > 0) {
+                    const { ensureCloudSyncRunning } = await import('./cloudDownloader');
+                    ensureCloudSyncRunning();
+                }
+            } catch { /* ignore */ }
+
+            // Re-attach all in-progress local torrent downloads on server start that aren't currently active
             const staleDownloads = db.prepare(
                 `SELECT id, magnetUri, status, infoHash, name, downloadPath, startedAt 
                  FROM downloads 
                  WHERE status IN ('metadata', 'downloading', 'stalled') 
-                 AND magnetUri NOT LIKE 'http-direct:%'`
+                 AND magnetUri NOT LIKE 'http-direct:%'
+                 AND (target IS NULL OR target != 'cloud')`
             ).all() as any[];
 
             if (staleDownloads.length === 0) {
-                console.log('[DownloadManager] Recovery: no stuck downloads');
+                console.log('[DownloadManager] Recovery: no stuck local downloads');
                 return;
             }
 
@@ -344,9 +360,29 @@ class DownloadManager {
         }, delayMs);
     }
 
-    // Start a new download (auto-detects torrent vs HTTP, supports gdrive target)
-    async addDownload(magnetUri: string, watchlistId?: number, customPath?: string, customFilename?: string, target: 'local' | 'gdrive' = 'local'): Promise<DownloadRecord> {
+    // Start a new download (auto-detects torrent vs HTTP, supports gdrive & cloud targets)
+    async addDownload(magnetUri: string, watchlistId?: number, customPath?: string, customFilename?: string, target: 'local' | 'gdrive' | 'cloud' = 'local'): Promise<DownloadRecord> {
         console.log(`[DownloadManager] addDownload called for: ${magnetUri.substring(0, 30)}... target=${target}`);
+
+        // Cloud target: transfer directly cloud-to-cloud to Google Drive (zero local disk/bandwidth)
+        if (target === 'cloud') {
+            const isHttp = magnetUri.startsWith('http-direct:');
+            const rawUrl = isHttp ? magnetUri.replace('http-direct:', '') : magnetUri;
+            const type = isHttp ? 'direct' : 'torrent';
+            const { addCloudDownload } = await import('./cloudDownloader');
+            const res = await addCloudDownload({
+                url: rawUrl,
+                type,
+                filename: customFilename,
+                watchlistId,
+            });
+            if (!res.success || !res.downloadId) {
+                throw new Error(res.error || 'Failed to dispatch cloud download');
+            }
+            const record = this.getDownload(res.downloadId);
+            if (!record) throw new Error('Download record could not be retrieved');
+            return record;
+        }
 
         // Google Drive DDL: stream directly from URL to GDrive via rclone copyurl
         if (target === 'gdrive' && magnetUri.startsWith('http-direct:')) {
@@ -1112,11 +1148,31 @@ class DownloadManager {
             return false;
         }
 
+        // Handle Cloud downloads
+        if (record.target === 'cloud') {
+            const isDirect = record.magnetUri.startsWith('http-direct:');
+            const url = isDirect ? record.magnetUri.replace('http-direct:', '') : record.magnetUri;
+            try {
+                const { addCloudDownload } = await import('./cloudDownloader');
+                db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
+                const res = await addCloudDownload({
+                    url,
+                    type: isDirect ? 'direct' : 'torrent',
+                    filename: record.name || undefined,
+                    watchlistId: record.watchlistId || undefined,
+                });
+                return res.success;
+            } catch (err: any) {
+                console.error('[DownloadManager] Error resuming cloud download:', err);
+                return false;
+            }
+        }
+
         // Handle HTTP downloads
         if (record.magnetUri.startsWith('http-direct:')) {
             const url = record.magnetUri.replace('http-direct:', '');
             const filename = record.name || decodeURIComponent(url.split('/').pop() || 'download');
-            const target = record.target || 'local';
+            const target: 'local' | 'gdrive' = record.target === 'gdrive' ? 'gdrive' : 'local';
             const downloadPath = record.downloadPath || (target === 'gdrive' ? (await import('./gdriveUploader')).getGdriveConfig().tempPath : this.getDownloadPath());
 
             try {
@@ -1351,6 +1407,21 @@ class DownloadManager {
         if (gdriveProc) {
             try { gdriveProc.kill(); } catch { /* ignore */ }
             this.gdriveProcesses.delete(downloadId);
+        }
+
+        // Handle cloud downloads
+        if (record.target === 'cloud') {
+            try {
+                const { cancelCloudDownload } = await import('./cloudDownloader');
+                await cancelCloudDownload(downloadId);
+            } catch { /* ignore */ }
+            try {
+                db.prepare('DELETE FROM downloads WHERE id = ?').run(downloadId);
+            } catch (e) {
+                console.error('[Download] Failed to delete cloud download from DB:', e);
+                return false;
+            }
+            return true;
         }
 
         // Handle HTTP downloads
@@ -1717,7 +1788,7 @@ class DownloadManager {
     }
 
     // Trigger library rescan
-    private async triggerRescan(): Promise<void> {
+    public async triggerRescan(): Promise<void> {
         try {
             const baseUrl = `http://localhost:${process.env.PORT || 3000}`;
             await fetch(`${baseUrl}/api/rescan`, { method: 'POST' }).catch(() => { });

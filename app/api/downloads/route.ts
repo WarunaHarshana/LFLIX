@@ -62,7 +62,20 @@ export async function POST(req: Request) {
         const { magnetUri, httpUrl, watchlistId, downloadPath, torrentBase64, filename, target } = await readJsonObject(req, 2 * 1024 * 1024);
         const validatedDownloadPath = getValidatedDownloadPath(downloadPath);
         const parsedWatchlistId = watchlistId ? parsePositiveInt(watchlistId) ?? undefined : undefined;
-        const downloadTarget = target === 'gdrive' ? 'gdrive' as const : 'local' as const;
+        const downloadTarget = target === 'cloud' ? 'cloud' as const : (target === 'gdrive' ? 'gdrive' as const : 'local' as const);
+
+        // Validate Cloud Downloader is configured when target is cloud
+        if (downloadTarget === 'cloud') {
+            try {
+                const { getCloudConfig } = await import('@/lib/cloudDownloader');
+                const config = getCloudConfig();
+                if (!config.workerUrl) {
+                    return NextResponse.json({ error: 'Cloud Worker URL is not configured. Deploy your Headless Cloud Container and set the URL in Settings.' }, { status: 400 });
+                }
+            } catch (e: any) {
+                return NextResponse.json({ error: `Cloud error: ${e.message}` }, { status: 500 });
+            }
+        }
 
         // Validate GDrive is configured when target is gdrive
         if (downloadTarget === 'gdrive') {
