@@ -356,6 +356,20 @@ function ContentCard({
                 )}
             </div>
 
+            {/* Mobile backdrop scrim for expanded card overlay */}
+            {!reflowMode && (
+                <div
+                    className={clsx(
+                        "fixed inset-0 bg-black/70 md:hidden transition-opacity duration-500",
+                        activeExpanded ? "opacity-100 z-[999] pointer-events-auto" : "opacity-0 pointer-events-none"
+                    )}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setHoverState(false);
+                    }}
+                />
+            )}
+
             {/* 2. EXPANDED HOVER CARD (Prime Video 2-Card Banner Expansion - Responsive across Mobile & Desktop) */}
             <div
                 ref={expandedCardRef}
@@ -373,8 +387,12 @@ function ContentCard({
                             activeExpanded ? "pointer-events-auto opacity-100 scale-100" : "pointer-events-none opacity-0 scale-95"
                         )
                         : clsx(
-                            "!absolute top-0 h-full w-[calc(200%+1rem)] max-w-[calc(100vw-2rem)]",
-                            horizontalOrigin === 'left' ? "left-0 origin-top-left" : "right-0 origin-top-right",
+                            // Mobile: fixed full-width overlay centered on screen
+                            // Desktop: absolute 2-card-wide horizontal expansion
+                            "md:!absolute md:top-0 md:h-full md:w-[calc(200%+1rem)] md:max-w-[calc(100vw-2rem)]",
+                            // Mobile: fixed overlay
+                            "!fixed md:!absolute inset-x-3 md:inset-x-auto top-20 md:top-0 bottom-auto md:bottom-auto h-[55vh] md:h-full",
+                            horizontalOrigin === 'left' ? "md:left-0 md:origin-top-left" : "md:right-0 md:origin-top-right",
                             activeExpanded
                                 ? "!z-[1000] pointer-events-auto opacity-100 scale-100"
                                 : "!z-0 pointer-events-none opacity-0 scale-95"
@@ -423,7 +441,7 @@ function ContentCard({
                         setHoverState(false);
                     }}
                     className={clsx(
-                        "!absolute top-2 right-2 z-40 w-7 h-7 rounded-full liquid-glass-pill bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer transition sm:hidden shadow-md border border-white/20",
+                        "!absolute top-2 right-2 z-40 w-7 h-7 rounded-full liquid-glass-pill bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer transition md:hidden shadow-md border border-white/20",
                         activeExpanded ? "pointer-events-auto" : "pointer-events-none"
                     )}
                     aria-label="Close preview"

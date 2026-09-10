@@ -248,25 +248,25 @@ export default function DetailTabNav({
 
   return (
     <>
-      <nav className="fixed top-0 left-0 right-0 w-full z-40 px-6 sm:px-8 lg:px-10 py-4 sm:py-5 items-center justify-between hidden md:flex transition-all duration-300 bg-gradient-to-b from-black/65 via-black/20 to-transparent">
-        <div className="flex items-center gap-4 lg:gap-6">
+      <nav className="fixed top-0 left-0 right-0 w-full z-40 px-3 md:px-4 lg:px-6 xl:px-10 py-3 md:py-4 lg:py-5 items-center justify-between hidden md:flex transition-all duration-300 bg-gradient-to-b from-black/65 via-black/20 to-transparent">
+        <div className="flex items-center gap-2 lg:gap-4 xl:gap-6 min-w-0 flex-shrink">
           {onBack && (
             <button
               onClick={() => {
                 triggerHaptic('light');
                 onBack();
               }}
-              className="h-10 w-10 sm:h-11 sm:w-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 text-neutral-200 hover:text-white hover:scale-105 active:scale-95 transition-all inline-flex items-center justify-center shadow-xl backdrop-blur-xl cursor-pointer shrink-0"
+              className="h-9 w-9 lg:h-10 lg:w-10 xl:h-11 xl:w-11 rounded-2xl liquid-glass-pill border border-white/20 hover:border-white/40 text-neutral-200 hover:text-white hover:scale-105 active:scale-95 transition-all inline-flex items-center justify-center shadow-xl backdrop-blur-xl cursor-pointer shrink-0"
               title="Back"
               aria-label="Back"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
-          <h1 className="text-3xl sm:text-4xl font-black accent-text tracking-tighter select-none drop-shadow-md">LFLIX</h1>
+          <h1 className="text-2xl lg:text-3xl xl:text-4xl font-black accent-text tracking-tighter select-none drop-shadow-md shrink-0">LFLIX</h1>
           
-          {/* Navigation Tabs */}
-          <div className="flex items-center gap-2">
+          {/* Navigation Tabs — horizontally scrollable at medium widths */}
+          <div className="flex items-center gap-1 lg:gap-2 min-w-0 overflow-x-auto scrollbar-hide">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id && !showLiveSportsActive;
               return (
@@ -274,16 +274,16 @@ export default function DetailTabNav({
                   key={tab.id}
                   onClick={() => switchTab(tab.id)}
                   className={clsx(
-                    'relative px-4 sm:px-4.5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition-all duration-200 cursor-pointer min-w-[76px] flex items-center justify-center gap-2 select-none min-h-[44px]',
+                    'relative px-2.5 lg:px-4 xl:px-4.5 py-1.5 lg:py-2 xl:py-2.5 rounded-xl text-xs lg:text-sm xl:text-base font-semibold transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 lg:gap-2 select-none min-h-[36px] lg:min-h-[40px] xl:min-h-[44px] whitespace-nowrap shrink-0',
                     isActive
                       ? 'text-white font-bold bg-white/20 border border-white/40 shadow-[0_2px_14px_rgba(255,255,255,0.25)] backdrop-blur-xl'
                       : 'liquid-glass-pill text-neutral-300 hover:text-white'
                   )}
                 >
-                  <span className="relative z-10 flex items-center justify-center gap-2 drop-shadow-sm">
-                    {tab.icon === 'discover' && <Globe className="w-4.5 h-4.5" />}
-                    {tab.icon === 'live' && <Tv className="w-4.5 h-4.5" />}
-                    {tab.icon === 'watchlist' && <Bookmark className="w-4.5 h-4.5" />}
+                  <span className="relative z-10 flex items-center justify-center gap-1.5 lg:gap-2 drop-shadow-sm">
+                    {tab.icon === 'discover' && <Globe className="w-4 h-4 lg:w-4.5 lg:h-4.5" />}
+                    {tab.icon === 'live' && <Tv className="w-4 h-4 lg:w-4.5 lg:h-4.5" />}
+                    {tab.icon === 'watchlist' && <Bookmark className="w-4 h-4 lg:w-4.5 lg:h-4.5" />}
                     <span>{tab.label}</span>
                   </span>
                 </button>
@@ -299,14 +299,14 @@ export default function DetailTabNav({
                 }
               }}
               className={clsx(
-                'relative px-4 sm:px-4.5 py-2 sm:py-2.5 rounded-xl text-sm sm:text-base font-semibold transition-all duration-200 cursor-pointer min-w-[76px] flex items-center justify-center gap-2 select-none min-h-[44px]',
+                'relative px-2.5 lg:px-4 xl:px-4.5 py-1.5 lg:py-2 xl:py-2.5 rounded-xl text-xs lg:text-sm xl:text-base font-semibold transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 lg:gap-2 select-none min-h-[36px] lg:min-h-[40px] xl:min-h-[44px] whitespace-nowrap shrink-0',
                 showLiveSportsActive
                   ? 'text-white font-bold bg-white/20 border border-white/40 shadow-[0_2px_14px_rgba(255,255,255,0.25)] backdrop-blur-xl'
                   : 'liquid-glass-pill text-neutral-300 hover:text-white'
               )}
             >
-              <span className="relative z-10 flex items-center justify-center gap-2 drop-shadow-sm">
-                <Trophy className="w-4.5 h-4.5" />
+              <span className="relative z-10 flex items-center justify-center gap-1.5 lg:gap-2 drop-shadow-sm">
+                <Trophy className="w-4 h-4 lg:w-4.5 lg:h-4.5" />
                 <span>Live Sports</span>
               </span>
             </button>
@@ -314,13 +314,13 @@ export default function DetailTabNav({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 lg:gap-2 shrink-0">
           <button
             aria-label="Search (Press /)"
             onClick={() => {
               if (onShowSearch) onShowSearch();
             }}
-            className="liquid-glass-pill p-2.5 sm:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="liquid-glass-pill p-2 lg:p-2.5 xl:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer min-w-[36px] min-h-[36px] lg:min-w-[44px] lg:min-h-[44px] flex items-center justify-center"
             title="Search (Press /)"
           >
             <Search className="w-5 h-5" />
@@ -335,7 +335,7 @@ export default function DetailTabNav({
                 setInternalShowMobileConnect(true);
               }
             }}
-            className="liquid-glass-pill p-2.5 sm:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center"
+            className="liquid-glass-pill p-2 lg:p-2.5 xl:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer hidden lg:flex min-w-[36px] min-h-[36px] lg:min-w-[44px] lg:min-h-[44px] items-center justify-center"
             title="Connect Mobile"
           >
             <Smartphone className="w-5 h-5" />
@@ -350,7 +350,7 @@ export default function DetailTabNav({
                 setInternalShowDlna(true);
               }
             }}
-            className="liquid-glass-pill p-2.5 sm:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center"
+            className="liquid-glass-pill p-2 lg:p-2.5 xl:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer hidden lg:flex min-w-[36px] min-h-[36px] lg:min-w-[44px] lg:min-h-[44px] items-center justify-center"
             title="Cast to Smart TV (DLNA)"
           >
             <Cast className="w-5 h-5" />
@@ -361,7 +361,7 @@ export default function DetailTabNav({
             aria-label={forceBrowserPlayer ? 'Browser Player: ON (click to use native player)' : 'Browser Player: OFF (click to enable for TV)'}
             onClick={handleToggleBrowserPlayer}
             className={clsx(
-              'liquid-glass-pill px-3 py-2 sm:py-2.5 rounded-xl transition-all duration-200 cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center gap-1.5 relative select-none active:scale-95',
+              'liquid-glass-pill px-2 lg:px-3 py-1.5 lg:py-2 xl:py-2.5 rounded-xl transition-all duration-200 cursor-pointer hidden lg:flex min-w-[36px] min-h-[36px] lg:min-w-[44px] lg:min-h-[44px] items-center justify-center gap-1.5 relative select-none active:scale-95',
               forceBrowserPlayer
                 ? 'border-sky-400 bg-sky-500/25 text-sky-200 shadow-[0_0_18px_rgba(56,189,248,0.5)] ring-1 ring-sky-400/50 font-bold'
                 : 'text-neutral-300 hover:text-white border-white/10 hover:border-white/20 bg-black/20'
@@ -381,7 +381,7 @@ export default function DetailTabNav({
             aria-label="Refresh Library (Scan for new files)"
             onClick={handleRescan}
             disabled={scanning}
-            className="liquid-glass-pill p-2.5 sm:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="liquid-glass-pill p-2 lg:p-2.5 xl:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-w-[36px] min-h-[36px] lg:min-w-[44px] lg:min-h-[44px] flex items-center justify-center"
             title="Refresh Library (Scan for new files)"
           >
             <RotateCw className={clsx('w-5 h-5', scanning && 'animate-spin')} />
@@ -396,7 +396,7 @@ export default function DetailTabNav({
                 router.push('/?tab=all');
               }
             }}
-            className="liquid-glass-pill p-2.5 sm:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="liquid-glass-pill p-2 lg:p-2.5 xl:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer hidden xl:flex min-w-[36px] min-h-[36px] lg:min-w-[44px] lg:min-h-[44px] items-center justify-center"
             title="Manage Folders"
           >
             <Plus className="w-5 h-5" />
@@ -411,7 +411,7 @@ export default function DetailTabNav({
                 setInternalShowDownloads(true);
               }
             }}
-            className="liquid-glass-pill p-2.5 sm:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center relative"
+            className="liquid-glass-pill p-2 lg:p-2.5 xl:p-3 text-neutral-200 hover:text-white rounded-xl transition cursor-pointer hidden md:flex min-w-[36px] min-h-[36px] lg:min-w-[44px] lg:min-h-[44px] items-center justify-center relative"
             title="Downloads"
           >
             <Download className="w-5 h-5" />
@@ -427,7 +427,7 @@ export default function DetailTabNav({
 
           <Link
             href={settingsHref}
-            className="liquid-glass-pill p-2.5 sm:p-3 text-neutral-200 hover:text-white rounded-xl transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="liquid-glass-pill p-2 lg:p-2.5 xl:p-3 text-neutral-200 hover:text-white rounded-xl transition min-w-[36px] min-h-[36px] lg:min-w-[44px] lg:min-h-[44px] flex items-center justify-center"
             title="Settings"
           >
             <Settings className="w-5 h-5" />
@@ -435,7 +435,7 @@ export default function DetailTabNav({
 
           <div
             className={clsx(
-              'liquid-glass-pill px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm tracking-wider select-none border flex items-center min-h-[44px] transition-all duration-300',
+              'liquid-glass-pill px-3 lg:px-3.5 xl:px-4 py-1.5 lg:py-2 xl:py-2.5 rounded-xl text-xs tracking-wider select-none border hidden xl:flex items-center min-h-[36px] lg:min-h-[44px] transition-all duration-300',
               hdrDisplaySupported
                 ? 'border-amber-400 bg-amber-500/25 text-amber-200 shadow-[0_0_18px_rgba(245,158,11,0.5)] ring-1 ring-amber-400/60 font-black'
                 : 'border-white/10 text-neutral-400 bg-black/30 font-semibold'
@@ -470,7 +470,7 @@ export default function DetailTabNav({
               await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'same-origin' });
               router.push('/');
             }}
-            className="liquid-glass-pill px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-neutral-300 hover:text-white hover:border-red-500/40 transition cursor-pointer min-h-[44px] flex items-center"
+            className="liquid-glass-pill px-2 lg:px-3.5 xl:px-4 py-1.5 lg:py-2 xl:py-2.5 rounded-xl text-xs font-semibold text-neutral-300 hover:text-white hover:border-red-500/40 transition cursor-pointer min-h-[36px] lg:min-h-[44px] flex items-center"
             title="Logout"
           >
             Exit
