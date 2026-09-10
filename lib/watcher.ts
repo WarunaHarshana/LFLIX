@@ -1,5 +1,6 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import path from 'path';
+import fs from 'fs';
 import db from './db';
 import { isExtrasFolderName, isVideoFile } from './mediaNaming';
 
@@ -142,17 +143,26 @@ class FolderWatcher {
         // Get all folders to watch
         const folders = db.prepare('SELECT folderPath FROM scanned_folders').all() as { folderPath: string }[];
 
-        if (folders.length === 0) {
-            console.log('No folders to watch');
+        const rawPaths = folders.map(f => path.normalize(f.folderPath));
+        const paths = rawPaths.filter(p => {
+            try {
+                return fs.existsSync(p);
+            } catch {
+                return false;
+            }
+        });
+
+        if (paths.length === 0) {
+            console.log('No accessible folders to watch');
             return;
         }
 
-        const paths = folders.map(f => f.folderPath);
         console.log('Starting folder watcher for:', paths);
 
         this.watcher = chokidar.watch(paths, {
             persistent: true,
             ignoreInitial: true, // Don't trigger events for existing files
+            followSymlinks: false, // Critical: prevents realpath syscall errors on virtual/WinFsp cloud mounts
             depth: 10, // Watch subdirectories
             awaitWriteFinish: {
                 stabilityThreshold: 2000, // Wait for file to be stable for 2s
@@ -192,8 +202,12 @@ class FolderWatcher {
         });
 
         this.watcher.on('error', (error: unknown) => {
-            console.error('Watcher error:', error);
             const message = error instanceof Error ? error.message : String(error);
+            // Suppress benign virtual drive / realpath errors from WinFsp/rclone mounts
+            if (message.includes('realpath') || (error as any)?.code === 'UNKNOWN') {
+                return;
+            }
+            console.error('Watcher error:', error);
             this.emit({ type: 'error', message });
         });
 
