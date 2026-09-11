@@ -343,7 +343,10 @@ class AutoDownloader {
       }
 
       // Start the download
-      const download = await downloadManager.addDownload(best.magnet, undefined, undefined, customFilename);
+      const target = ep.target;
+      const download = target && target !== 'local'
+        ? await downloadManager.addDownload(best.magnet, undefined, undefined, customFilename, target)
+        : await downloadManager.addDownload(best.magnet, undefined, undefined, customFilename);
 
       // Upsert into episode_releases
       db.prepare(`
@@ -412,7 +415,7 @@ class AutoDownloader {
     // 4. Haven't been successfully downloaded yet (downloadAttempted = 0 OR download status is error/null)
     // 5. Haven't been attempted in the last 15 minutes
     const pendingEpisodes = db.prepare(`
-      SELECT er.*, at.showId, at.title as showTitle, at.qualityPreference,
+      SELECT er.*, at.showId, at.title as showTitle, at.qualityPreference, at.target,
              (SELECT posterPath FROM shows WHERE id = at.showId) as posterPath
       FROM episode_releases er
       JOIN auto_track at ON er.tmdbId = at.tmdbId AND at.enabled = 1
@@ -435,6 +438,12 @@ class AutoDownloader {
 
     console.log(`[AutoDownloader] Retrying/downloading ${pendingEpisodes.length} missing episode(s)...`);
 
+    let globalDefaultTarget: string | null = null;
+    try {
+      const setting = db.prepare("SELECT value FROM settings WHERE key = 'autoDownloadTarget'").get() as { value: string } | undefined;
+      if (setting?.value) globalDefaultTarget = setting.value;
+    } catch { /* ignore */ }
+
     const episodes: NewEpisodeInfo[] = pendingEpisodes.map(ep => ({
       tmdbId: ep.tmdbId,
       showId: ep.showId,
@@ -445,6 +454,7 @@ class AutoDownloader {
       airDate: ep.airDate,
       posterPath: ep.posterPath || null,
       qualityPreference: ep.qualityPreference || '1080p',
+      target: (ep.target && ep.target !== 'local' ? ep.target : (globalDefaultTarget || ep.target || 'local')) as any,
     }));
 
     await this.processNewEpisodes(episodes);

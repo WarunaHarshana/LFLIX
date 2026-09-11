@@ -209,6 +209,7 @@ db.exec(`
     title TEXT NOT NULL,
     enabled INTEGER DEFAULT 1,
     qualityPreference TEXT DEFAULT '1080p',
+    target TEXT DEFAULT 'local',
     lastCheckedAt DATETIME,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(showId)
@@ -283,6 +284,7 @@ const VALID_COLUMNS: Record<string, string[]> = {
   scanned_folders: ['contentType'],
   watchlist: ['trackRelease', 'imdbRating'],
   downloads: ['retryCount', 'lastProgressAt', 'stateUpdatedAt', 'target'],
+  auto_track: ['target'],
   settings: []
 };
 
@@ -355,6 +357,7 @@ addColumnIfNotExists('downloads', 'retryCount', 'INTEGER DEFAULT 0');
 addColumnIfNotExists('downloads', 'lastProgressAt', 'DATETIME');
 addColumnIfNotExists('downloads', 'stateUpdatedAt', 'DATETIME');
 addColumnIfNotExists('downloads', 'target', "TEXT DEFAULT 'local'");
+addColumnIfNotExists('auto_track', 'target', "TEXT DEFAULT 'local'");
 
 try {
   db.prepare(`

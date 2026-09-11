@@ -20,10 +20,28 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing or invalid parameters' }, { status: 400 });
         }
 
-        // Get quality preference from auto_track, default to 'best'
-        const trackStmt = db.prepare('SELECT qualityPreference FROM auto_track WHERE showId = ?');
-        const trackResult = trackStmt.get(showId) as { qualityPreference: string } | undefined;
+        const bodyTarget = typeof body.target === 'string' && ['local', 'gdrive', 'cloud'].includes(body.target)
+            ? body.target
+            : null;
+
+        // Get quality preference & target from auto_track, fallback to global settings
+        const trackStmt = db.prepare('SELECT qualityPreference, target FROM auto_track WHERE showId = ?');
+        const trackResult = trackStmt.get(showId) as { qualityPreference?: string; target?: string } | undefined;
         const qualityPref = trackResult?.qualityPreference || 'best';
+
+        let targetPref: 'local' | 'gdrive' | 'cloud' = 'local';
+        if (bodyTarget) {
+            targetPref = bodyTarget as any;
+        } else if (trackResult?.target && ['local', 'gdrive', 'cloud'].includes(trackResult.target)) {
+            targetPref = trackResult.target as any;
+        } else {
+            try {
+                const globalSetting = db.prepare("SELECT value FROM settings WHERE key = 'autoDownloadTarget'").get() as { value: string } | undefined;
+                if (globalSetting?.value === 'gdrive' || globalSetting?.value === 'cloud') {
+                    targetPref = globalSetting.value as any;
+                }
+            } catch { /* ignore */ }
+        }
 
         // Get show info for notifications
         const showStmt = db.prepare(`
@@ -69,6 +87,7 @@ export async function POST(req: Request) {
                         airDate: ep.air_date,
                         posterPath: showData?.posterPath || null,
                         qualityPreference: qualityPref,
+                        target: targetPref,
                         isManual: true
                     });
                 }

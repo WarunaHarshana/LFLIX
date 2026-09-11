@@ -22,6 +22,7 @@ type Settings = {
     cloudWorkerUrl?: string;
     cloudWorkerToken?: string;
     gdriveDownloadMode?: 'local_upload' | 'cloud_container';
+    autoDownloadTarget?: 'local' | 'gdrive' | 'cloud';
 };
 
 // Component for refresh metadata button
@@ -114,6 +115,7 @@ export default function SettingsPage() {
         gdriveMountDrive: 'Z:',
         gdriveMountPath: 'Z:\\Media',
         gdriveDownloadMode: 'local_upload',
+        autoDownloadTarget: 'local',
         cloudEnabled: 'false',
         cloudProvider: 'headless',
         cloudWorkerUrl: '',
@@ -298,6 +300,7 @@ export default function SettingsPage() {
                 gdriveMountDrive: data.gdriveMountDrive || 'Z:',
                 gdriveMountPath: data.gdriveMountPath || 'Z:\\Media',
                 gdriveDownloadMode: (data.gdriveDownloadMode as any) || (data.cloudEnabled === 'true' ? 'cloud_container' : 'local_upload'),
+                autoDownloadTarget: (data.autoDownloadTarget as any) || 'local',
                 cloudEnabled: data.cloudEnabled !== undefined ? String(data.cloudEnabled) : 'false',
                 cloudProvider: 'headless',
                 cloudWorkerUrl: data.cloudWorkerUrl || '',
@@ -448,6 +451,67 @@ export default function SettingsPage() {
                                     }`} />
                                 </button>
                             </label>
+                        </div>
+
+                        <div className="pt-4 border-t border-white/10">
+                            <div>
+                                <div className="text-neutral-200 font-medium mb-1">
+                                    Default Auto-Download Destination
+                                </div>
+                                <div className="text-xs text-neutral-400 mb-3 leading-relaxed">
+                                    Where automated background downloads (auto-tracked episodes and new releases) will be saved by default.
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings(prev => ({ ...prev, autoDownloadTarget: 'local' }))}
+                                        className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                                            (settings.autoDownloadTarget || 'local') === 'local'
+                                                ? 'bg-white/15 border-white/40 shadow-sm'
+                                                : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.07] text-neutral-400'
+                                        }`}
+                                    >
+                                        <div className="font-semibold text-xs sm:text-sm text-white flex items-center gap-1.5">
+                                            <span>💻</span> Local Storage
+                                        </div>
+                                        <div className="text-[11px] text-neutral-400 mt-1">
+                                            Save to local download folder
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings(prev => ({ ...prev, autoDownloadTarget: 'gdrive' }))}
+                                        className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                                            settings.autoDownloadTarget === 'gdrive'
+                                                ? 'bg-blue-500/20 border-blue-500/40 text-blue-300 shadow-sm'
+                                                : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.07] text-neutral-400'
+                                        }`}
+                                    >
+                                        <div className="font-semibold text-xs sm:text-sm text-white flex items-center gap-1.5">
+                                            <span>☁️</span> Google Drive
+                                        </div>
+                                        <div className="text-[11px] text-neutral-400 mt-1">
+                                            Upload/stream to Google Drive
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings(prev => ({ ...prev, autoDownloadTarget: 'cloud' }))}
+                                        className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                                            settings.autoDownloadTarget === 'cloud'
+                                                ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 shadow-sm'
+                                                : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.07] text-neutral-400'
+                                        }`}
+                                    >
+                                        <div className="font-semibold text-xs sm:text-sm text-white flex items-center gap-1.5">
+                                            <span>⚡</span> Cloud Worker
+                                        </div>
+                                        <div className="text-[11px] text-neutral-400 mt-1">
+                                            Zero local disk & bandwidth
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>

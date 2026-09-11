@@ -6,9 +6,11 @@ describe('AutoDownloader manual vs automatic tracking', () => {
   let createdShowId: number | null = null;
 
   afterEach(() => {
+    vi.restoreAllMocks();
     if (createdShowId !== null) {
       db.prepare('DELETE FROM auto_track WHERE showId = ?').run(createdShowId);
-      db.prepare('DELETE FROM episode_releases WHERE tmdbId = 1399').run();
+      db.prepare('DELETE FROM episode_releases WHERE tmdbId IN (1399, 999999)').run();
+      db.prepare('DELETE FROM notifications WHERE tmdbId IN (1399, 999999)').run();
       db.prepare('DELETE FROM shows WHERE id = ?').run(createdShowId);
       createdShowId = null;
     }
@@ -48,5 +50,70 @@ describe('AutoDownloader manual vs automatic tracking', () => {
     expect(() => {
       autoDownloader.processNewEpisodes([manualEp]);
     }).not.toThrow();
+  });
+
+  it('forwards target destination to downloadManager.addDownload', async () => {
+    const downloadManager = (await import('@/lib/downloader')).default;
+    const addDownloadSpy = vi.spyOn(downloadManager, 'addDownload').mockResolvedValueOnce({
+      id: 8888,
+      magnetUri: 'magnet:?xt=urn:btih:mock',
+      infoHash: 'mock',
+      name: 'Test Show S01E01',
+      watchlistId: null,
+      status: 'downloading',
+      progress: 0,
+      downloadSpeed: 0,
+      totalSize: 1000,
+      downloadedSize: 0,
+      downloadPath: 'Z:\\Media\\TV Shows',
+      errorMessage: null,
+      retryCount: 0,
+      lastProgressAt: null,
+      stateUpdatedAt: null,
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+    });
+
+    const torrentSearch = await import('@/lib/torrentSearch');
+    vi.spyOn(torrentSearch, 'searchTorrents').mockResolvedValueOnce([
+      {
+        title: 'Test Show S01E01 1080p WEB-DL',
+        magnet: 'magnet:?xt=urn:btih:mock',
+        seeds: 50,
+        leeches: 0,
+        size: '1.2 GB',
+        sizeBytes: 1200000000,
+        quality: '1080p',
+        source: 'Mock',
+      }
+    ]);
+
+    // Insert mock show in DB
+    const info = db.prepare("INSERT INTO shows (title, tmdbId) VALUES ('Test Show', 999999)").run();
+    createdShowId = Number(info.lastInsertRowid);
+
+    const ep = {
+      tmdbId: 999999,
+      showId: createdShowId,
+      showTitle: 'Test Show',
+      seasonNumber: 1,
+      episodeNumber: 1,
+      episodeTitle: 'Pilot',
+      airDate: '2020-01-01',
+      posterPath: null,
+      qualityPreference: '1080p',
+      target: 'gdrive' as const,
+      isManual: true,
+    };
+
+    const result = await autoDownloader.findAndDownload(ep);
+    expect(result).toBe(true);
+    expect(addDownloadSpy).toHaveBeenCalledWith(
+      'magnet:?xt=urn:btih:mock',
+      undefined,
+      undefined,
+      undefined,
+      'gdrive'
+    );
   });
 });

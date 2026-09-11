@@ -14,6 +14,7 @@ export interface TrackedShow {
   title: string;
   enabled: number;
   qualityPreference: string;
+  target?: 'local' | 'gdrive' | 'cloud';
   lastCheckedAt: string | null;
   addedAt: string;
 }
@@ -28,6 +29,7 @@ export interface NewEpisodeInfo {
   airDate: string;
   posterPath: string | null;
   qualityPreference: string;
+  target?: 'local' | 'gdrive' | 'cloud';
   isManual?: boolean;
 }
 
@@ -208,6 +210,17 @@ class ReleaseMonitor {
           if (localEpisodeSet.has(key)) continue;
           if (!airDate || airDate > today) continue;
 
+          // Determine effective download target (show-level target or global default)
+          let effectiveTarget: 'local' | 'gdrive' | 'cloud' = show.target || 'local';
+          if (!show.target || show.target === 'local') {
+            try {
+              const globalSetting = db.prepare("SELECT value FROM settings WHERE key = 'autoDownloadTarget'").get() as { value: string } | undefined;
+              if (globalSetting?.value === 'gdrive' || globalSetting?.value === 'cloud') {
+                effectiveTarget = globalSetting.value as any;
+              }
+            } catch { /* ignore */ }
+          }
+
           // This is an episode that has aired but is missing from the local library
           const episodeInfo: NewEpisodeInfo = {
             tmdbId: show.tmdbId,
@@ -219,6 +232,7 @@ class ReleaseMonitor {
             airDate,
             posterPath,
             qualityPreference: show.qualityPreference,
+            target: effectiveTarget,
           };
 
           // Upsert into episode_releases

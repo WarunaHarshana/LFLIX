@@ -10,6 +10,9 @@ export async function GET(request: Request) {
     const showIdStr = searchParams.get('showId');
     const autoDownload = searchParams.get('autoDownload') === 'true';
 
+    const targetParam = searchParams.get('target');
+    const validTarget = targetParam && ['local', 'gdrive', 'cloud'].includes(targetParam) ? targetParam : null;
+
     if (!showIdStr) return NextResponse.json({ error: 'showId is required' }, { status: 400 });
 
     try {
@@ -83,9 +86,23 @@ export async function GET(request: Request) {
         }
 
         if (autoDownload && episodeMeta) {
-            const trackStmt = db.prepare('SELECT qualityPreference FROM auto_track WHERE showId = ?');
-            const trackResult = trackStmt.get(showId) as { qualityPreference: string } | undefined;
+            const trackStmt = db.prepare('SELECT qualityPreference, target FROM auto_track WHERE showId = ?');
+            const trackResult = trackStmt.get(showId) as { qualityPreference?: string; target?: string } | undefined;
             const qualityPref = trackResult?.qualityPreference || 'best';
+
+            let targetPref: 'local' | 'gdrive' | 'cloud' = 'local';
+            if (validTarget) {
+                targetPref = validTarget as any;
+            } else if (trackResult?.target && ['local', 'gdrive', 'cloud'].includes(trackResult.target)) {
+                targetPref = trackResult.target as any;
+            } else {
+                try {
+                    const globalSetting = db.prepare("SELECT value FROM settings WHERE key = 'autoDownloadTarget'").get() as { value: string } | undefined;
+                    if (globalSetting?.value === 'gdrive' || globalSetting?.value === 'cloud') {
+                        targetPref = globalSetting.value as any;
+                    }
+                } catch { /* ignore */ }
+            }
 
             const newRelease = {
                 showId: show.id,
@@ -97,6 +114,7 @@ export async function GET(request: Request) {
                 airDate: episodeMeta.air_date || new Date().toISOString().split('T')[0],
                 posterPath: show.posterPath,
                 qualityPreference: qualityPref,
+                target: targetPref,
                 isManual: true
             };
 

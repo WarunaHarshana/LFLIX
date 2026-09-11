@@ -144,6 +144,7 @@ type AutoTrackEntry = {
     showId: number;
     enabled: number;
     qualityPreference: string;
+    target?: string;
 };
 
 type CollectionData = {
@@ -218,6 +219,20 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
     const [isTracking, setIsTracking] = useState(false);
     const [trackLoading, setTrackLoading] = useState(false);
     const [qualityPref, setQualityPref] = useState('best');
+    const [targetPref, setTargetPref] = useState('local');
+    const [gdriveAvailable, setGdriveAvailable] = useState(false);
+    const [cloudAvailable, setCloudAvailable] = useState(false);
+
+    const DESTINATION_OPTIONS = useMemo(() => {
+        const opts = [
+            { id: 'local', name: 'Local Disk' },
+            { id: 'gdrive', name: 'Google Drive' },
+        ];
+        if (cloudAvailable) {
+            opts.push({ id: 'cloud', name: 'Cloud Worker' });
+        }
+        return opts;
+    }, [cloudAvailable]);
 
     const filteredPersonCredits = useMemo(() => {
         const credits = personData?.credits || [];
@@ -247,19 +262,40 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
         setVisiblePersonCredits(8);
     }, [personCreditFilter, personCreditSort]);
 
-    // Check if show is being tracked
+    // Check if show is being tracked and fetch destination settings
     const checkTrackingStatus = useCallback(async () => {
         if (item.type !== 'show' || !item.tmdbId) return;
         try {
-            const res = await fetch('/api/auto-track');
-            if (!res.ok) return;
-            const data = await res.json();
-            const tracked = ((data.tracked || []) as AutoTrackEntry[]).find((t) => t.showId === item.id);
-            if (tracked) {
-                setIsTracking(!!tracked.enabled);
-                setQualityPref(tracked.qualityPreference || 'best');
-            } else {
-                setIsTracking(false);
+            const [trackRes, settingsRes] = await Promise.all([
+                fetch('/api/auto-track'),
+                fetch('/api/settings').catch(() => null)
+            ]);
+
+            let globalTarget = 'local';
+            if (settingsRes && settingsRes.ok) {
+                const s = await settingsRes.json();
+                if (s.gdriveEnabled === 'true' || s.gdriveRemote || s.gdriveMountDrive) {
+                    setGdriveAvailable(true);
+                }
+                if (s.cloudEnabled === 'true' || s.cloudWorkerUrl) {
+                    setCloudAvailable(true);
+                }
+                if (s.autoDownloadTarget) {
+                    globalTarget = s.autoDownloadTarget;
+                }
+            }
+
+            if (trackRes.ok) {
+                const data = await trackRes.json();
+                const tracked = ((data.tracked || []) as AutoTrackEntry[]).find((t) => t.showId === item.id);
+                if (tracked) {
+                    setIsTracking(!!tracked.enabled);
+                    setQualityPref(tracked.qualityPreference || 'best');
+                    setTargetPref(tracked.target || globalTarget || 'local');
+                } else {
+                    setIsTracking(false);
+                    setTargetPref(globalTarget || 'local');
+                }
             }
         } catch { /* ignore */ }
     }, [item.id, item.type, item.tmdbId]);
@@ -286,6 +322,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                         tmdbId: item.tmdbId,
                         title: item.title,
                         qualityPreference: qualityPref,
+                        target: targetPref,
                     }),
                 });
                 setIsTracking(true);
@@ -302,6 +339,19 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ showId: item.id, qualityPreference: quality }),
+                });
+            } catch { /* ignore */ }
+        }
+    };
+
+    const updateTargetPref = async (target: string) => {
+        setTargetPref(target);
+        if (isTracking) {
+            try {
+                await fetch('/api/auto-track', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ showId: item.id, target }),
                 });
             } catch { /* ignore */ }
         }
@@ -611,16 +661,28 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                         {isTracking ? 'Tracking' : 'Auto-Track'}
                                     </button>
                                     {isTracking && (
-                                        <LiquidDropdown
-                                            label="Quality"
-                                            title="Preferred Quality"
-                                            options={QUALITY_OPTIONS}
-                                            value={qualityPref}
-                                            onChange={(val) => updateQualityPref(val)}
-                                            align="left"
-                                            className="min-w-[130px]"
-                                            pillClassName="liquid-glass-pill px-3 py-1.5 rounded-xl flex items-center justify-between gap-2 text-xs font-semibold text-neutral-200 hover:text-white cursor-pointer"
-                                        />
+                                        <>
+                                            <LiquidDropdown
+                                                label="Quality"
+                                                title="Preferred Quality"
+                                                options={QUALITY_OPTIONS}
+                                                value={qualityPref}
+                                                onChange={(val) => updateQualityPref(val)}
+                                                align="left"
+                                                className="min-w-[130px]"
+                                                pillClassName="liquid-glass-pill px-3 py-1.5 rounded-xl flex items-center justify-between gap-2 text-xs font-semibold text-neutral-200 hover:text-white cursor-pointer"
+                                            />
+                                            <LiquidDropdown
+                                                label="Destination"
+                                                title="Download Destination"
+                                                options={DESTINATION_OPTIONS}
+                                                value={targetPref}
+                                                onChange={(val) => updateTargetPref(val)}
+                                                align="left"
+                                                className="min-w-[140px]"
+                                                pillClassName="liquid-glass-pill px-3 py-1.5 rounded-xl flex items-center justify-between gap-2 text-xs font-semibold text-neutral-200 hover:text-white cursor-pointer"
+                                            />
+                                        </>
                                     )}
                                 </div>
                             )}

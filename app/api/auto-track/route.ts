@@ -24,7 +24,7 @@ export async function GET() {
 // POST — add a show to auto-tracking
 export async function POST(req: Request) {
   try {
-    const { showId, tmdbId, title, qualityPreference } = await readJsonObject(req);
+    const { showId, tmdbId, title, qualityPreference, target } = await readJsonObject(req);
 
     if (!showId || !tmdbId || !title) {
       return NextResponse.json({ error: 'Missing required fields: showId, tmdbId, title' }, { status: 400 });
@@ -40,12 +40,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Show is not in the library' }, { status: 404 });
     }
 
+    const validTarget = typeof target === 'string' && ['local', 'gdrive', 'cloud'].includes(target) ? target : 'local';
+
     const stmt = db.prepare(`
-      INSERT OR IGNORE INTO auto_track (showId, tmdbId, title, qualityPreference)
-      VALUES (?, ?, ?, ?)
+      INSERT OR IGNORE INTO auto_track (showId, tmdbId, title, qualityPreference, target)
+      VALUES (?, ?, ?, ?, ?)
     `);
 
-    const result = stmt.run(showId, tmdbId, title, qualityPreference || 'best');
+    const result = stmt.run(showId, tmdbId, title, qualityPreference || 'best', validTarget);
 
     if (result.changes === 0) {
       return NextResponse.json({ message: 'Already tracking this show', alreadyExists: true });
@@ -73,7 +75,7 @@ export async function POST(req: Request) {
 // PATCH — update tracking settings
 export async function PATCH(req: Request) {
   try {
-    const { id, showId, enabled, qualityPreference } = await readJsonObject(req);
+    const { id, showId, enabled, qualityPreference, target } = await readJsonObject(req);
 
     const trackId = id || showId;
     if (!trackId) {
@@ -89,6 +91,10 @@ export async function PATCH(req: Request) {
 
     if (qualityPreference) {
       db.prepare(`UPDATE auto_track SET qualityPreference = ? WHERE ${field} = ?`).run(qualityPreference, trackId);
+    }
+
+    if (typeof target === 'string' && ['local', 'gdrive', 'cloud'].includes(target)) {
+      db.prepare(`UPDATE auto_track SET target = ? WHERE ${field} = ?`).run(target, trackId);
     }
 
     return NextResponse.json({ success: true });

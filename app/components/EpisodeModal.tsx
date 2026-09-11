@@ -105,7 +105,50 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
     
     const [isDownloadingNext, setIsDownloadingNext] = useState(false);
     const [downloadNextQuery, setDownloadNextQuery] = useState<string | null>(null);
+    const [downloadTarget, setDownloadTarget] = useState<'local' | 'gdrive' | 'cloud'>('local');
+    const [gdriveAvailable, setGdriveAvailable] = useState(false);
+    const [cloudAvailable, setCloudAvailable] = useState(false);
     const { toast, showToast } = useToast();
+
+    // Check tracking & global settings for destination preference
+    useEffect(() => {
+        let cancelled = false;
+        const checkDestination = async () => {
+            try {
+                const [trackRes, settingsRes] = await Promise.all([
+                    fetch('/api/auto-track'),
+                    fetch('/api/settings').catch(() => null)
+                ]);
+
+                let target: 'local' | 'gdrive' | 'cloud' = 'local';
+                if (settingsRes && settingsRes.ok) {
+                    const s = await settingsRes.json();
+                    if (s.gdriveEnabled === 'true' || s.gdriveRemote || s.gdriveMountDrive) {
+                        if (!cancelled) setGdriveAvailable(true);
+                    }
+                    if (s.cloudEnabled === 'true' || s.cloudWorkerUrl) {
+                        if (!cancelled) setCloudAvailable(true);
+                    }
+                    if (s.autoDownloadTarget && ['local', 'gdrive', 'cloud'].includes(s.autoDownloadTarget)) {
+                        target = s.autoDownloadTarget;
+                    }
+                }
+
+                if (trackRes && trackRes.ok) {
+                    const data = await trackRes.json();
+                    const tracked = ((data.tracked || []) as Array<{ showId: number; target?: string }>).find(t => t.showId === show.id);
+                    if (tracked?.target && ['local', 'gdrive', 'cloud'].includes(tracked.target)) {
+                        target = tracked.target as any;
+                    }
+                }
+                if (!cancelled) {
+                    setDownloadTarget(target);
+                }
+            } catch { /* ignore */ }
+        };
+        checkDestination();
+        return () => { cancelled = true; };
+    }, [show.id]);
 
     // Reset active season when seasons change (new show opened)
     useEffect(() => {
@@ -157,7 +200,8 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                 body: JSON.stringify({
                     showId: show.id,
                     tmdbId: show.tmdbId,
-                    seasonNumber: activeSeason
+                    seasonNumber: activeSeason,
+                    target: downloadTarget,
                 })
             });
             const data = await res.json();
@@ -177,7 +221,7 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
         if (!show.id) return;
         setIsDownloadingNext(true);
         try {
-            const res = await fetch(`/api/episodes/next?showId=${show.id}&autoDownload=true`);
+            const res = await fetch(`/api/episodes/next?showId=${show.id}&autoDownload=true&target=${downloadTarget}`);
             const data = await res.json();
             if (res.ok && data.queued) {
                 showToast(data.message || 'Next episode download queued', 'success');
@@ -567,6 +611,49 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                 </h3>
                                 {show.tmdbId && (
                                     <div className="flex items-center gap-2 flex-wrap">
+                                        <div className="flex items-center p-0.5 liquid-glass-pill rounded-xl border border-white/10 text-xs mr-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setDownloadTarget('local')}
+                                                className={`px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                                                    downloadTarget === 'local'
+                                                        ? 'bg-white/20 text-white shadow-sm font-semibold'
+                                                        : 'text-neutral-400 hover:text-white'
+                                                }`}
+                                                title="Save to local drive"
+                                            >
+                                                <span>💻</span>
+                                                <span className="hidden sm:inline">Local</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setDownloadTarget('gdrive')}
+                                                className={`px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                                                    downloadTarget === 'gdrive'
+                                                        ? 'bg-blue-500/30 text-blue-300 border border-blue-500/40 shadow-sm font-semibold'
+                                                        : 'text-neutral-400 hover:text-white'
+                                                }`}
+                                                title="Save to Google Drive"
+                                            >
+                                                <span>☁️</span>
+                                                <span>Drive</span>
+                                            </button>
+                                            {cloudAvailable && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDownloadTarget('cloud')}
+                                                    className={`px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                                                        downloadTarget === 'cloud'
+                                                            ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40 shadow-sm font-semibold'
+                                                            : 'text-neutral-400 hover:text-white'
+                                                    }`}
+                                                    title="Save via Cloud Worker"
+                                                >
+                                                    <span>⚡</span>
+                                                    <span className="hidden sm:inline">Cloud</span>
+                                                </button>
+                                            )}
+                                        </div>
                                         <button aria-label={`Download next episode globally across all seasons`}
                                             onClick={handleDownloadNext}
                                             disabled={isDownloadingNext}

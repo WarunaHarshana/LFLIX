@@ -94,8 +94,31 @@ if defined STALE_PID (
         echo Held by "!STALE_NAME!" ^(PID %STALE_PID%^), which is not LFLIX.
         echo LFLIX will start on a different port - watch the address printed below.
         echo.
-        timeout /t 4 >nul
+        timeout /t 2 >nul
     )
+)
+
+:: ---------------------------------------------------------------------------
+:: Detect available port.
+:: If port 3000 is blocked by Windows (Hyper-V / WinNAT exclusion),
+:: automatically fall back to 4000, 3550, or 8080.
+:: ---------------------------------------------------------------------------
+set "LFLIX_PORT=3000"
+for /f %%p in ('node -e "const http=require('http'); const ports=[3000,4000,3550,8080]; function test(i){ if(i>=ports.length){console.log(3000);process.exit(0);} const s=http.createServer(); s.listen(ports[i],'0.0.0.0',()=>{ s.close(()=>{ console.log(ports[i]); process.exit(0); }); }).on('error',()=>{ test(i+1); }); } test(0);"') do set "LFLIX_PORT=%%p"
+
+if not "!LFLIX_PORT!"=="3000" (
+    echo ==========================================
+    echo    NOTICE: Port 3000 reserved by Windows
+    echo ==========================================
+    echo Windows Hyper-V / WinNAT has reserved port 3000.
+    echo Starting LFLIX on port !LFLIX_PORT! instead:
+    echo.
+    echo    http://localhost:!LFLIX_PORT!
+    echo.
+    echo ^(To reclaim port 3000, open CMD as Administrator and run:
+    echo  net stop winnat ^&^& net start winnat^)
+    echo ==========================================
+    echo.
 )
 
 echo ==========================================
@@ -105,20 +128,21 @@ echo.
 echo The server will start below.
 echo The browser will open automatically once ready.
 echo.
-echo    http://localhost:3000
+echo    http://localhost:!LFLIX_PORT!
 echo.
 echo Please stop the server with Ctrl+C rather than closing this window,
-echo so it releases port 3000 for next time.
+echo so it releases port !LFLIX_PORT! for next time.
 echo ==========================================
 echo.
 
 :: Wait for the server to be ready, then open the browser.
 :: -f matters: without it curl treats a 404 as success, which is exactly how the
 :: orphaned-server case managed to open a broken page.
-start /b cmd /c "for /L %%i in (1,1,45) do (curl -sf -o nul http://localhost:3000/api/ping && start http://localhost:3000 && exit /b 0 || timeout /t 2 >nul) & echo Browser auto-open timed out - open http://localhost:3000 manually."
+start /b cmd /c "for /L %%i in (1,1,45) do (curl -sf -o nul http://localhost:!LFLIX_PORT!/api/ping && start http://localhost:!LFLIX_PORT! && exit /b 0 || timeout /t 2 >nul) & echo Browser auto-open timed out - open http://localhost:!LFLIX_PORT! manually."
 
 :: Start the server (this blocks)
-npm run dev
+set "PORT=!LFLIX_PORT!"
+call npm run dev -- -p !LFLIX_PORT!
 
 :: If server stops
 echo.
