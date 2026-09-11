@@ -97,7 +97,20 @@ function flattenEmbeds(blocks: StreamiEmbedBlock[] | undefined): { language: str
   for (const block of blocks) {
     const embeds = Array.isArray(block.embeds) ? block.embeds : Object.values(block.embeds);
     for (const e of embeds) {
-      flat.push({ language: block.language, embed: e.embed, label: e.label });
+      if (!e || !e.embed) continue;
+      const trimmedEmbed = e.embed.trim();
+      // Discard invalid / empty placeholder links (e.g. https://streami.fit/live/?channel_id=)
+      if (
+        !trimmedEmbed.startsWith('http') ||
+        trimmedEmbed.endsWith('channel_id=') ||
+        trimmedEmbed.endsWith('channel_id=null') ||
+        trimmedEmbed.endsWith('channel_id=undefined') ||
+        trimmedEmbed.endsWith('/live/?') ||
+        trimmedEmbed.endsWith('/embed/')
+      ) {
+        continue;
+      }
+      flat.push({ language: block.language, embed: trimmedEmbed, label: e.label });
     }
   }
   return flat;

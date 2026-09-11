@@ -28,78 +28,158 @@ export type XyzStream = {
 };
 
 /**
- * Parses the EVENTS_DATA array from the homepage HTML.
+ * Extracts a JavaScript/JSON array assigned to a variable name using balanced bracket parsing.
  */
-function parseEventsData(html: string): XyzEvent[] {
-  const match = html.match(/const\s+EVENTS_DATA\s*=\s*(\[[\s\S]*?\]);/);
-  if (!match) return [];
-  
-  try {
-    let jsText = match[1];
-    // Remove comments safely (not stripping HLS/URL double slashes)
-    jsText = jsText.replace(/(?<!:)\/\/.*$/gm, '');
-    // Convert single quotes to double quotes for JSON parsing
-    jsText = jsText.replace(/'/g, '"');
-    // Quote unquoted object keys (ignoring http:// and https://)
-    jsText = jsText.replace(/([a-zA-Z0-9_]+)\s*:(?!\/\/)/g, '"$1":');
-    // Remove trailing commas
-    jsText = jsText.replace(/,\s*\]/g, ']');
-    jsText = jsText.replace(/,\s*\}/g, '}');
-    
-    return JSON.parse(jsText);
-  } catch (err) {
-    // Regex fallback
-    const objRegex = /\{\s*title:\s*"([^"]+)"[\s\S]*?href:\s*"([^"]+)"[\s\S]*?start:\s*"([^"]+)"[\s\S]*?end:\s*"([^"]+)"[\s\S]*?category:\s*"([^"]+)"/g;
-    const results: XyzEvent[] = [];
-    let m;
-    while ((m = objRegex.exec(match[1])) !== null) {
-      results.push({
-        title: m[1],
-        href: m[2],
-        start: m[3],
-        end: m[4],
-        category: m[5]
-      });
+export function extractJsonArray(html: string, varName: string): any[] {
+  const markerRegex = new RegExp(`(?:const|let|var)?\\s*${varName}\\s*=\\s*\\[`);
+  const match = html.match(markerRegex);
+  if (!match || match.index === undefined) return [];
+
+  const arrayStart = html.indexOf('[', match.index);
+  if (arrayStart === -1) return [];
+
+  let depth = 0;
+  let inString = false;
+  let stringChar = '';
+  let escape = false;
+
+  for (let i = arrayStart; i < html.length; i++) {
+    const char = html[i];
+    if (escape) {
+      escape = false;
+      continue;
     }
-    return results;
+    if (char === '\\') {
+      escape = true;
+      continue;
+    }
+    if (inString) {
+      if (char === stringChar) {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      inString = true;
+      stringChar = char;
+      continue;
+    }
+    if (char === '[') {
+      depth++;
+    } else if (char === ']') {
+      depth--;
+      if (depth === 0) {
+        const raw = html.substring(arrayStart, i + 1);
+        try {
+          return JSON.parse(raw);
+        } catch {
+          try {
+            return (new Function(`return ${raw}`))();
+          } catch {
+            return [];
+          }
+        }
+      }
+    }
   }
+  return [];
 }
 
 /**
- * Parses the streams array from a channel HTML page.
+ * Parses the EVENTS_DATA array from the homepage HTML.
  */
-function parseStreamsData(html: string): XyzStream[] {
-  const match = html.match(/const\s+streams\s*=\s*(\[[\s\S]*?\]);/);
-  if (!match) return [];
-  
-  try {
-    let jsText = match[1];
-    // Remove comments safely (not stripping HLS/URL double slashes)
-    jsText = jsText.replace(/(?<!:)\/\/.*$/gm, '');
-    // Convert single quotes to double quotes for JSON parsing
-    jsText = jsText.replace(/'/g, '"');
-    // Quote unquoted object keys (ignoring http:// and https://)
-    jsText = jsText.replace(/([a-zA-Z0-9_]+)\s*:(?!\/\/)/g, '"$1":');
-    // Remove trailing commas
-    jsText = jsText.replace(/,\s*\]/g, ']');
-    jsText = jsText.replace(/,\s*\}/g, '}');
-    
-    return JSON.parse(jsText);
-  } catch (err) {
-    // Regex fallback
-    const objRegex = /\{\s*server:\s*"([^"]+)"[\s\S]*?btnName:\s*"([^"]+)"[\s\S]*?title:\s*"([^"]+)"[\s\S]*?file:\s*"([^"]+)"/g;
-    const results: XyzStream[] = [];
-    let m;
-    while ((m = objRegex.exec(match[1])) !== null) {
-      results.push({
-        server: m[1],
-        btnName: m[2],
-        title: m[3],
-        file: m[4]
+export function parseEventsData(html: string): XyzEvent[] {
+  const events = extractJsonArray(html, 'EVENTS_DATA');
+  if (events && Array.isArray(events) && events.length > 0) {
+    return events;
+  }
+
+  // Regex fallback
+  const objRegex = /\{\s*["']?title["']?\s*:\s*["']([^"']+)["'][\s\S]*?["']?href["']?\s*:\s*["']([^"']+)["'][\s\S]*?["']?start["']?\s*:\s*["']([^"']+)["'][\s\S]*?["']?end["']?\s*:\s*["']([^"']+)["'][\s\S]*?["']?category["']?\s*:\s*["']([^"']*)["']/g;
+  const results: XyzEvent[] = [];
+  let m;
+  while ((m = objRegex.exec(html)) !== null) {
+    results.push({
+      title: m[1],
+      href: m[2],
+      start: m[3],
+      end: m[4],
+      category: m[5] || ''
+    });
+  }
+  return results;
+}
+
+/**
+ * Parses streams from a channel HTML page, supporting both embedded scripts,
+ * modern iframe player targets, and stream selector buttons.
+ */
+export function parseStreamsData(html: string): XyzStream[] {
+  // 1. Try script array 'streams'
+  const scriptStreams = extractJsonArray(html, 'streams');
+  if (scriptStreams && Array.isArray(scriptStreams) && scriptStreams.length > 0) {
+    return scriptStreams;
+  }
+
+  const detectedStreams: XyzStream[] = [];
+  const seenUrls = new Set<string>();
+
+  // 2. Look for stream switcher buttons with data-url: <button class="...stream-btn..." data-url="...">
+  const btnRegex = /<[^>]+class=["'][^"']*stream-btn[^"']*["'][^>]*data-url=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[^>]+>/gi;
+  let btnMatch;
+  let serverIdx = 1;
+  while ((btnMatch = btnRegex.exec(html)) !== null) {
+    const streamUrl = btnMatch[1].trim();
+    const btnLabel = btnMatch[2].replace(/<[^>]+>/g, '').trim();
+    if (streamUrl && !seenUrls.has(streamUrl)) {
+      seenUrls.add(streamUrl);
+      detectedStreams.push({
+        server: `Server ${serverIdx++}`,
+        btnName: btnLabel || `Stream ${detectedStreams.length + 1}`,
+        title: btnLabel || `Stream ${detectedStreams.length + 1}`,
+        file: streamUrl,
+        embedUrl: streamUrl
       });
     }
-    return results;
   }
+
+  // 3. Look for default stream-player iframe: <iframe ... id="stream-player" ... src="...">
+  const playerIframeMatch = html.match(/<iframe[^>]+id=["']stream-player["'][^>]+src=["']([^"']+)["']/i) ||
+                            html.match(/<iframe[^>]+src=["']([^"']+)["'][^>]+id=["']stream-player["']/i);
+  if (playerIframeMatch) {
+    const mainEmbedUrl = playerIframeMatch[1].trim();
+    if (mainEmbedUrl && !seenUrls.has(mainEmbedUrl)) {
+      seenUrls.add(mainEmbedUrl);
+      detectedStreams.unshift({
+        server: 'Primary Server',
+        btnName: 'Main Stream',
+        title: 'Main Stream',
+        file: mainEmbedUrl,
+        embedUrl: mainEmbedUrl
+      });
+    }
+  }
+
+  // 4. Fallback: look for any iframe with embed or player src
+  if (detectedStreams.length === 0) {
+    const anyIframeRegex = /<iframe[^>]+src=["']([^"']+)["']/gi;
+    let ifm;
+    while ((ifm = anyIframeRegex.exec(html)) !== null) {
+      const src = ifm[1].trim();
+      if ((src.includes('embed') || src.includes('player') || src.includes('stream') || src.endsWith('.m3u8')) && !seenUrls.has(src)) {
+        seenUrls.add(src);
+        detectedStreams.push({
+          server: `Server ${detectedStreams.length + 1}`,
+          btnName: `Stream ${detectedStreams.length + 1}`,
+          title: `Stream ${detectedStreams.length + 1}`,
+          file: src,
+          embedUrl: src
+        });
+      }
+    }
+  }
+
+  return detectedStreams;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchStreamiEvents, getStreamiTitle, mapStreamiCategory } from '@/lib/streami';
+import { fetchStreamiEvents, getStreamiTitle, mapStreamiCategory, getStreamiStreams } from '@/lib/streami';
 import { fetchXyzEvents } from '@/lib/xyzstreams';
 import { fetchTimStreamsEvents, parseTimStreamsTimeToUTC, mapTimStreamsCategory, extractTeamsFromTitle } from '@/lib/timstreams';
 
@@ -226,6 +226,7 @@ export function matchesSportFilter(matchCategory: string, requestedSport: string
 
   // Aliases for Football
   if (req === 'football' && ['soccer', 'futsal'].includes(matchCat)) return true;
+  if (['soccer', 'futsal'].includes(req) && matchCat === 'football') return true;
 
   return false;
 }
@@ -236,13 +237,14 @@ function getMatchKey(match: any): string {
     const t2 = match.teams.away.name.toLowerCase().replace(/[^a-z0-9]/g, '');
     return [t1, t2].sort().join('-vs-');
   }
-  const vsMatch = match.title.match(/(.+?)\s*(?:vs\.?|v\.|@|[-–])\s*(.+)/i);
+  const vsMatch = (match.title || '').match(/(.+?)\s*(?:vs\.?|v\.|@|[-–])\s*(.+)/i);
   if (vsMatch) {
     const t1 = vsMatch[1].toLowerCase().replace(/[^a-z0-9]/g, '');
     const t2 = vsMatch[2].toLowerCase().replace(/[^a-z0-9]/g, '');
     return [t1, t2].sort().join('-vs-');
   }
-  return match.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cat = (match.category || 'other').toLowerCase();
+  return `${cat}-${(match.title || '').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 }
 
 function normalizeKey(str?: string | null): string {
@@ -477,6 +479,12 @@ export async function GET(request: Request) {
         });
       } else if (type === 'popular') {
         rawMatches = rawMatches.filter((match: any) => match.popular);
+      } else if (type === 'today') {
+        const now = Date.now();
+        // Today window: matches that started within the last 4 hours or start in the next 30 hours
+        rawMatches = rawMatches.filter((match: any) => {
+          return match.date >= (now - 4 * 3600 * 1000) && match.date <= (now + 30 * 3600 * 1000);
+        });
       }
 
       // Apply sport filtering
@@ -497,43 +505,49 @@ export async function GET(request: Request) {
   try {
     const streamiEvents = await fetchStreamiEvents();
 
-    let rawStreamiMatches = streamiEvents.map((event) => {
-      const title = getStreamiTitle(event);
-      const mappedCategory = mapStreamiCategory(event.category);
-      const normalizedCat = normalizeSportCategory(mappedCategory, title);
-      const dateMs = event.startTime * 1000;
-      const now = Date.now();
-      const isLive = (now >= dateMs - 30 * 60 * 1000) && (now <= dateMs + 4 * 3600 * 1000);
-      const has4k = event._embeds?.some(block => {
-        const embeds = Array.isArray(block.embeds) ? block.embeds : Object.values(block.embeds);
-        return embeds.some((e: any) =>
-          e.label && (e.label.toLowerCase().includes('4k') || e.label.toLowerCase().includes('uhd'))
-        );
-      });
+    let rawStreamiMatches = streamiEvents
+      .filter((event) => {
+        // Discard events without any valid embeds
+        const activeStreams = getStreamiStreams(event);
+        return activeStreams.length > 0;
+      })
+      .map((event) => {
+        const title = getStreamiTitle(event);
+        const mappedCategory = mapStreamiCategory(event.category);
+        const normalizedCat = normalizeSportCategory(mappedCategory, title);
+        const dateMs = event.startTime * 1000;
+        const now = Date.now();
+        const isLive = (now >= dateMs - 30 * 60 * 1000) && (now <= dateMs + 4 * 3600 * 1000);
+        const has4k = event._embeds?.some(block => {
+          const embeds = Array.isArray(block.embeds) ? block.embeds : Object.values(block.embeds);
+          return embeds.some((e: any) =>
+            e.label && (e.label.toLowerCase().includes('4k') || e.label.toLowerCase().includes('uhd'))
+          );
+        });
 
-      // Try to extract team names from title (supports "Team A - Team B" format)
-      let teams: any = undefined;
-      const vsMatch = title.match(/^(.+?)\s*[-–vs.]+\s*(.+)$/i);
-      if (vsMatch && mappedCategory !== 'pinned' && mappedCategory !== 'tv') {
-        teams = {
-          home: { name: vsMatch[1].trim() },
-          away: { name: vsMatch[2].trim() },
+        // Try to extract team names from title (supports "Team A - Team B" format)
+        let teams: any = undefined;
+        const vsMatch = title.match(/^(.+?)\s*[-–vs.]+\s*(.+)$/i);
+        if (vsMatch && mappedCategory !== 'pinned' && mappedCategory !== 'tv') {
+          teams = {
+            home: { name: vsMatch[1].trim() },
+            away: { name: vsMatch[2].trim() },
+          };
+        }
+
+        return {
+          id: `streami-${event.id}`,
+          title,
+          category: mappedCategory === 'pinned' || mappedCategory === 'tv' ? 'other' : normalizedCat,
+          date: dateMs,
+          poster: null,
+          popular: event.category === 'pilkanozna_wazne' || event.category === 'przypiete',
+          teams,
+          sources: [{ source: 'streami', id: event.id }],
+          isLive,
+          is4k: !!has4k,
         };
-      }
-
-      return {
-        id: `streami-${event.id}`,
-        title,
-        category: mappedCategory === 'pinned' || mappedCategory === 'tv' ? 'other' : normalizedCat,
-        date: dateMs,
-        poster: null,
-        popular: event.category === 'pilkanozna_wazne' || event.category === 'przypiete',
-        teams,
-        sources: [{ source: 'streami', id: event.id }],
-        isLive,
-        is4k: !!has4k,
-      };
-    });
+      });
 
     // Filter out pinned/TV items for sport queries
     rawStreamiMatches = rawStreamiMatches.filter((m: any) => m.category !== 'pinned' && m.category !== 'tv');
@@ -548,6 +562,11 @@ export async function GET(request: Request) {
       });
     } else if (type === 'popular') {
       rawStreamiMatches = rawStreamiMatches.filter((match: any) => match.popular);
+    } else if (type === 'today') {
+      const now = Date.now();
+      rawStreamiMatches = rawStreamiMatches.filter((match: any) => {
+        return match.date >= (now - 4 * 3600 * 1000) && match.date <= (now + 30 * 3600 * 1000);
+      });
     }
 
     // Apply sport filtering
@@ -612,6 +631,11 @@ export async function GET(request: Request) {
       });
     } else if (type === 'popular') {
       rawXyzMatches = rawXyzMatches.filter((match: any) => match.popular);
+    } else if (type === 'today') {
+      const now = Date.now();
+      rawXyzMatches = rawXyzMatches.filter((match: any) => {
+        return match.date >= (now - 4 * 3600 * 1000) && match.date <= (now + 30 * 3600 * 1000);
+      });
     }
 
     // Apply sport filtering

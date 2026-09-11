@@ -302,6 +302,7 @@ function matchesSport(matchCat: string, targetSport: string): boolean {
   if (t === 'afl' && m === 'rugby') return true;
 
   if (t === 'football' && ['soccer', 'futsal'].includes(m)) return true;
+  if (['soccer', 'futsal'].includes(t) && m === 'football') return true;
 
   return false;
 }
@@ -829,24 +830,13 @@ export default function LiveSports({ onClose }: Props) {
       if (m.is4k) counts['4k'] = (counts['4k'] || 0) + 1;
       const cat = (m.category || 'other').toLowerCase();
       counts[cat] = (counts[cat] || 0) + 1;
-
-      // Handle aliases
-      if (cat === 'fight') {
-        counts['mma'] = (counts['mma'] || 0) + 1;
-        counts['boxing'] = (counts['boxing'] || 0) + 1;
-      }
-      if (cat === 'motor-sports') {
-        counts['formula1'] = (counts['formula1'] || 0) + 1;
-      }
-      if (cat === 'billiards') {
-        counts['snooker'] = (counts['snooker'] || 0) + 1;
-      }
-      if (cat === 'rugby') {
-        counts['afl'] = (counts['afl'] || 0) + 1;
-      }
+    }
+    for (const sport of sports) {
+      const sportKey = sport.id.toLowerCase();
+      counts[sportKey] = rawMatches.filter(m => matchesSport(m.category, sportKey)).length;
     }
     return counts;
-  }, [rawMatches]);
+  }, [rawMatches, sports]);
 
   // Client-side filtering for fast and responsive UX
   const filteredMatches = useMemo(() => {
@@ -884,6 +874,7 @@ export default function LiveSports({ onClose }: Props) {
     setSelectedMatch(match);
     setSelectedStream(null);
     setStreams([]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 
     try {
       const fetchPromises = match.sources.map(async (source) => {
@@ -1132,7 +1123,8 @@ export default function LiveSports({ onClose }: Props) {
         <div className="pt-28 sm:pt-24 pb-12">
           <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-12">
             {/* Active Stream Player Theater Mode */}
-            {selectedMatch && selectedStream && (
+            {/* Active Stream Player Theater Mode */}
+            {selectedMatch && (
               <div className="mb-8 animate-fade-in">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Video Player (2/3 width) */}
@@ -1153,11 +1145,44 @@ export default function LiveSports({ onClose }: Props) {
                         top: 0,
                         left: 0
                       } : undefined}
-                      className={`relative bg-black rounded-3xl overflow-hidden border border-white/15 shadow-2xl shadow-black/90 aspect-video flex items-center justify-center transition-all duration-300 ${
-                        !showControls ? 'cursor-none' : 'cursor-pointer'
-                      }`}
+                      className="relative bg-black rounded-3xl overflow-hidden border border-white/15 shadow-2xl shadow-black/90 aspect-video flex items-center justify-center transition-all duration-300"
                     >
-                      {!selectedStream.embedUrl ? (
+                      {loadingStreams ? (
+                        <div className="flex flex-col items-center justify-center p-8 text-center gap-3">
+                          <div className="animate-spin rounded-full h-10 w-10 border-2 border-white/20 border-t-red-500" />
+                          <p className="text-white font-bold text-sm sm:text-base">Connecting to Broadcast Feeds...</p>
+                          <p className="text-neutral-400 text-xs max-w-sm">Fetching and prioritizing live stream sources for {selectedMatch.title}</p>
+                        </div>
+                      ) : !selectedStream ? (
+                        <div className="flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto">
+                          <AlertCircle className="w-12 h-12 text-amber-400 mb-3 animate-pulse" />
+                          <h3 className="text-white font-bold text-base mb-1">Broadcast Feeds Not Yet Active</h3>
+                          <p className="text-neutral-400 text-xs sm:text-sm mb-5 leading-relaxed">
+                            Feeds for this match are currently offline. Broadcasters usually activate streaming feeds 15 to 30 minutes before match time.
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => loadStreams(selectedMatch)}
+                              className="px-4 py-2 rounded-xl liquid-btn-primary text-black text-xs font-bold transition-all hover:scale-105 cursor-pointer shadow-md flex items-center gap-1.5"
+                            >
+                              <RotateCw className="w-3.5 h-3.5" />
+                              <span>Check Feeds Again</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedMatch(null);
+                                setSelectedStream(null);
+                                setStreams([]);
+                              }}
+                              className="px-4 py-2 rounded-xl liquid-glass-pill text-neutral-300 hover:text-white text-xs font-semibold transition-all cursor-pointer border border-white/10"
+                            >
+                              Close Player
+                            </button>
+                          </div>
+                        </div>
+                      ) : !selectedStream.embedUrl ? (
                         <div className="flex flex-col items-center justify-center p-6 text-center">
                           <AlertCircle className="w-12 h-12 text-red-500 mb-3 animate-pulse" />
                           <p className="text-neutral-200 font-semibold mb-1">Stream feed unavailable</p>
@@ -1177,6 +1202,8 @@ export default function LiveSports({ onClose }: Props) {
                           className="w-full h-full border-0"
                           allow="autoplay; picture-in-picture; fullscreen *"
                           allowFullScreen
+                          referrerPolicy="no-referrer"
+                          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
                         />
                       ) : (
                         <video
@@ -1213,18 +1240,20 @@ export default function LiveSports({ onClose }: Props) {
                         }`}
                       >
                         {/* Reload Stream Button */}
-                        <button
-                          type="button"
-                          aria-label="Reload Stream"
-                          onClick={() => setStreamReloadKey(k => k + 1)}
-                          className="p-2.5 liquid-glass-pill bg-black/75 hover:bg-black/95 border border-white/20 text-white hover:text-red-400 backdrop-blur-xl rounded-full transition-all cursor-pointer shadow-lg hover:scale-105"
-                          title="Reload Stream"
-                        >
-                          <RotateCw className="w-4 h-4 sm:w-5 sm:h-5" />
-                        </button>
+                        {selectedStream?.embedUrl && (
+                          <button
+                            type="button"
+                            aria-label="Reload Stream"
+                            onClick={() => setStreamReloadKey(k => k + 1)}
+                            className="p-2.5 liquid-glass-pill bg-black/75 hover:bg-black/95 border border-white/20 text-white hover:text-red-400 backdrop-blur-xl rounded-full transition-all cursor-pointer shadow-lg hover:scale-105"
+                            title="Reload Stream"
+                          >
+                            <RotateCw className="w-4 h-4 sm:w-5 sm:h-5" />
+                          </button>
+                        )}
 
                         {/* Open in External Tab Button */}
-                        {selectedStream.embedUrl && (
+                        {selectedStream?.embedUrl && (
                           <button
                             type="button"
                             aria-label="Open Stream in External Tab"
@@ -1237,15 +1266,17 @@ export default function LiveSports({ onClose }: Props) {
                         )}
 
                         {/* Fullscreen Button */}
-                        <button
-                          type="button"
-                          aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-                          onClick={toggleFullscreen}
-                          className="p-2.5 liquid-glass-pill bg-black/75 hover:bg-black/95 border border-white/20 text-white hover:text-red-400 backdrop-blur-xl rounded-full transition-all cursor-pointer shadow-lg hover:scale-105"
-                          title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-                        >
-                          {isFullscreen ? <Minimize className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize className="w-4 h-4 sm:w-5 sm:h-5" />}
-                        </button>
+                        {selectedStream?.embedUrl && (
+                          <button
+                            type="button"
+                            aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                            onClick={toggleFullscreen}
+                            className="p-2.5 liquid-glass-pill bg-black/75 hover:bg-black/95 border border-white/20 text-white hover:text-red-400 backdrop-blur-xl rounded-full transition-all cursor-pointer shadow-lg hover:scale-105"
+                            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                          >
+                            {isFullscreen ? <Minimize className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize className="w-4 h-4 sm:w-5 sm:h-5" />}
+                          </button>
+                        )}
 
                         {/* Close Player Button */}
                         <button
@@ -1265,16 +1296,6 @@ export default function LiveSports({ onClose }: Props) {
                           <X className="w-4 h-4 sm:w-5 sm:h-5" />
                         </button>
                       </div>
-
-                      {/* Invisible activity sensor overlay */}
-                      {!showControls && (
-                        <div
-                          className="absolute inset-0 z-40 bg-transparent cursor-none"
-                          onMouseMove={handleActivity}
-                          onMouseDown={handleActivity}
-                          onTouchStart={handleActivity}
-                        />
-                      )}
                     </div>
                   </div>
 
@@ -1343,44 +1364,69 @@ export default function LiveSports({ onClose }: Props) {
                           </div>
                         </div>
 
-                        {/* Stream Selection Dropdown */}
+                        {/* Stream Selection Dropdown or State */}
                         <div className="flex flex-col gap-2 mb-4 relative z-50" ref={dropdownRef}>
                           <div className="flex items-center justify-between">
                             <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider">Select Stream Feed</span>
-                            <button
-                              type="button"
-                              onClick={() => setSortByQuality(!sortByQuality)}
-                              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-semibold transition-all cursor-pointer border ${
-                                sortByQuality
-                                  ? 'bg-neutral-800 text-neutral-200 border-white/20'
-                                  : 'bg-white/[0.03] border-white/10 text-neutral-400 hover:text-white'
-                              }`}
-                            >
-                              <SlidersHorizontal className="w-3 h-3 text-red-400" />
-                              <span>Sort: Quality First</span>
-                            </button>
+                            {streams.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setSortByQuality(!sortByQuality)}
+                                className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-semibold transition-all cursor-pointer border ${
+                                  sortByQuality
+                                    ? 'bg-neutral-800 text-neutral-200 border-white/20'
+                                    : 'bg-white/[0.03] border-white/10 text-neutral-400 hover:text-white'
+                                }`}
+                              >
+                                <SlidersHorizontal className="w-3 h-3 text-red-400" />
+                                <span>Sort: Quality First</span>
+                              </button>
+                            )}
                           </div>
 
-                          <LiquidDropdown
-                            label="Select a feed..."
-                            title="Available Feeds"
-                            options={getSortedStreams().map((stream) => ({
-                              id: stream.id,
-                              name: getStreamTitle(stream),
-                              badge: (
-                                <span className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-white/[0.08] text-neutral-300 border border-white/10 uppercase tracking-wider shrink-0">
-                                  {stream.source}
-                                </span>
-                              ),
-                            }))}
-                            value={selectedStream?.id || ''}
-                            onChange={(val) => {
-                              const s = streams.find((st) => String(st.id) === String(val));
-                              if (s) setSelectedStream(s);
-                            }}
-                            className="w-full"
-                            menuWidth="w-full"
-                          />
+                          {loadingStreams ? (
+                            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-white/[0.04] border border-white/10 text-neutral-300 text-xs">
+                              <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white/20 border-t-red-500 shrink-0" />
+                              <span>Searching for broadcast feeds...</span>
+                            </div>
+                          ) : streams.length === 0 ? (
+                            <div className="p-3.5 rounded-2xl bg-amber-500/[0.08] border border-amber-500/20 text-amber-200 text-xs flex flex-col gap-2">
+                              <div className="flex items-center gap-1.5 font-bold">
+                                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                                <span>No active feeds right now</span>
+                              </div>
+                              <p className="text-[11px] text-neutral-400">Streams will appear automatically as soon as coverage begins.</p>
+                              <button
+                                type="button"
+                                onClick={() => loadStreams(selectedMatch)}
+                                className="mt-1 px-3 py-1.5 rounded-xl liquid-btn-primary text-black text-[11px] font-bold self-start cursor-pointer flex items-center gap-1"
+                              >
+                                <RotateCw className="w-3 h-3" />
+                                <span>Retry Feeds</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <LiquidDropdown
+                              label="Select a feed..."
+                              title="Available Feeds"
+                              options={getSortedStreams().map((stream) => ({
+                                id: stream.id,
+                                name: getStreamTitle(stream),
+                                badge: (
+                                  <span className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-white/[0.08] text-neutral-300 border border-white/10 uppercase tracking-wider shrink-0">
+                                    {stream.source}
+                                  </span>
+                                ),
+                              }))}
+                              value={selectedStream?.id || ''}
+                              onChange={(val) => {
+                                const s = streams.find((st) => String(st.id) === String(val));
+                                if (s) setSelectedStream(s);
+                              }}
+                              className="w-full"
+                              menuWidth="w-full"
+                            />
+                          )}
                         </div>
 
                         {/* Direct HLS Quality Selector Buttons (when supported) */}
