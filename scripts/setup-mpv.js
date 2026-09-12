@@ -118,7 +118,7 @@ audio-file-auto=exact
 audio-pitch-correction=yes
 
 # === Subtitles ===
-sub-auto=exact
+sub-auto=fuzzy
 sub-file-paths=sub:subs:subtitles
 sub-font="Segoe UI"
 sub-font-size=42
