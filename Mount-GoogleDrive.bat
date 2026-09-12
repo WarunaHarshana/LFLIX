@@ -5,7 +5,7 @@ cls
 
 echo ===================================================
 echo       LFLIX Google Drive Cloud Mount (Z:)
-echo       Optimized: Instant Open (2M) & Instant Close (0s)
+echo       Optimized: Instant Open (2M) ^& Instant Close (0s)
 echo ===================================================
 echo.
 cd /d "%~dp0"
@@ -31,7 +31,7 @@ if not exist "C:\Program Files\WinFsp\bin\winfsp-x64.dll" if not exist "C:\Progr
 
 :: 3. Kill existing rclone mounts
 taskkill /IM rclone.exe /F >nul 2>&1
-timeout /t 1 >nul
+ping 127.0.0.1 -n 2 >nul
 
 :: 4. Cache directory
 set "CACHE_DIR=C:\RcloneCache"
