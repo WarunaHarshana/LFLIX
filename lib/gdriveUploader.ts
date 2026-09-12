@@ -218,7 +218,7 @@ function remoteExists(remoteName: string): boolean {
     }
 }
 
-function isMounted(mountDrive: string): boolean {
+export function isMounted(mountDrive: string): boolean {
     try {
         const driveLetter = mountDrive.replace(/[:\\\/]+$/, '');
         execSync(`vol ${driveLetter}: 2>nul`, { stdio: 'pipe', timeout: 3000 });
@@ -600,12 +600,19 @@ export function uploadFile(
  */
 export async function refreshMountVfsCache(dir?: string): Promise<boolean> {
     try {
-        const url = dir
-            ? `http://127.0.0.1:5572/vfs/refresh?dir=${encodeURIComponent(dir.replace(/\\/g, '/'))}`
-            : 'http://127.0.0.1:5572/vfs/refresh';
-        const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(4000) });
+        const normalizedDir = dir ? dir.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+        const body = {
+            dir: normalizedDir,
+            recursive: true,
+        };
+        const res = await fetch('http://127.0.0.1:5572/vfs/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(6000),
+        });
         if (res.ok) {
-            console.log(`[GDrive] VFS directory cache refreshed successfully${dir ? ` for ${dir}` : ''}`);
+            console.log(`[GDrive] VFS directory cache refreshed successfully${normalizedDir ? ` for ${normalizedDir}` : ' (entire mount)'}`);
             return true;
         }
     } catch {
@@ -627,6 +634,7 @@ export function getOptimizedMountArgs(remote: string, mountDrive: string, tempPa
         '--vfs-cache-max-age', '24h',
         '--vfs-read-chunk-size', '2M',
         '--vfs-read-chunk-size-limit', '64M',
+        '--vfs-read-ahead', '32M',
         '--vfs-handle-caching', '0s',
         '--vfs-read-wait', '0ms',
         '--vfs-fast-fingerprint',
@@ -718,6 +726,42 @@ export function mountDrive(
 
     proc.unref();
     return proc;
+}
+
+/**
+ * Ensure Google Drive is mounted and healthy.
+ * If already mounted, returns immediately.
+ * If unmounted and enabled on Windows, attempts to launch Mount-GoogleDrive.bat interactively.
+ */
+export async function ensureDriveMounted(): Promise<boolean> {
+    const config = getGdriveConfig();
+    if (!config.enabled) return false;
+
+    if (isMounted(config.mountDrive)) {
+        return true;
+    }
+
+    if (process.platform === 'win32') {
+        const batPath = path.join(process.cwd(), 'Mount-GoogleDrive.bat');
+        if (fs.existsSync(batPath)) {
+            try {
+                console.log(`[GDrive] Mount ${config.mountDrive} is not active. Launching Mount-GoogleDrive.bat interactively...`);
+                // Launch in a separate interactive window so WinFsp registers drive Z: in the user's desktop session
+                exec(`start "LFLIX - Mount Google Drive" cmd.exe /c call "${batPath}"`, { cwd: process.cwd() });
+                for (let i = 0; i < 4; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    if (isMounted(config.mountDrive)) {
+                        console.log(`[GDrive] Drive ${config.mountDrive} is now mounted and verified`);
+                        return true;
+                    }
+                }
+            } catch (e) {
+                console.warn('[GDrive] Could not launch Mount-GoogleDrive.bat:', e);
+            }
+        }
+    }
+
+    return isMounted(config.mountDrive);
 }
 
 /**

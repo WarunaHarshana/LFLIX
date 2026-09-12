@@ -488,13 +488,16 @@ export async function rescanLibrary(targetFolderPath?: string): Promise<RescanRe
   isScanning = true;
 
   try {
-    // Refresh rclone VFS mount cache if Google Drive mount is active
+    // Ensure Google Drive mount is active and VFS cache refreshed
     try {
-      const { refreshMountVfsCache } = await import('./gdriveUploader');
-      const refreshed = await refreshMountVfsCache();
-      if (refreshed) {
-        // Give the mount time to reflect updated directory listings
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      const { getGdriveConfig, ensureDriveMounted, refreshMountVfsCache } = await import('./gdriveUploader');
+      const gdriveConfig = getGdriveConfig();
+      if (gdriveConfig.enabled) {
+        const mounted = await ensureDriveMounted();
+        if (mounted) {
+          await refreshMountVfsCache();
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
       }
     } catch { /* ignore */ }
 
@@ -547,7 +550,7 @@ export async function rescanLibrary(targetFolderPath?: string): Promise<RescanRe
           .all(`${folderPath}%`) as { id: number; filePath: string }[];
 
         for (const row of movieRows) {
-          if (!fs.existsSync(row.filePath) || isItemPartOfActiveDownload(row.filePath, activeDownloads)) {
+          if (!fs.existsSync(row.filePath)) {
             const deleted = db.prepare('DELETE FROM movies WHERE id = ?').run(row.id);
             totalRemoved += deleted.changes;
           }
@@ -558,7 +561,7 @@ export async function rescanLibrary(targetFolderPath?: string): Promise<RescanRe
           .all(`${folderPath}%`) as { id: number; filePath: string }[];
 
         for (const row of episodeRows) {
-          if (!fs.existsSync(row.filePath) || isItemPartOfActiveDownload(row.filePath, activeDownloads)) {
+          if (!fs.existsSync(row.filePath)) {
             const deleted = db.prepare('DELETE FROM episodes WHERE id = ?').run(row.id);
             totalRemoved += deleted.changes;
           }

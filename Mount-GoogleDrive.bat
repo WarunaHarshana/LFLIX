@@ -31,8 +31,8 @@ if not exist "C:\Program Files\WinFsp\bin\winfsp-x64.dll" if not exist "C:\Progr
 
 :: 3. Unmount existing rclone mount gracefully via RC (without killing active uploads/downloads)
 curl -s -X POST http://127.0.0.1:5572/core/quit >nul 2>&1
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name = 'rclone.exe'\" | Where-Object { $_.CommandLine -like '*mount*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
-ping 127.0.0.1 -n 2 >nul
+timeout /t 1 >nul 2>&1
+taskkill /F /IM rclone.exe /FI "WINDOWTITLE eq *mount*" >nul 2>&1
 
 :: 4. Cache directory
 set "CACHE_DIR=C:\RcloneCache"
@@ -53,6 +53,7 @@ echo.
   --vfs-cache-max-age 24h ^
   --vfs-read-chunk-size 2M ^
   --vfs-read-chunk-size-limit 64M ^
+  --vfs-read-ahead 32M ^
   --vfs-handle-caching 0s ^
   --vfs-read-wait 0ms ^
   --vfs-fast-fingerprint ^

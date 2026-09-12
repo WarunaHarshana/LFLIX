@@ -20,14 +20,14 @@ describe('Player Configuration and Cloud Streaming Optimizations', () => {
             // Instant close
             expect(OPTIMIZED_MPV_CONF).toContain('demuxer-termination-timeout=0.1');
             // Fast seek & buffer
-            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-readahead-secs=30');
-            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-max-bytes=300MiB');
-            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-max-back-bytes=100MiB');
+            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-readahead-secs=20');
+            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-max-bytes=200MiB');
+            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-max-back-bytes=50MiB');
             expect(OPTIMIZED_MPV_CONF).toContain('demuxer-seekable-cache=yes');
             // GPU video output & tone mapping
-            expect(OPTIMIZED_MPV_CONF).toContain('vo=gpu-next');
+            expect(OPTIMIZED_MPV_CONF).toContain('vo=gpu');
             expect(OPTIMIZED_MPV_CONF).toContain('gpu-api=d3d11');
-            expect(OPTIMIZED_MPV_CONF).toContain('tone-mapping=spline');
+            expect(OPTIMIZED_MPV_CONF).toContain('tone-mapping=mobius');
             expect(OPTIMIZED_MPV_CONF).toContain('[4k-hevc]');
         });
     });

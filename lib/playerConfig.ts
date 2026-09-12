@@ -7,7 +7,7 @@ export const OPTIMIZED_MPV_CONF = `# ===========================================
 # ==============================================================================
 
 # === GPU Video Output & Backend ===
-vo=gpu-next
+vo=gpu
 gpu-api=d3d11
 gpu-context=d3d11
 d3d11-output-format=auto
@@ -28,7 +28,7 @@ dither-depth=auto
 # === HDR to SDR Tone Mapping & Vivid Colors ===
 target-prim=bt.709
 target-trc=srgb
-tone-mapping=spline
+tone-mapping=mobius
 gamut-mapping-mode=auto
 hdr-compute-peak=no
 
@@ -71,9 +71,9 @@ screenshot-template="mpv_%F_%P"
 
 # === Fast Open & Cloud Streaming Cache ===
 cache=yes
-demuxer-max-bytes=300MiB
-demuxer-max-back-bytes=100MiB
-demuxer-readahead-secs=30
+demuxer-max-bytes=200MiB
+demuxer-max-back-bytes=50MiB
+demuxer-readahead-secs=20
 demuxer-seekable-cache=yes
 force-seekable=yes
 hr-seek=yes
@@ -87,10 +87,12 @@ demuxer-termination-timeout=0.1
 # ==============================================================================
 [4k-hevc]
 profile-cond=(width or 0) >= 3840 or get("video-format") == "hevc"
-hwdec=no
+hwdec=auto-safe
+vd-lavc-threads=0
 scale=bilinear
 cscale=bilinear
-dscale=mitchell
+dscale=bilinear
+tone-mapping=mobius
 hdr-compute-peak=no
 `;
 

@@ -65,6 +65,18 @@ if not exist ".env.local" (
 )
 
 :: ---------------------------------------------------------------------------
+:: Auto-Mount Google Drive (Z:) if not already mounted
+:: ---------------------------------------------------------------------------
+vol Z: >nul 2>&1
+if errorlevel 1 (
+    if exist "Mount-GoogleDrive-Hidden.vbs" (
+        echo Mounting Google Drive Z:...
+        wscript.exe "Mount-GoogleDrive-Hidden.vbs"
+        timeout /t 2 >nul
+    )
+)
+
+:: ---------------------------------------------------------------------------
 :: Clear a stale server off port 3000.
 ::
 :: Closing this window with the X button leaves node.exe running and holding the

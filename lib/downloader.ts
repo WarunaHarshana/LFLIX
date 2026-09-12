@@ -741,7 +741,7 @@ class DownloadManager {
                                                         WHERE id = ?
                                                     `).run(mountedPath, downloadId);
                                                 } catch { /* ignore */ }
-                                                this.triggerRescan();
+                                                this.handleGdriveUploadComplete(mountedPath, remoteDest);
                                             } else {
                                                 try {
                                                     db.prepare(`
@@ -921,7 +921,7 @@ class DownloadManager {
                                                     WHERE id = ?
                                                 `).run(mountedPath, downloadId);
                                             } catch { /* ignore */ }
-                                            this.triggerRescan();
+                                            this.handleGdriveUploadComplete(mountedPath, remoteDest);
                                         } else {
                                             try {
                                                 db.prepare(`
@@ -1071,11 +1071,11 @@ class DownloadManager {
                         db.prepare(`
                             UPDATE downloads
                             SET status = 'completed', progress = 100, downloadSpeed = 0,
-                                completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
+                                downloadPath = ?, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
                             WHERE id = ?
-                        `).run(downloadId);
+                        `).run(mountedPath, downloadId);
                     } catch { /* ignore */ }
-                    this.triggerRescan();
+                    this.handleGdriveUploadComplete(mountedPath, remoteDest);
                 } else {
                     try {
                         db.prepare(`
@@ -1803,15 +1803,57 @@ class DownloadManager {
         } catch { /* ignore */ }
     }
 
+    /**
+     * Handle Google Drive upload completion: ensure drive is mounted,
+     * refresh VFS directory cache, perform immediate targeted scanFile(),
+     * and trigger broad background rescan.
+     */
+    public async handleGdriveUploadComplete(mountedPath: string, remoteDest?: string): Promise<void> {
+        try {
+            const { ensureDriveMounted, refreshMountVfsCache } = await import('./gdriveUploader');
+            await ensureDriveMounted();
+
+            const dir = remoteDest ? path.dirname(remoteDest).replace(/^[^:]+:/, '') : undefined;
+            await refreshMountVfsCache(dir);
+
+            // Give VFS 1 second to propagate to Windows filesystem
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Immediate targeted scan of the new file
+            const { scanFile } = await import('./scanner');
+            let scanned = false;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                if (fs.existsSync(mountedPath)) {
+                    const res = await scanFile(mountedPath);
+                    console.log(`[DownloadManager] Targeted scan for ${path.basename(mountedPath)}: added=${res.added}`);
+                    scanned = true;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            if (!scanned) {
+                console.log(`[DownloadManager] Targeted file not yet visible at ${mountedPath}, falling back to rescanLibrary`);
+            }
+
+            // Always trigger rescan to keep all library folders synchronized
+            await this.triggerRescan();
+        } catch (e) {
+            console.error('[DownloadManager] handleGdriveUploadComplete error:', e);
+            await this.triggerRescan();
+        }
+    }
+
     // Trigger library rescan
     public async triggerRescan(): Promise<void> {
         try {
-            // Refresh VFS cache first and wait for it to propagate
+            // Ensure Google Drive is mounted and refresh VFS cache first
             try {
-                const { refreshMountVfsCache } = await import('./gdriveUploader');
+                const { ensureDriveMounted, refreshMountVfsCache } = await import('./gdriveUploader');
+                await ensureDriveMounted();
                 await refreshMountVfsCache();
                 // Give the mount time to reflect the new file after VFS cache invalidation
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                await new Promise(resolve => setTimeout(resolve, 1500));
             } catch { /* ignore if mount not active */ }
             const { rescanLibrary } = await import('./scanner');
             await rescanLibrary();
