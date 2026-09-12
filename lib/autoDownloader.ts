@@ -10,7 +10,8 @@ import releaseMonitor, { NewEpisodeInfo } from './releaseMonitor';
 
 // Quality tiers for scoring
 const QUALITY_SCORES: Record<string, number> = {
-  '2160p': 100, '4K': 100, 'UHD': 100,
+  '2160p': 100, '4K': 100, 'UHD': 100, '4K (2160p)': 100,
+  '1440p': 90, '2K': 90, '2K (1440p)': 90,
   '1080p': 80,
   '720p': 60,
   '480p': 30,
@@ -20,6 +21,17 @@ const QUALITY_SCORES: Record<string, number> = {
   'CAM': 5, 'TS': 10,
   'Unknown': 20,
 };
+
+export function getQualityScore(quality?: string): number {
+  if (!quality) return QUALITY_SCORES['Unknown'];
+  if (QUALITY_SCORES[quality] !== undefined) return QUALITY_SCORES[quality];
+  if (/2160|4k|uhd/i.test(quality)) return 100;
+  if (/1440|2k/i.test(quality)) return 90;
+  if (/1080/i.test(quality)) return 80;
+  if (/720/i.test(quality)) return 60;
+  if (/480/i.test(quality)) return 30;
+  return QUALITY_SCORES['Unknown'];
+}
 
 const SOURCE_BONUS: Record<string, number> = {
   'Remux': 15,
@@ -49,11 +61,16 @@ export interface AutoDownloadStatus {
  * Score a torrent result by quality, size, and seeds.
  */
 function scoreTorrent(result: TorrentResult, preferredQuality: string, maxQualityScore?: number): number {
+  // If a direct download is known to have exceeded its quota, skip it
+  if ((result as any).quotaExceeded) {
+    return 0;
+  }
+
   let score = 0;
 
   // Base quality score
   const quality = result.quality || 'Unknown';
-  const qualityScore = QUALITY_SCORES[quality] || QUALITY_SCORES['Unknown'];
+  const qualityScore = getQualityScore(quality);
   score += qualityScore;
 
   // Massive bonus for DDLs (User preference: check DDL first, fallback to torrent)
@@ -62,18 +79,17 @@ function scoreTorrent(result: TorrentResult, preferredQuality: string, maxQualit
     if (preferredQuality === 'any') {
       preferredQualityScore = 0;
     } else if (preferredQuality && preferredQuality !== 'best') {
-      preferredQualityScore = QUALITY_SCORES[preferredQuality] || 80;
+      preferredQualityScore = getQualityScore(preferredQuality);
     }
 
-    const targetQualityScore = maxQualityScore !== undefined
-      ? Math.min(preferredQualityScore, maxQualityScore)
-      : preferredQualityScore;
-
-    // Only apply the massive DDL bonus if the DDL meets or exceeds the target quality score.
-    // If it's below the target quality, we give it a much smaller bonus (+15)
-    // so it doesn't override higher quality torrents, but still beats torrents in its own lower quality tier.
-    if (qualityScore >= targetQualityScore) {
+    // DDL priority policy:
+    // If DDL meets/exceeds preferred quality: +1000 bonus (dominant priority)
+    // If DDL is HD (>= 720p), it still gets a strong +500 bonus over all torrents.
+    // DDLs within the same tier rank by resolution (2160p > 1080p > 720p) and size.
+    if (qualityScore >= preferredQualityScore) {
       score += 1000;
+    } else if (qualityScore >= 60) {
+      score += 500;
     } else {
       score += 15;
     }
@@ -298,7 +314,7 @@ class AutoDownloader {
 
       // Calculate maxQualityScore across all episode results
       const maxQualityScore = episodeResults.reduce((max, r) => {
-        const score = QUALITY_SCORES[r.quality || 'Unknown'] || QUALITY_SCORES['Unknown'];
+        const score = getQualityScore(r.quality);
         return score > max ? score : max;
       }, 0);
 

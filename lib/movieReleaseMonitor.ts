@@ -10,7 +10,8 @@ import releaseMonitor from './releaseMonitor';
 
 // Re-use the same quality scoring from autoDownloader
 const QUALITY_SCORES: Record<string, number> = {
-  '2160p': 100, '4K': 100, 'UHD': 100,
+  '2160p': 100, '4K': 100, 'UHD': 100, '4K (2160p)': 100,
+  '1440p': 90, '2K': 90, '2K (1440p)': 90,
   '1080p': 80,
   '720p': 60,
   '480p': 30,
@@ -20,6 +21,17 @@ const QUALITY_SCORES: Record<string, number> = {
   'CAM': 5, 'TS': 10,
   'Unknown': 20,
 };
+
+function getQualityScore(quality?: string): number {
+  if (!quality) return QUALITY_SCORES['Unknown'];
+  if (QUALITY_SCORES[quality] !== undefined) return QUALITY_SCORES[quality];
+  if (/2160|4k|uhd/i.test(quality)) return 100;
+  if (/1440|2k/i.test(quality)) return 90;
+  if (/1080/i.test(quality)) return 80;
+  if (/720/i.test(quality)) return 60;
+  if (/480/i.test(quality)) return 30;
+  return QUALITY_SCORES['Unknown'];
+}
 
 /** Minimum score to consider a movie "available" */
 const MIN_AVAILABLE_SCORE = 70;
@@ -58,6 +70,10 @@ export interface MovieReleaseRow {
  * Score a torrent result for a movie (simplified from autoDownloader).
  */
 function scoreMovieTorrent(result: TorrentResult, maxQualityScore?: number): number {
+  if ((result as any).quotaExceeded) {
+    return 0;
+  }
+
   if (!isGoodMovieReleaseQuality(result)) {
     return 0;
   }
@@ -65,7 +81,7 @@ function scoreMovieTorrent(result: TorrentResult, maxQualityScore?: number): num
   let score = 0;
 
   const quality = result.quality || 'Unknown';
-  const qualityScore = QUALITY_SCORES[quality] || QUALITY_SCORES['Unknown'];
+  const qualityScore = getQualityScore(quality);
   score += qualityScore;
 
   // DDL bonus
@@ -73,6 +89,8 @@ function scoreMovieTorrent(result: TorrentResult, maxQualityScore?: number): num
     const targetQualityScore = maxQualityScore !== undefined ? maxQualityScore : 100;
     if (qualityScore >= targetQualityScore) {
       score += 1000;
+    } else if (qualityScore >= 60) {
+      score += 500;
     } else {
       score += 15;
     }
@@ -290,7 +308,7 @@ class MovieReleaseMonitor {
 
     // Calculate maxQualityScore across all good-quality results
     const maxQualityScore = releaseQualityResults.reduce((max, r) => {
-      const score = QUALITY_SCORES[r.quality || 'Unknown'] || QUALITY_SCORES['Unknown'];
+      const score = getQualityScore(r.quality);
       return score > max ? score : max;
     }, 0);
 

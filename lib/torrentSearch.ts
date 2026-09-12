@@ -1120,16 +1120,22 @@ async function searchDirectDownloads(
                             episode: options.episode,
                         }
                     );
-                    return downloads.map((dl) => ({
-                        title: dl.name,
-                        magnet: `http-direct:${dl.url}`,
-                        size: dl.size,
-                        sizeBytes: dl.sizeBytes,
-                        seeds: 0,
-                        leeches: 0,
-                        quality: dl.qualityLabel,
-                        source: 'DDL',
-                    }));
+                    return downloads.map((dl) => {
+                        const rawQuality = extractQuality(dl.name);
+                        const quality = rawQuality !== 'Unknown'
+                            ? rawQuality
+                            : (dl.quality >= 2160 ? '2160p' : dl.quality >= 1440 ? '1440p' : dl.quality >= 1080 ? '1080p' : dl.quality >= 720 ? '720p' : dl.qualityLabel);
+                        return {
+                            title: dl.name,
+                            magnet: `http-direct:${dl.url}`,
+                            size: dl.size,
+                            sizeBytes: dl.sizeBytes,
+                            seeds: 0,
+                            leeches: 0,
+                            quality,
+                            source: 'DDL',
+                        };
+                    });
                 } catch (e) {
                     console.error('[TorrentSearch] DDL provider fetch error:', e);
                     return [];
