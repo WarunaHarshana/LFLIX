@@ -229,9 +229,12 @@ function isMounted(mountDrive: string): boolean {
 }
 
 function parseProgressLine(line: string): UploadProgress | null {
+    const clean = line.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+    if (!clean) return null;
+
     // rclone --stats-one-line output format:
     // Transferred:   1.234 GiB / 4.567 GiB, 27%, 15.678 MiB/s, ETA 3m30s
-    const statsMatch = line.match(
+    const statsMatch = clean.match(
         /Transferred:\s*([\d.]+\s*\w+)\s*\/\s*([\d.]+\s*\w+),\s*([\d.]+)%,\s*([\d.]+\s*\w+\/s),\s*ETA\s*(.+)/i
     );
     if (statsMatch) {
@@ -244,7 +247,7 @@ function parseProgressLine(line: string): UploadProgress | null {
     }
 
     // Individual file progress line: e.g. "* ...:  78% /10.040Gi, 3.842Mi/s, 5m10s"
-    const fileMatch = line.match(
+    const fileMatch = clean.match(
         /\*\s*.*?:\s*([\d.]+)%\s*\/([\d.]+\s*\w+),\s*([\d.]+\s*\w+\/s),\s*(.+)/i
     );
     if (fileMatch) {
@@ -257,7 +260,7 @@ function parseProgressLine(line: string): UploadProgress | null {
     }
 
     // Generic transferred percentage: e.g. "Transferred: ... 78%"
-    const transferredMatch = line.match(/Transferred:.*?([\d.]+)%/i);
+    const transferredMatch = clean.match(/Transferred:.*?([\d.]+)%/i);
     if (transferredMatch) {
         return {
             percent: parseFloat(transferredMatch[1]),
@@ -472,7 +475,7 @@ export function uploadUrl(
     let lastError = '';
 
     proc.stdout?.on('data', (data: Buffer) => {
-        const lines = data.toString().split('\n');
+        const lines = data.toString().split(/[\r\n]+/);
         for (const line of lines) {
             const progress = parseProgressLine(line);
             if (progress && onProgress) {
@@ -487,7 +490,7 @@ export function uploadUrl(
             lastError = text.trim();
         }
         // rclone outputs progress to stderr with -v
-        const lines = text.split('\n');
+        const lines = text.split(/[\r\n]+/);
         for (const line of lines) {
             const progress = parseProgressLine(line);
             if (progress && onProgress) {
@@ -549,7 +552,7 @@ export function uploadFile(
     let lastError = '';
 
     proc.stdout?.on('data', (data: Buffer) => {
-        const lines = data.toString().split('\n');
+        const lines = data.toString().split(/[\r\n]+/);
         for (const line of lines) {
             const progress = parseProgressLine(line);
             if (progress && onProgress) {
@@ -563,7 +566,7 @@ export function uploadFile(
         if (/error|failed|fatal|googleapi|ratelimit|quota|denied/i.test(text)) {
             lastError = text.trim();
         }
-        const lines = text.split('\n');
+        const lines = text.split(/[\r\n]+/);
         for (const line of lines) {
             const progress = parseProgressLine(line);
             if (progress && onProgress) {
