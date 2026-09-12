@@ -129,11 +129,23 @@ export async function POST(req: Request) {
         }
 
         if (uri.startsWith('http-direct:')) {
-            const validatedHttp = await validateHttpDownloadUrl(uri.replace(/^http-direct:/, ''));
+            const rawUrl = uri.replace(/^http-direct:/, '');
+            const validatedHttp = await validateHttpDownloadUrl(rawUrl);
             if (validatedHttp.error !== null) {
                 return NextResponse.json({ error: validatedHttp.error }, { status: 400 });
             }
             uri = `http-direct:${validatedHttp.url}`;
+
+            // Pre-flight health probe to catch Google Drive quota limits or expired links upfront
+            try {
+                const { probeDirectDownloadUrl } = await import('@/lib/directDownloadHealth');
+                const probe = await probeDirectDownloadUrl(validatedHttp.url, 3000);
+                if (!probe.ok && probe.error) {
+                    return NextResponse.json({ error: probe.error }, { status: 400 });
+                }
+            } catch {
+                // Non-fatal: if probe timed out, allow download to proceed
+            }
         }
 
         if (!uri.startsWith('magnet:') && !uri.startsWith('http-direct:') && !uri.endsWith('.torrent')) {

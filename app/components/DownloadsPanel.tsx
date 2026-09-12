@@ -315,7 +315,12 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
                                                     <span className="text-yellow-400">Paused</span>
                                                 )}
                                                 {dl.status === 'error' && (
-                                                    <span className="text-rose-400 truncate">{dl.errorMessage || 'Error'}</span>
+                                                    <span
+                                                        className="text-rose-400 truncate flex items-center gap-1 cursor-help"
+                                                        title={dl.errorMessage || 'Error'}
+                                                    >
+                                                        {dl.errorMessage || 'Error'}
+                                                    </span>
                                                 )}
                                             </div>
                                         </div>

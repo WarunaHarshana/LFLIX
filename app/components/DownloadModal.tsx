@@ -2,7 +2,7 @@
 
 import type React from 'react';
 import { useState, useEffect, useMemo } from 'react';
-import { X, Search, Download, Loader2, Star, ArrowDown, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown, Zap, Copy, Check, ExternalLink, Cloud, CloudUpload } from 'lucide-react';
+import { X, Search, Download, Loader2, Star, ArrowDown, ArrowRight, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown, Zap, Copy, Check, ExternalLink, Cloud, CloudUpload } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import LiquidDropdown from './LiquidDropdown';
 import { isDirectDownloadMatch } from '@/lib/titleMatching';
@@ -30,6 +30,7 @@ type DirectDownloadItem = {
     sizeBytes: number;
     url: string;
     provider: string;
+    quotaExceeded?: boolean;
 };
 
 type ScannedFolder = {
@@ -149,12 +150,16 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
 
     const filteredDirectDownloads = useMemo(() => {
         return directDownloads.filter((d) => {
-            if (d.provider !== 'ddl' && d.source?.includes('CINEJOY')) {
+            if (d.provider !== 'ddl' && (/cinejoy/i.test(d.source || '') || /cinejoy/i.test(d.provider || ''))) {
                 return true;
             }
             return isDirectDownloadMatch(d, title, { year, mediaType, season, episode });
         });
     }, [directDownloads, title, year, mediaType, season, episode]);
+
+    const allDirectQuotaExceeded = useMemo(() => {
+        return filteredDirectDownloads.length > 0 && filteredDirectDownloads.every(item => item.quotaExceeded);
+    }, [filteredDirectDownloads]);
 
     // Check Google Drive and Cloud Downloader availability only when modal opens
     useEffect(() => {
@@ -341,7 +346,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             const data = await res.json();
             if (data.success && Array.isArray(data.downloads)) {
                 const validDownloads = (data.downloads as DirectDownloadItem[]).filter((d) => {
-                    if (d.provider !== 'ddl' && d.source?.includes('CINEJOY')) {
+                    if (d.provider !== 'ddl' && (/cinejoy/i.test(d.source || '') || /cinejoy/i.test(d.provider || ''))) {
                         return true;
                     }
                     return isDirectDownloadMatch(d, title, { year, mediaType, season, episode });
@@ -351,13 +356,18 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                     const previousNonDuplicates = prev
                         .filter((p) => !existingUrls.has(p.url))
                         .filter((p) => {
-                            if (p.provider !== 'ddl' && p.source?.includes('CINEJOY')) return true;
+                            if (p.provider !== 'ddl' && (/cinejoy/i.test(p.source || '') || /cinejoy/i.test(p.provider || ''))) return true;
                             return isDirectDownloadMatch(p, title, { year, mediaType, season, episode });
                         });
                     return [...validDownloads, ...previousNonDuplicates];
                 });
                 if (validDownloads.length > 0) {
-                    setActiveTab('direct');
+                    const hasWorkingDownloads = validDownloads.some((d: DirectDownloadItem) => !d.quotaExceeded);
+                    if (hasWorkingDownloads) {
+                        setActiveTab('direct');
+                    } else {
+                        setActiveTab('torrents');
+                    }
                 }
             }
         } catch (err) {
@@ -369,6 +379,11 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     };
 
     const startDirectDownload = async (item: DirectDownloadItem, forceTarget?: 'local' | 'gdrive' | 'cloud') => {
+        if (item.quotaExceeded) {
+            setError('Google Drive download quota exceeded for this stream. Please choose another quality link (e.g. 1080p) or download via torrent.');
+            return;
+        }
+
         const isCloud = forceTarget === 'cloud' || (forceTarget === undefined && cloudMode);
         const isDrive = !isCloud && (forceTarget === 'gdrive' || (forceTarget === undefined && gdriveMode));
         const targetMode = isCloud ? 'cloud' : (isDrive ? 'gdrive' : 'local');
@@ -564,8 +579,12 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                         {searchingDirect ? (
                             <Loader2 className="w-3 h-3 animate-spin ml-1 text-neutral-300" />
                         ) : filteredDirectDownloads.length > 0 ? (
-                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-bold border border-white/30">
-                                {filteredDirectDownloads.length}
+                            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                allDirectQuotaExceeded
+                                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                                    : 'bg-white/20 text-white border-white/30'
+                            }`}>
+                                {allDirectQuotaExceeded ? '⚠️ ' : ''}{filteredDirectDownloads.length}
                             </span>
                         ) : null}
                     </button>
@@ -613,6 +632,28 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                             {/* Direct Results */}
                             {!searchingDirect && filteredDirectDownloads.length > 0 && (
                                 <>
+                                    {allDirectQuotaExceeded && (
+                                        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                            <div className="flex items-start gap-2.5">
+                                                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                                                <div className="text-xs">
+                                                    <p className="font-semibold text-amber-200">Google Drive Daily Quota Reached on Upstream Hosts</p>
+                                                    <p className="text-neutral-300 mt-0.5">
+                                                        All direct download streams for this title have reached Google Drive&apos;s 24-hour public download limit. Switch to the Torrents tab for instant, unlimited downloading.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveTab('torrents')}
+                                                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs shrink-0 transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                                            >
+                                                <span>Switch to Torrents</span>
+                                                <ArrowRight className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    )}
+
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-1.5">
                                             <Zap className="w-3.5 h-3.5 text-amber-400" />
@@ -626,7 +667,11 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                         {filteredDirectDownloads.map((item, i) => (
                                             <div
                                                 key={i}
-                                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 liquid-glass-pill bg-white/[0.03] hover:bg-white/[0.07] rounded-2xl transition border border-white/10 hover:border-white/20"
+                                                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 liquid-glass-pill rounded-2xl transition border ${
+                                                    item.quotaExceeded
+                                                        ? 'bg-rose-950/15 hover:bg-rose-950/25 border-rose-500/25'
+                                                        : 'bg-white/[0.03] hover:bg-white/[0.07] border-white/10 hover:border-white/20'
+                                                }`}
                                             >
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -638,9 +683,24 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                                 {item.size}
                                                             </span>
                                                         )}
-                                                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 font-medium">
-                                                            ⚡ Fast Direct
-                                                        </span>
+                                                        {item.quotaExceeded ? (
+                                                            <span
+                                                                className="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/40 font-medium flex items-center gap-1"
+                                                                title="Google Drive 24-hour public download quota exceeded. Please select another quality or download via torrent."
+                                                            >
+                                                                <AlertTriangle className="w-3 h-3" />
+                                                                Quota Exceeded
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 font-medium">
+                                                                ⚡ Fast Direct
+                                                            </span>
+                                                        )}
+                                                        {item.source && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium">
+                                                                {item.source}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <p className="text-sm font-medium truncate text-neutral-200" title={item.name}>
                                                         {item.name}
@@ -681,8 +741,16 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         download
-                                                        className="px-2.5 py-2 liquid-orb text-white font-medium rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
-                                                        title="Download directly in browser"
+                                                        onClick={(e) => {
+                                                            if (item.quotaExceeded) {
+                                                                e.preventDefault();
+                                                                setError('Google Drive download quota exceeded for this stream. Please use the Torrents tab.');
+                                                            }
+                                                        }}
+                                                        className={`px-2.5 py-2 liquid-orb text-white font-medium rounded-xl text-xs flex items-center gap-1.5 transition ${
+                                                            item.quotaExceeded ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                                                        }`}
+                                                        title={item.quotaExceeded ? "Google Drive quota exceeded for this file" : "Download directly in browser"}
                                                     >
                                                         <ExternalLink className="w-3.5 h-3.5" />
                                                         <span className="text-[11px] hidden sm:inline">Browser</span>
@@ -691,43 +759,65 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                     <button
                                                         type="button"
                                                         onClick={() => startDirectDownload(item)}
-                                                        disabled={downloading !== null}
-                                                        className="px-3 py-2 liquid-btn-primary rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md disabled:opacity-50"
-                                                        title="Download directly to library folder"
+                                                        disabled={Boolean(item.quotaExceeded) || downloading !== null}
+                                                        className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 shadow-md ${
+                                                            item.quotaExceeded
+                                                                ? 'bg-rose-950/20 text-rose-300/70 border border-rose-500/20 cursor-not-allowed opacity-50'
+                                                                : 'liquid-btn-primary cursor-pointer disabled:opacity-50'
+                                                        }`}
+                                                        title={item.quotaExceeded ? "Google Drive quota exceeded. Switch to Torrents tab to download." : "Download directly to library folder"}
                                                     >
-                                                        {downloading === item.url ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                                                        <span>Save to Library</span>
+                                                        {downloading === item.url ? (
+                                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        ) : item.quotaExceeded ? (
+                                                            <AlertTriangle className="w-3.5 h-3.5 text-rose-300/80" />
+                                                        ) : (
+                                                            <Download className="w-3.5 h-3.5" />
+                                                        )}
+                                                        <span>{item.quotaExceeded ? 'Quota Exceeded' : 'Save to Library'}</span>
                                                     </button>
 
                                                     <button
                                                         type="button"
                                                         onClick={() => startDirectDownload(item, 'gdrive')}
-                                                        disabled={downloading !== null}
-                                                        className="px-3 py-2 bg-blue-600/85 hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md shadow-blue-500/15 hover:shadow-blue-500/30 disabled:opacity-50 border border-blue-400/30"
-                                                        title="Download directly to Google Drive (Zero local disk)"
+                                                        disabled={Boolean(item.quotaExceeded) || downloading !== null}
+                                                        className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 shadow-md border ${
+                                                            item.quotaExceeded
+                                                                ? 'bg-rose-950/20 text-rose-300/70 border-rose-500/20 cursor-not-allowed opacity-50'
+                                                                : 'bg-blue-600/85 hover:bg-blue-600 text-white shadow-blue-500/15 hover:shadow-blue-500/30 border-blue-400/30 cursor-pointer disabled:opacity-50'
+                                                        }`}
+                                                        title={item.quotaExceeded ? "Google Drive quota exceeded. Switch to Torrents tab to download." : "Download directly to Google Drive (Zero local disk)"}
                                                     >
                                                         {downloading === `${item.url}:gdrive` ? (
                                                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        ) : item.quotaExceeded ? (
+                                                            <AlertTriangle className="w-3.5 h-3.5 text-rose-300/80" />
                                                         ) : (
                                                             <CloudUpload className="w-3.5 h-3.5" />
                                                         )}
-                                                        <span>To Drive</span>
+                                                        <span>{item.quotaExceeded ? 'Quota Limit' : 'To Drive'}</span>
                                                     </button>
 
                                                     {cloudAvailable && (
                                                         <button
                                                             type="button"
                                                             onClick={() => startDirectDownload(item, 'cloud')}
-                                                            disabled={downloading !== null}
-                                                            className="px-3 py-2 bg-purple-600/85 hover:bg-purple-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 cursor-pointer shadow-md shadow-purple-500/15 hover:shadow-purple-500/30 disabled:opacity-50 border border-purple-400/30"
-                                                            title="Cloud-to-Cloud: Stream direct download straight into Google Drive with 0 local disk/network"
+                                                            disabled={Boolean(item.quotaExceeded) || downloading !== null}
+                                                            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition flex-shrink-0 shadow-md border ${
+                                                                item.quotaExceeded
+                                                                    ? 'bg-rose-950/20 text-rose-300/70 border-rose-500/20 cursor-not-allowed opacity-50'
+                                                                    : 'bg-purple-600/85 hover:bg-purple-600 text-white shadow-purple-500/15 hover:shadow-purple-500/30 border-purple-400/30 cursor-pointer disabled:opacity-50'
+                                                            }`}
+                                                            title={item.quotaExceeded ? "Google Drive quota exceeded. Switch to Torrents tab to download." : "Cloud-to-Cloud: Stream direct download straight into Google Drive with 0 local disk/network"}
                                                         >
                                                             {downloading === `${item.url}:cloud` ? (
                                                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                            ) : item.quotaExceeded ? (
+                                                                <AlertTriangle className="w-3.5 h-3.5 text-rose-300/80" />
                                                             ) : (
                                                                 <Cloud className="w-3.5 h-3.5" />
                                                             )}
-                                                            <span>To Cloud</span>
+                                                            <span>{item.quotaExceeded ? 'Quota Limit' : 'To Cloud'}</span>
                                                         </button>
                                                     )}
                                                 </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye, Palette, Activity, Cloud, CloudUpload, CheckCircle, XCircle, FolderPlus, Copy } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye, Palette, Activity, Cloud, CloudUpload, CheckCircle, XCircle, FolderPlus, Copy, Play, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from '../components/ThemeProvider';
 
@@ -132,6 +132,11 @@ export default function SettingsPage() {
     const [cloudTestResult, setCloudTestResult] = useState<{ success: boolean; message: string } | null>(null);
     const [copiedRcloneSecret, setCopiedRcloneSecret] = useState(false);
     const [copyingRclone, setCopyingRclone] = useState(false);
+    const [detectedPlayers, setDetectedPlayers] = useState<{ type: string; name: string; path: string; recommended: boolean }[]>([]);
+    const [mpvOptimized, setMpvOptimized] = useState(false);
+    const [mpvConfigPath, setMpvConfigPath] = useState('');
+    const [deployingMpvConf, setDeployingMpvConf] = useState(false);
+    const [mpvDeployResult, setMpvDeployResult] = useState<string | null>(null);
 
     const { theme, setTheme, accent, setAccent, isMounted } = useTheme();
 
@@ -307,10 +312,39 @@ export default function SettingsPage() {
                 cloudWorkerToken: data.cloudWorkerToken || '',
             });
             setTmdbConfigured(data.tmdbConfigured !== false);
+            setDetectedPlayers(data.detectedPlayers || []);
+            setMpvOptimized(Boolean(data.mpvOptimized));
+            setMpvConfigPath(data.mpvConfigPath || '');
         } catch (e) {
             console.error('Failed to load settings', e);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeployMpvConfig = async (playerPath?: string) => {
+        setDeployingMpvConf(true);
+        setMpvDeployResult(null);
+        try {
+            const res = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'deploy-mpv-conf', playerPath: playerPath || settings.vlcPath })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setMpvDeployResult(data.message || 'Configuration deployed');
+                setMpvOptimized(true);
+                if (data.mpvPath) {
+                    setSettings(prev => ({ ...prev, vlcPath: data.mpvPath }));
+                }
+            } else {
+                alert(data.message || 'Failed to deploy MPV configuration');
+            }
+        } catch {
+            alert('Network error deploying MPV configuration');
+        } finally {
+            setDeployingMpvConf(false);
         }
     };
 
@@ -961,6 +995,118 @@ export default function SettingsPage() {
                                 omdbapi.com
                             </a>
                         </p>
+                    </div>
+                </section>
+
+                {/* External Media Player (MPV & Streaming Profile) */}
+                <section className="liquid-glass-base rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
+                    <div className="p-6 border-b border-white/10 flex flex-wrap items-center justify-between gap-3 bg-white/[0.02]">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg liquid-glass-pill flex items-center justify-center">
+                                <Play className="w-4 h-4 text-red-500" />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-semibold tracking-wide">External Media Player</h2>
+                                <p className="text-xs text-neutral-400">Desktop player launched when playing movies and shows on PC</p>
+                            </div>
+                        </div>
+                        {settings.vlcPath.toLowerCase().includes('mpv') && (
+                            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <Zap className="w-3.5 h-3.5" />
+                                {mpvOptimized ? 'Streaming Profile Active' : 'MPV Active'}
+                            </span>
+                        )}
+                    </div>
+                    <div className="p-6 space-y-6">
+                        <div>
+                            <label className="block text-sm text-neutral-300 font-medium mb-2">Player Executable Path</label>
+                            <input
+                                type="text"
+                                value={settings.vlcPath}
+                                onChange={(e) => setSettings(prev => ({ ...prev, vlcPath: e.target.value }))}
+                                className="w-full liquid-input rounded-xl px-4 py-3 outline-none text-white transition font-mono text-sm placeholder:text-white/30"
+                                placeholder="C:\path\to\mpv.exe or vlc.exe"
+                            />
+                            <p className="text-xs text-neutral-400 mt-2">
+                                Supported: <strong>MPV (Recommended for cloud streaming)</strong>, VLC, PotPlayer, MPC-HC/BE.
+                            </p>
+                        </div>
+
+                        {/* Quick select detected players */}
+                        {detectedPlayers.length > 0 && (
+                            <div>
+                                <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+                                    Detected Players on this PC
+                                </label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {detectedPlayers.map((p) => {
+                                        const isSelected = settings.vlcPath.toLowerCase() === p.path.toLowerCase();
+                                        return (
+                                            <button
+                                                key={p.path}
+                                                type="button"
+                                                onClick={() => setSettings(prev => ({ ...prev, vlcPath: p.path }))}
+                                                className={`flex items-center justify-between p-3 rounded-xl border text-left transition ${
+                                                    isSelected
+                                                        ? 'liquid-glass-pill-active border-white/40 shadow-lg'
+                                                        : 'liquid-glass-pill text-neutral-300 hover:text-white'
+                                                }`}
+                                            >
+                                                <div className="min-w-0 pr-2">
+                                                    <div className="flex items-center gap-2 font-medium text-sm">
+                                                        <span>{p.name}</span>
+                                                        {p.recommended && (
+                                                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 font-semibold border border-red-500/30">
+                                                                Recommended
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[11px] text-neutral-400 font-mono truncate max-w-[280px]">
+                                                        {p.path}
+                                                    </div>
+                                                </div>
+                                                {isSelected ? (
+                                                    <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                                                ) : (
+                                                    <span className="text-xs text-white/50 hover:text-white flex-shrink-0">Select</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MPV Cloud Streaming Optimization Card */}
+                        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <Zap className="w-4 h-4 text-amber-400" />
+                                    <span className="text-sm font-semibold text-white">
+                                        Instant Cloud Streaming Profile (mpv.conf)
+                                    </span>
+                                </div>
+                                <p className="text-xs text-neutral-400">
+                                    Pre-configures 2MB initial chunk open, 30s readahead, 0.1s instant process exit, GPU D3D11 rendering, and HDR tone mapping.
+                                </p>
+                                {mpvDeployResult && (
+                                    <p className="text-xs text-emerald-400 mt-1 font-medium">✓ {mpvDeployResult}</p>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => handleDeployMpvConfig()}
+                                disabled={deployingMpvConf}
+                                className="liquid-glass-pill hover:bg-white/15 px-4 py-2.5 rounded-xl border border-white/20 text-xs font-semibold text-white flex items-center gap-2 whitespace-nowrap shadow-md transition disabled:opacity-50"
+                            >
+                                {deployingMpvConf ? (
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                                )}
+                                {mpvOptimized ? 'Re-apply Streaming Config' : 'Apply Streaming Config'}
+                            </button>
+                        </div>
                     </div>
                 </section>
 

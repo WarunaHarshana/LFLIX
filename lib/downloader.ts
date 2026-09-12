@@ -629,7 +629,15 @@ class DownloadManager {
 
                     if (response.statusCode !== 200 && response.statusCode !== 206) {
                         response.resume();
-                        markHttpError(`HTTP error ${response.statusCode}`);
+                        let errorMsg = `HTTP error ${response.statusCode}`;
+                        if (response.statusCode === 403) {
+                            errorMsg = 'Google Drive download quota exceeded for this file. Please choose another quality link (e.g. 1080p) or download via torrent.';
+                        } else if (response.statusCode === 404) {
+                            errorMsg = 'File not found on host (HTTP 404). The stream link may have expired.';
+                        } else if (response.statusCode === 410) {
+                            errorMsg = 'Download link has expired (HTTP 410). Please search and choose a fresh link.';
+                        }
+                        markHttpError(errorMsg);
                         return;
                     }
 

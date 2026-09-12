@@ -4,6 +4,13 @@ import db from '@/lib/db';
 import { validateExistingDirectory, validatePlayerExecutable } from '@/lib/security';
 import { apiErrorResponse, readJsonObject } from '@/lib/apiSecurity';
 import { isTmdbConfigured } from '@/lib/metadata';
+import {
+    findInstalledPlayers,
+    isMpvConfigOptimized,
+    getMpvConfigPath,
+    deployMpvConfig,
+    findMpvExecutable,
+} from '@/lib/playerConfig';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -34,7 +41,7 @@ export async function GET() {
             settingsObj.autoOrganize = 'true';
         }
 
-        // Validate current VLC path and add warning if invalid
+        // Validate current VLC/Player path and add warning if invalid
         if (settingsObj.vlcPath) {
             const validation = validateVlcPath(settingsObj.vlcPath);
             if (!validation.valid) {
@@ -42,7 +49,17 @@ export async function GET() {
             }
         }
 
-        return NextResponse.json({ ...settingsObj, tmdbConfigured: isTmdbConfigured() });
+        const detectedPlayers = findInstalledPlayers();
+        const mpvOptimized = isMpvConfigOptimized();
+        const mpvConfigPath = getMpvConfigPath();
+
+        return NextResponse.json({
+            ...settingsObj,
+            tmdbConfigured: isTmdbConfigured(),
+            detectedPlayers,
+            mpvOptimized,
+            mpvConfigPath,
+        });
     } catch (e) {
         return apiErrorResponse(e, 'Settings request failed');
     }
@@ -52,6 +69,29 @@ export async function GET() {
 export async function POST(req: Request) {
     try {
         const settings = await readJsonObject(req, 32 * 1024);
+
+        // Action handler for MPV streaming config deployment
+        if (settings.action === 'deploy-mpv-conf' || settings.action === 'setup-mpv') {
+            const mpvExe = typeof settings.playerPath === 'string' && settings.playerPath
+                ? settings.playerPath
+                : findMpvExecutable();
+
+            const deployRes = deployMpvConfig(mpvExe || undefined);
+            if (mpvExe) {
+                db.prepare(`
+                    INSERT INTO settings (key, value) VALUES ('vlcPath', ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                `).run(mpvExe);
+            }
+            return NextResponse.json({
+                success: deployRes.success,
+                message: deployRes.success
+                    ? 'MPV streaming configuration deployed successfully!'
+                    : (deployRes.error || 'Failed to deploy configuration'),
+                mpvPath: mpvExe,
+                configPath: deployRes.path,
+            });
+        }
 
         // Validate setting keys
         for (const key of Object.keys(settings)) {

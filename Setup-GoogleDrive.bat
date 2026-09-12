@@ -44,7 +44,19 @@ pause
 echo.
 echo ============================================
 echo Setup complete!
+echo.
+choice /C YN /M "Would you like to mount Google Drive (Z:) now with optimized streaming"
+if errorlevel 2 goto done_gdrive
+if errorlevel 1 (
+    echo Starting Google Drive mount in background...
+    start "" wscript "%~dp0Mount-GoogleDrive-Hidden.vbs"
+    timeout /t 2 >nul
+    echo Google Drive mounted to Z:
+)
+
+:done_gdrive
+echo.
 echo Open LFLIX Settings (http://localhost:3000/settings)
-echo to mount your drive or test the connection.
+echo to configure library folders or test the connection.
 echo ============================================
 pause

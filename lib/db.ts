@@ -2,6 +2,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { getBestDefaultPlayerPath } from './playerConfig';
 
 // Ensure data directory exists
 const dataDir = path.join(process.cwd(), 'data');
@@ -112,8 +113,6 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
-
-  INSERT OR IGNORE INTO settings (key, value) VALUES ('vlcPath', 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe');
   -- TMDB uses an optional settings override, then environment variable, then bundled default
 
   -- IPTV Channels
@@ -366,6 +365,21 @@ try {
         stateUpdatedAt = COALESCE(stateUpdatedAt, startedAt, CURRENT_TIMESTAMP)
     WHERE lastProgressAt IS NULL OR stateUpdatedAt IS NULL
   `).run();
+} catch { /* ignore */ }
+
+try {
+  const defaultPlayer = getBestDefaultPlayerPath();
+  const existingPlayer = db.prepare("SELECT value FROM settings WHERE key = 'vlcPath'").get() as { value: string } | undefined;
+  if (!existingPlayer) {
+    db.prepare("INSERT INTO settings (key, value) VALUES ('vlcPath', ?)").run(defaultPlayer);
+  } else if (
+    existingPlayer.value === 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe' &&
+    !fs.existsSync(existingPlayer.value)
+  ) {
+    if (fs.existsSync(defaultPlayer) && defaultPlayer !== existingPlayer.value) {
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'vlcPath'").run(defaultPlayer);
+    }
+  }
 } catch { /* ignore */ }
 
 // Create indexes for frequently queried columns

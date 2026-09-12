@@ -14,7 +14,7 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const tmdbIdParam = searchParams.get('tmdbId');
-    const typeParam = searchParams.get('type') || 'movie';
+    const typeParam = searchParams.get('mediaType') || searchParams.get('type') || 'movie';
     const seasonParam = searchParams.get('season');
     const episodeParam = searchParams.get('episode');
     const query = searchParams.get('q')?.trim();

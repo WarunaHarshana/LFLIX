@@ -213,42 +213,31 @@ if defined RCLONE_EXE (
         echo Would you like to configure your Google Drive now?
         echo (Press Y to run rclone setup, or N to configure later via Setup-GoogleDrive.bat)
         choice /C YN /M "Configure Google Drive now"
-        if errorlevel 2 goto check_vlc
+        if errorlevel 2 goto check_player
         if errorlevel 1 (
             call "Setup-GoogleDrive.bat"
         )
     )
 )
 
-:check_vlc
+:check_player
 echo.
-echo Checking VLC Media Player...
+echo Checking MPV Media Player (Recommended for Instant Google Drive Streaming)...
+call "Setup-MPV.bat"
 
-if exist "C:\Program Files\VideoLAN\VLC\vlc.exe" goto vlc_ok
-if exist "C:\Program Files (x86)\VideoLAN\VLC\vlc.exe" goto vlc_ok
-
-echo VLC not found. Install? (optional but recommended for best playback)
-choice /C YN
-if errorlevel 2 goto done
-
-echo Downloading VLC...
-curl -L -s -o "%TEMP%\vlc.exe" "https://get.videolan.org/vlc/3.0.20/win64/vlc-3.0.20-win64.exe"
-if not exist "%TEMP%\vlc.exe" (
-    powershell -Command "Invoke-WebRequest -Uri 'https://get.videolan.org/vlc/3.0.20/win64/vlc-3.0.20-win64.exe' -OutFile '%TEMP%\vlc.exe'" -ErrorAction SilentlyContinue
+:check_vlc_optional
+echo.
+echo Checking VLC Media Player (Optional Alternative)...
+if exist "C:\Program Files\VideoLAN\VLC\vlc.exe" (
+    echo [OK] VLC is also installed.
+    goto done
 )
-
-if exist "%TEMP%\vlc.exe" (
-    echo Installing VLC...
-    "%TEMP%\vlc.exe" /S
-    del "%TEMP%\vlc.exe" 2>nul
-    echo [OK] VLC installed!
-) else (
-    echo Could not download VLC. Install manually from videolan.org
+if exist "C:\Program Files (x86)\VideoLAN\VLC\vlc.exe" (
+    echo [OK] VLC is also installed.
+    goto done
 )
+echo [INFO] MPV is configured as primary player with streaming profile.
 goto done
-
-:vlc_ok
-echo [OK] VLC already installed!
 
 :done
 echo.
@@ -262,6 +251,7 @@ echo   [OK] npm dependencies
 echo   [OK] Aria2c fast multi-stream downloader
 echo   [OK] Rclone cloud integration
 echo   [OK] WinFsp cloud mount driver
+echo   [OK] MPV Player with Instant Cloud Streaming Config
 echo.
 echo You can now run 'Start LFLIX.bat' to launch!
 echo.

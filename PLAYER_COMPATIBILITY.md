@@ -12,12 +12,13 @@
 | **BSPlayer** | Android | Network stream | Hardware acceleration |
 
 ### Desktop Players
-| Player | Platform | How to Use |
-|--------|----------|------------|
-| **VLC** | Windows/Mac/Linux | Media → Open Network Stream |
-| **PotPlayer** | Windows | Open → Open URL |
-| **Kodi** | All | Add source → HTTP/DLNA |
-| **MPC-HC** | Windows | File → Open File/URL |
+| Player | Platform | How to Use | Notes |
+|--------|----------|------------|-------|
+| **MPV** (Recommended) | Windows/Mac/Linux | Direct / Auto-Launch (`Setup-MPV.bat`) | Instant cloud streaming (2M chunk open), 0.1s exit, D3D11 GPU, HDR-to-SDR |
+| **VLC** | Windows/Mac/Linux | Media → Open Network Stream | Universal format support |
+| **PotPlayer** | Windows | Open → Open URL | Lightweight, rich controls |
+| **Kodi** | All | Add source → HTTP/DLNA | Home theater experience |
+| **MPC-HC** | Windows | File → Open File/URL | Classic lightweight DirectShow player |
 
 ## 📋 How to Use Any Player
 
@@ -63,9 +64,10 @@ The **browser player** ("Play in Browser") works on ALL devices since it uses HT
 3. **Browser player** (Simplest)
 
 ### Windows
-1. **VLC** (Already works with LocalFlix)
-2. **PotPlayer** (Lightweight)
-3. **Browser** (Access via IP)
+1. **MPV** (Recommended — Instant Cloud Streaming & fast seek via `Setup-MPV.bat`)
+2. **VLC** (Universal compatibility)
+3. **PotPlayer** (Lightweight)
+4. **Browser** (Access via IP)
 
 ## 🔒 Security Note
 

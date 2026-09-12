@@ -12,6 +12,7 @@
 import { spawn, execSync, ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import { probeDirectDownloadUrl } from './directDownloadHealth';
 
 export interface Aria2Progress {
     percent: number;
@@ -196,17 +197,77 @@ export function startAria2Download(options: StartAria2Options): ChildProcess {
     proc.stdout?.on('data', handleChunk);
     proc.stderr?.on('data', handleChunk);
 
-    proc.on('close', (code) => {
+    proc.on('close', async (code) => {
         if (onComplete) {
             if (code === 0) {
                 console.log(`[Aria2] Download completed successfully: ${filename}`);
                 onComplete(true);
             } else {
                 console.error(`[Aria2] Download failed with code ${code}: ${lastError}`);
-                onComplete(false, lastError || `aria2c exited with code ${code}`);
+                const formatted = await formatAria2Error(lastError || `aria2c exited with code ${code}`, url);
+                onComplete(false, formatted);
             }
         }
     });
 
     return proc;
+}
+
+/**
+ * Translate cryptic aria2c errors (especially C++ exception strings and HTTP errors)
+ * into actionable, user-friendly messages.
+ */
+export async function formatAria2Error(rawError: string, url?: string): Promise<string> {
+    if (!rawError) return 'Download failed';
+
+    // Check for HTTP 403 Forbidden
+    if ((/errorCode=22/i.test(rawError) && /status=403/i.test(rawError)) || /status=403/i.test(rawError)) {
+        if (url) {
+            try {
+                const probe = await probeDirectDownloadUrl(url, 3000);
+                if (probe.quotaExceeded || probe.error) {
+                    return probe.error!;
+                }
+            } catch {
+                // fall through
+            }
+            if (/workers\.dev|shegu\.st|cinejoy|4khdhub/i.test(url)) {
+                return 'Google Drive download quota exceeded for this file. Please choose another quality link (e.g. 1080p) or download via torrent.';
+            }
+        }
+        return 'Download access forbidden (HTTP 403). The file host or CDN blocked access. Try another link or torrent.';
+    }
+
+    if ((/errorCode=22/i.test(rawError) && /status=404/i.test(rawError)) || /status=404/i.test(rawError)) {
+        return 'File not found on host (HTTP 404). The stream link may have expired.';
+    }
+
+    if ((/errorCode=22/i.test(rawError) && /status=410/i.test(rawError)) || /status=410/i.test(rawError)) {
+        return 'Download link has expired (HTTP 410). Please search and choose a fresh link.';
+    }
+
+    if ((/errorCode=22/i.test(rawError) && /status=50[234]/i.test(rawError)) || /status=50[234]/i.test(rawError)) {
+        return 'Host server is temporarily unavailable or overloaded (HTTP 502/503/504). Please try again later.';
+    }
+
+    if (/errorCode=9\b/i.test(rawError) || /not enough disk space/i.test(rawError)) {
+        return 'Not enough disk space to save the file.';
+    }
+
+    if (/errorCode=19\b/i.test(rawError) || /Name resolution failed/i.test(rawError)) {
+        return 'DNS lookup failed: could not resolve download host.';
+    }
+
+    if (/errorCode=2\b/i.test(rawError) || /time out/i.test(rawError)) {
+        return 'Download timed out connecting to the file host.';
+    }
+
+    // Clean up raw C++ file pointers like -> [HttpSkipResponseCommand.cc:239]
+    const cleaned = rawError
+        .replace(/->\s*\[[\w.]+:\d+\]\s*/g, '')
+        .replace(/Exception:\s*\[[\w.]+:\d+\]\s*/g, '')
+        .replace(/^errorCode=\d+\s*/g, '')
+        .trim();
+
+    return cleaned || 'Download failed';
 }

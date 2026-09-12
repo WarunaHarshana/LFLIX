@@ -187,7 +187,7 @@ if defined RCLONE_EXE (
         echo [INFO] No Google Drive remote configured yet.
         echo Would you like to link your Google Drive now?
         choice /C YN /M "Configure Google Drive now"
-        if errorlevel 2 goto check_vlc
+        if errorlevel 2 goto check_player
         if errorlevel 1 (
             call "Setup-GoogleDrive.bat"
         )
@@ -195,21 +195,11 @@ if defined RCLONE_EXE (
 )
 echo.
 
-:check_vlc
-echo Step 7: Checking VLC Media Player...
+:check_player
+echo Step 7: Checking Media Player (MPV recommended for Instant Google Drive Streaming)...
 echo.
-
-if exist "C:\Program Files\VideoLAN\VLC\vlc.exe" goto vlc_ok
-if exist "C:\Program Files (x86)\VideoLAN\VLC\vlc.exe" goto vlc_ok
-
-echo VLC not found (optional but recommended for best playback)
-echo Download from: https://videolan.org/vlc/
-echo.
+call "Setup-MPV.bat"
 goto done
-
-:vlc_ok
-echo [OK] VLC is installed!
-echo.
 
 :done
 echo ============================================

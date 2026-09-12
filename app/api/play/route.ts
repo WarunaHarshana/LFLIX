@@ -4,6 +4,7 @@ import fs from 'fs';
 import db from '@/lib/db';
 import { parsePositiveInt, validatePlayerExecutable } from '@/lib/security';
 import { apiErrorResponse, rateLimit, readJsonObject } from '@/lib/apiSecurity';
+import { getBestDefaultPlayerPath } from '@/lib/playerConfig';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,16 @@ export const dynamic = 'force-dynamic';
 function getPlayerPath(): string {
   try {
     const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('vlcPath') as { value: string } | undefined;
+    if (setting?.value && fs.existsSync(setting.value)) {
+      return setting.value;
+    }
+    const detected = getBestDefaultPlayerPath();
+    if (fs.existsSync(detected)) {
+      try {
+        db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(detected, 'vlcPath');
+      } catch {}
+      return detected;
+    }
     return setting?.value || 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
   } catch {
     return 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';

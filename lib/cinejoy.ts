@@ -322,6 +322,7 @@ export type CinejoyDirectDownload = {
   sizeBytes: number;
   url: string;
   provider: string;
+  quotaExceeded?: boolean;
 };
 
 export function parseDirectDownloadSizeBytes(sizeStr: string): number {
@@ -344,7 +345,41 @@ export type DirectDownloadContext = {
   episode?: number;
 };
 
-export function extractRealReleaseFilename(url: string): string | null {
+export function isPlausibleReleaseFilename(filename: string, contextTitle?: string): boolean {
+  if (!filename) return false;
+  const clean = filename.trim();
+  if (clean.length < 5) return false;
+
+  // Reject generic CDN/player filenames or playlist manifests
+  if (/^(?:download|video|file|stream|index|master|manifest|output|play|chunk|enc[\w-]*)[\d._-]*\.[a-z0-9]+$/i.test(clean)) {
+    return false;
+  }
+  const ext = clean.split('.').pop()?.toLowerCase();
+  if (ext && ['m3u8', 'mpd', 'ts', 'key'].includes(ext)) {
+    return false;
+  }
+
+  // If a context title is provided, check if the filename contains at least one significant title word
+  if (contextTitle) {
+    const titleTokens = contextTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !/^(the|and|for|with)$/.test(w));
+
+    if (titleTokens.length > 0) {
+      const lowerClean = clean.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+      const hasAnyToken = titleTokens.some((t) => lowerClean.includes(t));
+      if (!hasAnyToken) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+export function extractRealReleaseFilename(url: string, contextTitle?: string): string | null {
   try {
     const parsed = new URL(url);
     const disposition = parsed.searchParams.get('response-content-disposition');
@@ -352,7 +387,7 @@ export function extractRealReleaseFilename(url: string): string | null {
       const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
       if (match && match[1]) {
         const decoded = decodeURIComponent(match[1]).trim();
-        if (decoded && !/^(?:download|video|file)\.[a-z0-9]+$/i.test(decoded)) {
+        if (isPlausibleReleaseFilename(decoded, contextTitle)) {
           return decoded;
         }
       }
@@ -360,7 +395,7 @@ export function extractRealReleaseFilename(url: string): string | null {
     const pathName = parsed.pathname.split('/').filter(Boolean).pop();
     if (pathName && pathName.includes('.')) {
       const decoded = decodeURIComponent(pathName).trim();
-      if (decoded && !/^(?:download|video|file)\.[a-z0-9]+$/i.test(decoded)) {
+      if (isPlausibleReleaseFilename(decoded, contextTitle)) {
         return decoded;
       }
     }
@@ -395,7 +430,8 @@ export function getDirectDownloadQualityLabel(quality: number): string {
   return `${quality}p`;
 }
 
-const DOWNLOADS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const DOWNLOADS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const NEGATIVE_CACHE_TTL_MS = 10_000; // 10 seconds on errors/empty to allow fast retries
 const cinejoyDownloadsCache = new MemoryCache<CinejoyDirectDownload[]>(1, 100);
 
 export async function fetchCinejoyDirectDownloads(
@@ -423,14 +459,29 @@ export async function fetchCinejoyDirectDownloads(
     : `${CINEJOY_DOWNLOADS_API}/tv/${tmdbId}/${season || 1}/${episode || 1}`;
 
   try {
-    const res = await fetch(endpoint, {
-      headers: CINEJOY_HEADERS,
-      signal: AbortSignal.timeout(10000),
-    });
+    // Upstream API can be slow for TV episodes; use generous timeout + one retry on timeout
+    const FETCH_TIMEOUT_MS = 20_000;
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        headers: CINEJOY_HEADERS,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch (firstErr: any) {
+      // Retry once on timeout (TV endpoints are often slower)
+      if (firstErr?.name === 'TimeoutError' || firstErr?.code === 'UND_ERR_CONNECT_TIMEOUT') {
+        res = await fetch(endpoint, {
+          headers: CINEJOY_HEADERS,
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+      } else {
+        throw firstErr;
+      }
+    }
 
     if (!res.ok) {
       if (res.status === 404 || res.status === 500) {
-        cinejoyDownloadsCache.set(cacheKey, [], 60_000);
+        cinejoyDownloadsCache.set(cacheKey, [], NEGATIVE_CACHE_TTL_MS);
         return [];
       }
       throw new Error(`Direct downloads request failed: HTTP ${res.status}`);
@@ -439,7 +490,7 @@ export async function fetchCinejoyDirectDownloads(
     const data = await res.json();
     const rawLinks = Array.isArray(data?.links) ? data.links : [];
     if (rawLinks.length === 0) {
-      cinejoyDownloadsCache.set(cacheKey, [], 60_000);
+      cinejoyDownloadsCache.set(cacheKey, [], NEGATIVE_CACHE_TTL_MS);
       return [];
     }
 
@@ -457,10 +508,10 @@ export async function fetchCinejoyDirectDownloads(
       const sizeBytes = parseDirectDownloadSizeBytes(sizeStr);
       const quality = typeof link.quality === 'number' ? link.quality : 1080;
       const rawName = typeof link.name === 'string' ? link.name.trim() : '';
-      const source = typeof link.source === 'string' ? link.source.trim() : 'Direct';
-      const provider = typeof link.provider === 'string' ? link.provider.trim() : '';
+      const source = typeof link.source === 'string' && link.source.trim() ? link.source.trim() : 'Cinejoy';
+      const provider = typeof link.provider === 'string' && link.provider.trim() ? link.provider.trim() : 'cinejoy';
 
-      const extractedRelease = extractRealReleaseFilename(url);
+      const extractedRelease = extractRealReleaseFilename(url, context?.title);
       let displayName = '';
       if (extractedRelease) {
         displayName = extractedRelease.replace(/\.[a-z0-9]+$/i, '');
@@ -505,15 +556,36 @@ export async function fetchCinejoyDirectDownloads(
       });
     }
 
-    // Sort by resolution descending, then file size descending
-    downloads.sort((a, b) => b.quality - a.quality || b.sizeBytes - a.sizeBytes);
+    // Perform fast parallel health probe to flag any Google Drive quota-exceeded streams
+    try {
+      const { probeDirectDownloadUrl } = await import('./directDownloadHealth');
+      await Promise.allSettled(
+        downloads.map(async (dl) => {
+          const probe = await probeDirectDownloadUrl(dl.url, 2500);
+          if (probe.quotaExceeded) {
+            dl.quotaExceeded = true;
+          }
+        })
+      );
+    } catch {
+      // Non-fatal: if health probe fails, continue with unflagged links
+    }
+
+    // Sort: available before quotaExceeded, then by resolution descending, then file size descending
+    downloads.sort((a, b) => {
+      const aBlocked = a.quotaExceeded ? 1 : 0;
+      const bBlocked = b.quotaExceeded ? 1 : 0;
+      if (aBlocked !== bBlocked) return aBlocked - bBlocked;
+      return b.quality - a.quality || b.sizeBytes - a.sizeBytes;
+    });
 
     cinejoyDownloadsCache.set(cacheKey, downloads, DOWNLOADS_CACHE_TTL_MS);
     return downloads;
   } catch (error: any) {
     console.error(`[cinejoy] Direct downloads fetch failed for ${mediaType} ${tmdbId}:`, error.message || error);
-    cinejoyDownloadsCache.set(cacheKey, [], 60_000);
+    cinejoyDownloadsCache.set(cacheKey, [], NEGATIVE_CACHE_TTL_MS);
     return [];
   }
 }
+
 

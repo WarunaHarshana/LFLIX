@@ -588,6 +588,39 @@ export function uploadFile(
     return proc;
 }
 
+export function getOptimizedMountArgs(remote: string, mountDrive: string, tempPath?: string): string[] {
+    const args = [
+        'mount',
+        `${remote}:`,
+        mountDrive,
+        '--vfs-cache-mode', 'full',
+        '--vfs-cache-max-size', '20G',
+        '--vfs-cache-max-age', '24h',
+        '--vfs-read-chunk-size', '2M',
+        '--vfs-read-chunk-size-limit', '64M',
+        '--vfs-handle-caching', '0s',
+        '--vfs-read-wait', '0ms',
+        '--vfs-fast-fingerprint',
+        '--buffer-size', '16M',
+        '--drive-pacer-min-sleep', '10ms',
+        '--drive-pacer-burst', '200',
+        '--volname', 'Google Drive',
+        '--poll-interval', '15s',
+        '--dir-cache-time', '24h',
+        '--attr-timeout', '24h',
+        '--no-modtime',
+        '--no-checksum',
+        '--log-level', 'NOTICE',
+    ];
+
+    if (tempPath) {
+        const cacheDir = path.join(tempPath, 'rclone-cache');
+        args.push('--cache-dir', cacheDir);
+    }
+
+    return args;
+}
+
 /**
  * Mount Google Drive using rclone with optimized streaming flags.
  * Returns the child process (long-running daemon).
@@ -618,21 +651,8 @@ export function mountDrive(
 
     console.log(`[GDrive] Mounting ${config.remote}: → ${config.mountDrive}`);
 
-    const proc = spawn(rcloneBin, [
-        'mount',
-        `${config.remote}:`,
-        config.mountDrive,
-        '--vfs-cache-mode', 'full',
-        '--vfs-cache-max-size', '20G',
-        '--vfs-cache-max-age', '24h',
-        '--vfs-read-chunk-size', '64M',
-        '--vfs-read-chunk-size-limit', '2G',
-        '--buffer-size', '64M',
-        '--dir-cache-time', '72h',
-        '--poll-interval', '15s',
-        '--log-level', 'NOTICE',
-        '--volname', 'Google Drive',
-    ], { stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+    const mountArgs = getOptimizedMountArgs(config.remote, config.mountDrive, config.tempPath);
+    const proc = spawn(rcloneBin, mountArgs, { stdio: ['pipe', 'pipe', 'pipe'], detached: true });
 
     let started = false;
 
