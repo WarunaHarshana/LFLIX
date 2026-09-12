@@ -4,7 +4,7 @@
  */
 
 import db from './db';
-import { searchTorrents, TorrentResult, isDirectDownloadMatch } from './torrentSearch';
+import { searchTorrents, TorrentResult, isDirectDownloadMatch, isCamQualityResult } from './torrentSearch';
 import downloadManager from './downloader';
 import releaseMonitor, { NewEpisodeInfo } from './releaseMonitor';
 
@@ -57,78 +57,99 @@ export interface AutoDownloadStatus {
   failed: number;
 }
 
+export function getResolutionTier(quality?: string): number {
+  if (!quality) return 0;
+  const q = quality.toLowerCase();
+  if (/2160|4k|uhd/i.test(q)) return 5;
+  if (/1440|2k/i.test(q)) return 4;
+  if (/1080/i.test(q)) return 3;
+  if (/720/i.test(q)) return 2;
+  if (/480|576/i.test(q)) return 1;
+  if (/bluray|remux|bdrip/i.test(q)) return 3; // Typically 1080p
+  if (/web[\s.-]?dl|webrip/i.test(q)) return 2.5;
+  return 0.5;
+}
+
+export function getResolutionTierBaseScore(quality?: string, preferredQuality?: string): number {
+  const tier = getResolutionTier(quality);
+  const pref = (preferredQuality || 'best').toLowerCase();
+
+  // If preference is 1080p specifically
+  if (pref === '1080p') {
+    if (tier === 3) return 100_000;      // 1080p is top tier
+    if (tier === 2) return 80_000;       // 720p fallback
+    if (tier === 1) return 60_000;       // 480p fallback
+    if (tier >= 4) return 40_000;        // 4K fallback
+    return 10_000;
+  }
+
+  if (pref === '720p') {
+    if (tier === 2) return 100_000;      // 720p is top tier
+    if (tier === 1) return 80_000;       // 480p fallback
+    if (tier === 3) return 60_000;       // 1080p fallback
+    if (tier >= 4) return 40_000;        // 4K fallback
+    return 10_000;
+  }
+
+  // Default: 'best', '2160p', 'any', or unspecified — resolution comes strictly first:
+  // 2160p (100,000) > 1440p (80,000) > 1080p (60,000) > 720p (40,000) > 480p (20,000)
+  if (tier >= 5) return 100_000;         // 2160p / 4K / UHD
+  if (tier >= 4) return 80_000;          // 1440p / 2K
+  if (tier >= 3) return 60_000;          // 1080p / FHD
+  if (tier >= 2) return 40_000;          // 720p / HD
+  if (tier >= 1) return 20_000;          // 480p / SD
+  return 10_000;                         // Unknown / non-cam
+}
+
 /**
- * Score a torrent result by quality, size, and seeds.
+ * Score a candidate release by resolution tier, provider source (DDL first within tier), seeds, and size.
  */
-function scoreTorrent(result: TorrentResult, preferredQuality: string, maxQualityScore?: number): number {
-  // If a direct download is known to have exceeded its quota, skip it
+export function scoreTorrent(result: TorrentResult, preferredQuality: string, maxQualityScore?: number): number {
+  // If a direct download is known to have exceeded its quota, disqualify immediately
   if ((result as any).quotaExceeded) {
     return 0;
   }
 
-  let score = 0;
-
-  // Base quality score
-  const quality = result.quality || 'Unknown';
-  const qualityScore = getQualityScore(quality);
-  score += qualityScore;
-
-  // Massive bonus for DDLs (User preference: check DDL first, fallback to torrent)
-  if (result.source === 'DDL') {
-    let preferredQualityScore = 100; // default for 'best'
-    if (preferredQuality === 'any') {
-      preferredQualityScore = 0;
-    } else if (preferredQuality && preferredQuality !== 'best') {
-      preferredQualityScore = getQualityScore(preferredQuality);
-    }
-
-    // DDL priority policy:
-    // If DDL meets/exceeds preferred quality: +1000 bonus (dominant priority)
-    // If DDL is HD (>= 720p), it still gets a strong +500 bonus over all torrents.
-    // DDLs within the same tier rank by resolution (2160p > 1080p > 720p) and size.
-    if (qualityScore >= preferredQualityScore) {
-      score += 1000;
-    } else if (qualityScore >= 60) {
-      score += 500;
-    } else {
-      score += 15;
-    }
+  // Disqualify CAM / TS releases
+  if (isCamQualityResult(result)) {
+    return 0;
   }
 
-  // Source bonuses (check title for encoding info)
+  const quality = result.quality || 'Unknown';
+  let score = getResolutionTierBaseScore(quality, preferredQuality);
+
+  // Within the same resolution tier, Direct Download (DDL) is prioritized first over torrents.
+  // DDL receives +10,000 bonus.
+  // Torrents receive up to +5,000 bonus based on seeders/peers.
+  // This guarantees:
+  // 1) 2160p DDL (110,000+) beats 2160p Torrent (100,000 - 105,000)
+  // 2) 2160p Torrent (100,000+) ALWAYS beats 1080p DDL (70,000+)
+  // 3) Within torrents in the same tier, higher seeders/peers always beat lower seeders.
+  if (result.source === 'DDL') {
+    score += 10_000;
+  } else if (result.seeds > 0) {
+    score += Math.min(5_000, Math.log2(result.seeds + 1) * 500);
+  }
+
+  // Source & encoding bonuses (check title for encoding info)
   const titleLower = result.title.toLowerCase();
   for (const [tag, bonus] of Object.entries(SOURCE_BONUS)) {
     if (titleLower.includes(tag.toLowerCase())) {
-      score += bonus;
+      score += bonus * 15;
     }
   }
 
-  // Seed count bonus (more seeds = more reliable, but cap the bonus)
-  if (result.seeds > 0) {
-    score += Math.min(20, Math.log2(result.seeds) * 3);
-  }
-
-  // Size heuristic: prefer larger files (better quality), but not absurdly large
+  // Size heuristic: prefer healthy file sizes (1 - 25 GB for episodes)
   if (result.sizeBytes > 0) {
     const sizeGB = result.sizeBytes / (1024 ** 3);
-    if (sizeGB >= 1 && sizeGB <= 8) score += 10;        // sweet spot for episodes
-    else if (sizeGB >= 8 && sizeGB <= 20) score += 15;   // likely higher quality
-    else if (sizeGB > 50) score -= 20;                    // probably a full season pack
-  }
-
-  // Preferred quality bonus — if the result matches what user wants
-  if (preferredQuality !== 'any' && preferredQuality !== 'best') {
-    const prefScore = QUALITY_SCORES[preferredQuality] || 80;
-    const actualScore = QUALITY_SCORES[quality] || 20;
-    // Bonus if at or above preferred quality
-    if (actualScore >= prefScore) score += 15;
-    // Penalty if below preferred
-    else score -= 10;
+    if (sizeGB >= 1 && sizeGB <= 8) score += 200;
+    else if (sizeGB > 8 && sizeGB <= 25) score += 300;
+    else if (sizeGB > 50) score -= 2_000; // likely a full season pack or raw rip
   }
 
   // Penalty for obvious season packs (we want single episodes)
   if (/complete|full\s*season|s\d+\s*(?:complete|pack)/i.test(result.title)) {
-    score -= 50;
+    score -= 5_000;
   }
 
   return Math.max(0, score);
@@ -326,8 +347,8 @@ class AutoDownloader {
       const best = scored[0];
       console.log(`[AutoDownloader] Best result: "${best.title}" (score: ${best._score}, quality: ${best.quality}, seeds: ${best.seeds}, size: ${best.size})`);
 
-      // Only download if score is reasonable
-      if (best._score < 30) {
+      // Only download if best score is reasonable
+      if (best._score < 1_000) {
         console.log(`[AutoDownloader] Best result score too low (${best._score}), marking for retry`);
         this.markRetry(ep);
         if (ep.isManual) {
@@ -345,24 +366,60 @@ class AutoDownloader {
         return false;
       }
 
-      // Format clean filename for direct downloads
-      let customFilename: string | undefined = undefined;
-      if (best.magnet.startsWith('http-direct:')) {
-        const isJunkName = !best.title || /cinejoy|fsl_server|^4k\s*\[/i.test(best.title);
-        if (!isJunkName) {
-          customFilename = best.title.endsWith('.mkv') || best.title.endsWith('.mp4')
-            ? best.title
-            : `${best.title}.mkv`;
-        } else {
-          customFilename = `${ep.showTitle} S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')} [${best.quality || '1080p'}].mkv`;
+      // Try candidates in strict ranked order (e.g. 2160p DDL -> 2160p torrent -> 1080p DDL -> 1080p torrent)
+      // If a candidate throws an error upon initiation, seamlessly fall back to the next candidate.
+      let download: any = null;
+      let chosenResult: (typeof scored)[0] | null = null;
+      let lastInitiationError: any = null;
+
+      for (const candidate of scored) {
+        if (candidate._score < 1_000) break;
+
+        // Format clean filename for direct downloads
+        let customFilename: string | undefined = undefined;
+        if (candidate.magnet.startsWith('http-direct:')) {
+          const isJunkName = !candidate.title || /cinejoy|fsl_server|^4k\s*\[/i.test(candidate.title);
+          if (!isJunkName) {
+            customFilename = candidate.title.endsWith('.mkv') || candidate.title.endsWith('.mp4')
+              ? candidate.title
+              : `${candidate.title}.mkv`;
+          } else {
+            customFilename = `${ep.showTitle} S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')} [${candidate.quality || '1080p'}].mkv`;
+          }
+        }
+
+        try {
+          const target = ep.target;
+          download = target && target !== 'local'
+            ? await downloadManager.addDownload(candidate.magnet, undefined, undefined, customFilename, target)
+            : await downloadManager.addDownload(candidate.magnet, undefined, undefined, customFilename);
+
+          chosenResult = candidate;
+          console.log(`[AutoDownloader] Download started for ${ep.showTitle} ${epLabel} using "${candidate.title}" (source: ${candidate.source}, quality: ${candidate.quality})`);
+          break;
+        } catch (initErr) {
+          lastInitiationError = initErr;
+          console.warn(`[AutoDownloader] Failed to initiate candidate "${candidate.title}" (${candidate.source}), falling back to next candidate:`, initErr);
         }
       }
 
-      // Start the download
-      const target = ep.target;
-      const download = target && target !== 'local'
-        ? await downloadManager.addDownload(best.magnet, undefined, undefined, customFilename, target)
-        : await downloadManager.addDownload(best.magnet, undefined, undefined, customFilename);
+      if (!download || !chosenResult) {
+        console.error(`[AutoDownloader] All candidate downloads failed to initiate for ${ep.showTitle} ${epLabel}:`, lastInitiationError);
+        this.markRetry(ep);
+        if (ep.isManual) {
+          releaseMonitor.createNotification({
+            type: 'download_failed',
+            title: 'Download Failed',
+            message: `Could not start download for ${ep.showTitle} ${epLabel}`,
+            showId: ep.showId,
+            tmdbId: ep.tmdbId,
+            seasonNumber: ep.seasonNumber,
+            episodeNumber: ep.episodeNumber,
+            posterPath: ep.posterPath,
+          });
+        }
+        return false;
+      }
 
       // Upsert into episode_releases
       db.prepare(`
@@ -378,7 +435,7 @@ class AutoDownloader {
       releaseMonitor.createNotification({
         type: 'download_started',
         title: ep.isManual ? 'Download Started' : 'Auto-Download Started',
-        message: `${ep.showTitle} ${epLabel} — ${best.quality} (${best.size})`,
+        message: `${ep.showTitle} ${epLabel} — ${chosenResult.quality} (${chosenResult.size})`,
         showId: ep.showId,
         tmdbId: ep.tmdbId,
         seasonNumber: ep.seasonNumber,
@@ -386,7 +443,6 @@ class AutoDownloader {
         posterPath: ep.posterPath,
       });
 
-      console.log(`[AutoDownloader] Download started for ${ep.showTitle} ${epLabel}`);
       return true;
     } catch (e) {
       console.error(`[AutoDownloader] Search/download error for "${query}":`, e);
@@ -536,4 +592,5 @@ class AutoDownloader {
 
 // Singleton
 const autoDownloader = new AutoDownloader();
+export { autoDownloader };
 export default autoDownloader;

@@ -37,8 +37,18 @@ export function parseSizeToBytes(sizeStr: string): number {
 }
 
 export function extractQuality(title: string): string {
-  const match = title.match(/(2160p|4K|UHD|1080p|720p|480p|HDRip|BDRip|BluRay|WEBRip|WEB-DL|HDTV|HDCAM|CAM|TS|TC|TeleSync|Telecine)/i);
-  return match ? match[1] : 'Unknown';
+  // Check explicit resolutions first so source tags like WEB-DL or BluRay don't shadow the resolution
+  const resMatch = title.match(/\b(2160p|4k|uhd|1440p|2k|1080p|720p|480p)\b/i);
+  if (resMatch) {
+    const raw = resMatch[1].toUpperCase();
+    if (raw === '4K' || raw === 'UHD') return '2160p';
+    if (raw === '2K') return '1440p';
+    return resMatch[1].toLowerCase();
+  }
+
+  // Next, check for source / release types
+  const ripMatch = title.match(/\b(BluRay|BDRip|BRRip|Remux|WEB-DL|WEBRip|HDRip|HDTV|CAM|TS|TC|TeleSync|Telecine)\b/i);
+  return ripMatch ? ripMatch[1] : 'Unknown';
 }
 
 export function isCamQualityResult(result: { title: string; quality?: string }): boolean {

@@ -61,6 +61,7 @@ export interface TorrentResult {
     source: string;
     uploadDate?: string;
     uploadTimestamp?: number;
+    quotaExceeded?: boolean;
 }
 
 export type TorrentSourceName = 'PSA' | 'TPB' | 'YTS' | 'TorrentsCSV' | 'EZTV' | '1337x' | 'Knaben' | 'Nyaa' | 'DDL';
@@ -1134,6 +1135,7 @@ async function searchDirectDownloads(
                             leeches: 0,
                             quality,
                             source: 'DDL',
+                            quotaExceeded: Boolean(dl.quotaExceeded),
                         };
                     });
                 } catch (e) {

@@ -6,6 +6,7 @@
 
 import db from './db';
 import { isCamQualityResult, isGoodMovieReleaseQuality, searchTorrents, TorrentResult } from './torrentSearch';
+import { getResolutionTierBaseScore } from './autoDownloader';
 import releaseMonitor from './releaseMonitor';
 
 // Re-use the same quality scoring from autoDownloader
@@ -34,7 +35,7 @@ function getQualityScore(quality?: string): number {
 }
 
 /** Minimum score to consider a movie "available" */
-const MIN_AVAILABLE_SCORE = 70;
+const MIN_AVAILABLE_SCORE = 1_000;
 
 /** Don't re-check a movie more often than this */
 const RE_CHECK_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -67,9 +68,9 @@ export interface MovieReleaseRow {
 }
 
 /**
- * Score a torrent result for a movie (simplified from autoDownloader).
+ * Score a candidate release for a movie with strict resolution-tiered prioritization.
  */
-function scoreMovieTorrent(result: TorrentResult, maxQualityScore?: number): number {
+export function scoreMovieTorrent(result: TorrentResult, maxQualityScore?: number): number {
   if ((result as any).quotaExceeded) {
     return 0;
   }
@@ -78,35 +79,22 @@ function scoreMovieTorrent(result: TorrentResult, maxQualityScore?: number): num
     return 0;
   }
 
-  let score = 0;
-
   const quality = result.quality || 'Unknown';
-  const qualityScore = getQualityScore(quality);
-  score += qualityScore;
+  let score = getResolutionTierBaseScore(quality, 'best');
 
-  // DDL bonus
+  // Within the same resolution tier, DDL receives +10,000 to prioritize over torrents
   if (result.source === 'DDL') {
-    const targetQualityScore = maxQualityScore !== undefined ? maxQualityScore : 100;
-    if (qualityScore >= targetQualityScore) {
-      score += 1000;
-    } else if (qualityScore >= 60) {
-      score += 500;
-    } else {
-      score += 15;
-    }
+    score += 10_000;
+  } else if (result.seeds > 0) {
+    score += Math.min(5_000, Math.log2(result.seeds + 1) * 500);
   }
 
-  // Seed count bonus
-  if (result.seeds > 0) {
-    score += Math.min(20, Math.log2(result.seeds) * 3);
-  }
-
-  // Size heuristic for movies (prefer 1–20 GB range)
+  // Size heuristic for movies (prefer 1–25 GB range)
   if (result.sizeBytes > 0) {
     const sizeGB = result.sizeBytes / (1024 ** 3);
-    if (sizeGB >= 1 && sizeGB <= 5) score += 10;
-    else if (sizeGB > 5 && sizeGB <= 20) score += 15;
-    else if (sizeGB > 50) score -= 20;
+    if (sizeGB >= 1 && sizeGB <= 5) score += 200;
+    else if (sizeGB > 5 && sizeGB <= 25) score += 300;
+    else if (sizeGB > 50) score -= 2_000;
   }
 
   // Source bonuses
@@ -115,7 +103,7 @@ function scoreMovieTorrent(result: TorrentResult, maxQualityScore?: number): num
     ['remux', 15], ['bluray', 10], ['web-dl', 5], ['dv', 4], ['dolby vision', 4], ['hdr10+', 4], ['hdr', 3], ['hevc', 3], ['x265', 3], ['av1', 3], ['10bit', 2],
   ];
   for (const [tag, bonus] of sourceBonuses) {
-    if (titleLower.includes(tag)) score += bonus;
+    if (titleLower.includes(tag)) score += bonus * 15;
   }
 
   return Math.max(0, score);
