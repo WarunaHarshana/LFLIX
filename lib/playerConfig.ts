@@ -71,9 +71,9 @@ screenshot-template="mpv_%F_%P"
 
 # === Fast Open & Cloud Streaming Cache ===
 cache=yes
-demuxer-max-bytes=500MiB
-demuxer-max-back-bytes=150MiB
-demuxer-readahead-secs=60
+demuxer-max-bytes=300MiB
+demuxer-max-back-bytes=100MiB
+demuxer-readahead-secs=30
 demuxer-seekable-cache=yes
 force-seekable=yes
 hr-seek=yes
