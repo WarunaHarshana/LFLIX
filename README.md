@@ -24,6 +24,7 @@ A Netflix-style local media server that organizes and plays your movie & TV show
 | ⏸️ **Download Manager** | Pause, resume, delete downloads with progress tracking |
 | ⏯️ **Continue Watching** | Resume where you left off |
 | 📱 **Mobile & TV** | Access from any device via browser, QR code, or DLNA |
+| ☁️ **Google Drive Mount** | Stream and download directly to Google Drive with 0 local disk usage ([Setup Guide](docs/GOOGLE_DRIVE_SETUP.md)) |
 | 📡 **DLNA Server** | Auto-discover on Smart TVs |
 | 🔒 **PIN Protection** | Secure your library |
 | ⌨️ **Keyboard Navigation** | Arrow keys, Enter, search with `/` |
@@ -85,6 +86,14 @@ TV Shows/
 ```
 
 **Supported:** `.mp4` `.mkv` `.avi` `.mov` `.m4v` `.wmv` `.flv` `.webm` `.ts`
+
+## ☁️ Google Drive & Cloud Streaming (Zero Local Disk)
+
+LFLIX includes native integration with Google Drive via Rclone and WinFsp:
+- **Direct Cloud Downloads**: Download torrents and direct downloads straight to Google Drive.
+- **Auto-Organized Cloud Library**: Automatically sorts episodes into `TV Shows/<Show>/Season XX/` and movies into `Movies/<Title (Year)>/`.
+- **Instant Cloud Streaming**: Stream 4K/1080p media directly from your mounted Google Drive (`Z:`) with zero local disk buffering.
+- **Dedicated Client ID Guide**: See [docs/GOOGLE_DRIVE_SETUP.md](docs/GOOGLE_DRIVE_SETUP.md) for step-by-step instructions on setting up your free Google Cloud credentials for max upload speed (100–300+ Mbps) and zero rate limits.
 
 ## 📱 Access from Any Device
 

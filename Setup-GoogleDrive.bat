@@ -31,7 +31,11 @@ echo Instructions to connect Google Drive:
 echo   1. Type 'n' for New remote
 echo   2. Name: gdrive
 echo   3. Storage: Google Drive (type 'drive')
-echo   4. Leave Client ID / Secret blank (press Enter)
+echo   4. Client ID ^& Secret:
+echo      - RECOMMENDED: Paste your own Client ID ^& Secret
+echo        (For guide, see: docs\GOOGLE_DRIVE_SETUP.md)
+echo        Gives full 100-300+ Mbps upload and zero 403 errors!
+echo      - OR press Enter to leave blank (slower shared quota)
 echo   5. Scope: choose 1 (Full access)
 echo   6. Service Account: press Enter
 echo   7. Advanced config: type 'n'

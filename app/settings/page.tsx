@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye, Palette, Activity, Cloud, CloudUpload, CheckCircle, XCircle, FolderPlus, Copy, Play, Zap } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Settings as SettingsIcon, Folder, Key, Monitor, Keyboard, Download, HardDrive, Eye, Palette, Activity, Cloud, CloudUpload, CheckCircle, XCircle, FolderPlus, Copy, Play, Zap, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from '../components/ThemeProvider';
 
@@ -127,6 +127,7 @@ export default function SettingsPage() {
     const [tmdbConfigured, setTmdbConfigured] = useState(true);
     const [gdriveStatus, setGdriveStatus] = useState<any>(null);
     const [gdriveActionLoading, setGdriveActionLoading] = useState<string | null>(null);
+    const [showGdriveGuide, setShowGdriveGuide] = useState(false);
     const [cloudStatus, setCloudStatus] = useState<any>(null);
     const [testingCloud, setTestingCloud] = useState(false);
     const [cloudTestResult, setCloudTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -934,6 +935,51 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
                             )}
+
+                            {/* 💡 Dedicated Client ID Guide Callout */}
+                            <div className="p-4 rounded-2xl border border-blue-500/20 bg-blue-500/[0.04] space-y-3 mt-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-blue-300">
+                                        <Sparkles className="w-4 h-4 text-blue-400" />
+                                        <span>Pro Tip: Unlock Full Upload Speed & Zero 403 Errors</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowGdriveGuide(!showGdriveGuide)}
+                                        className="text-xs text-blue-400 hover:text-blue-300 transition font-medium flex items-center gap-1"
+                                    >
+                                        {showGdriveGuide ? 'Hide Guide ▲' : 'View 2-Min Setup Guide ▼'}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-neutral-300 leading-relaxed">
+                                    By default, Rclone uses a shared public client ID that gets throttled to ~2 MB/s with 403 quota errors. Creating your own free Google Cloud Client ID takes 2 minutes, is 100% free (no credit card required), and unlocks full 100–300+ Mbps speeds!
+                                </p>
+                                {showGdriveGuide && (
+                                    <div className="pt-2 border-t border-blue-500/15 space-y-2.5 text-xs text-neutral-300">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 space-y-1">
+                                                <span className="font-semibold text-white">1. Create Project</span>
+                                                <p className="text-neutral-400">Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-blue-400 underline">Google Cloud Console</a> & create a free project (e.g. <code>LFLIX-Drive</code>).</p>
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 space-y-1">
+                                                <span className="font-semibold text-white">2. Consent Screen & Test User</span>
+                                                <p className="text-neutral-400">Under <b>Google Auth Platform</b>, click <b>Get Started</b>. Under <b>Audience → Test users</b>, add your Gmail address.</p>
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 space-y-1">
+                                                <span className="font-semibold text-white">3. Enable Drive API</span>
+                                                <p className="text-neutral-400">Search for <b>Google Drive API</b> in the top search bar and click <b>Enable</b>.</p>
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 space-y-1">
+                                                <span className="font-semibold text-white">4. Create Desktop Credentials</span>
+                                                <p className="text-neutral-400">Under <b>Clients</b>, create a <b>Desktop app</b> credential. Paste the Client ID & Secret when running <code>Setup-GoogleDrive.bat</code>!</p>
+                                            </div>
+                                        </div>
+                                        <p className="text-neutral-400 text-[11px] pt-1">
+                                            For step-by-step screenshots, read <code className="bg-white/10 px-1 py-0.5 rounded text-white">docs/GOOGLE_DRIVE_SETUP.md</code> in your LFLIX folder.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </section>
