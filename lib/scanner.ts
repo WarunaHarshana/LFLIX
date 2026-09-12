@@ -462,3 +462,130 @@ export function removeFile(filePath: string): { removed: boolean } {
     return { removed: false };
   }
 }
+
+let isScanning = false;
+let queuedScan = false;
+
+export interface RescanResult {
+  success: boolean;
+  folders: number;
+  added: number;
+  removed: number;
+  errors?: string[];
+}
+
+/**
+ * Rescans all watched folders (or a specified folder), cleans up stale records,
+ * organizes loose media, refreshes rclone mount VFS cache if active, and indexes new files.
+ * Protected by an in-process mutex so concurrent calls debounce and run safely.
+ */
+export async function rescanLibrary(targetFolderPath?: string): Promise<RescanResult> {
+  if (isScanning) {
+    queuedScan = true;
+    console.log('[Scanner] Rescan already in progress, queuing next run');
+    return { success: true, folders: 0, added: 0, removed: 0 };
+  }
+  isScanning = true;
+
+  try {
+    // Refresh rclone VFS mount cache if Google Drive mount is active
+    try {
+      const { refreshMountVfsCache } = await import('./gdriveUploader');
+      await refreshMountVfsCache();
+    } catch { /* ignore */ }
+
+    // Get watched folders (or target folder)
+    const folderRows = targetFolderPath
+      ? [{ folderPath: targetFolderPath }]
+      : (db.prepare('SELECT folderPath FROM scanned_folders').all() as { folderPath: string }[]);
+
+    if (folderRows.length === 0) {
+      return { success: true, folders: 0, added: 0, removed: 0 };
+    }
+
+    let totalAdded = 0;
+    let totalRemoved = 0;
+    const errors: string[] = [];
+
+    // Auto-organize loose media (TV episodes & movies) in watched folders
+    for (const { folderPath } of folderRows) {
+      if (fs.existsSync(folderPath)) {
+        try {
+          const { organizeLooseMediaInDownloads } = await import('./mediaOrganizer');
+          await organizeLooseMediaInDownloads(folderPath);
+        } catch { /* ignore */ }
+      }
+    }
+
+    const activeDownloads = getActiveDownloads();
+
+    for (const { folderPath } of folderRows) {
+      if (!fs.existsSync(folderPath)) {
+        errors.push(`Folder not found: ${folderPath}`);
+        continue;
+      }
+
+      // 1) Remove stale DB entries (files deleted/moved on disk)
+      try {
+        const movieRows = db
+          .prepare('SELECT id, filePath FROM movies WHERE filePath LIKE ?')
+          .all(`${folderPath}%`) as { id: number; filePath: string }[];
+
+        for (const row of movieRows) {
+          if (!fs.existsSync(row.filePath) || isItemPartOfActiveDownload(row.filePath, activeDownloads)) {
+            const deleted = db.prepare('DELETE FROM movies WHERE id = ?').run(row.id);
+            totalRemoved += deleted.changes;
+          }
+        }
+
+        const episodeRows = db
+          .prepare('SELECT id, filePath FROM episodes WHERE filePath LIKE ?')
+          .all(`${folderPath}%`) as { id: number; filePath: string }[];
+
+        for (const row of episodeRows) {
+          if (!fs.existsSync(row.filePath) || isItemPartOfActiveDownload(row.filePath, activeDownloads)) {
+            const deleted = db.prepare('DELETE FROM episodes WHERE id = ?').run(row.id);
+            totalRemoved += deleted.changes;
+          }
+        }
+
+        // Clean up orphan shows (no episodes left)
+        db.prepare(`
+          DELETE FROM shows
+          WHERE id NOT IN (SELECT DISTINCT showId FROM episodes)
+        `).run();
+        cleanupOrphanedAutoTracks();
+      } catch (e) {
+        errors.push(`Cleanup error in ${folderPath}: ${getSafeErrorMessage(e)}`);
+      }
+
+      // 2) Add newly found files via scanFolder
+      try {
+        const folderResult = await scanFolder(folderPath);
+        totalAdded += folderResult.added;
+        if (folderResult.errors && folderResult.errors.length > 0) {
+          errors.push(...folderResult.errors);
+        }
+      } catch (e) {
+        errors.push(`Scan error in ${folderPath}: ${getSafeErrorMessage(e)}`);
+      }
+    }
+
+    console.log(`[Scanner] Rescan completed: ${totalAdded} added, ${totalRemoved} removed across ${folderRows.length} folders`);
+    return {
+      success: true,
+      folders: folderRows.length,
+      added: totalAdded,
+      removed: totalRemoved,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  } finally {
+    isScanning = false;
+    if (queuedScan) {
+      queuedScan = false;
+      setTimeout(() => {
+        rescanLibrary().catch((e) => console.error('[Scanner] Queued rescan error:', e));
+      }, 1000);
+    }
+  }
+}

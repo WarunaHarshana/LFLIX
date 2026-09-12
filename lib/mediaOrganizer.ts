@@ -345,7 +345,7 @@ export function getMoviesDirectory(baseDownloadPath?: string): string {
  * Format a season folder name.
  * If the show directory already has "Season 01" style folders, match that padding; otherwise default to "Season X".
  */
-export function formatSeasonFolderName(showDir: string, seasonNumber: number): string {
+export function formatSeasonFolderName(showDir: string, seasonNumber: number, showTitle?: string): string {
   const pad2 = `Season ${String(seasonNumber).padStart(2, '0')}`;
   const pad1 = `Season ${seasonNumber}`;
 
@@ -360,6 +360,40 @@ export function formatSeasonFolderName(showDir: string, seasonNumber: number): s
       const has2DigitSeason = entries.some(e => /^Season\s+\d{2,}$/i.test(e));
       if (has2DigitSeason) {
         return pad2;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // If showDir didn't have existing season folders, check database & watched folders
+  const title = showTitle || path.basename(showDir);
+  if (title) {
+    try {
+      // 1. Check existing episode paths in database for this show
+      const epRows = db.prepare(`
+        SELECT e.filePath FROM episodes e
+        JOIN shows s ON e.showId = s.id
+        WHERE s.title LIKE ? COLLATE NOCASE
+        LIMIT 10
+      `).all(`%${title}%`) as { filePath: string }[];
+
+      if (epRows.length > 0) {
+        const has2Digit = epRows.some(r => /Season\s+\d{2,}/i.test(r.filePath));
+        if (has2Digit) return pad2;
+        const has1Digit = epRows.some(r => /Season\s+\d\b/i.test(r.filePath));
+        if (has1Digit) return pad1;
+      }
+
+      // 2. Check watched folders in scanned_folders
+      const scannedFolders = db.prepare('SELECT folderPath FROM scanned_folders').all() as { folderPath: string }[];
+      for (const sf of scannedFolders) {
+        const candidateShowDir = path.join(sf.folderPath, title);
+        if (fs.existsSync(candidateShowDir)) {
+          const entries = fs.readdirSync(candidateShowDir);
+          const exact = entries.find(e => new RegExp(`^Season\\s+0*${seasonNumber}$`, 'i').test(e));
+          if (exact) return exact;
+          if (entries.some(e => /^Season\s+\d{2,}$/i.test(e))) return pad2;
+          if (entries.some(e => /^Season\s+\d$/i.test(e))) return pad1;
+        }
       }
     } catch { /* ignore */ }
   }
@@ -435,7 +469,7 @@ export async function organizeTvEpisodeFile(
 
     const tvShowsDir = getTvShowsDirectory(options?.baseDownloadPath);
     const showDir = path.join(tvShowsDir, cleanShowName);
-    const seasonFolderName = formatSeasonFolderName(showDir, seasonNumber);
+    const seasonFolderName = formatSeasonFolderName(showDir, seasonNumber, cleanShowName);
     const targetSeasonDir = path.join(showDir, seasonFolderName);
 
     if (!fs.existsSync(targetSeasonDir)) {

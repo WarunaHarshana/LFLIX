@@ -1682,6 +1682,9 @@ class DownloadManager {
                         let remoteRel = path.relative(torrentPath, file).replace(/\\/g, '/');
                         if (!remoteRel.startsWith('Movies/') && !remoteRel.startsWith('TV Shows/')) {
                             remoteRel = getOrganizedRemotePath(path.basename(file));
+                        } else {
+                            // Ensure 2-digit season padding on Google Drive to prevent split Season 4 vs Season 04
+                            remoteRel = remoteRel.replace(/(TV Shows\/[^\/]+\/Season )(\d)\//i, '$10$2/');
                         }
 
                         await new Promise<void>((resolve) => {
@@ -1803,9 +1806,11 @@ class DownloadManager {
     // Trigger library rescan
     public async triggerRescan(): Promise<void> {
         try {
-            const baseUrl = `http://localhost:${process.env.PORT || 3000}`;
-            await fetch(`${baseUrl}/api/rescan`, { method: 'POST' }).catch(() => { });
-        } catch { /* ignore */ }
+            const { rescanLibrary } = await import('./scanner');
+            await rescanLibrary();
+        } catch (e) {
+            console.error('[DownloadManager] Rescan trigger error:', e);
+        }
     }
 }
 

@@ -576,6 +576,7 @@ export function uploadFile(
         if (onComplete) {
             if (code === 0) {
                 console.log(`[GDrive] Upload complete: ${remoteDest}`);
+                refreshMountVfsCache(path.dirname(remoteDest)).catch(() => { });
                 onComplete(true);
             } else {
                 const cleanError = extractCleanErrorMessage(lastError) || `rclone exited with code ${code}`;
@@ -588,11 +589,34 @@ export function uploadFile(
     return proc;
 }
 
+/**
+ * Request rclone mount process to refresh its VFS directory cache via remote control (RC).
+ * Can refresh the entire mount or a specific subdirectory (e.g. "Media/TV Shows/Reacher").
+ */
+export async function refreshMountVfsCache(dir?: string): Promise<boolean> {
+    try {
+        const url = dir
+            ? `http://127.0.0.1:5572/vfs/refresh?dir=${encodeURIComponent(dir.replace(/\\/g, '/'))}`
+            : 'http://127.0.0.1:5572/vfs/refresh';
+        const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(4000) });
+        if (res.ok) {
+            console.log(`[GDrive] VFS directory cache refreshed successfully${dir ? ` for ${dir}` : ''}`);
+            return true;
+        }
+    } catch {
+        // rclone rc might not be running or mount not active
+    }
+    return false;
+}
+
 export function getOptimizedMountArgs(remote: string, mountDrive: string, tempPath?: string): string[] {
     const args = [
         'mount',
         `${remote}:`,
         mountDrive,
+        '--rc',
+        '--rc-no-auth',
+        '--rc-addr', '127.0.0.1:5572',
         '--vfs-cache-mode', 'full',
         '--vfs-cache-max-size', '20G',
         '--vfs-cache-max-age', '24h',

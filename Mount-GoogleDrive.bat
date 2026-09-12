@@ -43,6 +43,9 @@ echo Using Cache: %CACHE_DIR%
 echo.
 
 "%RCLONE_BIN%" mount gdrive: Z: ^
+  --rc ^
+  --rc-no-auth ^
+  --rc-addr 127.0.0.1:5572 ^
   --cache-dir "%CACHE_DIR%" ^
   --vfs-cache-mode full ^
   --vfs-cache-max-size 20G ^

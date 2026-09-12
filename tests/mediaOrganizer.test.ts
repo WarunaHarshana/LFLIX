@@ -104,6 +104,14 @@ describe('mediaOrganizer', () => {
 
       expect(formatSeasonFolderName(showDir, 2)).toBe('Season 02');
     });
+
+    it('matches 2-digit Season format from existing database episodes when showDir is empty', () => {
+      const showDir = path.join(tempDir, 'Reacher');
+      // showDir does not exist or is empty
+      // Reacher in test DB has Season 04
+      const result = formatSeasonFolderName(showDir, 4, 'Reacher');
+      expect(result).toBe('Season 04');
+    });
   });
 
   describe('sanitizeFolderName', () => {
