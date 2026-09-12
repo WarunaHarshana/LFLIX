@@ -425,16 +425,16 @@ export function getOrganizedRemotePath(filename: string, mediaType?: 'movie' | '
     return `Movies/${cleanTitle}/${filename}`;
 }
 
-// Flags to optimize Google Drive transfers and prevent 403 API rate limit errors
+// Flags optimized for dedicated Google Drive Client ID (high throughput, no shared throttling)
 const GDRIVE_TRANSFER_FLAGS = [
-    '--drive-chunk-size', '64M',
-    '--drive-upload-cutoff', '64M',
-    '--drive-pacer-min-sleep', '100ms',
-    '--drive-pacer-burst', '10',
-    '--tpslimit', '8',
-    '--retries', '8',
-    '--retries-sleep', '10s',
-    '--low-level-retries', '20',
+    '--drive-chunk-size', '128M',
+    '--drive-upload-cutoff', '128M',
+    '--drive-pacer-min-sleep', '10ms',
+    '--drive-pacer-burst', '100',
+    '--buffer-size', '32M',
+    '--retries', '5',
+    '--retries-sleep', '5s',
+    '--low-level-retries', '10',
 ];
 
 /**
