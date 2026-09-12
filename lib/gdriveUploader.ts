@@ -576,7 +576,9 @@ export function uploadFile(
         if (onComplete) {
             if (code === 0) {
                 console.log(`[GDrive] Upload complete: ${remoteDest}`);
-                refreshMountVfsCache(path.dirname(remoteDest)).catch(() => { });
+                // Strip remote: prefix (e.g. "gdrive:Media/...") → "Media/..."
+                const relDir = path.dirname(remoteDest).replace(/^[^:]+:/, '');
+                refreshMountVfsCache(relDir).catch(() => { });
                 onComplete(true);
             } else {
                 const cleanError = extractCleanErrorMessage(lastError) || `rclone exited with code ${code}`;

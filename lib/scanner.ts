@@ -491,7 +491,11 @@ export async function rescanLibrary(targetFolderPath?: string): Promise<RescanRe
     // Refresh rclone VFS mount cache if Google Drive mount is active
     try {
       const { refreshMountVfsCache } = await import('./gdriveUploader');
-      await refreshMountVfsCache();
+      const refreshed = await refreshMountVfsCache();
+      if (refreshed) {
+        // Give the mount time to reflect updated directory listings
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     } catch { /* ignore */ }
 
     // Get watched folders (or target folder)
@@ -508,7 +512,18 @@ export async function rescanLibrary(targetFolderPath?: string): Promise<RescanRe
     const errors: string[] = [];
 
     // Auto-organize loose media (TV episodes & movies) in watched folders
+    // Skip GDrive mount folders — files are already organized at upload time by getOrganizedRemotePath()
+    let gdriveMountDrive = '';
+    try {
+      const { getGdriveConfig } = await import('./gdriveUploader');
+      gdriveMountDrive = getGdriveConfig().mountDrive?.toUpperCase() || '';
+    } catch { /* ignore */ }
+
     for (const { folderPath } of folderRows) {
+      // Skip organizing on rclone mount — moving files on a FUSE mount re-downloads and re-uploads them
+      if (gdriveMountDrive && path.resolve(folderPath).toUpperCase().startsWith(gdriveMountDrive)) {
+        continue;
+      }
       if (fs.existsSync(folderPath)) {
         try {
           const { organizeLooseMediaInDownloads } = await import('./mediaOrganizer');

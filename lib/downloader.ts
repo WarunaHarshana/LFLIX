@@ -1806,6 +1806,13 @@ class DownloadManager {
     // Trigger library rescan
     public async triggerRescan(): Promise<void> {
         try {
+            // Refresh VFS cache first and wait for it to propagate
+            try {
+                const { refreshMountVfsCache } = await import('./gdriveUploader');
+                await refreshMountVfsCache();
+                // Give the mount time to reflect the new file after VFS cache invalidation
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            } catch { /* ignore if mount not active */ }
             const { rescanLibrary } = await import('./scanner');
             await rescanLibrary();
         } catch (e) {
