@@ -105,6 +105,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
     };
 
     const pauseDownload = async (id: number) => {
+        setDownloads(prev => prev.map(d => d.id === id ? { ...d, status: 'paused', downloadSpeed: 0 } : d));
         try {
             await fetch('/api/downloads', {
                 method: 'PATCH',
@@ -116,6 +117,7 @@ export default function DownloadsPanel({ isOpen, onClose }: Props) {
     };
 
     const resumeDownload = async (id: number) => {
+        setDownloads(prev => prev.map(d => d.id === id ? { ...d, status: 'downloading' } : d));
         try {
             await fetch('/api/downloads', {
                 method: 'PATCH',

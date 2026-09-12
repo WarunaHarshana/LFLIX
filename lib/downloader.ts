@@ -158,7 +158,7 @@ class DownloadManager {
         // Strategy 1: Direct lookup via client.get()
         try {
             const torrent = this.client.get(identifier);
-            if (torrent && typeof torrent.on === 'function') return torrent;
+            if (torrent && typeof torrent.on === 'function' && !torrent.destroyed) return torrent;
         } catch { /* ignore */ }
 
         // Strategy 2: If it's a magnet URI, extract infoHash and try again
@@ -167,7 +167,7 @@ class DownloadManager {
             try {
                 if (magnetInfoHash) {
                     const torrent = this.client.get(magnetInfoHash);
-                    if (torrent && typeof torrent.on === 'function') return torrent;
+                    if (torrent && typeof torrent.on === 'function' && !torrent.destroyed) return torrent;
                 }
             } catch { /* ignore */ }
         }
@@ -176,7 +176,7 @@ class DownloadManager {
         try {
             const searchHash = this.normalizeTorrentIdentifier(magnetInfoHash || identifier);
             for (const t of this.client.torrents) {
-                if (!t || typeof t.on !== 'function') continue;
+                if (!t || typeof t.on !== 'function' || t.destroyed) continue;
                 if (t.infoHash && this.normalizeTorrentIdentifier(t.infoHash) === searchHash) return t;
                 // Also try partial match on magnet URI
                 if (identifier.startsWith('magnet:') && t.magnetURI) {
@@ -1235,18 +1235,23 @@ class DownloadManager {
             try {
                 torrent.resume();
                 console.log(`[DownloadManager] Resumed existing torrent: ${torrent.infoHash}`);
+
+                const hasMeta = this.hasTorrentMetadata(torrent);
+                const nextStatus: DownloadStatus = hasMeta ? 'downloading' : 'metadata';
+                db.prepare(`
+                    UPDATE downloads
+                    SET status = ?,
+                        downloadSpeed = 0,
+                        errorMessage = NULL,
+                        stateUpdatedAt = CURRENT_TIMESTAMP,
+                        lastProgressAt = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                `).run(nextStatus, downloadId);
+
                 this.setupTorrentEvents(downloadId, torrent);
-                if (this.hasTorrentMetadata(torrent)) {
+                if (hasMeta) {
                     this.markTorrentHasMetadata(downloadId, torrent);
                 } else {
-                    db.prepare(`
-                        UPDATE downloads
-                        SET status = 'metadata',
-                            errorMessage = NULL,
-                            downloadSpeed = 0,
-                            stateUpdatedAt = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                    `).run(downloadId);
                     this.scheduleMetadataRetry(downloadId, record.magnetUri, downloadPath);
                 }
                 return true;
@@ -1809,6 +1814,9 @@ const globalForDownloader = globalThis as unknown as {
     downloadManagerInstance?: DownloadManager;
     downloaderStartupDone?: boolean;
 };
+if (globalForDownloader.downloadManagerInstance) {
+    Object.setPrototypeOf(globalForDownloader.downloadManagerInstance, DownloadManager.prototype);
+}
 const downloadManager = globalForDownloader.downloadManagerInstance || new DownloadManager();
 if (process.env.NODE_ENV !== 'production') {
     globalForDownloader.downloadManagerInstance = downloadManager;
