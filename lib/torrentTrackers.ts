@@ -68,27 +68,34 @@ export function enrichMagnetUri(magnetUri: string, extraTrackers?: string[]): st
     }
 
     try {
-        const queryPart = magnetUri.substring('magnet:?'.length);
-        const params = new URLSearchParams(queryPart);
+        // Auto-heal if xt colons were previously encoded as %3A (which breaks WebTorrent / magnet-uri parser)
+        let fixed = magnetUri.replace(/([?&]xt=)urn%3Abtih%3A/gi, '$1urn:btih:');
 
-        const existingTrackers = params.getAll('tr');
+        // Extract existing tr= entries without re-encoding the entire query string
         const seen = new Set<string>();
+        const trackerRegex = /[?&]tr=([^&]+)/gi;
+        let match: RegExpExecArray | null;
 
-        for (const tr of existingTrackers) {
-            seen.add(normalizeTrackerUrl(tr));
+        while ((match = trackerRegex.exec(fixed)) !== null) {
+            try {
+                seen.add(normalizeTrackerUrl(decodeURIComponent(match[1])));
+            } catch {
+                seen.add(normalizeTrackerUrl(match[1]));
+            }
         }
 
         const combinedTrackers = [...(extraTrackers || []), ...ENHANCED_TRACKERS];
+        let result = fixed;
 
         for (const tracker of combinedTrackers) {
             const normalized = normalizeTrackerUrl(tracker);
             if (!seen.has(normalized)) {
                 seen.add(normalized);
-                params.append('tr', tracker);
+                result += (result.includes('?') ? '&' : '?') + 'tr=' + encodeURIComponent(tracker);
             }
         }
 
-        return `magnet:?${params.toString()}`;
+        return result;
     } catch {
         return magnetUri;
     }

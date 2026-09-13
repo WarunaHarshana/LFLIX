@@ -30,10 +30,19 @@ describe('Enhanced BitTorrent Trackers', () => {
             const rawMagnet = 'magnet:?xt=urn:btih:5fe2b92919310674fd6d0f0593992ec4323de66b&dn=Cocktail%202';
             const enriched = enrichMagnetUri(rawMagnet);
 
-            expect(enriched).toContain('xt=urn%3Abtih%3A5fe2b92919310674fd6d0f0593992ec4323de66b');
-            expect(enriched).toContain('dn=Cocktail+2');
+            // Crucial: xt=urn:btih: must NOT have its colons encoded to %3A, otherwise WebTorrent throws 'Invalid torrent identifier'
+            expect(enriched).toContain('xt=urn:btih:5fe2b92919310674fd6d0f0593992ec4323de66b');
+            expect(enriched).toContain('dn=Cocktail%202');
             expect(enriched).toContain('tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce');
             expect(enriched).toContain('tr=https%3A%2F%2Ftracker.bt4g.com%3A443%2Fannounce');
+        });
+
+        it('auto-heals previously corrupted magnets where urn:btih colons were encoded as %3A', () => {
+            const corruptedMagnet = 'magnet:?xt=urn%3Abtih%3A4A8531E4FF7D23A2E3ABCB8FC035D32C61D7FA65&dn=The+Texas+Chainsaw';
+            const healed = enrichMagnetUri(corruptedMagnet);
+
+            expect(healed).toContain('xt=urn:btih:4A8531E4FF7D23A2E3ABCB8FC035D32C61D7FA65');
+            expect(healed).not.toContain('xt=urn%3Abtih%3A');
         });
 
         it('deduplicates existing trackers and preserves them', () => {
