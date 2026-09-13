@@ -50,7 +50,8 @@ echo.
   --cache-dir "%CACHE_DIR%" ^
   --vfs-cache-mode full ^
   --vfs-cache-max-size 10G ^
-  --vfs-cache-max-age 24h ^
+  --vfs-cache-max-age 15m ^
+  --vfs-cache-poll-interval 1m ^
   --vfs-read-chunk-size 2M ^
   --vfs-read-chunk-size-limit 64M ^
   --vfs-read-ahead 32M ^
