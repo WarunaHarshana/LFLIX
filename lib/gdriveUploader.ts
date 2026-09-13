@@ -630,7 +630,7 @@ export function getOptimizedMountArgs(remote: string, mountDrive: string, tempPa
         '--rc-no-auth',
         '--rc-addr', '127.0.0.1:5572',
         '--vfs-cache-mode', 'full',
-        '--vfs-cache-max-size', '10G',
+        '--vfs-cache-max-size', '3G',
         '--vfs-cache-max-age', '15m',
         '--vfs-cache-poll-interval', '1m',
         '--vfs-read-chunk-size', '2M',

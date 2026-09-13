@@ -100,7 +100,7 @@ describe('Google Drive Mount & VFS Cache Management', () => {
             expect(args).toContain('--rc-addr');
             expect(args).toContain('127.0.0.1:5572');
             expect(args).toContain('--vfs-cache-max-size');
-            expect(args).toContain('10G');
+            expect(args).toContain('3G');
             expect(args).toContain('--vfs-cache-max-age');
             expect(args).toContain('15m');
             expect(args).toContain('--vfs-cache-poll-interval');
