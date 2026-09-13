@@ -4,6 +4,7 @@
 
 import { recordSourceHealth } from './sourceHealth';
 import { fetchCinejoyDirectDownloads } from './cinejoy';
+import { ENHANCED_TRACKERS } from './torrentTrackers';
 import {
     parseSizeToBytes,
     extractQuality,
@@ -178,25 +179,8 @@ export type SearchOptions = {
 };
 type SearchCacheEntry = { ts: number; data: TorrentSearchDiagnostics };
 
-// Standard trackers for magnet links
-const TRACKERS = [
-    'udp://tracker.opentrackr.org:1337/announce',
-    'udp://tracker.torrent.eu.org:451/announce',
-    'udp://open.stealth.si:80/announce',
-    'udp://exodus.desync.com:6969/announce',
-    'udp://tracker-udp.gbitt.info:80/announce',
-    'udp://tracker.birkenwald.de:6969/announce',
-    'udp://tracker.moeking.me:6969/announce',
-    'udp://tracker.dler.org:6969/announce',
-    'udp://explodie.org:6969/announce',
-    'udp://open.demonii.com:1337/announce',
-    'udp://tracker.openbittorrent.com:80',
-    'udp://tracker.coppersurfer.tk:6969',
-    'udp://glotorrents.pw:6969/announce',
-    'udp://torrent.gresille.org:80/announce',
-    'udp://p4p.arenabg.com:1337',
-    'udp://tracker.leechers-paradise.org:6969',
-];
+// Enhanced live trackers for magnet links
+const TRACKERS = ENHANCED_TRACKERS;
 
 function buildMagnet(infoHash: string, name: string): string {
     const trackerParams = TRACKERS.map(t => `&tr=${encodeURIComponent(t)}`).join('');

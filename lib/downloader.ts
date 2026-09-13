@@ -9,6 +9,7 @@ import fs from 'fs';
 import http from 'http';
 import https from 'https';
 import { isPathInsideAny, sanitizeFilename } from './security';
+import { ENHANCED_TRACKERS, enrichMagnetUri } from './torrentTrackers';
 
 const downloadHttpsAgent = new https.Agent({
     keepAlive: true,
@@ -256,13 +257,24 @@ class DownloadManager {
         } catch { /* ignore */ }
 
         try {
-            let torrent = this.findTorrent(magnetUri);
+            const enrichedMagnet = enrichMagnetUri(magnetUri);
+            if (enrichedMagnet !== magnetUri) {
+                try {
+                    db.prepare('UPDATE downloads SET magnetUri = ? WHERE id = ?').run(enrichedMagnet, downloadId);
+                } catch { /* ignore */ }
+            }
+
+            let torrent = this.findTorrent(enrichedMagnet);
             if (torrent) {
                 console.log(`[DownloadManager] Reusing torrent in client: ${torrent.infoHash || 'metadata pending'}`);
                 try { torrent.resume(); } catch { /* ignore */ }
             } else {
-                console.log(`[DownloadManager] Adding torrent to client: ${magnetUri.substring(0, 30)}...`);
-                torrent = client.add(magnetUri, { path: downloadPath });
+                console.log(`[DownloadManager] Adding torrent to client: ${enrichedMagnet.substring(0, 30)}... with ${ENHANCED_TRACKERS.length} enhanced trackers`);
+                torrent = client.add(enrichedMagnet, {
+                    path: downloadPath,
+                    announce: [...ENHANCED_TRACKERS],
+                    maxConns: 100,
+                });
             }
 
             if (torrent.infoHash) {
@@ -452,15 +464,17 @@ class DownloadManager {
             } catch { /* fallback to default download path */ }
         }
 
+        const enrichedMagnet = enrichMagnetUri(magnetUri);
+
         // Insert DB record
         const stmt = db.prepare(`
       INSERT INTO downloads (magnetUri, watchlistId, status, downloadPath, retryCount, lastProgressAt, stateUpdatedAt, target)
       VALUES (?, ?, 'metadata', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
     `);
-        const result = stmt.run(magnetUri, watchlistId || null, downloadPath, target);
+        const result = stmt.run(enrichedMagnet, watchlistId || null, downloadPath, target);
         const downloadId = Number(result.lastInsertRowid);
 
-        await this.startTorrentDownload(downloadId, magnetUri, downloadPath);
+        await this.startTorrentDownload(downloadId, enrichedMagnet, downloadPath);
 
         return this.getDownload(downloadId)!;
     }
