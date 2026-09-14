@@ -124,3 +124,60 @@ describe('fetchCinejoySubtitles', () => {
     }
   });
 });
+
+describe('decryptSheguPayload', () => {
+  it('correctly decrypts an AES-256-GCM encrypted Shegu payload locally', async () => {
+    const crypto = await import('crypto');
+    const { decryptSheguPayload } = await import('@/lib/cinejoy');
+
+    const key = crypto.randomBytes(32);
+    const iv = crypto.randomBytes(12);
+    const keyId = 1;
+    const ephemeralPublic = crypto.randomBytes(65);
+    const aad = Buffer.concat([
+      Buffer.from('lumen-gate-v2', 'utf8'),
+      Buffer.from([0, 2, keyId]),
+      ephemeralPublic,
+    ]);
+
+    const mockData = {
+      data: {
+        stream: [
+          {
+            type: 'hls',
+            id: 'primary',
+            playlist: 'https://info.movieboxnoob.cc/playlist/test12345.m3u8',
+            captions: [],
+          },
+        ],
+      },
+      status: 200,
+    };
+    const plaintext = Buffer.from(JSON.stringify(mockData), 'utf8');
+
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    cipher.setAAD(aad);
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    const tag = cipher.getAuthTag();
+
+    const encryptedBuffer = Buffer.concat([iv, ciphertext, tag]);
+
+    const decrypted = decryptSheguPayload(encryptedBuffer, key, keyId, ephemeralPublic);
+    expect(decrypted).toEqual(mockData);
+    expect(decrypted.data.stream[0].playlist).toBe('https://info.movieboxnoob.cc/playlist/test12345.m3u8');
+  });
+
+  it('throws error when encrypted buffer is less than 28 bytes', async () => {
+    const crypto = await import('crypto');
+    const { decryptSheguPayload } = await import('@/lib/cinejoy');
+
+    const shortBuffer = Buffer.alloc(20);
+    const key = crypto.randomBytes(32);
+    const ephemeralPublic = crypto.randomBytes(65);
+
+    expect(() => {
+      decryptSheguPayload(shortBuffer, key, 1, ephemeralPublic);
+    }).toThrow(/too short/i);
+  });
+});
+

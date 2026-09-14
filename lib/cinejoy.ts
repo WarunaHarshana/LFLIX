@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { MemoryCache } from './cache';
 
 const CINEJOY_ENC_DEC_API = 'https://enc-dec.app/api';
@@ -74,6 +75,207 @@ export type CinejoyQueryParams = {
 
 const STREAM_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const cinejoyCache = new MemoryCache<CinejoyResolvedStream | null>(1, 100);
+
+let wasmModulePromise: Promise<WebAssembly.Module> | null = null;
+
+/**
+ * Caches and retrieves compiled crush.wasm module from memory.
+ */
+export async function getCinejoyWasmModule(): Promise<WebAssembly.Module> {
+  if (!wasmModulePromise) {
+    wasmModulePromise = (async () => {
+      const res = await fetch(`${CINEJOY_SHEGU_API}/crush.wasm`, {
+        headers: CINEJOY_HEADERS,
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to fetch crush.wasm: HTTP ${res.status}`);
+      }
+      const bytes = await res.arrayBuffer();
+      return WebAssembly.compile(bytes);
+    })().catch((err) => {
+      wasmModulePromise = null;
+      throw err;
+    });
+  }
+  return wasmModulePromise;
+}
+
+/**
+ * Decrypts Shegu payload using AES-256-GCM natively in Node.js.
+ */
+export function decryptSheguPayload(
+  encryptedBuffer: Buffer,
+  responseKey: Buffer,
+  keyId: number,
+  ephemeralPublic: Buffer
+): any {
+  if (encryptedBuffer.length < 28) {
+    throw new Error('Encrypted payload too short for AES-GCM (minimum 28 bytes required)');
+  }
+  const iv = encryptedBuffer.subarray(0, 12);
+  const tag = encryptedBuffer.subarray(encryptedBuffer.length - 16);
+  const ciphertext = encryptedBuffer.subarray(12, encryptedBuffer.length - 16);
+  const aad = Buffer.concat([
+    Buffer.from('lumen-gate-v2', 'utf8'),
+    Buffer.from([0, 2, keyId]),
+    ephemeralPublic,
+  ]);
+
+  const decipher = crypto.createDecipheriv('aes-256-gcm', responseKey, iv);
+  decipher.setAuthTag(tag);
+  decipher.setAAD(aad);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return JSON.parse(decrypted.toString('utf8'));
+}
+
+async function resolveViaLocalWasm(
+  server: string,
+  type: 'movie' | 'tv',
+  tmdbId: number,
+  title: string,
+  year?: string | number | null,
+  imdbId?: string | null,
+  season?: number,
+  episode?: number
+): Promise<any> {
+  const wasmModule = await getCinejoyWasmModule();
+  const instance = await WebAssembly.instantiate(wasmModule);
+  const { memory, alloc, seal_request } = instance.exports as {
+    memory: WebAssembly.Memory;
+    alloc: (len: number) => number;
+    seal_request: (
+      pathPtr: number,
+      pathLen: number,
+      randPtr: number,
+      randLen: number,
+      outPtr: number,
+      outCap: number
+    ) => number;
+  };
+
+  const isTv = type === 'tv';
+  const path = `/${server.toLowerCase()}/${isTv ? 'series' : 'movie'}`;
+  const payload: Record<string, string> = {
+    tmdb: String(tmdbId),
+    title,
+  };
+  if (isTv) {
+    payload.season = String(season ?? 1);
+    payload.episode = String(episode ?? 1);
+  }
+  if (year) payload.year = String(year);
+  if (imdbId) payload.imdb = imdbId;
+
+  const jsonBytes = Buffer.from(JSON.stringify({ path, payload }), 'utf8');
+  const randomBytes = crypto.randomBytes(44);
+
+  const jsonPtr = alloc(jsonBytes.length);
+  new Uint8Array(memory.buffer, jsonPtr, jsonBytes.length).set(jsonBytes);
+
+  const randPtr = alloc(44);
+  new Uint8Array(memory.buffer, randPtr, 44).set(randomBytes);
+
+  const outCap = jsonBytes.length + 512;
+  const outPtr = alloc(outCap);
+
+  const ret = seal_request(jsonPtr, jsonBytes.length, randPtr, 44, outPtr, outCap);
+  if (ret <= 98) {
+    throw new Error(`seal_request returned invalid length: ${ret}`);
+  }
+
+  const outBuf = Buffer.from(memory.buffer, outPtr, ret);
+  const responseKey = outBuf.subarray(0, 32);
+  const keyId = outBuf[32];
+  const ephemeralPublic = outBuf.subarray(33, 98);
+  const body = outBuf.subarray(98, ret);
+
+  const gRes = await fetch(`${CINEJOY_SHEGU_API}/g`, {
+    method: 'POST',
+    body,
+    headers: {
+      ...CINEJOY_HEADERS,
+      'Content-Type': 'application/octet-stream',
+    },
+    signal: AbortSignal.timeout(6000),
+  });
+
+  if (!gRes.ok) {
+    throw new Error(`shegu.st/g returned HTTP ${gRes.status}`);
+  }
+
+  const gBuf = Buffer.from(await gRes.arrayBuffer());
+  return decryptSheguPayload(gBuf, responseKey, keyId, ephemeralPublic);
+}
+
+async function resolveViaLegacyEncDec(targetUrl: string): Promise<any> {
+  const encRes = await fetch(
+    `${CINEJOY_ENC_DEC_API}/enc-cinejoy?url=${encodeURIComponent(targetUrl)}`,
+    {
+      signal: AbortSignal.timeout(6000),
+    }
+  );
+
+  if (!encRes.ok) {
+    throw new Error(`enc-cinejoy returned HTTP ${encRes.status}`);
+  }
+
+  const encJson = await encRes.json();
+  if (encJson.status !== 200 || !encJson.result?.data) {
+    throw new Error('enc-cinejoy returned invalid payload');
+  }
+
+  const { data, state } = encJson.result;
+
+  const gRes = await fetch(`${CINEJOY_SHEGU_API}/g`, {
+    method: 'POST',
+    body: Buffer.from(data, 'base64url'),
+    headers: CINEJOY_HEADERS,
+    signal: AbortSignal.timeout(6000),
+  });
+
+  if (!gRes.ok) {
+    throw new Error(`shegu.st/g returned HTTP ${gRes.status}`);
+  }
+
+  const gBuffer = Buffer.from(await gRes.arrayBuffer());
+
+  // Try local native decrypt first using state to save the 3rd external hop to dec-cinejoy
+  try {
+    if (state?.responseKey && state?.aad) {
+      const key = Buffer.from(state.responseKey, 'base64url');
+      const aad = Buffer.from(state.aad, 'base64url');
+      const iv = gBuffer.subarray(0, 12);
+      const tag = gBuffer.subarray(gBuffer.length - 16);
+      const ciphertext = gBuffer.subarray(12, gBuffer.length - 16);
+
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(tag);
+      decipher.setAAD(aad);
+      const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+      return JSON.parse(plaintext.toString('utf8'));
+    }
+  } catch (decErr) {
+    console.warn('[cinejoy] Local decryption of legacy state failed, trying dec-cinejoy:', decErr);
+  }
+
+  // Fallback to external dec-cinejoy if local decryption fails
+  const decRes = await fetch(`${CINEJOY_ENC_DEC_API}/dec-cinejoy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: gBuffer.toString('base64url'),
+      state,
+    }),
+    signal: AbortSignal.timeout(6000),
+  });
+
+  if (!decRes.ok) {
+    throw new Error(`dec-cinejoy returned HTTP ${decRes.status}`);
+  }
+
+  return decRes.json();
+}
 
 /**
  * Rewrites URLs in an HLS m3u8 playlist to route through the local proxy.
@@ -184,84 +386,40 @@ export async function resolveCinejoyStream(
   const subtitlesPromise = fetchCinejoySubtitles(tmdbId, type, season, episode);
 
   try {
-    const isTv = type === 'tv';
-    const cType = isTv ? 'series' : 'movie';
-    let targetUrl = `${CINEJOY_SHEGU_API}/?title=${encodeURIComponent(title)}&type=${cType}&tmdb=${tmdbId}&server=${server}`;
-
-    if (year) {
-      targetUrl += `&year=${year}`;
-    }
-    if (imdbId) {
-      targetUrl += `&imdb=${encodeURIComponent(imdbId)}`;
-    }
-    if (isTv) {
-      targetUrl += `&season=${season ?? 1}&episode=${episode ?? 1}`;
-    }
-
-    // 1. Get encryption signature & state
-    const encRes = await fetch(
-      `${CINEJOY_ENC_DEC_API}/enc-cinejoy?url=${encodeURIComponent(targetUrl)}`,
-      {
-        signal: AbortSignal.timeout(6000),
+    let decJson: any = null;
+    try {
+      decJson = await resolveViaLocalWasm(
+        server,
+        type,
+        tmdbId,
+        title,
+        year,
+        imdbId,
+        season,
+        episode
+      );
+    } catch (wasmErr: any) {
+      console.warn(
+        `[cinejoy] Local WASM resolution failed for server ${server}, falling back to legacy enc-dec:`,
+        wasmErr?.message || wasmErr
+      );
+      const isTv = type === 'tv';
+      const cType = isTv ? 'series' : 'movie';
+      let targetUrl = `${CINEJOY_SHEGU_API}/?title=${encodeURIComponent(title)}&type=${cType}&tmdb=${tmdbId}&server=${server}`;
+      if (year) {
+        targetUrl += `&year=${year}`;
       }
-    );
-
-    if (!encRes.ok) {
-      console.warn(`[cinejoy] enc-cinejoy returned ${encRes.status}`);
-      cinejoyCache.set(cacheKey, null, 60_000);
-      return null;
+      if (imdbId) {
+        targetUrl += `&imdb=${encodeURIComponent(imdbId)}`;
+      }
+      if (isTv) {
+        targetUrl += `&season=${season ?? 1}&episode=${episode ?? 1}`;
+      }
+      decJson = await resolveViaLegacyEncDec(targetUrl);
     }
 
-    const encJson = await encRes.json();
-    if (encJson.status !== 200 || !encJson.result?.data) {
-      console.warn('[cinejoy] enc-cinejoy payload invalid:', encJson);
-      cinejoyCache.set(cacheKey, null, 60_000);
-      return null;
-    }
-
-    const { data, state } = encJson.result;
-
-    // 2. Fetch encrypted payload from shegu backend
-    const gRes = await fetch(`${CINEJOY_SHEGU_API}/g`, {
-      method: 'POST',
-      body: Buffer.from(data, 'base64url'),
-      headers: CINEJOY_HEADERS,
-      signal: AbortSignal.timeout(6000),
-    });
-
-    if (!gRes.ok) {
-      console.warn(`[cinejoy] shegu.st/g returned ${gRes.status}`);
-      cinejoyCache.set(cacheKey, null, 60_000);
-      return null;
-    }
-
-    const gBuffer = Buffer.from(await gRes.arrayBuffer());
-
-    // 3. Decrypt into structured JSON
-    const decRes = await fetch(`${CINEJOY_ENC_DEC_API}/dec-cinejoy`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: gBuffer.toString('base64url'),
-        state,
-      }),
-      signal: AbortSignal.timeout(6000),
-    });
-
-    if (!decRes.ok) {
-      console.warn(`[cinejoy] dec-cinejoy returned ${decRes.status}`);
-      cinejoyCache.set(cacheKey, null, 60_000);
-      return null;
-    }
-
-    const decJson = await decRes.json();
-    if (decJson.status !== 200 || !decJson.result?.data?.stream) {
-      console.warn('[cinejoy] dec-cinejoy returned no stream:', decJson);
-      cinejoyCache.set(cacheKey, null, 60_000);
-      return null;
-    }
-
-    const streams = decJson.result.data.stream;
+    const payloadData = decJson?.data || decJson?.result?.data;
+    const streams = payloadData?.stream;
     const primaryStream = Array.isArray(streams) ? streams[0] : null;
     if (!primaryStream || typeof primaryStream.playlist !== 'string') {
       cinejoyCache.set(cacheKey, null, 60_000);

@@ -23,6 +23,10 @@ function pickBestLogoPath(logos: any[] | undefined): string | null {
     return preferred?.file_path || null;
 }
 
+const CACHE_HEADERS = {
+    'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+};
+
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
@@ -77,7 +81,7 @@ export async function GET(req: Request) {
                     character: c.character,
                     profilePath: c.profile_path
                 })),
-            });
+            }, { headers: CACHE_HEADERS });
         } else if (type === 'tv') {
             // If season specified, fetch that season's episodes
             if (seasonNum) {
@@ -96,7 +100,7 @@ export async function GET(req: Request) {
                         rating: ep.vote_average || null,
                         runtime: ep.runtime || null,
                     })),
-                });
+                }, { headers: CACHE_HEADERS });
             }
 
             // Otherwise fetch show info with seasons
@@ -140,7 +144,7 @@ export async function GET(req: Request) {
                     character: c.character,
                     profilePath: c.profile_path
                 })),
-            });
+            }, { headers: CACHE_HEADERS });
         }
 
         return NextResponse.json({ error: 'Invalid type' }, { status: 400 });

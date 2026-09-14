@@ -113,6 +113,10 @@ export async function GET(req: Request) {
             profilePath: person.profile_path || null,
             biography: person.biography || null,
             credits,
+        }, {
+            headers: {
+                'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+            },
         });
     } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Unknown error';

@@ -5,6 +5,7 @@ import { Keyboard, X } from 'lucide-react';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { apiUrl } from '@/lib/mobileConfig';
+import { cachedFetch } from '@/lib/clientQueryCache';
 import { useAppStore } from './store/useAppStore';
 import type { ContentItem, Season, DiscoverOnlineItem, TabId } from './types';
 import { isValidTab } from './types';
@@ -149,6 +150,7 @@ export default function Home() {
   const activeTabRef = useRef(activeTab);
   const selectedGenreRef = useRef(selectedGenre);
   const focusedIndexRef = useRef(focusedIndex);
+  const playbackRef = useRef(playback);
 
   useEffect(() => {
     libraryRef.current = library;
@@ -156,7 +158,8 @@ export default function Home() {
     activeTabRef.current = activeTab;
     selectedGenreRef.current = selectedGenre;
     focusedIndexRef.current = focusedIndex;
-  }, [library, filteredLibrary, activeTab, selectedGenre, focusedIndex]);
+    playbackRef.current = playback;
+  }, [library, filteredLibrary, activeTab, selectedGenre, focusedIndex, playback]);
 
   // ──────────────────── Tab Switching ────────────────────
   const switchTab = (tab: TabId) => {
@@ -314,19 +317,41 @@ export default function Home() {
   }, []);
 
   // ──────────────────── Cross-Hook Handlers ────────────────────
-  const openShow = async (show: ContentItem) => {
+  const openShow = useCallback(async (show: ContentItem) => {
     setSelectedShow(show);
     setLoadingEpisodes(true);
     try {
-      const res = await fetch(apiUrl(`/api/episodes?showId=${show.id}`), { credentials: 'same-origin' });
-      const data = await res.json();
+      const data = await cachedFetch<{ seasons?: Season[] }>(
+        apiUrl(`/api/episodes?showId=${show.id}`),
+        { credentials: 'same-origin' }
+      );
       setSeasons(data.seasons || []);
-    } catch (e) {
+    } catch {
       showToast('Failed to load episodes', 'error');
     } finally {
       setLoadingEpisodes(false);
     }
-  };
+  }, [setSelectedShow, setLoadingEpisodes, setSeasons, showToast]);
+
+  const handleCardClick = useCallback((item: ContentItem) => {
+    setSelectedDetail(item);
+  }, [setSelectedDetail]);
+
+  const handlePlayClick = useCallback((item: ContentItem) => {
+    if (item.type === 'movie') {
+      playbackRef.current.playFile('movie', item.id, undefined, item.watchProgress?.progress);
+    } else {
+      openShow(item);
+    }
+  }, [openShow]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, item: ContentItem) => {
+    setContextMenu({ x: e.clientX, y: e.clientY, item });
+  }, [setContextMenu]);
+
+  const handleGenreClear = useCallback(() => {
+    setSelectedGenre(null);
+  }, [setSelectedGenre]);
 
   const handleRescanAll = async () => {
     setLoading(true);
@@ -516,19 +541,13 @@ export default function Home() {
               onLanguageSelect={setSelectedLanguage}
               sortBy={sortBy}
               onSortChange={setSortBy}
-              onGenreClear={() => setSelectedGenre(null)}
+              onGenreClear={handleGenreClear}
               focusedIndex={focusedIndex}
               displayPrefs={displayPrefs}
               onDisplayPrefChange={updateDisplayPref}
-              onCardClick={(item) => setSelectedDetail(item)}
-              onPlayClick={(item) => {
-                if (item.type === 'movie') {
-                  playback.playFile('movie', item.id, undefined, item.watchProgress?.progress);
-                } else {
-                  openShow(item);
-                }
-              }}
-              onContextMenu={(e, item) => setContextMenu({ x: e.clientX, y: e.clientY, item })}
+              onCardClick={handleCardClick}
+              onPlayClick={handlePlayClick}
+              onContextMenu={handleContextMenu}
             />
           </div>
         </>

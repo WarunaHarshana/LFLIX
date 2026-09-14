@@ -219,7 +219,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
     }
 
     try {
-      const params = new URLSearchParams({
+      const baseParams = new URLSearchParams({
         tmdbId: tmdbId.toString(),
         type,
         ...(title && { title }),
@@ -228,31 +228,69 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
         ...(vpnMode && { vpn: '1' }),
         ...((options.refresh || vpnMode) && { refresh: '1' }),
       });
-      const res = await fetch(`/api/stream-servers?${params}`, { cache: 'no-store' });
+
+      // 1. Progressive fast probe: attempt immediate Cinejoy direct resolution (~200ms)
+      // This eliminates the 4.5s-10s wait on slow third-party scrapers for initial playback.
+      let hasStartedPlayback = false;
+      if (!vpnMode && !options.refresh) {
+        const fastParams = new URLSearchParams(baseParams);
+        fastParams.set('fast', '1');
+        try {
+          const fastRes = await fetch(`/api/stream-servers?${fastParams}`, { cache: 'no-store' });
+          if (fastRes.ok) {
+            const fastData = await fastRes.json();
+            if (Array.isArray(fastData.servers) && fastData.servers.length > 0) {
+              const rankedFast = rankServersByQuality(fastData.servers as StreamServer[]);
+              if (rankedFast.length > 0) {
+                hasStartedPlayback = true;
+                preconnectToServers(rankedFast.slice(0, 3));
+                setServers(rankedFast);
+                setActiveServer(0);
+                setAttemptedServers([0]);
+                attemptedServersRef.current = [0];
+                setIframeError(false);
+                setIframeLoading(true);
+                setLoading(false);
+              }
+            }
+          }
+        } catch {
+          // Fast check failed or timed out; full probe below will handle it
+        }
+      }
+
+      // 2. Full probe for all servers (runs concurrently in background or as primary if fast was empty)
+      const res = await fetch(`/api/stream-servers?${baseParams}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.servers) {
         const rankedServers = rankServersByQuality(data.servers as StreamServer[]);
-        const bestServerIndex = typeof data.bestServerIndex === 'number' ? data.bestServerIndex : 0;
-        const firstIndex = rankedServers.length > 0 ? Math.max(0, Math.min(bestServerIndex, rankedServers.length - 1)) : -1;
-
-        // Warm the connections to the top candidates before anything is played.
-        // DNS + TLS to a third-party host is dead time at the front of every
-        // start, and the same cost is paid again on each failover — doing it
-        // during the probe hides it. Only the leaders, so this stays cheap.
         preconnectToServers(rankedServers.slice(0, 3));
 
-        setServers(rankedServers);
-        setActiveServer(Math.max(firstIndex, 0));
-        const initialAttempted = firstIndex >= 0 ? [firstIndex] : [];
-        setAttemptedServers(initialAttempted);
-        attemptedServersRef.current = initialAttempted;
-        setIframeError(false);
-        setIframeLoading(rankedServers.length > 0);
-        setAutoSwitching(false);
-        setShowSources(vpnMode);
-        setIframeBootstrapped(false);
-        setPlaybackReady(false);
-        setMaybeStalled(false);
+        setServers((prevServers) => {
+          if (hasStartedPlayback && prevServers.length > 0) {
+            // Keep currently playing server at top/intact, merge in new backup servers
+            const existingIds = new Set(prevServers.map((s) => s.id));
+            const newBackups = rankedServers.filter((s) => !existingIds.has(s.id));
+            return [...prevServers, ...newBackups];
+          }
+          const bestServerIndex = typeof data.bestServerIndex === 'number' ? data.bestServerIndex : 0;
+          const firstIndex = rankedServers.length > 0 ? Math.max(0, Math.min(bestServerIndex, rankedServers.length - 1)) : -1;
+          setActiveServer(Math.max(firstIndex, 0));
+          const initialAttempted = firstIndex >= 0 ? [firstIndex] : [];
+          setAttemptedServers(initialAttempted);
+          attemptedServersRef.current = initialAttempted;
+          setIframeError(false);
+          setIframeLoading(rankedServers.length > 0);
+          return rankedServers;
+        });
+
+        if (!hasStartedPlayback) {
+          setAutoSwitching(false);
+          setShowSources(vpnMode);
+          setIframeBootstrapped(false);
+          setPlaybackReady(false);
+          setMaybeStalled(false);
+        }
       }
     } catch (e) {
       console.error('Failed to fetch servers:', e);
@@ -260,7 +298,7 @@ export default function StreamServerModal({ tmdbId, type, title, season, episode
       inFlightProbeRef.current = null;
       setLoading(false);
     }
-  }, [tmdbId, type, season, episode, vpnMode]);
+  }, [tmdbId, type, season, episode, vpnMode, title]);
 
   useEffect(() => {
     void fetchServers();

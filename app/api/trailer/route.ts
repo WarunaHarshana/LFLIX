@@ -139,6 +139,10 @@ export async function GET(req: Request) {
             name: trailer.name,
             site: trailer.site,
             type: trailer.type,
+        }, {
+            headers: {
+                'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+            },
         });
     } catch (e: unknown) {
         console.error('Trailer fetch error:', e);

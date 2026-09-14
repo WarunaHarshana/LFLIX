@@ -99,6 +99,34 @@ describe('VideoPlayer HLS prioritization', () => {
     });
   });
 
+  it('passes startPosition and tuned 0ms retry delay into Hls config for instant seeking', async () => {
+    render(
+      <VideoPlayer
+        title="DC"
+        src='https://proxy.example/stream.m3u8'
+        initialTime={150}
+        onClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockHlsConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startPosition: 150,
+          fragLoadPolicy: expect.objectContaining({
+            default: expect.objectContaining({
+              timeoutRetry: expect.objectContaining({
+                retryDelayMs: 0,
+                maxRetryDelayMs: 0,
+              }),
+            }),
+          }),
+        })
+      );
+    });
+  });
+
+
   it('falls back to native HLS when Hls.isSupported() is false (e.g. iOS Safari)', async () => {
     isHlsSupportedMock.mockReturnValue(false);
 

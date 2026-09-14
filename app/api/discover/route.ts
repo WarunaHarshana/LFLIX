@@ -71,6 +71,10 @@ export async function GET(req: Request) {
             page: res.page || 1,
             totalPages: res.total_pages || 1,
             totalResults: res.total_results || 0
+        }, {
+            headers: {
+                'Cache-Control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400',
+            },
         });
     } catch (e) {
         console.error('TMDB discover error:', e);

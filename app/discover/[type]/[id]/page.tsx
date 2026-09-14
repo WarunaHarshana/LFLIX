@@ -27,6 +27,7 @@ import { triggerHaptic } from '@/lib/haptics';
 import { useAppStore } from '@/app/store/useAppStore';
 import LiquidDropdown from '../../../components/LiquidDropdown';
 import RottenTomatoesIcon from '../../../components/RottenTomatoesIcon';
+import { cachedFetch } from '@/lib/clientQueryCache';
 
 const PERSON_SORT_OPTIONS = [
   { id: 'date', name: 'Sort: Date' },
@@ -275,12 +276,12 @@ export default function DiscoverDetailPage() {
 
       try {
         const [detailsResp, similarResp] = await Promise.allSettled([
-          fetch(`/api/tmdb-details?id=${tmdbId}&type=${mediaType}`),
-          fetch(`/api/tmdb-similar?id=${tmdbId}&type=${mediaType}`),
+          cachedFetch<any>(`/api/tmdb-details?id=${tmdbId}&type=${mediaType}`),
+          cachedFetch<any>(`/api/tmdb-similar?id=${tmdbId}&type=${mediaType}`),
         ]);
 
-        if (!cancelled && detailsResp.status === 'fulfilled' && detailsResp.value.ok) {
-          const detailsData = await detailsResp.value.json();
+        if (!cancelled && detailsResp.status === 'fulfilled' && detailsResp.value) {
+          const detailsData = detailsResp.value;
           if (mediaType === 'movie') {
             const movieObj = detailsData as MovieDetails;
             setMovieDetails(movieObj);
@@ -289,10 +290,9 @@ export default function DiscoverDetailPage() {
             if (movieObj.collection?.id) {
               setLoadingCollection(true);
               try {
-                const collectionResp = await fetch(`/api/tmdb-collection?id=${movieObj.collection.id}`);
-                if (!cancelled && collectionResp.ok) {
-                  const collData = await collectionResp.json();
-                  setCollectionData(collData as CollectionData);
+                const collData = await cachedFetch<CollectionData>(`/api/tmdb-collection?id=${movieObj.collection.id}`);
+                if (!cancelled) {
+                  setCollectionData(collData);
                 }
               } catch (e) {
                 console.error('Failed to fetch collection data', e);
@@ -309,8 +309,8 @@ export default function DiscoverDetailPage() {
           }
         }
 
-        if (!cancelled && similarResp.status === 'fulfilled' && similarResp.value.ok) {
-          const similarData = await similarResp.value.json();
+        if (!cancelled && similarResp.status === 'fulfilled' && similarResp.value) {
+          const similarData = similarResp.value;
           const filtered = (similarData.results || []).filter((item: TMDBResult) => item.tmdbId !== tmdbId);
           setSimilarItems(filtered.slice(0, 12));
         }
@@ -360,9 +360,8 @@ export default function DiscoverDetailPage() {
       setLoadingEpisodes(true);
       setEpisodes([]);
       try {
-        const res = await fetch(`/api/tmdb-details?id=${tmdbId}&type=tv&season=${selectedSeason}`);
-        if (!cancelled && res.ok) {
-          const data = await res.json();
+        const data = await cachedFetch<{ episodes?: any[] }>(`/api/tmdb-details?id=${tmdbId}&type=tv&season=${selectedSeason}`);
+        if (!cancelled) {
           setEpisodes(data.episodes || []);
         }
       } catch (error) {
@@ -493,11 +492,7 @@ export default function DiscoverDetailPage() {
     setPersonCreditSort('date');
 
     try {
-      const res = await fetch(`/api/tmdb-person?id=${personId}`);
-      if (!res.ok) {
-        throw new Error('Failed to load person details');
-      }
-      const data = await res.json();
+      const data = await cachedFetch<any>(`/api/tmdb-person?id=${personId}`);
       setPersonData(data);
     } catch (error) {
       console.error('Failed to fetch person details', error);

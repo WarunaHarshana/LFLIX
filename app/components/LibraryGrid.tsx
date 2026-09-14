@@ -64,7 +64,6 @@ const GRID_CLASS_MAP: Record<number, string> = {
 type LibraryGridItemProps = {
   item: ContentItem;
   index: number;
-  isHoveredItem: boolean;
   columnCount: number;
   isFocused: boolean;
   showTitle: boolean;
@@ -72,14 +71,11 @@ type LibraryGridItemProps = {
   onCardClick: (item: ContentItem) => void;
   onPlayClick?: (item: ContentItem) => void;
   onContextMenu: (e: React.MouseEvent, item: ContentItem) => void;
-  onHover: (index: number) => void;
-  onLeave: (index: number) => void;
 };
 
 const LibraryGridItem = memo(function LibraryGridItem({
   item,
   index,
-  isHoveredItem,
   columnCount,
   isFocused,
   showTitle,
@@ -87,9 +83,8 @@ const LibraryGridItem = memo(function LibraryGridItem({
   onCardClick,
   onPlayClick,
   onContextMenu,
-  onHover,
-  onLeave,
 }: LibraryGridItemProps) {
+  const [isHovered, setIsHovered] = useState(false);
   const handleClick = useCallback(() => onCardClick(item), [onCardClick, item]);
   const handlePlay = useMemo(() => onPlayClick ? () => onPlayClick(item) : undefined, [onPlayClick, item]);
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -97,12 +92,8 @@ const LibraryGridItem = memo(function LibraryGridItem({
     onContextMenu(e, item);
   }, [onContextMenu, item]);
   const handleHoverChange = useCallback((hovered: boolean) => {
-    if (hovered) {
-      onHover(index);
-    } else {
-      onLeave(index);
-    }
-  }, [index, onHover, onLeave]);
+    setIsHovered(hovered);
+  }, []);
 
   const isLastCol = columnCount > 1 && (index % columnCount === columnCount - 1);
 
@@ -110,15 +101,16 @@ const LibraryGridItem = memo(function LibraryGridItem({
     <div
       className={clsx(
         "relative col-span-1",
-        isHoveredItem ? "z-40" : "z-10",
-        isFocused && "ring-2 ring-white ring-offset-2 ring-offset-black rounded-lg"
+        isHovered ? "z-40" : "z-10",
+        isFocused && "ring-2 ring-white ring-offset-2 ring-offset-black rounded-lg",
+        !isHovered && "[content-visibility:auto] [contain-intrinsic-size:auto_200px_auto_300px]"
       )}
     >
       <ContentCard
         item={item}
         reflowMode={false}
         horizontalOrigin={isLastCol ? 'right' : 'left'}
-        isExpanded={isHoveredItem}
+        isExpanded={isHovered}
         onHoverChange={handleHoverChange}
         onClick={handleClick}
         onPlay={handlePlay}
@@ -158,45 +150,72 @@ export default function LibraryGrid({
   const langDropdownRef = useRef<HTMLDivElement>(null);
   const genreDropdownRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [columnCount, setColumnCount] = useState<number>(() => displayPrefs.gridColumns || 8);
 
   useEffect(() => {
     const updateCols = () => {
       if (!gridRef.current) return;
+      // 1. Try computed grid-template-columns from the browser layout engine
+      const style = window.getComputedStyle(gridRef.current);
+      const templateColumns = style.getPropertyValue('grid-template-columns');
+      if (templateColumns && templateColumns !== 'none') {
+        const tracks = templateColumns.split(' ').filter(Boolean);
+        if (tracks.length > 0) {
+          setColumnCount(tracks.length);
+          return;
+        }
+      }
+
+      // 2. Measure DOM children if at least one subsequent child wrapped to row 2
       const children = Array.from(gridRef.current.children) as HTMLElement[];
-      if (children.length > 0) {
+      if (children.length > 1) {
         const firstTop = children[0].offsetTop;
         let cols = 0;
         while (cols < children.length && children[cols].offsetTop === firstTop) {
           cols++;
         }
-        if (cols > 0) {
+        // ONLY trust this count if at least one subsequent child wrapped (offsetTop > firstTop)
+        if (cols > 0 && cols < children.length) {
           setColumnCount(cols);
           return;
         }
       }
-      const style = window.getComputedStyle(gridRef.current);
-      const templateColumns = style.getPropertyValue('grid-template-columns');
-      const count = templateColumns.split(' ').filter(Boolean).length;
-      if (count > 0) setColumnCount(count);
+
+      // 3. Fallback: calculate from window width matching Tailwind breakpoints for GRID_CLASS_MAP
+      const width = typeof window !== 'undefined' ? window.innerWidth : 1280;
+      const targetCols = displayPrefs.gridColumns || 8;
+      let effectiveCols = targetCols;
+      if (targetCols === 4) {
+        effectiveCols = width < 768 ? 2 : width < 1024 ? 3 : 4;
+      } else if (targetCols === 5) {
+        effectiveCols = width < 640 ? 2 : width < 768 ? 3 : width < 1024 ? 4 : 5;
+      } else if (targetCols === 6) {
+        effectiveCols = width < 640 ? 2 : width < 768 ? 3 : width < 1024 ? 4 : 6;
+      } else if (targetCols === 7) {
+        effectiveCols = width < 640 ? 2 : width < 768 ? 3 : width < 1024 ? 5 : 7;
+      } else if (targetCols === 8) {
+        effectiveCols = width < 768 ? 2 : width < 1024 ? 4 : width < 1280 ? 6 : 8;
+      } else if (targetCols === 10) {
+        effectiveCols = width < 640 ? 2 : width < 768 ? 4 : width < 1024 ? 6 : width < 1280 ? 8 : 10;
+      }
+      setColumnCount(effectiveCols);
     };
+
     updateCols();
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined' && gridRef.current
+      ? new ResizeObserver(updateCols)
+      : null;
+    if (resizeObserver && gridRef.current) {
+      resizeObserver.observe(gridRef.current);
+    }
     window.addEventListener('resize', updateCols);
-    return () => window.removeEventListener('resize', updateCols);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', updateCols);
+    };
   }, [displayPrefs.gridColumns, filteredLibrary.length]);
-
-  useEffect(() => {
-    setHoveredIndex(null);
-  }, [activeTab, selectedGenre, selectedLanguage, sortBy, displayPrefs.gridColumns]);
-
-  const handleHover = useCallback((idx: number) => {
-    setHoveredIndex(idx);
-  }, []);
-
-  const handleLeave = useCallback((idx: number) => {
-    setHoveredIndex((prev) => (prev === idx ? null : prev));
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
@@ -546,27 +565,20 @@ export default function LibraryGrid({
           ref={gridRef}
           className={clsx("grid gap-4", gridColumnsClass)}
         >
-          {filteredLibrary.map((item, index) => {
-            const isHoveredItem = hoveredIndex === index;
-
-            return (
-              <LibraryGridItem
-                key={`${item.type}-${item.id}`}
-                item={item}
-                index={index}
-                isHoveredItem={isHoveredItem}
-                columnCount={columnCount}
-                isFocused={focusedIndex === index}
-                showTitle={displayPrefs.showTitles}
-                showRating={displayPrefs.showRatings}
-                onCardClick={onCardClick}
-                onPlayClick={onPlayClick}
-                onContextMenu={onContextMenu}
-                onHover={handleHover}
-                onLeave={handleLeave}
-              />
-            );
-          })}
+          {filteredLibrary.map((item, index) => (
+            <LibraryGridItem
+              key={`${item.type}-${item.id}`}
+              item={item}
+              index={index}
+              columnCount={columnCount}
+              isFocused={focusedIndex === index}
+              showTitle={displayPrefs.showTitles}
+              showRating={displayPrefs.showRatings}
+              onCardClick={onCardClick}
+              onPlayClick={onPlayClick}
+              onContextMenu={onContextMenu}
+            />
+          ))}
         </div>
       )}
     </div>

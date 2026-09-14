@@ -92,26 +92,32 @@ export async function GET(req: NextRequest) {
 
     const isM3u8 =
       parsedUrl.pathname.endsWith('.m3u8') ||
+      parsedUrl.pathname.includes('/m3u8') ||
+      parsedUrl.search.includes('m3u8') ||
+      (parsedUrl.hostname.includes('bright67.online') && parsedUrl.pathname.includes('playlist.jpg')) ||
       contentType.includes('application/vnd.apple.mpegurl') ||
       contentType.includes('application/x-mpegurl') ||
       contentType.includes('audio/x-mpegurl');
 
     if (isM3u8) {
       const playlistText = await upstreamRes.text();
-      const rewritten = rewriteM3u8Playlist(playlistText, targetUrl);
+      // If payload is indeed an HLS playlist starting with #EXTM3U or rewritten format
+      if (playlistText.includes('#EXTM3U') || isM3u8) {
+        const rewritten = rewriteM3u8Playlist(playlistText, targetUrl);
 
-      return new NextResponse(rewritten, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/vnd.apple.mpegurl',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-        },
-      });
+        return new NextResponse(rewritten, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.apple.mpegurl',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          },
+        });
+      }
     }
 
-    // Media segments (.ts, .html chunk, .m4s, etc.)
+    // Media segments (.ts, .html chunk, .m4s, disguised .jpg/.png chunks, etc.)
     const responseHeaders: Record<string, string> = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
@@ -126,10 +132,16 @@ export async function GET(req: NextRequest) {
       pathname.endsWith('.mp4') ||
       pathname.includes('video_') ||
       pathname.includes('audio_') ||
+      (parsedUrl.hostname.includes('bright67.online') && (pathname.endsWith('.jpg') || pathname.endsWith('.png'))) ||
       contentType.includes('text/html')
     ) {
       effectiveContentType = 'video/mp4';
-    } else if (pathname.endsWith('.ts')) {
+    } else if (
+      pathname.endsWith('.ts') ||
+      pathname.startsWith('/s') ||
+      pathname.includes('/s?') ||
+      contentType.includes('text/css')
+    ) {
       effectiveContentType = 'video/mp2t';
     }
 

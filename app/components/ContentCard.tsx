@@ -1,11 +1,12 @@
 'use client';
 
-import { memo, useState, useRef, useEffect, useCallback } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { Film, Tv, Play, Info, X } from 'lucide-react';
 import clsx from 'clsx';
 import TMDBImage from './TMDBImage';
 import { triggerHaptic } from '@/lib/haptics';
 import { apiUrl } from '@/lib/mobileConfig';
+import { cachedFetch, prefetchQuery } from '@/lib/clientQueryCache';
 
 // Module-level logo cache to prevent repeated network requests
 const logoCache: Record<string, string | null> = {};
@@ -68,7 +69,8 @@ function ContentCard({
 }: Props) {
     const cardRef = useRef<HTMLDivElement>(null);
     const expandedCardRef = useRef<HTMLDivElement>(null);
-    const [horizontalOrigin, setHorizontalOrigin] = useState<'left' | 'right'>(propHorizontalOrigin || 'left');
+    const [measuredOrigin, setMeasuredOrigin] = useState<'left' | 'right'>('left');
+    const horizontalOrigin = propHorizontalOrigin || measuredOrigin;
     const [internalIsHovered, setInternalIsHovered] = useState(false);
     const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
     const leaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -76,6 +78,10 @@ function ContentCard({
     const activeExpanded = controlledIsExpanded !== undefined ? controlledIsExpanded : internalIsHovered;
 
     const setHoverState = (val: boolean) => {
+        if (!val && hoverTimerRef.current) {
+            clearTimeout(hoverTimerRef.current);
+            hoverTimerRef.current = null;
+        }
         setInternalIsHovered(val);
         onHoverChange?.(val);
     };
@@ -136,10 +142,12 @@ function ContentCard({
         const fetchLogo = async () => {
             try {
                 const mediaType = item.type === 'show' ? 'tv' : 'movie';
-                const res = await fetch(apiUrl(`/api/tmdb-details?id=${targetId}&type=${mediaType}`), { credentials: 'same-origin' });
-                if (!res.ok || cancelled) return;
-                const data = await res.json();
-                const fetchedLogo = data.logoPath || null;
+                const data = await cachedFetch<{ logoPath?: string | null }>(
+                    apiUrl(`/api/tmdb-details?id=${targetId}&type=${mediaType}`),
+                    { credentials: 'same-origin' }
+                );
+                if (cancelled) return;
+                const fetchedLogo = data?.logoPath || null;
                 logoCache[logoCacheKey] = fetchedLogo;
                 if (!cancelled && fetchedLogo) {
                     setLogoUrl(`https://image.tmdb.org/t/p/w500${fetchedLogo}`);
@@ -159,24 +167,6 @@ function ContentCard({
         : 0;
     const displayRating = item.imdbRating ?? item.rating;
 
-    const updateOrigin = useCallback(() => {
-        if (!cardRef.current) return;
-        const rect = cardRef.current.getBoundingClientRect();
-        const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-        const neededWidth = rect.width * 2 + 16;
-        if (rect.left + neededWidth > viewportWidth - 20) {
-            setHorizontalOrigin('right');
-        } else {
-            setHorizontalOrigin(propHorizontalOrigin || 'left');
-        }
-    }, [propHorizontalOrigin]);
-
-    useEffect(() => {
-        if (propHorizontalOrigin) {
-            setHorizontalOrigin(propHorizontalOrigin);
-        }
-    }, [propHorizontalOrigin]);
-
     const handleMouseEnter = () => {
         // Cancel any pending leave timer immediately when mouse enters or stays inside
         if (leaveTimerRef.current) {
@@ -184,8 +174,26 @@ function ContentCard({
             leaveTimerRef.current = null;
         }
 
-        if (!reflowMode) {
-            updateOrigin();
+        // Measure origin for standalone cards (carousels, search results) where propHorizontalOrigin is omitted
+        if (!reflowMode && !propHorizontalOrigin && cardRef.current) {
+            const rect = cardRef.current.getBoundingClientRect();
+            const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+            const neededWidth = rect.width * 2 + 16;
+            if (rect.left + neededWidth > viewportWidth - 20) {
+                setMeasuredOrigin('right');
+            } else {
+                setMeasuredOrigin('left');
+            }
+        }
+
+        // Prefetch TMDB details (and show episodes) ahead of hover/click
+        const targetId = item.tmdbId || item.id;
+        if (targetId) {
+            const mediaType = item.type === 'show' ? 'tv' : 'movie';
+            prefetchQuery(apiUrl(`/api/tmdb-details?id=${targetId}&type=${mediaType}`));
+            if (item.type === 'show') {
+                prefetchQuery(apiUrl(`/api/episodes?showId=${item.id}`));
+            }
         }
 
         if (activeExpanded) return;
@@ -229,8 +237,15 @@ function ContentCard({
         if ((isTouchEvent || lacksHover) && !activeExpanded) {
             e.stopPropagation();
             triggerHaptic('light');
-            if (!reflowMode) {
-                updateOrigin();
+            if (!reflowMode && !propHorizontalOrigin && cardRef.current) {
+                const rect = cardRef.current.getBoundingClientRect();
+                const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+                const neededWidth = rect.width * 2 + 16;
+                if (rect.left + neededWidth > viewportWidth - 20) {
+                    setMeasuredOrigin('right');
+                } else {
+                    setMeasuredOrigin('left');
+                }
             }
             setHoverState(true);
             return;
@@ -273,7 +288,7 @@ function ContentCard({
         return (
             <div className={clsx("absolute top-2 left-2 flex gap-1 z-20 pointer-events-none", compact ? "flex-row flex-wrap" : "flex-col")}>
                 {tags.map((t, i) => (
-                    <span key={i} className={`px-1.5 py-0.5 text-[10px] rounded-md font-bold tracking-wider backdrop-blur-md shadow-sm border ${t.cls}`}>
+                    <span key={i} className={`px-1.5 py-0.5 text-[10px] rounded-md font-bold tracking-wider shadow-sm border ${t.cls}`}>
                         {t.label}
                     </span>
                 ))}
@@ -340,14 +355,14 @@ function ContentCard({
 
                 {/* Watched badge as crystal pill */}
                 {item.watchProgress?.completed === 1 && (
-                    <span className="!absolute top-2.5 right-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 text-xs rounded-full font-bold z-20 backdrop-blur-md shadow-md pointer-events-none select-none">
+                    <span className="!absolute top-2.5 right-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 text-xs rounded-full font-bold z-20 shadow-md pointer-events-none select-none">
                         ✓ Watched
                     </span>
                 )}
 
                 {/* Glowing liquid progress bar */}
                 {showProgress && progressPercent > 0 && progressPercent < 95 && (
-                    <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60 backdrop-blur-sm z-20">
+                    <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/75 z-20">
                         <div
                             className="h-full bg-gradient-to-r from-red-600 via-rose-500 to-amber-400 transition-all rounded-r-full shadow-[0_0_10px_rgba(244,63,94,0.8)]"
                             style={{ width: `${progressPercent}%` }}
@@ -357,12 +372,9 @@ function ContentCard({
             </div>
 
             {/* Mobile backdrop scrim for expanded card overlay */}
-            {!reflowMode && (
+            {!reflowMode && activeExpanded && (
                 <div
-                    className={clsx(
-                        "fixed inset-0 bg-black/70 md:hidden transition-opacity duration-500",
-                        activeExpanded ? "opacity-100 z-[999] pointer-events-auto" : "opacity-0 pointer-events-none"
-                    )}
+                    className="fixed inset-0 bg-black/70 md:hidden transition-opacity duration-500 opacity-100 z-[999] pointer-events-auto"
                     onClick={(e) => {
                         e.stopPropagation();
                         setHoverState(false);
@@ -371,216 +383,204 @@ function ContentCard({
             )}
 
             {/* 2. EXPANDED HOVER CARD (Prime Video 2-Card Banner Expansion - Responsive across Mobile & Desktop) */}
-            <div
-                ref={expandedCardRef}
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
-                onClick={() => {
-                    triggerHaptic('light');
-                    onClick();
-                }}
-                onContextMenu={onContextMenu}
-                className={clsx(
-                    reflowMode
-                        ? clsx(
-                            "absolute inset-0 w-full h-full",
-                            activeExpanded ? "pointer-events-auto opacity-100 scale-100" : "pointer-events-none opacity-0 scale-95"
-                        )
-                        : clsx(
-                            // Mobile: fixed full-width overlay centered on screen
-                            // Desktop: absolute 2-card-wide horizontal expansion
-                            "md:!absolute md:top-0 md:h-full md:w-[calc(200%+1rem)] md:max-w-[calc(100vw-2rem)]",
-                            // Mobile: fixed overlay
-                            "!fixed md:!absolute inset-x-3 md:inset-x-auto top-20 md:top-0 bottom-auto md:bottom-auto h-[55vh] md:h-full",
-                            horizontalOrigin === 'left' ? "md:left-0 md:origin-top-left" : "md:right-0 md:origin-top-right",
-                            activeExpanded
-                                ? "!z-[1000] pointer-events-auto opacity-100 scale-100"
-                                : "!z-0 pointer-events-none opacity-0 scale-95"
-                        ),
-                    "transition-all duration-[850ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-                    "rounded-2xl overflow-hidden bg-[#121218]/95 backdrop-blur-md border border-white/20",
-                    "shadow-[0_20px_45px_rgba(0,0,0,0.9),0_0_20px_rgba(255,255,255,0.1)]",
-                    activeExpanded && "liquid-sheen-effect",
-                    "cursor-pointer"
-                )}
-            >
-                {/* 16:9 Landscape Backdrop Image with Zoom on Hover */}
-                <div className="absolute inset-0 w-full h-full overflow-hidden">
-                    {item.backdropPath || item.posterPath ? (
-                        <TMDBImage
-                            src={item.backdropPath || item.posterPath}
-                            alt={item.title}
-                            tmdbSize="w780"
-                            fill
-                            sizes="(max-width: 1200px) 50vw, 35vw"
-                            className={clsx(
-                                "w-full h-full object-cover object-center transition-transform duration-[1400ms] ease-out",
-                                activeExpanded ? "scale-105" : "scale-100"
-                            )}
-                        />
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center p-6 text-center text-[var(--text-muted)] bg-[var(--surface-2)]">
-                            <div>
-                                {item.type === 'movie' ? <Film className="w-10 h-10 mx-auto mb-2" /> : <Tv className="w-10 h-10 mx-auto mb-2" />}
-                                <span className="text-sm font-semibold">{item.title}</span>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Dark Cinematic Gradient Vignette matching HeroSection */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/75 via-55% to-transparent pointer-events-none" />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/40 to-transparent pointer-events-none" />
-
-                {/* Mobile / Touch explicit close button */}
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
+            {activeExpanded && (
+                <div
+                    ref={expandedCardRef}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                    onClick={() => {
                         triggerHaptic('light');
-                        setHoverState(false);
+                        onClick();
                     }}
+                    onContextMenu={onContextMenu}
                     className={clsx(
-                        "!absolute top-2 right-2 z-40 w-7 h-7 rounded-full liquid-glass-pill bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer transition md:hidden shadow-md border border-white/20",
-                        activeExpanded ? "pointer-events-auto" : "pointer-events-none"
+                        reflowMode
+                            ? "absolute inset-0 w-full h-full pointer-events-auto opacity-100 scale-100"
+                            : clsx(
+                                // Mobile: fixed full-width overlay centered on screen
+                                // Desktop: absolute 2-card-wide horizontal expansion
+                                "md:!absolute md:top-0 md:h-full md:w-[calc(200%+1rem)] md:max-w-[calc(100vw-2rem)]",
+                                // Mobile: fixed overlay
+                                "!fixed md:!absolute inset-x-3 md:inset-x-auto top-20 md:top-0 bottom-auto md:bottom-auto h-[55vh] md:h-full",
+                                horizontalOrigin === 'left' ? "md:left-0 md:origin-top-left" : "md:right-0 md:origin-top-right",
+                                "!z-[1000] pointer-events-auto opacity-100 scale-100"
+                            ),
+                        "transition-all duration-[850ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
+                        "rounded-2xl overflow-hidden bg-[#121218]/95 backdrop-blur-md border border-white/20",
+                        "shadow-[0_20px_45px_rgba(0,0,0,0.9),0_0_20px_rgba(255,255,255,0.1)]",
+                        "liquid-sheen-effect",
+                        "cursor-pointer"
                     )}
-                    aria-label="Close preview"
                 >
-                    <X className="w-3.5 h-3.5 text-neutral-300 hover:text-white" />
-                </button>
-
-                {/* Watched badge */}
-                {item.watchProgress?.completed === 1 && (
-                    <span className="!absolute top-2 right-10 sm:right-2.5 inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 text-[10px] sm:text-xs rounded-full font-bold z-30 backdrop-blur-md shadow-md pointer-events-none select-none">
-                        ✓ Watched
-                    </span>
-                )}
-
-                {/* Format tags in expanded card (compact row top-left) */}
-                {renderFormatTags(true)}
-
-                {/* Glowing progress bar */}
-                {showProgress && progressPercent > 0 && progressPercent < 95 && (
-                    <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60 backdrop-blur-sm z-30">
-                        <div
-                            className="h-full bg-gradient-to-r from-red-600 via-rose-500 to-amber-400 transition-all rounded-r-full shadow-[0_0_10px_rgba(244,63,94,0.8)]"
-                            style={{ width: `${progressPercent}%` }}
-                        />
-                    </div>
-                )}
-
-                {/* Expanded Card Content & Controls with Snappy Reveal Animation */}
-                <div className={clsx(
-                    "absolute inset-0 p-4 sm:p-5 md:p-6 flex flex-col justify-end z-20",
-                    activeExpanded ? "pointer-events-auto animate-card-reveal" : "pointer-events-none"
-                )}>
-                    {/* Proper Logo / Title Icon or Styled Heading */}
-                    {logoUrl ? (
-                        <div className="relative mb-1.5 sm:mb-2.5 shrink-0">
+                    {/* 16:9 Landscape Backdrop Image with Zoom on Hover */}
+                    <div className="absolute inset-0 w-full h-full overflow-hidden">
+                        {item.backdropPath || item.posterPath ? (
                             <TMDBImage
-                                src={logoUrl}
+                                src={item.backdropPath || item.posterPath}
                                 alt={item.title}
-                                width={360}
-                                height={110}
-                                className="h-9 sm:h-12 md:h-14 lg:h-16 max-w-[75%] sm:max-w-[80%] w-auto object-contain object-left drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]"
-                                fallback={
-                                    showTitle ? (
-                                        <h3 className="text-base sm:text-lg md:text-xl font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] leading-tight tracking-tight text-white line-clamp-1">
-                                            {item.title}
-                                        </h3>
-                                    ) : null
-                                }
+                                tmdbSize="w780"
+                                fill
+                                sizes="(max-width: 1200px) 50vw, 35vw"
+                                className="w-full h-full object-cover object-center transition-transform duration-[1400ms] ease-out scale-105"
+                            />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center p-6 text-center text-[var(--text-muted)] bg-[var(--surface-2)]">
+                                <div>
+                                    {item.type === 'movie' ? <Film className="w-10 h-10 mx-auto mb-2" /> : <Tv className="w-10 h-10 mx-auto mb-2" />}
+                                    <span className="text-sm font-semibold">{item.title}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Dark Cinematic Gradient Vignette matching HeroSection */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/75 via-55% to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/40 to-transparent pointer-events-none" />
+
+                    {/* Mobile / Touch explicit close button */}
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            triggerHaptic('light');
+                            setHoverState(false);
+                        }}
+                        className="!absolute top-2 right-2 z-40 w-7 h-7 rounded-full liquid-glass-pill bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer transition md:hidden shadow-md border border-white/20 pointer-events-auto"
+                        aria-label="Close preview"
+                    >
+                        <X className="w-3.5 h-3.5 text-neutral-300 hover:text-white" />
+                    </button>
+
+                    {/* Watched badge */}
+                    {item.watchProgress?.completed === 1 && (
+                        <span className="!absolute top-2 right-10 sm:right-2.5 inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 text-[10px] sm:text-xs rounded-full font-bold z-30 shadow-md pointer-events-none select-none">
+                            ✓ Watched
+                        </span>
+                    )}
+
+                    {/* Format tags in expanded card (compact row top-left) */}
+                    {renderFormatTags(true)}
+
+                    {/* Glowing progress bar */}
+                    {showProgress && progressPercent > 0 && progressPercent < 95 && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/75 z-30">
+                            <div
+                                className="h-full bg-gradient-to-r from-red-600 via-rose-500 to-amber-400 transition-all rounded-r-full shadow-[0_0_10px_rgba(244,63,94,0.8)]"
+                                style={{ width: `${progressPercent}%` }}
                             />
                         </div>
-                    ) : (
-                        showTitle && (
-                            <h3 className="text-base sm:text-lg md:text-xl font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] leading-tight tracking-tight text-white line-clamp-1 mb-1.5 sm:mb-2.5">
-                                {item.title}
-                            </h3>
-                        )
                     )}
 
-                    {/* Metadata line with liquid glass pills */}
-                    <div className="flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm font-semibold flex-wrap mb-2 sm:mb-2.5">
-                        <span className="liquid-glass-pill px-2.5 py-1 rounded-lg sm:rounded-xl uppercase tracking-wider text-[10px] sm:text-xs text-neutral-100 font-extrabold border border-white/20 shadow-sm">
-                            {item.type === 'show' ? 'TV Series' : 'Movie'}
-                        </span>
-                        {showRating && displayRating != null && displayRating > 0 && (
-                            <span
-                                className="inline-flex items-center overflow-hidden rounded-lg sm:rounded-xl border border-[#F5C518]/80 bg-black/75 shadow-sm"
-                                aria-label={`IMDb rating ${displayRating.toFixed(1)}`}
+                    {/* Expanded Card Content & Controls with Snappy Reveal Animation */}
+                    <div className="absolute inset-0 p-4 sm:p-5 md:p-6 flex flex-col justify-end z-20 pointer-events-auto animate-card-reveal">
+                        {/* Proper Logo / Title Icon or Styled Heading */}
+                        {logoUrl ? (
+                            <div className="relative mb-1.5 sm:mb-2.5 shrink-0">
+                                <TMDBImage
+                                    src={logoUrl}
+                                    alt={item.title}
+                                    width={360}
+                                    height={110}
+                                    className="h-9 sm:h-12 md:h-14 lg:h-16 max-w-[75%] sm:max-w-[80%] w-auto object-contain object-left drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]"
+                                    fallback={
+                                        showTitle ? (
+                                            <h3 className="text-base sm:text-lg md:text-xl font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] leading-tight tracking-tight text-white line-clamp-1">
+                                                {item.title}
+                                            </h3>
+                                        ) : null
+                                    }
+                                />
+                            </div>
+                        ) : (
+                            showTitle && (
+                                <h3 className="text-base sm:text-lg md:text-xl font-black drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] leading-tight tracking-tight text-white line-clamp-1 mb-1.5 sm:mb-2.5">
+                                    {item.title}
+                                </h3>
+                            )
+                        )}
+
+                        {/* Metadata line with liquid glass pills */}
+                        <div className="flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm font-semibold flex-wrap mb-2 sm:mb-2.5">
+                            <span className="liquid-glass-pill px-2.5 py-1 rounded-lg sm:rounded-xl uppercase tracking-wider text-[10px] sm:text-xs text-neutral-100 font-extrabold border border-white/20 shadow-sm">
+                                {item.type === 'show' ? 'TV Series' : 'Movie'}
+                            </span>
+                            {showRating && displayRating != null && displayRating > 0 && (
+                                <span
+                                    className="inline-flex items-center overflow-hidden rounded-lg sm:rounded-xl border border-[#F5C518]/80 bg-black/75 shadow-sm"
+                                    aria-label={`IMDb rating ${displayRating.toFixed(1)}`}
+                                >
+                                    <span className="bg-[#F5C518] px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-black text-black">IMDb</span>
+                                    <span className="px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold text-white">{displayRating.toFixed(1)}</span>
+                                </span>
+                            )}
+                            {year && (
+                                <span className="text-neutral-200 drop-shadow text-xs sm:text-sm font-bold">
+                                    {year}
+                                </span>
+                            )}
+                            {item.isHDR && (
+                                <span className="liquid-glass-pill px-2 py-0.5 sm:py-1 bg-yellow-500/20 text-yellow-300 text-[10px] sm:text-xs rounded-lg sm:rounded-xl font-bold border border-yellow-500/50 shadow-[0_0_12px_rgba(234,179,8,0.25)]">
+                                    HDR
+                                </span>
+                            )}
+                            {item.resolution && (
+                                <span className="liquid-glass-pill px-2 py-0.5 sm:py-1 bg-blue-500/20 text-blue-300 text-[10px] sm:text-xs rounded-lg sm:rounded-xl font-bold border border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.25)]">
+                                    {item.resolution === '2160p' ? '4K' : item.resolution}
+                                </span>
+                            )}
+                            {item.genres && (
+                                <span className="text-neutral-300 drop-shadow text-xs sm:text-sm font-medium truncate max-w-[160px] sm:max-w-[220px]">
+                                    {item.genres.split(',').slice(0, 2).join(' • ')}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Synopsis */}
+                        {item.overview && (
+                            <p className="text-xs sm:text-sm md:text-[15px] text-neutral-100/95 drop-shadow-md leading-relaxed line-clamp-2 sm:line-clamp-3 mb-2.5 sm:mb-3.5 font-normal">
+                                {item.overview}
+                            </p>
+                        )}
+
+                        {/* Banner-style Liquid Action Buttons */}
+                        <div className="flex items-center gap-2.5 sm:gap-3.5 pt-1">
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    triggerHaptic('medium');
+                                    if (onPlay) {
+                                        onPlay(item);
+                                    } else {
+                                        onClick();
+                                    }
+                                }}
+                                className="liquid-btn-primary px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 font-extrabold rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm md:text-base tracking-tight shadow-xl hover:scale-105 active:scale-95 transition cursor-pointer whitespace-nowrap shrink-0"
+                                title={item.type === 'show' ? "View Episodes" : "Play"}
+                                aria-label={`${item.type === 'show' ? 'View episodes for' : 'Play'} ${item.title}`}
                             >
-                                <span className="bg-[#F5C518] px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-black text-black">IMDb</span>
-                                <span className="px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold text-white">{displayRating.toFixed(1)}</span>
-                            </span>
-                        )}
-                        {year && (
-                            <span className="text-neutral-200 drop-shadow text-xs sm:text-sm font-bold">
-                                {year}
-                            </span>
-                        )}
-                        {item.isHDR && (
-                            <span className="liquid-glass-pill px-2 py-0.5 sm:py-1 bg-yellow-500/20 text-yellow-300 text-[10px] sm:text-xs rounded-lg sm:rounded-xl font-bold border border-yellow-500/50 shadow-[0_0_12px_rgba(234,179,8,0.25)]">
-                                HDR
-                            </span>
-                        )}
-                        {item.resolution && (
-                            <span className="liquid-glass-pill px-2 py-0.5 sm:py-1 bg-blue-500/20 text-blue-300 text-[10px] sm:text-xs rounded-lg sm:rounded-xl font-bold border border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.25)]">
-                                {item.resolution === '2160p' ? '4K' : item.resolution}
-                            </span>
-                        )}
-                        {item.genres && (
-                            <span className="text-neutral-300 drop-shadow text-xs sm:text-sm font-medium truncate max-w-[160px] sm:max-w-[220px]">
-                                {item.genres.split(',').slice(0, 2).join(' • ')}
-                            </span>
-                        )}
-                    </div>
+                                <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-black text-black" />
+                                <span>{item.type === 'show' ? 'View Episodes' : 'Play'}</span>
+                            </button>
 
-                    {/* Synopsis */}
-                    {item.overview && (
-                        <p className="text-xs sm:text-sm md:text-[15px] text-neutral-100/95 drop-shadow-md leading-relaxed line-clamp-2 sm:line-clamp-3 mb-2.5 sm:mb-3.5 font-normal">
-                            {item.overview}
-                        </p>
-                    )}
-
-                    {/* Banner-style Liquid Action Buttons */}
-                    <div className="flex items-center gap-2.5 sm:gap-3.5 pt-1">
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                triggerHaptic('medium');
-                                if (onPlay) {
-                                    onPlay(item);
-                                } else {
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    triggerHaptic('light');
                                     onClick();
-                                }
-                            }}
-                            className="liquid-btn-primary px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 font-extrabold rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm md:text-base tracking-tight shadow-xl hover:scale-105 active:scale-95 transition cursor-pointer whitespace-nowrap shrink-0"
-                            title={item.type === 'show' ? "View Episodes" : "Play"}
-                            aria-label={`${item.type === 'show' ? 'View episodes for' : 'Play'} ${item.title}`}
-                        >
-                            <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-black text-black" />
-                            <span>{item.type === 'show' ? 'View Episodes' : 'Play'}</span>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                triggerHaptic('light');
-                                onClick();
-                            }}
-                            className="liquid-btn-secondary px-3.5 sm:px-4.5 md:px-5 py-2 sm:py-2.5 font-bold rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm md:text-base tracking-tight shadow-md hover:scale-105 active:scale-95 transition cursor-pointer whitespace-nowrap shrink-0"
-                            title="More Info"
-                            aria-label={`More info about ${item.title}`}
-                        >
-                            <Info className="w-4 h-4 sm:w-5 sm:h-5" />
-                            <span>More Info</span>
-                        </button>
+                                }}
+                                className="liquid-btn-secondary px-3.5 sm:px-4.5 md:px-5 py-2 sm:py-2.5 font-bold rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-2.5 text-xs sm:text-sm md:text-base tracking-tight shadow-md hover:scale-105 active:scale-95 transition cursor-pointer whitespace-nowrap shrink-0"
+                                title="More Info"
+                                aria-label={`More info about ${item.title}`}
+                            >
+                                <Info className="w-4 h-4 sm:w-5 sm:h-5" />
+                                <span>More Info</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

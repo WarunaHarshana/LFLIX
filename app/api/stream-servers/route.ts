@@ -542,6 +542,7 @@ export async function GET(req: Request) {
     const titleParam = searchParams.get('title');
     const vpnMode = searchParams.get('vpn') === '1' || searchParams.get('networkMode') === 'vpn';
     const refreshProbe = searchParams.get('refresh') === '1' || vpnMode;
+    const fastMode = searchParams.get('fast') === '1';
 
     if (!tmdbId || !type) {
       return NextResponse.json({ error: 'Missing tmdbId or type' }, { status: 400 });
@@ -564,6 +565,72 @@ export async function GET(req: Request) {
     const parsedEpisode = episode !== null ? Number.parseInt(episode, 10) : NaN;
     const safeSeason = Number.isInteger(parsedSeason) && parsedSeason >= 0 ? parsedSeason : undefined;
     const safeEpisode = Number.isInteger(parsedEpisode) && parsedEpisode > 0 ? parsedEpisode : undefined;
+
+    // Start Cinejoy direct stream resolution immediately in parallel with all embed server checks.
+    // Cinejoy Lisbon 4K resolves in ~200ms using local WASM and does not wait on slow third-party scrapers.
+    const cinejoyPromise = (async (): Promise<StreamServerResponse[]> => {
+      try {
+        const meta = await resolveMediaMeta(parsedTmdbId, type);
+        const effectiveTitle = titleParam || meta.title;
+        if (!effectiveTitle) return [];
+
+        const cinejoyServers = ['Lisbon', 'Nebula'];
+        const resolved: StreamServerResponse[] = [];
+        await Promise.all(
+          cinejoyServers.map(async (serverName, sIdx) => {
+            const stream = await resolveCinejoyStream({
+              tmdbId: parsedTmdbId,
+              imdbId: meta.imdbId,
+              title: effectiveTitle,
+              year: meta.year,
+              type,
+              season: safeSeason,
+              episode: safeEpisode,
+              server: serverName,
+            });
+
+            if (stream) {
+              resolved.push({
+                id: stream.id,
+                name: stream.name,
+                url: stream.url,
+                color: serverName === 'Lisbon' ? '#10b981' : '#06b6d4',
+                order: -95 + sIdx,
+                baselineQuality: stream.qualityHint,
+                isReachable: true,
+                availabilityState: 'reachable',
+                probeError: null,
+                probeCheckedAt: new Date().toISOString(),
+                qualityHint: stream.qualityHint,
+                confidence: 1.0,
+                probeState: 'cached',
+                lastCheckedAt: new Date().toISOString(),
+                latencyMs: 45,
+                isDirect: true,
+                directSubtitles: stream.subtitles,
+                tier: 'best',
+              });
+            }
+          })
+        );
+        return resolved;
+      } catch (error: any) {
+        console.error('[stream-servers] Cinejoy query failed:', error.message || error);
+        return [];
+      }
+    })();
+
+    if (fastMode) {
+      const fastDirectStreams = await cinejoyPromise;
+      if (fastDirectStreams.length > 0) {
+        fastDirectStreams.sort((a, b) => getQualityRank(b.qualityHint) - getQualityRank(a.qualityHint));
+        return NextResponse.json({
+          servers: fastDirectStreams,
+          bestServerIndex: 0,
+          progressive: true,
+        });
+      }
+    }
 
     const servers = await buildServerUrls(parsedTmdbId, type, safeSeason, safeEpisode);
 
@@ -741,53 +808,9 @@ export async function GET(req: Request) {
       }
       })(),
       (async () => {
-        // Cinejoy API (cinejoy.to) — direct HLS stream sources
-        try {
-          const meta = await resolveMediaMeta(parsedTmdbId, type);
-          const effectiveTitle = titleParam || meta.title;
-          if (!effectiveTitle) return;
-
-          // Query Cinejoy Lisbon (4K UHD) and Nebula (1080p backup) in parallel
-          const cinejoyServers = ['Lisbon', 'Nebula'];
-          await Promise.all(
-            cinejoyServers.map(async (serverName, sIdx) => {
-              const stream = await resolveCinejoyStream({
-                tmdbId: parsedTmdbId,
-                imdbId: meta.imdbId,
-                title: effectiveTitle,
-                year: meta.year,
-                type,
-                season: safeSeason,
-                episode: safeEpisode,
-                server: serverName,
-              });
-
-              if (stream) {
-                responseServers.push({
-                  id: stream.id,
-                  name: stream.name,
-                  url: stream.url,
-                  color: serverName === 'Lisbon' ? '#10b981' : '#06b6d4',
-                  order: -95 + sIdx,
-                  baselineQuality: stream.qualityHint,
-                  isReachable: true,
-                  availabilityState: 'reachable',
-                  probeError: null,
-                  probeCheckedAt: new Date().toISOString(),
-                  qualityHint: stream.qualityHint,
-                  confidence: 1.0,
-                  probeState: 'cached',
-                  lastCheckedAt: new Date().toISOString(),
-                  latencyMs: 45,
-                  isDirect: true,
-                  directSubtitles: stream.subtitles,
-                  tier: 'best',
-                });
-              }
-            })
-          );
-        } catch (error: any) {
-          console.error('[stream-servers] Cinejoy query failed:', error.message || error);
+        const directStreams = await cinejoyPromise;
+        if (Array.isArray(directStreams)) {
+          responseServers.push(...directStreams);
         }
       })(),
     ]);

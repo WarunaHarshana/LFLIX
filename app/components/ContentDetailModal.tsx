@@ -10,6 +10,7 @@ import TMDBImage from './TMDBImage';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import LiquidDropdown from './LiquidDropdown';
 import { triggerHaptic } from '@/lib/haptics';
+import { cachedFetch } from '@/lib/clientQueryCache';
 
 const QUALITY_OPTIONS = [
     { id: 'best', name: 'Best Available' },
@@ -385,20 +386,19 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
 
             try {
                 const [detailsResp, similarResp] = await Promise.allSettled([
-                    fetch(`/api/tmdb-details?id=${item.tmdbId}&type=${mediaType}`),
-                    fetch(`/api/tmdb-similar?id=${item.tmdbId}&type=${mediaType}`),
+                    cachedFetch<any>(`/api/tmdb-details?id=${item.tmdbId}&type=${mediaType}`),
+                    cachedFetch<any>(`/api/tmdb-similar?id=${item.tmdbId}&type=${mediaType}`),
                 ]);
 
-                if (!cancelled && detailsResp.status === 'fulfilled' && detailsResp.value.ok) {
-                    const detailsData = await detailsResp.value.json();
+                if (!cancelled && detailsResp.status === 'fulfilled' && detailsResp.value) {
+                    const detailsData = detailsResp.value;
                     if (mediaType === 'movie') {
                         setTmdbMovieDetails(detailsData);
                         if (detailsData.collection?.id) {
                             setLoadingCollection(true);
-                            fetch(`/api/tmdb-collection?id=${detailsData.collection.id}`)
-                                .then(res => res.json())
+                            cachedFetch<CollectionData>(`/api/tmdb-collection?id=${detailsData.collection.id}`)
                                 .then(collData => {
-                                    if (!cancelled) setCollectionData(collData as CollectionData);
+                                    if (!cancelled) setCollectionData(collData);
                                 })
                                 .catch(e => console.error('Failed to fetch modal collection data', e))
                                 .finally(() => {
@@ -410,8 +410,8 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                     }
                 }
 
-                if (!cancelled && similarResp.status === 'fulfilled' && similarResp.value.ok) {
-                    const similarData = await similarResp.value.json();
+                if (!cancelled && similarResp.status === 'fulfilled' && similarResp.value) {
+                    const similarData = similarResp.value;
                     const filtered = (similarData.results || []).filter((s: TmdbResult) => s.tmdbId !== item.tmdbId);
                     setSimilarItems(filtered.slice(0, 8));
                 }
@@ -443,11 +443,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
         setPersonCreditSort('date');
 
         try {
-            const res = await fetch(`/api/tmdb-person?id=${personId}`);
-            if (!res.ok) {
-                throw new Error('Failed to load person details');
-            }
-            const data = await res.json();
+            const data = await cachedFetch<any>(`/api/tmdb-person?id=${personId}`);
             setPersonData(data);
         } catch (e) {
             console.error('Failed to fetch person details', e);

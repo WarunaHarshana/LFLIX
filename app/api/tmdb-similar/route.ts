@@ -70,6 +70,10 @@ export async function GET(req: Request) {
             page: normalized.page || 1,
             totalPages: normalized.total_pages || 1,
             totalResults: normalized.total_results || 0,
+        }, {
+            headers: {
+                'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+            },
         });
     } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Unknown error';

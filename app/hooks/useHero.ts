@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiUrl } from '@/lib/mobileConfig';
+import { cachedFetch } from '@/lib/clientQueryCache';
 import type { ContentItem } from '@/app/types';
 
 export function useHero(filteredLibrary: ContentItem[]) {
@@ -33,15 +34,14 @@ export function useHero(filteredLibrary: ContentItem[]) {
     const fetchLogo = async () => {
       try {
         const mediaType = featured.type === 'show' ? 'tv' : 'movie';
-        const res = await fetch(apiUrl(`/api/tmdb-details?id=${featured.tmdbId}&type=${mediaType}`), { credentials: 'same-origin' });
-        if (!res.ok || cancelled) return;
+        const data = await cachedFetch<{ logoPath?: string | null }>(
+          apiUrl(`/api/tmdb-details?id=${featured.tmdbId}&type=${mediaType}`),
+          { credentials: 'same-origin' }
+        );
+        if (cancelled) return;
 
-        const data = await res.json();
-        const logoPath = data.logoPath || null;
-
-        if (!cancelled) {
-          setHeroLogoPaths((prev) => ({ ...prev, [cacheKey]: logoPath }));
-        }
+        const logoPath = data?.logoPath || null;
+        setHeroLogoPaths((prev) => ({ ...prev, [cacheKey]: logoPath }));
       } catch {
         if (!cancelled) {
           setHeroLogoPaths((prev) => ({ ...prev, [cacheKey]: null }));

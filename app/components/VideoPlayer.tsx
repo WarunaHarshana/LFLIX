@@ -86,13 +86,15 @@ function isLocalSource(url: string): boolean {
   }
 }
 
-function buildHlsConfig(src: string): Record<string, unknown> {
+function buildHlsConfig(src: string, initialTime = 0): Record<string, unknown> {
   const local = isLocalSource(src);
+  const startPosition = initialTime > 0 ? initialTime : -1;
 
   if (local) {
     return {
       enableWorker: true,
       progressive: true,
+      startPosition,
       maxBufferLength: 30,
       maxMaxBufferLength: 60,
       maxBufferSize: 60 * 1000 * 1000,
@@ -106,7 +108,7 @@ function buildHlsConfig(src: string): Record<string, unknown> {
         default: {
           maxTimeToFirstByteMs: 15_000,
           maxLoadTimeMs: 60_000,
-          timeoutRetry: { maxNumRetry: 4, retryDelayMs: 500, maxRetryDelayMs: 3000 },
+          timeoutRetry: { maxNumRetry: 4, retryDelayMs: 0, maxRetryDelayMs: 0 },
           errorRetry: { maxNumRetry: 6, retryDelayMs: 500, maxRetryDelayMs: 3000 },
         },
       },
@@ -116,6 +118,7 @@ function buildHlsConfig(src: string): Record<string, unknown> {
   return {
     enableWorker: true,
     progressive: true,
+    startPosition,
     maxBufferLength: 60,
     maxMaxBufferLength: 120,
     maxBufferSize: 60 * 1000 * 1000,
@@ -129,7 +132,7 @@ function buildHlsConfig(src: string): Record<string, unknown> {
       default: {
         maxTimeToFirstByteMs: 10_000,
         maxLoadTimeMs: 30_000,
-        timeoutRetry: { maxNumRetry: 2, retryDelayMs: 500, maxRetryDelayMs: 2000 },
+        timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 },
         errorRetry: { maxNumRetry: 3, retryDelayMs: 500, maxRetryDelayMs: 2000 },
       },
     },
@@ -137,7 +140,7 @@ function buildHlsConfig(src: string): Record<string, unknown> {
       default: {
         maxTimeToFirstByteMs: 8_000,
         maxLoadTimeMs: 15_000,
-        timeoutRetry: { maxNumRetry: 2, retryDelayMs: 500, maxRetryDelayMs: 2000 },
+        timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 },
         errorRetry: { maxNumRetry: 2, retryDelayMs: 500, maxRetryDelayMs: 2000 },
       },
     },
@@ -707,7 +710,7 @@ export default function VideoPlayer({
         // but Android Chrome's native player fails on transcode streams with error 4 (MEDIA_ERR_SRC_NOT_SUPPORTED).
         // MediaSource Extensions (Hls.isSupported()) work reliably on Android Chrome.
         if (Hls.isSupported()) {
-          hls = new Hls(buildHlsConfig(activeSrc));
+          hls = new Hls(buildHlsConfig(activeSrc, initialTime));
           hlsRef.current = hls;
 
           hls.on(Hls.Events.MANIFEST_PARSED, (_e: any, data: any) => {
@@ -741,9 +744,8 @@ export default function VideoPlayer({
               setPreferredLevel(fourKLevel.index);
             }
 
-            if (initialTime > 0 && videoRef.current) {
-              videoRef.current.currentTime = initialTime;
-            }
+            // Note: Hls.js startPosition initializes fragment loading directly at initialTime,
+            // avoiding the duplicate initial fragment download caused by post-manifest seeks.
             videoRef.current?.play().catch(() => {});
           });
 

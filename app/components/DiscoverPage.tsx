@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X, Film, Tv, Loader2, Globe, TrendingUp, ChevronDown, Filter, Magnet } from 'lucide-react';
 import LiquidDropdown from './LiquidDropdown';
+import { cachedFetch } from '@/lib/clientQueryCache';
 
 const MOVIE_GENRES = [
     { id: '28', name: 'Action' },
@@ -119,13 +120,12 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
 
     const isFiltering = selectedGenre !== '' || selectedLanguage !== '' || sortBy !== 'popularity.desc';
 
-    // Fetch trending on mount
+    // Fetch trending on mount (cached in memory for 0ms returns)
     useEffect(() => {
         const fetchTrending = async () => {
             setLoadingTrending(true);
             try {
-                const res = await fetch('/api/trending');
-                const data = await res.json();
+                const data = await cachedFetch<{ movies?: TrendingItem[]; tv?: TrendingItem[] }>('/api/trending');
                 if (data.movies) setTrendingMovies(data.movies);
                 if (data.tv) setTrendingTv(data.tv);
             } catch { /* ignore */ }
@@ -134,10 +134,9 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
         fetchTrending();
     }, []);
 
-    // Reset pagination when filters change
+    // Reset pagination when filters change (preserve discoveredItems to prevent jarring grid collapse/flash)
     useEffect(() => {
         setDiscoverPage(1);
-        setDiscoveredItems([]);
         setHasMoreDiscover(true);
     }, [discoverType, selectedGenre, selectedLanguage, sortBy]);
 
@@ -162,11 +161,12 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
                 if (selectedGenre) params.append('with_genres', selectedGenre);
                 if (selectedLanguage) params.append('with_original_language', selectedLanguage);
                 
-                const res = await fetch(`/api/discover?${params.toString()}`);
-                const data = await res.json();
+                const data = await cachedFetch<{ results?: TMDBResult[]; page: number; totalPages: number }>(
+                    `/api/discover?${params.toString()}`
+                );
                 
                 if (data.results && data.results.length > 0) {
-                    setDiscoveredItems(prev => discoverPage === 1 ? data.results : [...prev, ...data.results]);
+                    setDiscoveredItems(prev => discoverPage === 1 ? data.results! : [...prev, ...data.results!]);
                     setHasMoreDiscover(data.page < data.totalPages);
                 } else {
                     if (discoverPage === 1) setDiscoveredItems([]);
@@ -179,12 +179,15 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
             }
         };
 
-        const timeout = setTimeout(fetchDiscover, discoverPage === 1 ? 500 : 100);
+        // Instant 0ms dispatch for discrete filter and tab switches; debounce only occurs on live search typing
+        const timeout = setTimeout(fetchDiscover, 0);
         return () => clearTimeout(timeout);
     }, [discoverType, selectedGenre, selectedLanguage, sortBy, isFiltering, discoverPage, hasMoreDiscover]);
 
     // Intersection observer for infinite scroll
     useEffect(() => {
+        if (typeof IntersectionObserver === 'undefined') return;
+
         const observer = new IntersectionObserver(
             entries => {
                 if (entries[0].isIntersecting && hasMoreDiscover && !loadingDiscover && isFiltering) {
