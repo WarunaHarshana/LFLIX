@@ -12,7 +12,7 @@ interface AppState {
   setSelectedShow: (show: ContentItem | null) => void;
 
   seasons: Season[];
-  setSeasons: (seasons: Season[]) => void;
+  setSeasons: (seasons: Season[] | ((prev: Season[]) => Season[])) => void;
 
   loadingEpisodes: boolean;
   setLoadingEpisodes: (loading: boolean) => void;
@@ -65,7 +65,10 @@ export const useAppStore = create<AppState>((set) => ({
   setSelectedShow: (show) => set({ selectedShow: show }),
 
   seasons: [],
-  setSeasons: (seasons) => set({ seasons }),
+  setSeasons: (seasons) => set((state) => {
+    const next = typeof seasons === 'function' ? seasons(state.seasons) : seasons;
+    return { seasons: Array.isArray(next) ? next : [] };
+  }),
 
   loadingEpisodes: false,
   setLoadingEpisodes: (loading) => set({ loadingEpisodes: loading }),

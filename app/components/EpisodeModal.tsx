@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, BookmarkMinus, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download, Check, MoreVertical } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
@@ -92,10 +92,11 @@ function episodeScore(
     return { value: rating, source: 'TMDB' };
 }
 
-export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEpisode, onDeleteEpisode, onRemoveEpisodeFromLibrary, onMarkWatched }: Props) {
+export default function EpisodeModal({ show, seasons: rawSeasons, loading, onClose, onPlayEpisode, onDeleteEpisode, onRemoveEpisodeFromLibrary, onMarkWatched }: Props) {
+    const seasons = useMemo(() => Array.isArray(rawSeasons) ? rawSeasons : [], [rawSeasons]);
     const modalRef = useModalBehavior(true, onClose);
 
-    const [activeSeason, setActiveSeason] = useState(seasons[0]?.season || 1);
+    const [activeSeason, setActiveSeason] = useState<number>(() => (Array.isArray(rawSeasons) && rawSeasons[0]?.season) ? rawSeasons[0].season : 1);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; episode: Episode } | null>(null);
     const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
     const [showStreamServers, setShowStreamServers] = useState(false);
@@ -152,11 +153,13 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
 
     // Reset active season when seasons change (new show opened)
     useEffect(() => {
-        setActiveSeason(seasons[0]?.season || 1);
+        if (seasons.length > 0) {
+            setActiveSeason(seasons[0]?.season || 1);
+        }
         setSelectedEpisode(null);
     }, [seasons]);
 
-    const currentSeason = seasons.find(s => s.season === activeSeason);
+    const currentSeason = seasons.find(s => s.season === activeSeason) || seasons[0];
 
     // Neighbouring episodes within the loaded season, so the online player can
     // step through a season without closing and reopening.

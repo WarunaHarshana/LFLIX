@@ -438,7 +438,7 @@ export default function Home() {
     if (!confirmed) return;
     // Optimistically update UI immediately so deleted episode disappears with zero lag
     setSeasons(prev =>
-      prev
+      (Array.isArray(prev) ? prev : [])
         .map(s => ({
           ...s,
           episodes: s.episodes.filter(ep => ep.id !== episodeId)
@@ -468,7 +468,7 @@ export default function Home() {
     if (!confirmed) return;
     // Optimistically update UI immediately
     setSeasons(prev =>
-      prev
+      (Array.isArray(prev) ? prev : [])
         .map(s => ({
           ...s,
           episodes: s.episodes.filter(ep => ep.id !== episodeId)
@@ -666,7 +666,7 @@ export default function Home() {
       {selectedShow && (
         <EpisodeModal
           show={selectedShow}
-          seasons={seasons}
+          seasons={Array.isArray(seasons) ? seasons : []}
           loading={loadingEpisodes}
           onClose={() => setSelectedShow(null)}
           onPlayEpisode={(episodeId, startTime) => playback.playFile('show', selectedShow.id, episodeId, startTime)}

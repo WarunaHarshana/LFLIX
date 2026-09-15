@@ -251,10 +251,10 @@ export async function syncCloudDownloads(): Promise<void> {
 
     // Find all in-flight cloud downloads
     const activeDownloads = db.prepare(`
-        SELECT id, name, magnetUri, target
+        SELECT id, name, magnetUri, target, downloadPath
         FROM downloads
         WHERE target = 'cloud' AND status IN ('downloading', 'metadata')
-    `).all() as { id: number; name: string; magnetUri: string; target: string }[];
+    `).all() as { id: number; name: string; magnetUri: string; target: string; downloadPath?: string | null }[];
 
     if (activeDownloads.length === 0) {
         if (syncTimer) {
