@@ -250,6 +250,10 @@ export async function formatAria2Error(rawError: string, url?: string): Promise<
         return 'Host server is temporarily unavailable or overloaded (HTTP 502/503/504). Please try again later.';
     }
 
+    if ((/errorCode=22/i.test(rawError) && /status=429/i.test(rawError)) || /status=429/i.test(rawError)) {
+        return 'Download rate-limited by host (HTTP 429 Too Many Requests). The server is throttling requests; please try again later or choose a torrent source.';
+    }
+
     if (/errorCode=9\b/i.test(rawError) || /not enough disk space/i.test(rawError)) {
         return 'Not enough disk space to save the file.';
     }
@@ -260,6 +264,12 @@ export async function formatAria2Error(rawError: string, url?: string): Promise<
 
     if (/errorCode=2\b/i.test(rawError) || /time out/i.test(rawError)) {
         return 'Download timed out connecting to the file host.';
+    }
+
+    const statusMatch = rawError.match(/status=(\d+)/i);
+    if (statusMatch) {
+        const statusCode = statusMatch[1];
+        return `Download server returned HTTP ${statusCode}. The host may be blocking automated requests or requiring a browser challenge; please choose another source or torrent.`;
     }
 
     // Clean up raw C++ file pointers like -> [HttpSkipResponseCommand.cc:239]

@@ -391,6 +391,15 @@ describe('Direct Downloads Resolver', () => {
       expect(formatted).not.toContain('HttpSkipResponseCommand');
     });
 
+    it('translates status 429 to rate limited message', async () => {
+      const { formatAria2Error } = await import('@/lib/aria2Downloader');
+      const raw = 'Exception: [HttpSkipResponseCommand.cc:239] errorCode=22 The response status is not successful. status=429';
+      const formatted = await formatAria2Error(raw);
+
+      expect(formatted).toContain('Download rate-limited by host (HTTP 429 Too Many Requests)');
+      expect(formatted).not.toContain('HttpSkipResponseCommand');
+    });
+
     it('translates errorCode=9 to disk space error', async () => {
       const { formatAria2Error } = await import('@/lib/aria2Downloader');
       const raw = 'errorCode=9 Not enough disk space';
