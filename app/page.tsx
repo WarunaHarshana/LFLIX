@@ -234,8 +234,12 @@ export default function Home() {
             showToast('New video detected, scanning...', 'success');
           } else if (data.type === 'scan_complete' && data.added > 0) {
             showToast(`Added ${data.added} new item${data.added > 1 ? 's' : ''} to library`, 'success');
+            invalidateQuery(/\/api\/episodes/);
             fetchLibrary();
             fetchContinueWatching();
+            if (selectedShowRef.current) {
+              openShow(selectedShowRef.current, true);
+            }
           } else if (data.type === 'file_removed') {
             showToast('Item removed from library', 'success');
             invalidateQuery(/\/api\/episodes/);

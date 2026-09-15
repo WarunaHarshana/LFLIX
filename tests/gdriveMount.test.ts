@@ -26,14 +26,14 @@ describe('Google Drive Mount & VFS Cache Management', () => {
     });
 
     describe('refreshMountVfsCache', () => {
-        it('sends JSON POST body with recursive: true to rclone RC', async () => {
+        it('sends JSON POST body with recursive: "true" and basePath prefix to rclone RC', async () => {
             const fetchMock = vi.fn().mockResolvedValue({
                 ok: true,
-                json: async () => ({ result: 'ok' }),
+                json: async () => ({ result: { 'Media/TV Shows/Reacher': 'OK' } }),
             });
             vi.stubGlobal('fetch', fetchMock);
 
-            const success = await refreshMountVfsCache('Media/TV Shows/Reacher');
+            const success = await refreshMountVfsCache('TV Shows/Reacher');
             expect(success).toBe(true);
             expect(fetchMock).toHaveBeenCalledWith(
                 'http://127.0.0.1:5572/vfs/refresh',
@@ -41,8 +41,8 @@ describe('Google Drive Mount & VFS Cache Management', () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        recursive: 'true',
                         dir: 'Media/TV Shows/Reacher',
-                        recursive: true,
                     }),
                 })
             );
@@ -50,10 +50,10 @@ describe('Google Drive Mount & VFS Cache Management', () => {
             vi.unstubAllGlobals();
         });
 
-        it('refreshes entire mount when dir is omitted or empty', async () => {
+        it('refreshes entire mount without dir parameter when dir is omitted or empty', async () => {
             const fetchMock = vi.fn().mockResolvedValue({
                 ok: true,
-                json: async () => ({ result: 'ok' }),
+                json: async () => ({ result: { '': 'OK' } }),
             });
             vi.stubGlobal('fetch', fetchMock);
 
@@ -65,11 +65,29 @@ describe('Google Drive Mount & VFS Cache Management', () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        dir: '',
-                        recursive: true,
+                        recursive: 'true',
                     }),
                 })
             );
+
+            vi.unstubAllGlobals();
+        });
+
+        it('falls back to full mount refresh if targeted dir does not exist in rclone', async () => {
+            const fetchMock = vi.fn()
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({ result: { 'Media/NonExistent': 'file does not exist' } }),
+                })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({ result: { '': 'OK' } }),
+                });
+            vi.stubGlobal('fetch', fetchMock);
+
+            const success = await refreshMountVfsCache('NonExistent');
+            expect(success).toBe(true);
+            expect(fetchMock).toHaveBeenCalledTimes(2);
 
             vi.unstubAllGlobals();
         });

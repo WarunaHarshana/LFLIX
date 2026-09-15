@@ -298,10 +298,14 @@ export async function syncCloudDownloads(): Promise<void> {
                 `).run(dl.id);
                 cloudJobMap.delete(dl.id);
 
-                // Trigger library rescan
+                // Trigger targeted scan and library rescan
                 try {
                     const { default: downloadManager } = await import('./downloader');
-                    downloadManager.triggerRescan();
+                    if (dl.downloadPath) {
+                        downloadManager.handleGdriveUploadComplete(dl.downloadPath);
+                    } else {
+                        downloadManager.triggerRescan();
+                    }
                 } catch { /* ignore */ }
             } else if (job.status === 'error') {
                 db.prepare(`

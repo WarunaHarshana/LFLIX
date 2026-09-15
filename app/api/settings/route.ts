@@ -138,10 +138,14 @@ export async function POST(req: Request) {
     `);
 
         for (const [key, value] of Object.entries(settings)) {
-            if (typeof value === 'string') {
-                updateSetting.run(key, value);
-            } else if (typeof value === 'boolean') {
-                updateSetting.run(key, value ? 'true' : 'false');
+            let val = value;
+            if (typeof val === 'string' && (key === 'gdriveMountPath' || key === 'gdriveTempPath' || key === 'downloadPath')) {
+                val = path.normalize(val.replace(/\\\\+/g, '\\'));
+            }
+            if (typeof val === 'string') {
+                updateSetting.run(key, val);
+            } else if (typeof val === 'boolean') {
+                updateSetting.run(key, val ? 'true' : 'false');
             }
         }
 

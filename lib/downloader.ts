@@ -1691,6 +1691,10 @@ class DownloadManager {
                         return;
                     }
 
+                    const uploadedPaths: { mountedPath: string; remoteRel: string }[] = [];
+                    const { getGdriveConfig } = await import('./gdriveUploader');
+                    const gdriveConfig = getGdriveConfig();
+
                     for (let i = 0; i < filesToUpload.length; i++) {
                         const file = filesToUpload[i];
                         let remoteRel = path.relative(torrentPath, file).replace(/\\/g, '/');
@@ -1718,6 +1722,9 @@ class DownloadManager {
                                     this.gdriveProcesses.delete(downloadId);
                                     if (!success) {
                                         console.error(`[DownloadManager] GDrive upload error for ${file}:`, err);
+                                    } else {
+                                        const mounted = path.normalize(path.join(gdriveConfig.mountPath, remoteRel));
+                                        uploadedPaths.push({ mountedPath: mounted, remoteRel });
                                     }
                                     resolve();
                                 }
@@ -1734,13 +1741,20 @@ class DownloadManager {
                         }
                     } catch { /* ignore */ }
 
+                    const primaryMountedPath = uploadedPaths[0]?.mountedPath || gdriveConfig.mountPath;
+
                     db.prepare(`
                         UPDATE downloads SET status = 'completed', progress = 100, downloadSpeed = 0,
-                        downloadedSize = totalSize, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
+                        downloadedSize = totalSize, downloadPath = ?, completedAt = CURRENT_TIMESTAMP, stateUpdatedAt = CURRENT_TIMESTAMP
                         WHERE id = ?
-                    `).run(downloadId);
+                    `).run(primaryMountedPath, downloadId);
 
-                    this.triggerRescan();
+                    for (const { mountedPath, remoteRel } of uploadedPaths) {
+                        await this.handleGdriveUploadComplete(mountedPath, remoteRel);
+                    }
+                    if (uploadedPaths.length === 0) {
+                        await this.triggerRescan();
+                    }
                 } catch (gdriveErr: any) {
                     console.error('[DownloadManager] GDrive upload processing failed:', gdriveErr);
                     db.prepare(`
@@ -1827,6 +1841,7 @@ class DownloadManager {
             const { ensureDriveMounted, refreshMountVfsCache } = await import('./gdriveUploader');
             await ensureDriveMounted();
 
+            const normalizedMountedPath = path.normalize(mountedPath);
             const dir = remoteDest ? path.dirname(remoteDest).replace(/^[^:]+:/, '') : undefined;
             await refreshMountVfsCache(dir);
 
@@ -1836,18 +1851,28 @@ class DownloadManager {
             // Immediate targeted scan of the new file
             const { scanFile } = await import('./scanner');
             let scanned = false;
-            for (let attempt = 0; attempt < 3; attempt++) {
-                if (fs.existsSync(mountedPath)) {
-                    const res = await scanFile(mountedPath);
-                    console.log(`[DownloadManager] Targeted scan for ${path.basename(mountedPath)}: added=${res.added}`);
+            for (let attempt = 0; attempt < 5; attempt++) {
+                if (fs.existsSync(normalizedMountedPath)) {
+                    const res = await scanFile(normalizedMountedPath);
+                    console.log(`[DownloadManager] Targeted scan for ${path.basename(normalizedMountedPath)}: added=${res.added}`);
+                    if (res.added) {
+                        try {
+                            const { folderWatcher } = await import('./watcher');
+                            folderWatcher.emit({ type: 'scan_complete', added: 1 });
+                        } catch { /* ignore */ }
+                    }
                     scanned = true;
                     break;
                 }
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                if (attempt === 2) {
+                    // Refresh entire mount cache if targeted subdir didn't reveal the file yet
+                    await refreshMountVfsCache();
+                }
+                await new Promise(resolve => setTimeout(resolve, 1500));
             }
 
             if (!scanned) {
-                console.log(`[DownloadManager] Targeted file not yet visible at ${mountedPath}, falling back to rescanLibrary`);
+                console.log(`[DownloadManager] Targeted file not yet visible at ${normalizedMountedPath}, falling back to rescanLibrary`);
             }
 
             // Always trigger rescan to keep all library folders synchronized

@@ -368,6 +368,31 @@ try {
 } catch { /* ignore */ }
 
 try {
+  // Normalize any accidental double backslashes stored in paths
+  const normalizeDoubleBackslashes = (val: string) => val.replace(/\\\\+/g, '\\');
+
+  const settingRows = db.prepare("SELECT key, value FROM settings WHERE instr(value, char(92) || char(92)) > 0").all() as { key: string; value: string }[];
+  for (const s of settingRows) {
+    db.prepare("UPDATE settings SET value = ? WHERE key = ?").run(normalizeDoubleBackslashes(s.value), s.key);
+  }
+
+  const epRows = db.prepare("SELECT id, filePath FROM episodes WHERE instr(filePath, char(92) || char(92)) > 0").all() as { id: number; filePath: string }[];
+  for (const ep of epRows) {
+    db.prepare("UPDATE episodes SET filePath = ? WHERE id = ?").run(normalizeDoubleBackslashes(ep.filePath), ep.id);
+  }
+
+  const movieRows = db.prepare("SELECT id, filePath FROM movies WHERE instr(filePath, char(92) || char(92)) > 0").all() as { id: number; filePath: string }[];
+  for (const m of movieRows) {
+    db.prepare("UPDATE movies SET filePath = ? WHERE id = ?").run(normalizeDoubleBackslashes(m.filePath), m.id);
+  }
+
+  const dlRows = db.prepare("SELECT id, downloadPath FROM downloads WHERE instr(downloadPath, char(92) || char(92)) > 0").all() as { id: number; downloadPath: string }[];
+  for (const dl of dlRows) {
+    db.prepare("UPDATE downloads SET downloadPath = ? WHERE id = ?").run(normalizeDoubleBackslashes(dl.downloadPath), dl.id);
+  }
+} catch { /* ignore */ }
+
+try {
   const defaultPlayer = getBestDefaultPlayerPath();
   const existingPlayer = db.prepare("SELECT value FROM settings WHERE key = 'vlcPath'").get() as { value: string } | undefined;
   if (!existingPlayer) {

@@ -28,7 +28,7 @@ class FolderWatcher {
     }
 
     // Emit event to all listeners
-    private emit(event: WatcherEvent) {
+    public emit(event: WatcherEvent) {
         this.listeners.forEach(callback => {
             try {
                 callback(event);

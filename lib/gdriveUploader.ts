@@ -124,9 +124,9 @@ export function getGdriveConfig(): GdriveConfig {
             switch (row.key) {
                 case 'gdriveEnabled': explicitEnabled = row.value === 'true'; break;
                 case 'gdriveRemote': config.remote = row.value; break;
-                case 'gdriveBasePath': config.basePath = row.value; break;
-                case 'gdriveTempPath': config.tempPath = row.value; break;
-                case 'gdriveMountPath': config.mountPath = row.value; break;
+                case 'gdriveBasePath': config.basePath = row.value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''); break;
+                case 'gdriveTempPath': config.tempPath = path.normalize(row.value.replace(/\\\\+/g, '\\')); break;
+                case 'gdriveMountPath': config.mountPath = path.normalize(row.value.replace(/\\\\+/g, '\\')); break;
                 case 'gdriveMountDrive': config.mountDrive = row.value; break;
             }
         }
@@ -600,18 +600,43 @@ export function uploadFile(
  */
 export async function refreshMountVfsCache(dir?: string): Promise<boolean> {
     try {
-        const normalizedDir = dir ? dir.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
-        const body = {
-            dir: normalizedDir,
-            recursive: true,
+        const config = getGdriveConfig();
+        let normalizedDir = dir ? dir.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+
+        // If a subdirectory is specified, ensure it includes the basePath prefix (e.g. "Media/TV Shows/...")
+        if (normalizedDir && config.basePath) {
+            const cleanBase = config.basePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+            if (cleanBase && !normalizedDir.startsWith(cleanBase) && normalizedDir !== cleanBase) {
+                normalizedDir = `${cleanBase}/${normalizedDir}`;
+            }
+        }
+
+        // Rclone RC API requires string "recursive": "true".
+        // When refreshing the entire mount root, omitting "dir" refreshes root ('') reliably.
+        const body: { dir?: string; recursive: string } = {
+            recursive: 'true',
         };
+        if (normalizedDir) {
+            body.dir = normalizedDir;
+        }
+
         const res = await fetch('http://127.0.0.1:5572/vfs/refresh', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(6000),
         });
+
         if (res.ok) {
+            const json = (await res.json().catch(() => ({}))) as { result?: Record<string, string> };
+            const resultEntry = normalizedDir ? json?.result?.[normalizedDir] : json?.result?.[''];
+            if (resultEntry && typeof resultEntry === 'string' && resultEntry !== 'OK' && resultEntry.includes('does not exist')) {
+                console.warn(`[GDrive] VFS refresh for "${normalizedDir}" returned "${resultEntry}". Falling back to full mount refresh...`);
+                // Fallback to full refresh by calling without dir
+                if (normalizedDir) {
+                    return refreshMountVfsCache();
+                }
+            }
             console.log(`[GDrive] VFS directory cache refreshed successfully${normalizedDir ? ` for ${normalizedDir}` : ' (entire mount)'}`);
             return true;
         }

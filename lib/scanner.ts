@@ -590,6 +590,20 @@ export async function rescanLibrary(targetFolderPath?: string): Promise<RescanRe
     }
 
     console.log(`[Scanner] Rescan completed: ${totalAdded} added, ${totalRemoved} removed across ${folderRows.length} folders`);
+
+    if (totalAdded > 0) {
+      try {
+        const { folderWatcher } = await import('./watcher');
+        folderWatcher.emit({ type: 'scan_complete', added: totalAdded });
+      } catch { /* ignore */ }
+    }
+    if (totalRemoved > 0) {
+      try {
+        const { folderWatcher } = await import('./watcher');
+        folderWatcher.emit({ type: 'file_removed' });
+      } catch { /* ignore */ }
+    }
+
     return {
       success: true,
       folders: folderRows.length,
