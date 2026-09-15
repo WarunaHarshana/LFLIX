@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import db from '@/lib/db';
+import fs from 'fs';
+import path from 'path';
+import db, { removeAutoTrackingForShow } from '@/lib/db';
 import { apiErrorResponse } from '@/lib/apiSecurity';
 
 // Mark as dynamic for static export compatibility
@@ -73,11 +75,50 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Invalid showId. Must be a positive integer' }, { status: 400 });
     }
 
-    const episodes = db.prepare(`
+    const allEpisodes = db.prepare(`
       SELECT * FROM episodes 
       WHERE showId = ? 
       ORDER BY seasonNumber ASC, episodeNumber ASC
     `).all(showId) as Episode[];
+
+    const episodes: Episode[] = [];
+    const missingEpisodeIds: number[] = [];
+
+    for (const ep of allEpisodes) {
+      if (ep.filePath) {
+        try {
+          const parentDir = path.dirname(ep.filePath);
+          // Only prune if parent directory exists (verifying drive/folder is mounted) but the file is gone
+          if (fs.existsSync(parentDir)) {
+            if (!fs.existsSync(ep.filePath)) {
+              missingEpisodeIds.push(ep.id);
+              continue;
+            }
+          }
+        } catch {
+          // If filesystem access error, keep episode to be safe
+        }
+      }
+      episodes.push(ep);
+    }
+
+    // Clean up missing episodes from database automatically
+    if (missingEpisodeIds.length > 0) {
+      try {
+        const placeholders = missingEpisodeIds.map(() => '?').join(',');
+        db.prepare(`DELETE FROM episodes WHERE id IN (${placeholders})`).run(...missingEpisodeIds);
+        db.prepare(`DELETE FROM watch_history WHERE episodeId IN (${placeholders})`).run(...missingEpisodeIds);
+
+        // Check if show still has remaining episodes
+        const remaining = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE showId = ?').get(showId) as { count: number };
+        if (remaining.count === 0) {
+          removeAutoTrackingForShow(showId);
+          db.prepare('DELETE FROM shows WHERE id = ?').run(showId);
+        }
+      } catch (err) {
+        console.warn('[Episodes API] Failed to clean up missing episodes:', err);
+      }
+    }
 
     // Get watch progress for all episodes of this show
     const watchProgress = db.prepare(`

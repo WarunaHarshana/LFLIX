@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { cachedFetch, prefetchQuery, clientQueryCache } from '@/lib/clientQueryCache';
+import { cachedFetch, prefetchQuery, clientQueryCache, invalidateQuery } from '@/lib/clientQueryCache';
 
 describe('clientQueryCache', () => {
   beforeEach(() => {
@@ -109,5 +109,61 @@ describe('clientQueryCache', () => {
     expect(fakeFetch).toHaveBeenCalledTimes(1);
     expect(t1.key).toBe('dQw4w9WgXcQ');
     expect(t2.key).toBe('dQw4w9WgXcQ');
+  });
+
+  it('bypasses cache and refetches fresh data when forceFresh is true', async () => {
+    let count = 0;
+    const fakeFetch = vi.fn().mockImplementation(async () => {
+      count++;
+      return {
+        ok: true,
+        json: async () => ({ seasons: [{ season: 1, episodes: count === 1 ? [1, 2] : [1] }] }),
+      };
+    });
+    vi.stubGlobal('fetch', fakeFetch);
+
+    const first = await cachedFetch<any>('/api/episodes?showId=590');
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(first.seasons[0].episodes).toEqual([1, 2]);
+
+    // Regular cachedFetch should return cached response
+    const cached = await cachedFetch<any>('/api/episodes?showId=590');
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(cached.seasons[0].episodes).toEqual([1, 2]);
+
+    // With forceFresh = true, should fetch fresh data from network
+    const fresh = await cachedFetch<any>('/api/episodes?showId=590', undefined, undefined, true);
+    expect(fakeFetch).toHaveBeenCalledTimes(2);
+    expect(fresh.seasons[0].episodes).toEqual([1]);
+  });
+
+  it('invalidates cache matching URL pattern or string', async () => {
+    const fakeFetch = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ title: 'Test' }),
+    }));
+    vi.stubGlobal('fetch', fakeFetch);
+
+    await cachedFetch('/api/episodes?showId=590');
+    await cachedFetch('/api/episodes?showId=600');
+    await cachedFetch('/api/tmdb-details?id=100');
+    expect(fakeFetch).toHaveBeenCalledTimes(3);
+
+    // Invalidate show 590
+    invalidateQuery('/api/episodes?showId=590');
+
+    // Show 590 should refetch
+    await cachedFetch('/api/episodes?showId=590');
+    expect(fakeFetch).toHaveBeenCalledTimes(4);
+
+    // Show 600 and tmdb should still be cached
+    await cachedFetch('/api/episodes?showId=600');
+    await cachedFetch('/api/tmdb-details?id=100');
+    expect(fakeFetch).toHaveBeenCalledTimes(4);
+
+    // Invalidate all episodes by regex
+    invalidateQuery(/\/api\/episodes/);
+    await cachedFetch('/api/episodes?showId=600');
+    expect(fakeFetch).toHaveBeenCalledTimes(5);
   });
 });

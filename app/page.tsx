@@ -5,7 +5,7 @@ import { Keyboard, X } from 'lucide-react';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { apiUrl } from '@/lib/mobileConfig';
-import { cachedFetch } from '@/lib/clientQueryCache';
+import { cachedFetch, invalidateQuery } from '@/lib/clientQueryCache';
 import { useAppStore } from './store/useAppStore';
 import type { ContentItem, Season, DiscoverOnlineItem, TabId } from './types';
 import { isValidTab } from './types';
@@ -151,6 +151,7 @@ export default function Home() {
   const selectedGenreRef = useRef(selectedGenre);
   const focusedIndexRef = useRef(focusedIndex);
   const playbackRef = useRef(playback);
+  const selectedShowRef = useRef(selectedShow);
 
   useEffect(() => {
     libraryRef.current = library;
@@ -159,7 +160,8 @@ export default function Home() {
     selectedGenreRef.current = selectedGenre;
     focusedIndexRef.current = focusedIndex;
     playbackRef.current = playback;
-  }, [library, filteredLibrary, activeTab, selectedGenre, focusedIndex, playback]);
+    selectedShowRef.current = selectedShow;
+  }, [library, filteredLibrary, activeTab, selectedGenre, focusedIndex, playback, selectedShow]);
 
   // ──────────────────── Tab Switching ────────────────────
   const switchTab = (tab: TabId) => {
@@ -236,8 +238,12 @@ export default function Home() {
             fetchContinueWatching();
           } else if (data.type === 'file_removed') {
             showToast('Item removed from library', 'success');
+            invalidateQuery(/\/api\/episodes/);
             fetchLibrary();
             fetchContinueWatching();
+            if (selectedShowRef.current) {
+              openShow(selectedShowRef.current, true);
+            }
           }
         } catch (e) {
           console.error('SSE parse error:', e);
@@ -317,15 +323,24 @@ export default function Home() {
   }, []);
 
   // ──────────────────── Cross-Hook Handlers ────────────────────
-  const openShow = useCallback(async (show: ContentItem) => {
+  const openShow = useCallback(async (show: ContentItem, forceFresh: boolean = false) => {
     setSelectedShow(show);
     setLoadingEpisodes(true);
     try {
+      if (forceFresh) {
+        invalidateQuery(`/api/episodes?showId=${show.id}`);
+      }
       const data = await cachedFetch<{ seasons?: Season[] }>(
         apiUrl(`/api/episodes?showId=${show.id}`),
-        { credentials: 'same-origin' }
+        { credentials: 'same-origin' },
+        undefined,
+        forceFresh
       );
-      setSeasons(data.seasons || []);
+      const loadedSeasons = data.seasons || [];
+      setSeasons(loadedSeasons);
+      if (loadedSeasons.length === 0) {
+        setSelectedShow(null);
+      }
     } catch {
       showToast('Failed to load episodes', 'error');
     } finally {
@@ -382,6 +397,10 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Remove failed');
       showToast(`"${item.title}" removed from library`, 'success');
+      invalidateQuery(`/api/episodes?showId=${item.id}`);
+      if (selectedShow && selectedShow.id === item.id) {
+        setSelectedShow(null);
+      }
       setContextMenu(null);
       await fetchLibrary();
     } catch (e) {
@@ -399,6 +418,10 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Delete failed');
       showToast(`Deleted (${data.filesDeleted ?? 0} file(s) removed from disk)`, 'success');
+      invalidateQuery(`/api/episodes?showId=${item.id}`);
+      if (selectedShow && selectedShow.id === item.id) {
+        setSelectedShow(null);
+      }
       setContextMenu(null);
       await fetchLibrary();
     } catch (e) {
@@ -409,6 +432,15 @@ export default function Home() {
   const handleDeleteEpisode = async (episodeId: number) => {
     const confirmed = confirm('Delete this episode from library AND local disk permanently?');
     if (!confirmed) return;
+    // Optimistically update UI immediately so deleted episode disappears with zero lag
+    setSeasons(prev =>
+      prev
+        .map(s => ({
+          ...s,
+          episodes: s.episodes.filter(ep => ep.id !== episodeId)
+        }))
+        .filter(s => s.episodes.length > 0)
+    );
     try {
       const res = await fetch(apiUrl(`/api/delete?type=episode&id=${episodeId}&deleteFile=1`), {
         method: 'DELETE', credentials: 'same-origin'
@@ -416,16 +448,29 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Delete failed');
       showToast(`Episode deleted (${data.filesDeleted ?? 0} file removed)`, 'success');
-      if (selectedShow) openShow(selectedShow);
+      if (selectedShow) {
+        invalidateQuery(`/api/episodes?showId=${selectedShow.id}`);
+        await openShow(selectedShow, true);
+      }
       await fetchLibrary();
     } catch (e) {
       showToast('Failed to delete episode', 'error');
+      if (selectedShow) openShow(selectedShow, true);
     }
   };
 
   const handleRemoveEpisodeFromLibrary = async (episodeId: number) => {
     const confirmed = confirm('Remove this episode from library? The file will remain on disk.');
     if (!confirmed) return;
+    // Optimistically update UI immediately
+    setSeasons(prev =>
+      prev
+        .map(s => ({
+          ...s,
+          episodes: s.episodes.filter(ep => ep.id !== episodeId)
+        }))
+        .filter(s => s.episodes.length > 0)
+    );
     try {
       const res = await fetch(apiUrl(`/api/delete?type=episode&id=${episodeId}&deleteFile=0`), {
         method: 'DELETE', credentials: 'same-origin'
@@ -433,10 +478,14 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Remove failed');
       showToast('Episode removed from library', 'success');
-      if (selectedShow) openShow(selectedShow);
+      if (selectedShow) {
+        invalidateQuery(`/api/episodes?showId=${selectedShow.id}`);
+        await openShow(selectedShow, true);
+      }
       await fetchLibrary();
     } catch (e) {
       showToast('Failed to remove episode from library', 'error');
+      if (selectedShow) openShow(selectedShow, true);
     }
   };
 
@@ -621,7 +670,10 @@ export default function Home() {
           onRemoveEpisodeFromLibrary={handleRemoveEpisodeFromLibrary}
           onMarkWatched={async (episode, watched) => {
             await handleMarkWatched({ ...selectedShow, type: 'show', title: episode.title } as ContentItem, watched, episode.id);
-            if (selectedShow) openShow(selectedShow);
+            if (selectedShow) {
+              invalidateQuery(`/api/episodes?showId=${selectedShow.id}`);
+              openShow(selectedShow, true);
+            }
           }}
         />
       )}

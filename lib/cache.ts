@@ -78,6 +78,27 @@ export class MemoryCache<T> {
     return promise;
   }
 
+  delete(key: string): boolean {
+    this.inflight.delete(key);
+    return this.cache.delete(key);
+  }
+
+  deleteMatching(predicate: (key: string) => boolean): number {
+    let count = 0;
+    for (const key of Array.from(this.cache.keys())) {
+      if (predicate(key)) {
+        this.cache.delete(key);
+        count++;
+      }
+    }
+    for (const key of Array.from(this.inflight.keys())) {
+      if (predicate(key)) {
+        this.inflight.delete(key);
+      }
+    }
+    return count;
+  }
+
   clear() {
     this.cache.clear();
     this.inflight.clear();

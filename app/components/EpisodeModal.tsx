@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, BookmarkMinus, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download, Check } from 'lucide-react';
+import { X, Play, RefreshCw, ChevronDown, ChevronLeft, Trash2, BookmarkMinus, Clock, Star, Globe, BarChart3, SkipForward, Eye, EyeOff, DownloadCloud, Download, Check, MoreVertical } from 'lucide-react';
 import StreamServerModal from './StreamServerModal';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import ToastNotification from './ToastNotification';
@@ -178,14 +178,22 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
 
     const handleRemoveFromLibrary = () => {
         if (contextMenu && onRemoveEpisodeFromLibrary) {
-            onRemoveEpisodeFromLibrary(contextMenu.episode.id);
+            const epId = contextMenu.episode.id;
+            onRemoveEpisodeFromLibrary(epId);
+            if (selectedEpisode?.id === epId) {
+                setSelectedEpisode(null);
+            }
         }
         setContextMenu(null);
     };
 
     const handleDelete = () => {
         if (contextMenu && onDeleteEpisode) {
-            onDeleteEpisode(contextMenu.episode.id);
+            const epId = contextMenu.episode.id;
+            onDeleteEpisode(epId);
+            if (selectedEpisode?.id === epId) {
+                setSelectedEpisode(null);
+            }
         }
         setContextMenu(null);
     };
@@ -371,11 +379,11 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                 {/* Episode Detail View */}
                 {selectedEpisode ? (
                     <div className="flex-1 overflow-y-auto p-4 sm:p-8 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:pb-8">
-                        {/* Play Button */}
-                        <div className="flex gap-3 mb-6">
+                        {/* Play Button & Actions */}
+                        <div className="flex gap-3 mb-6 flex-wrap items-center">
                             <button
                                 onClick={() => onPlayEpisode(selectedEpisode.id, selectedEpisode.watchProgress?.progress)}
-                                className="liquid-btn-primary px-5 sm:px-6 py-2.5 font-bold rounded-xl flex items-center gap-2 text-sm shadow-lg"
+                                className="liquid-btn-primary px-5 sm:px-6 py-2.5 font-bold rounded-xl flex items-center gap-2 text-sm shadow-lg cursor-pointer"
                             >
                                 <Play className="w-4 h-4 fill-black" />
                                 {selectedEpisode.watchProgress && selectedEpisode.watchProgress.progress > 0
@@ -385,11 +393,23 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                             {show.tmdbId && (
                                 <button
                                     onClick={() => setShowStreamServers(true)}
-                                    className="liquid-btn-primary px-4 py-2 sm:px-5 sm:py-2.5 font-semibold rounded-xl flex items-center gap-2 text-sm"
+                                    className="liquid-btn-primary px-4 py-2 sm:px-5 sm:py-2.5 font-semibold rounded-xl flex items-center gap-2 text-sm cursor-pointer"
                                 >
                                     <Globe className="w-4 h-4" /> Watch Online
                                 </button>
                             )}
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setContextMenu({ x: rect.left, y: rect.bottom + 6, episode: selectedEpisode });
+                                }}
+                                className="liquid-glass-pill px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-neutral-300 hover:text-white hover:bg-white/10 transition flex items-center gap-1.5 text-xs font-semibold border border-white/10 cursor-pointer"
+                                title="Episode options"
+                            >
+                                <MoreVertical className="w-4 h-4" />
+                                <span>Options</span>
+                            </button>
                         </div>
 
                         {/* Watch Progress */}
@@ -791,6 +811,19 @@ export default function EpisodeModal({ show, seasons, loading, onClose, onPlayEp
                                                             {Math.round(progressPercent)}%
                                                         </span>
                                                     )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                            setContextMenu({ x: Math.max(10, rect.left - 140), y: rect.bottom + 6, episode: ep });
+                                                        }}
+                                                        title="Episode options"
+                                                        aria-label="Episode options"
+                                                        className="w-8 h-8 rounded-full liquid-orb flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                                                    >
+                                                        <MoreVertical className="w-4 h-4" />
+                                                    </button>
                                                     <div className="w-8 h-8 rounded-full liquid-orb flex items-center justify-center text-neutral-400 group-hover:text-white group-hover:translate-x-0.5 transition-all">
                                                         <ChevronDown className="w-4 h-4 -rotate-90" />
                                                     </div>

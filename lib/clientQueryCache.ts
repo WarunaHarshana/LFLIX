@@ -15,7 +15,8 @@ export const clientQueryCache = new MemoryCache<unknown>(30, 1000);
 export async function cachedFetch<T = unknown>(
   url: string,
   options?: RequestInit,
-  ttlMs?: number
+  ttlMs?: number,
+  forceFresh?: boolean
 ): Promise<T> {
   const resolvedUrl = url.startsWith('/') ? apiUrl(url) : url;
   const method = (options?.method || 'GET').toUpperCase();
@@ -30,6 +31,10 @@ export async function cachedFetch<T = unknown>(
   }
 
   const cacheKey = `GET:${resolvedUrl}`;
+  if (forceFresh) {
+    clientQueryCache.delete(cacheKey);
+  }
+
   return clientQueryCache.getOrSet(
     cacheKey,
     async () => {
@@ -42,6 +47,22 @@ export async function cachedFetch<T = unknown>(
     ttlMs,
     (data) => data !== null && data !== undefined
   ) as Promise<T>;
+}
+
+/**
+ * Invalidates cache entries matching a URL string, substring, or regular expression.
+ * If no argument is provided, the entire cache is cleared.
+ */
+export function invalidateQuery(urlOrPattern?: string | RegExp): void {
+  if (!urlOrPattern) {
+    clientQueryCache.clear();
+    return;
+  }
+  if (typeof urlOrPattern === 'string') {
+    clientQueryCache.deleteMatching((key) => key.includes(urlOrPattern));
+  } else {
+    clientQueryCache.deleteMatching((key) => urlOrPattern.test(key));
+  }
 }
 
 /**
