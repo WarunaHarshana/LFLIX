@@ -102,7 +102,7 @@ const LibraryGridItem = memo(function LibraryGridItem({
       className={clsx(
         "relative col-span-1",
         isHovered ? "z-40" : "z-10",
-        isFocused && "ring-2 ring-white ring-offset-2 ring-offset-black rounded-lg",
+        isFocused && !isHovered && "ring-2 ring-white ring-offset-2 ring-offset-black rounded-lg",
         !isHovered && "[content-visibility:auto] [contain-intrinsic-size:auto_200px_auto_300px]"
       )}
     >

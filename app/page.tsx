@@ -165,6 +165,7 @@ export default function Home() {
 
   // ──────────────────── Tab Switching ────────────────────
   const switchTab = (tab: TabId) => {
+    setFocusedIndex(-1);
     setSelectedGenre(null);
     setSelectedLanguage(null);
     if (tab === 'discover') {
@@ -322,9 +323,35 @@ export default function Home() {
           break;
       }
     };
+
+    const handlePointerInteraction = (e: MouseEvent) => {
+      if (focusedIndexRef.current !== -1 && (e.movementX !== 0 || e.movementY !== 0)) {
+        setFocusedIndex(-1);
+      }
+    };
+
+    const handlePointerDown = () => {
+      if (focusedIndexRef.current !== -1) {
+        setFocusedIndex(-1);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    window.addEventListener('mousemove', handlePointerInteraction, { passive: true });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('mousemove', handlePointerInteraction);
+    };
+  }, [setFocusedIndex]);
+
+  // If filtered list changes and focused index is now out-of-bounds, reset it
+  useEffect(() => {
+    if (focusedIndex >= filteredLibrary.length) {
+      setFocusedIndex(-1);
+    }
+  }, [filteredLibrary.length, focusedIndex, setFocusedIndex]);
 
   // ──────────────────── Cross-Hook Handlers ────────────────────
   const openShow = useCallback(async (show: ContentItem, forceFresh: boolean = false) => {
@@ -353,16 +380,18 @@ export default function Home() {
   }, [setSelectedShow, setLoadingEpisodes, setSeasons, showToast]);
 
   const handleCardClick = useCallback((item: ContentItem) => {
+    setFocusedIndex(-1);
     setSelectedDetail(item);
-  }, [setSelectedDetail]);
+  }, [setSelectedDetail, setFocusedIndex]);
 
   const handlePlayClick = useCallback((item: ContentItem) => {
+    setFocusedIndex(-1);
     if (item.type === 'movie') {
       playbackRef.current.playFile('movie', item.id, undefined, item.watchProgress?.progress);
     } else {
       openShow(item);
     }
-  }, [openShow]);
+  }, [openShow, setFocusedIndex]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, item: ContentItem) => {
     setContextMenu({ x: e.clientX, y: e.clientY, item });
