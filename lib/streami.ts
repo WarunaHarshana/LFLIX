@@ -59,6 +59,7 @@ export type StreamiEvent = {
   _embeds?: StreamiEmbedBlock[];
   isFake?: boolean;
   fakeUrl?: string;
+  popular?: boolean;
 };
 
 /**
@@ -138,35 +139,26 @@ export function getStreamiStreams(event: StreamiEvent) {
   });
 }
 
+// Short in-memory cache to prevent repeated 260KB Base64 fetches across simultaneous calls
+let cachedEvents: StreamiEvent[] | null = null;
+let cacheExpiresAt = 0;
+const CACHE_TTL_MS = 45_000;
+
 /**
- * Fetch all events from Streami.click (popular + main schedule).
- * Returns a deduplicated array of StreamiEvent objects.
+ * Fetch all events from Streami.click (main schedule + popular events).
+ * Prioritizes getEvents.php as primary source with functional streams,
+ * and supplements with J.php popular tags.
  */
 export async function fetchStreamiEvents(): Promise<StreamiEvent[]> {
+  const now = Date.now();
+  if (cachedEvents && now < cacheExpiresAt && cachedEvents.length > 0) {
+    return cachedEvents;
+  }
+
   const allEvents = new Map<string, StreamiEvent>();
   const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-  // 1. Popular events (no auth required)
-  try {
-    const popRes = await fetch(`${STREAMI_BASE}/api/J.php`, {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': USER_AGENT
-      },
-      next: { revalidate: 60 } as any,
-    });
-    if (popRes.ok) {
-      const popJson = await popRes.json();
-      const popEvents: StreamiEvent[] = Array.isArray(popJson) ? popJson : [];
-      for (const ev of popEvents) {
-        if (!ev.isFake) allEvents.set(ev.id, ev);
-      }
-    }
-  } catch (err) {
-    console.error('Streami: Failed to fetch popular events:', err);
-  }
-
-  // 2. Main events (requires auth headers, response is base64-encoded)
+  // 1. Primary: Main scheduled events (requires auth headers, response is base64-encoded)
   try {
     const mainRes = await fetch(`${STREAMI_BASE}/api/getEvents.php`, {
       headers: {
@@ -175,29 +167,75 @@ export async function fetchStreamiEvents(): Promise<StreamiEvent[]> {
         'X-SSIG': STREAMI_SSIG,
         'User-Agent': USER_AGENT
       },
-      next: { revalidate: 60 } as any,
+      signal: AbortSignal.timeout(8000),
+      cache: 'no-store'
     });
     if (mainRes.ok) {
       const b64Text = await mainRes.text();
-      const decoded = decodeBase64UTF8(b64Text);
+      const decoded = decodeBase64UTF8(b64Text.trim());
       const mainJson = JSON.parse(decoded);
       const mainEvents: StreamiEvent[] = Array.isArray(mainJson) ? mainJson : [];
       for (const ev of mainEvents) {
-        if (!ev.isFake) {
-          // Popular events already fetched may have richer data, don't overwrite
-          if (!allEvents.has(ev.id)) {
-            allEvents.set(ev.id, ev);
-          }
+        if (!ev.isFake && ev.id) {
+          allEvents.set(ev.id, ev);
         }
       }
     } else {
-      console.error(`Streami: Main events returned status ${mainRes.status}`);
+      console.warn(`Streami: Main events returned status ${mainRes.status}`);
     }
   } catch (err) {
     console.error('Streami: Failed to fetch main events:', err);
   }
 
-  return Array.from(allEvents.values());
+  // 2. Secondary: Popular / featured events (marks events as popular or adds any missing items)
+  try {
+    const popRes = await fetch(`${STREAMI_BASE}/api/J.php`, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': USER_AGENT
+      },
+      signal: AbortSignal.timeout(4000),
+      cache: 'no-store'
+    });
+    if (popRes.ok) {
+      const popJson = await popRes.json();
+      const popEvents: StreamiEvent[] = Array.isArray(popJson) ? popJson : [];
+      for (const ev of popEvents) {
+        if (ev.isFake || !ev.id) continue;
+        const existing = allEvents.get(ev.id);
+        if (existing) {
+          existing.popular = true;
+          // Merge any valid embeds if existing had none
+          if ((!existing._embeds || existing._embeds.length === 0) && ev._embeds && ev._embeds.length > 0) {
+            existing._embeds = ev._embeds;
+          }
+        } else {
+          // Only add if it has valid embed streams
+          const streams = flattenEmbeds(ev._embeds);
+          if (streams.length > 0) {
+            ev.popular = true;
+            allEvents.set(ev.id, ev);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Streami: Failed to fetch popular events:', err);
+  }
+
+  const result = Array.from(allEvents.values());
+  if (result.length > 0) {
+    cachedEvents = result;
+    cacheExpiresAt = now + CACHE_TTL_MS;
+    return result;
+  }
+
+  // If fetch failed completely, return stale cache if available
+  if (cachedEvents && cachedEvents.length > 0) {
+    return cachedEvents;
+  }
+
+  return [];
 }
 
 /**

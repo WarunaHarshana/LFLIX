@@ -527,7 +527,7 @@ export async function GET(request: Request) {
 
         // Try to extract team names from title (supports "Team A - Team B" format)
         let teams: any = undefined;
-        const vsMatch = title.match(/^(.+?)\s*[-–vs.]+\s*(.+)$/i);
+        const vsMatch = title.match(/^(.+?)\s*(?:vs\.?|v\.|[-–])\s*(.+)$/i);
         if (vsMatch && mappedCategory !== 'pinned' && mappedCategory !== 'tv') {
           teams = {
             home: { name: vsMatch[1].trim() },
@@ -541,7 +541,7 @@ export async function GET(request: Request) {
           category: mappedCategory === 'pinned' || mappedCategory === 'tv' ? 'other' : normalizedCat,
           date: dateMs,
           poster: null,
-          popular: event.category === 'pilkanozna_wazne' || event.category === 'przypiete',
+          popular: !!event.popular || event.category === 'pilkanozna_wazne' || event.category === 'przypiete',
           teams,
           sources: [{ source: 'streami', id: event.id }],
           isLive,
@@ -593,7 +593,7 @@ export async function GET(request: Request) {
       const cleanTitle = event.title.replace(/^FIFA\s+WC\s+\d+™\s*-\s*/i, '');
       const normalizedCat = normalizeSportCategory(event.category, cleanTitle);
       let teams: any = undefined;
-      const vsMatch = cleanTitle.match(/^(.+?)\s*[-–vs.]+\s*(.+)$/i);
+      const vsMatch = cleanTitle.match(/^(.+?)\s*(?:vs\.?|v\.|[-–])\s*(.+)$/i);
       if (vsMatch) {
         teams = {
           home: { name: vsMatch[1].trim() },

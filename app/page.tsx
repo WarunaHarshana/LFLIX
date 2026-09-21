@@ -449,7 +449,9 @@ export default function Home() {
         method: 'DELETE', credentials: 'same-origin'
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || (data.fileErrors && data.fileErrors[0]) || 'Delete failed');
+      }
       showToast(`Deleted (${data.filesDeleted ?? 0} file(s) removed from disk)`, 'success');
       invalidateQuery(`/api/episodes?showId=${item.id}`);
       if (selectedShow && selectedShow.id === item.id) {
@@ -457,8 +459,9 @@ export default function Home() {
       }
       setContextMenu(null);
       await fetchLibrary();
-    } catch (e) {
-      showToast('Failed to delete item', 'error');
+    } catch (e: any) {
+      showToast(e.message || 'Failed to delete item', 'error');
+      await fetchLibrary();
     }
   };
 
@@ -479,16 +482,19 @@ export default function Home() {
         method: 'DELETE', credentials: 'same-origin'
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || (data.fileErrors && data.fileErrors[0]) || 'Delete failed');
+      }
       showToast(`Episode deleted (${data.filesDeleted ?? 0} file removed)`, 'success');
       if (selectedShow) {
         invalidateQuery(`/api/episodes?showId=${selectedShow.id}`);
         await openShow(selectedShow, true);
       }
       await fetchLibrary();
-    } catch (e) {
-      showToast('Failed to delete episode', 'error');
+    } catch (e: any) {
+      showToast(e.message || 'Failed to delete episode', 'error');
       if (selectedShow) openShow(selectedShow, true);
+      await fetchLibrary();
     }
   };
 
