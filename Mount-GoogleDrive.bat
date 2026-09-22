@@ -1,64 +1,31 @@
 @echo off
-title LFLIX - Mount Google Drive
-color 0B
-cls
-
+title Rclone Google Drive Mount (Z:)
 echo ===================================================
-echo       LFLIX Google Drive Cloud Mount (Z:)
-echo       Optimized: Instant Open (2M) ^& Instant Close (0s)
+echo       Mounting Google Drive to Z: (Local Disk)
+echo       Cache Directory: H:\RcloneCache
+echo       Remote Control Port: 5572
 echo ===================================================
 echo.
-cd /d "%~dp0"
-
-:: 1. Locate Rclone executable
-set "RCLONE_BIN="
-if exist "bin\rclone.exe" set "RCLONE_BIN=%~dp0bin\rclone.exe"
-if not defined RCLONE_BIN (where rclone >nul 2>&1 && set "RCLONE_BIN=rclone")
-if not defined RCLONE_BIN if exist "C:\Rclone\rclone.exe" set "RCLONE_BIN=C:\Rclone\rclone.exe"
-
-if not defined RCLONE_BIN (
-    echo [ERROR] rclone.exe not found!
-    echo Please run Setup-Auto.bat to install Rclone and WinFsp.
-    pause
-    exit /b 1
-)
-
-:: 2. Check WinFsp
-if not exist "C:\Program Files\WinFsp\bin\winfsp-x64.dll" if not exist "C:\Program Files (x86)\WinFsp\bin\winfsp-x64.dll" (
-    echo [WARNING] WinFsp is not detected.
-    echo WinFsp is required to mount cloud drives as Windows drive letters.
-)
-
-:: 3. Unmount existing rclone mount gracefully via RC (without killing active uploads/downloads)
 curl -s -X POST http://127.0.0.1:5572/core/quit >nul 2>&1
-timeout /t 1 >nul 2>&1
-taskkill /F /IM rclone.exe /FI "WINDOWTITLE eq *mount*" >nul 2>&1
-
-:: 4. Cache directory
-set "CACHE_DIR=C:\RcloneCache"
-if exist "H:\" set "CACHE_DIR=H:\RcloneCache"
-if exist "D:\LFLIX-Temp" set "CACHE_DIR=D:\LFLIX-Temp\rclone-cache"
-
-echo Mounting remote 'gdrive:' to Z: ...
-echo Using Cache: %CACHE_DIR%
-echo.
-
-"%RCLONE_BIN%" mount gdrive: Z: ^
+curl -s -X POST http://127.0.0.1:55720/core/quit >nul 2>&1
+ping 127.0.0.1 -n 2 >nul
+taskkill /IM rclone.exe /F >nul 2>&1
+ping 127.0.0.1 -n 2 >nul
+"C:\Rclone\rclone.exe" mount gdrive: Z: ^
   --rc ^
   --rc-no-auth ^
   --rc-addr 127.0.0.1:5572 ^
-  --cache-dir "%CACHE_DIR%" ^
+  --cache-dir "H:\RcloneCache" ^
   --vfs-cache-mode full ^
-  --vfs-cache-max-size 3G ^
-  --vfs-cache-max-age 15m ^
+  --vfs-cache-max-size 15G ^
+  --vfs-cache-max-age 6h ^
   --vfs-cache-poll-interval 1m ^
-  --vfs-read-chunk-size 2M ^
-  --vfs-read-chunk-size-limit 64M ^
-  --vfs-read-ahead 32M ^
+  --vfs-read-chunk-size 16M ^
+  --vfs-read-chunk-size-limit 256M ^
   --vfs-handle-caching 0s ^
   --vfs-read-wait 0ms ^
   --vfs-fast-fingerprint ^
-  --buffer-size 16M ^
+  --buffer-size 64M ^
   --drive-pacer-min-sleep 10ms ^
   --drive-pacer-burst 200 ^
   --volname "Google Drive" ^
@@ -67,4 +34,5 @@ echo.
   --attr-timeout 24h ^
   --no-modtime ^
   --no-checksum ^
+  --log-file "C:\Rclone\rclone.log" ^
   --log-level NOTICE

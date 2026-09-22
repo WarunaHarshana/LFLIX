@@ -16,14 +16,14 @@ d3d11-output-format=auto
 vd-lavc-threads=0
 hwdec=auto-safe
 
-# === Scaling & Performance ===
-scale=spline36
+# === Scaling & Performance (Lightweight GPU shaders for legacy & modern GPUs) ===
+scale=bilinear
 cscale=bilinear
-dscale=mitchell
-correct-downscaling=yes
-linear-downscaling=yes
-sigmoid-upscaling=yes
-dither-depth=auto
+dscale=bilinear
+correct-downscaling=no
+linear-downscaling=no
+sigmoid-upscaling=no
+dither-depth=no
 
 # === HDR to SDR Tone Mapping & Vivid Colors ===
 target-prim=bt.709
@@ -71,12 +71,12 @@ screenshot-template="mpv_%F_%P"
 
 # === Fast Open & Cloud Streaming Cache ===
 cache=yes
-demuxer-max-bytes=200MiB
-demuxer-max-back-bytes=50MiB
-demuxer-readahead-secs=20
+demuxer-max-bytes=500MiB
+demuxer-max-back-bytes=150MiB
+demuxer-readahead-secs=60
 demuxer-seekable-cache=yes
 force-seekable=yes
-hr-seek=yes
+hr-seek=no
 hr-seek-framedrop=yes
 demuxer-mkv-probe-start-time=no
 demuxer-mkv-subtitle-preroll=no

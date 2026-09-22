@@ -20,9 +20,9 @@ describe('Player Configuration and Cloud Streaming Optimizations', () => {
             // Instant close
             expect(OPTIMIZED_MPV_CONF).toContain('demuxer-termination-timeout=0.1');
             // Fast seek & buffer
-            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-readahead-secs=20');
-            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-max-bytes=200MiB');
-            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-max-back-bytes=50MiB');
+            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-readahead-secs=60');
+            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-max-bytes=500MiB');
+            expect(OPTIMIZED_MPV_CONF).toContain('demuxer-max-back-bytes=150MiB');
             expect(OPTIMIZED_MPV_CONF).toContain('demuxer-seekable-cache=yes');
             // GPU video output & tone mapping
             expect(OPTIMIZED_MPV_CONF).toContain('vo=gpu');
@@ -76,20 +76,20 @@ describe('Player Configuration and Cloud Streaming Optimizations', () => {
             expect(args).toContain('mount');
             expect(args).toContain('gdrive:');
             expect(args).toContain('Z:');
-            // Instant open (2MB)
+            // Streaming chunk size (16MB)
             expect(args).toContain('--vfs-read-chunk-size');
-            expect(args[args.indexOf('--vfs-read-chunk-size') + 1]).toBe('2M');
-            // Ramp up limit (64MB)
+            expect(args[args.indexOf('--vfs-read-chunk-size') + 1]).toBe('16M');
+            // Ramp up limit (256MB)
             expect(args).toContain('--vfs-read-chunk-size-limit');
-            expect(args[args.indexOf('--vfs-read-chunk-size-limit') + 1]).toBe('64M');
+            expect(args[args.indexOf('--vfs-read-chunk-size-limit') + 1]).toBe('256M');
             // Instant close (0s handle caching)
             expect(args).toContain('--vfs-handle-caching');
             expect(args[args.indexOf('--vfs-handle-caching') + 1]).toBe('0s');
-            // Zero seek wait & 16M buffer
+            // Zero seek wait & 64M buffer
             expect(args).toContain('--vfs-read-wait');
             expect(args[args.indexOf('--vfs-read-wait') + 1]).toBe('0ms');
             expect(args).toContain('--buffer-size');
-            expect(args[args.indexOf('--buffer-size') + 1]).toBe('16M');
+            expect(args[args.indexOf('--buffer-size') + 1]).toBe('64M');
             // Caching mode
             expect(args).toContain('--vfs-cache-mode');
             expect(args[args.indexOf('--vfs-cache-mode') + 1]).toBe('full');

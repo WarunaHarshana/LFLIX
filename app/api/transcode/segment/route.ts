@@ -107,6 +107,9 @@ export async function GET(req: Request) {
 
     const args = [
       '-v', 'error',
+      '-probesize', '65536',
+      '-analyzeduration', '0',
+      '-fflags', '+fastseek+nobuffer+discardcorrupt',
       '-noaccurate_seek',
       '-ss', String(start),            // fast input seek to segment start using cues
       '-t', String(SEGMENT_DURATION),  // emit only this segment's worth
