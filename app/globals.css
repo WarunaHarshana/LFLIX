@@ -1062,5 +1062,92 @@ video::cue {
   pointer-events: none;
 }
 
+/* ──────────────── Apple Design & Glassmorphism Utilities ──────────────── */
 
+/* High-fidelity Frosted Apple Glass Panel */
+.apple-glass-panel {
+  background: rgba(18, 18, 26, 0.65);
+  backdrop-filter: blur(28px) saturate(190%) contrast(104%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(104%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 
+    0 20px 50px -10px rgba(0, 0, 0, 0.7),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.4);
+  transform: translateZ(0);
+}
 
+/* Apple Frosted Glass Card */
+.apple-glass-card {
+  position: relative;
+  background: rgba(22, 22, 32, 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    0 10px 30px -5px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  transition: border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.apple-glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow: 
+    0 20px 45px -8px rgba(0, 0, 0, 0.75),
+    0 0 28px rgba(255, 255, 255, 0.08),
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.35);
+}
+
+/* Floating Glass Toast Notification (Agency & Forgiveness) */
+.apple-glass-toast {
+  background: rgba(26, 26, 38, 0.88);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: 
+    0 24px 60px rgba(0, 0, 0, 0.85),
+    0 4px 16px rgba(0, 0, 0, 0.5),
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.45);
+}
+
+/* Subtle Apple Glass Container */
+.apple-glass-subtle {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.12);
+}
+
+/* Apple Design Typography Tracking Utilities */
+.tracking-apple-tight {
+  letter-spacing: -0.022em;
+}
+
+.tracking-apple-micro {
+  letter-spacing: 0.035em;
+}
+
+/* Accessibility: Reduced Transparency Fallback */
+@media (prefers-reduced-transparency: reduce) {
+  .apple-glass-panel,
+  .apple-glass-card,
+  .apple-glass-toast,
+  .liquid-glass-base,
+  .liquid-glass-dock {
+    background: #14141c !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Accessibility: Reduced Motion Fallback */
+@media (prefers-reduced-motion: reduce) {
+  .apple-glass-card,
+  .liquid-glass-pill,
+  .liquid-sheen-effect::after {
+    transition: opacity 0.15s ease !important;
+    transform: none !important;
+    animation: none !important;
+  }
+}
