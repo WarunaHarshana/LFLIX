@@ -26,6 +26,7 @@ import MobileConnectModal from './MobileConnectModal';
 import DlnaModal from './DlnaModal';
 import DownloadsPanel from './DownloadsPanel';
 import NotificationBell from './NotificationBell';
+import { useAppStore } from '@/app/store/useAppStore';
 
 type TabId = 'all' | 'movie' | 'show' | 'live' | 'watchlist' | 'discover';
 
@@ -219,12 +220,19 @@ export default function DetailTabNav({
   }, [activeDownloadsProp]);
 
   const switchTab = (tab: TabId) => {
+    triggerHaptic('light');
     if (onTabChange) {
       onTabChange(tab);
       return;
     }
 
-    router.push(`/?tab=${tab}`);
+    useAppStore.getState().setDiscoverInitialItem(null);
+    useAppStore.getState().setActiveTab(tab);
+    if (tab === 'discover') {
+      useAppStore.getState().setDiscoverMode('online');
+      useAppStore.getState().setTorrentInitialQuery('');
+    }
+    router.push(tab === 'all' ? '/' : `/?tab=${tab}`);
   };
 
   const handleRescan = async () => {
@@ -248,7 +256,7 @@ export default function DetailTabNav({
 
   return (
     <>
-      <nav className="fixed top-0 left-0 right-0 w-full z-40 px-3 md:px-4 lg:px-6 xl:px-10 py-3 md:py-4 lg:py-5 items-center justify-between hidden md:flex transition-all duration-300 bg-gradient-to-b from-black/65 via-black/20 to-transparent">
+      <nav className="fixed top-0 left-0 right-0 w-full z-50 px-3 md:px-4 lg:px-6 xl:px-10 py-3 md:py-4 lg:py-5 items-center justify-between hidden md:flex transition-all duration-300 bg-gradient-to-b from-black/65 via-black/20 to-transparent">
         <div className="flex items-center gap-2 lg:gap-4 xl:gap-6 min-w-0 flex-shrink">
           {onBack && (
             <button

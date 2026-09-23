@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Search, X, Film, Tv, Loader2, Globe, TrendingUp, ChevronDown, Filter, Magnet } from 'lucide-react';
 import LiquidDropdown from './LiquidDropdown';
 import { cachedFetch } from '@/lib/clientQueryCache';
+import { useAppStore } from '@/app/store/useAppStore';
 
 const MOVIE_GENRES = [
     { id: '28', name: 'Action' },
@@ -251,6 +252,7 @@ export default function DiscoverPage({ initialItem, onSwitchToTorrents }: Discov
     useEffect(() => {
         if (initialItem) {
             openDetails(initialItem);
+            useAppStore.getState().setDiscoverInitialItem(null);
         }
     }, [initialItem]);
 

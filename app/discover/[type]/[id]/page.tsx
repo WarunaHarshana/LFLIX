@@ -617,7 +617,8 @@ export default function DiscoverDetailPage() {
 
   const handleBack = () => {
     triggerHaptic('light');
-    if (typeof window !== 'undefined' && (window.history.state?.idx > 0 || window.history.length > 1)) {
+    useAppStore.getState().setDiscoverInitialItem(null);
+    if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
     } else {
       useAppStore.getState().setActiveTab('discover');
@@ -628,7 +629,20 @@ export default function DiscoverDetailPage() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-white overflow-x-hidden">
-      <DetailTabNav activeTab="discover" onBack={handleBack} />
+      <DetailTabNav
+        activeTab="discover"
+        onBack={handleBack}
+        onTabChange={(tab) => {
+          triggerHaptic('light');
+          useAppStore.getState().setDiscoverInitialItem(null);
+          useAppStore.getState().setActiveTab(tab);
+          if (tab === 'discover') {
+            useAppStore.getState().setDiscoverMode('online');
+            useAppStore.getState().setTorrentInitialQuery('');
+          }
+          router.push(tab === 'all' ? '/' : `/?tab=${tab}`);
+        }}
+      />
 
       {/* Mobile Top Navigation Bar: Back button on top-left, Trailer controls on top-right */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pointer-events-none">
@@ -1282,24 +1296,34 @@ export default function DiscoverDetailPage() {
                 {collectionData.parts.map((part) => {
                   const isCurrent = part.tmdbId === tmdbId;
                   return (
-                    <div key={part.tmdbId} className={`w-36 sm:w-44 shrink-0 scroll-snap-align-start ${isCurrent ? 'ring-2 ring-blue-500 rounded-xl scale-[1.02] transition-transform' : ''}`}>
-                      <ContentCard
-                        item={{
-                          id: part.tmdbId,
-                          type: 'movie',
-                          title: part.title,
-                          posterPath: part.posterPath,
-                          backdropPath: part.backdropPath,
-                          overview: part.overview,
-                          rating: part.rating,
-                          year: part.year ? parseInt(part.year, 10) : undefined,
-                        }}
-                        onClick={() => {
-                          if (!isCurrent) router.push(`/discover/movie/${part.tmdbId}`);
-                        }}
-                        showProgress={false}
-                        showRating
-                      />
+                    <div key={part.tmdbId} className="w-36 sm:w-44 shrink-0 scroll-snap-align-start relative group">
+                      <div className={`relative rounded-2xl overflow-hidden ${isCurrent ? 'ring-1 ring-blue-400/60 shadow-[0_0_12px_rgba(59,130,246,0.3)]' : ''}`}>
+                        <ContentCard
+                          item={{
+                            id: part.tmdbId,
+                            type: 'movie',
+                            title: part.title,
+                            posterPath: part.posterPath,
+                            backdropPath: part.backdropPath,
+                            overview: part.overview,
+                            rating: part.rating,
+                            year: part.year ? parseInt(part.year, 10) : undefined,
+                          }}
+                          onClick={() => {
+                            if (!isCurrent) router.push(`/discover/movie/${part.tmdbId}`);
+                          }}
+                          disableHoverExpand={true}
+                          showProgress={false}
+                          showRating
+                        />
+                        {isCurrent && (
+                          <div className="absolute top-2 right-2 z-20 pointer-events-none">
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md bg-blue-600/90 text-white shadow-sm border border-blue-400/40">
+                              Current
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -1325,6 +1349,7 @@ export default function DiscoverDetailPage() {
                   <ContentCard
                     item={toDiscoverContentCardItem(item)}
                     onClick={() => router.push(`/discover/${item.mediaType}/${item.tmdbId}`)}
+                    disableHoverExpand={true}
                     showProgress={false}
                     showRating
                   />

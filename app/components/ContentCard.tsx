@@ -52,6 +52,7 @@ type Props = {
     horizontalOrigin?: 'left' | 'right';
     isExpanded?: boolean;
     onHoverChange?: (hovered: boolean) => void;
+    disableHoverExpand?: boolean;
 };
 
 function ContentCard({
@@ -66,6 +67,7 @@ function ContentCard({
     horizontalOrigin: propHorizontalOrigin,
     isExpanded: controlledIsExpanded,
     onHoverChange,
+    disableHoverExpand = false,
 }: Props) {
     const cardRef = useRef<HTMLDivElement>(null);
     const expandedCardRef = useRef<HTMLDivElement>(null);
@@ -75,9 +77,10 @@ function ContentCard({
     const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
     const leaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    const activeExpanded = controlledIsExpanded !== undefined ? controlledIsExpanded : internalIsHovered;
+    const activeExpanded = disableHoverExpand ? false : (controlledIsExpanded !== undefined ? controlledIsExpanded : internalIsHovered);
 
     const setHoverState = (val: boolean) => {
+        if (disableHoverExpand) return;
         if (!val && hoverTimerRef.current) {
             clearTimeout(hoverTimerRef.current);
             hoverTimerRef.current = null;
@@ -174,6 +177,8 @@ function ContentCard({
             leaveTimerRef.current = null;
         }
 
+        if (disableHoverExpand) return;
+
         // Measure origin for standalone cards (carousels, search results) where propHorizontalOrigin is omitted
         if (!reflowMode && !propHorizontalOrigin && cardRef.current) {
             const rect = cardRef.current.getBoundingClientRect();
@@ -210,6 +215,8 @@ function ContentCard({
             hoverTimerRef.current = null;
         }
 
+        if (disableHoverExpand) return;
+
         // Check if pointer moved into cardRef or expandedCardRef
         const nextTarget = e?.relatedTarget;
         if (nextTarget instanceof Node) {
@@ -234,7 +241,7 @@ function ContentCard({
         const isTouchEvent = (e.nativeEvent as PointerEvent).pointerType === 'touch';
         const lacksHover = typeof window !== 'undefined' && !window.matchMedia('(hover: hover)').matches;
 
-        if ((isTouchEvent || lacksHover) && !activeExpanded) {
+        if (!disableHoverExpand && (isTouchEvent || lacksHover) && !activeExpanded) {
             e.stopPropagation();
             triggerHaptic('light');
             if (!reflowMode && !propHorizontalOrigin && cardRef.current) {
@@ -316,11 +323,12 @@ function ContentCard({
                 className={clsx(
                     "relative w-full h-full rounded-2xl overflow-hidden cursor-pointer",
                     "liquid-card shadow-md border border-white/10",
-                    "transition-all duration-[850ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
+                    disableHoverExpand
+                        ? "transition-all duration-300 hover:scale-[1.03] hover:border-white/25 hover:shadow-xl active:scale-[0.97]"
+                        : "transition-all duration-[850ms] ease-[cubic-bezier(0.25,0.1,0.25,1)] active:scale-[0.97]",
                     activeExpanded
                         ? "opacity-0 scale-95 pointer-events-none"
-                        : "opacity-100 scale-100 pointer-events-auto",
-                    "active:scale-[0.97]"
+                        : "opacity-100 scale-100 pointer-events-auto"
                 )}
             >
                 {/* Poster Image */}

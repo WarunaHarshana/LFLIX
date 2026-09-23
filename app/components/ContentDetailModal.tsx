@@ -792,36 +792,46 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                     {collectionData.parts.map((part) => {
                                         const isCurrent = part.tmdbId === item.tmdbId;
                                         return (
-                                            <div key={part.tmdbId} className={`w-28 sm:w-36 shrink-0 scroll-snap-align-start ${isCurrent ? 'ring-2 ring-blue-500 rounded-xl scale-[1.02] transition-transform' : ''}`}>
-                                                <ContentCard
-                                                    item={{
-                                                        id: part.tmdbId,
-                                                        type: 'movie',
-                                                        title: part.title,
-                                                        posterPath: part.posterPath,
-                                                        backdropPath: part.backdropPath,
-                                                        overview: part.overview,
-                                                        rating: part.rating,
-                                                        year: part.year ? parseInt(part.year, 10) : undefined,
-                                                    }}
-                                                    onClick={() => {
-                                                        if (!isCurrent && onOpenOnline) {
-                                                            onOpenOnline({
-                                                                tmdbId: part.tmdbId,
-                                                                mediaType: 'movie',
-                                                                title: part.title,
-                                                                posterPath: part.posterPath,
-                                                                backdropPath: part.backdropPath,
-                                                                overview: part.overview,
-                                                                rating: part.rating,
-                                                                year: part.year,
-                                                                popularity: 0,
-                                                            });
-                                                        }
-                                                    }}
-                                                    showProgress={false}
-                                                    showRating
-                                                />
+                                            <div key={part.tmdbId} className="w-28 sm:w-36 shrink-0 scroll-snap-align-start relative group">
+                                                <div className={`relative rounded-2xl overflow-hidden ${isCurrent ? 'ring-1 ring-blue-400/60 shadow-[0_0_12px_rgba(59,130,246,0.3)]' : ''}`}>
+                                                    <ContentCard
+                                                        item={{
+                                                            id: part.tmdbId,
+                                                            type: 'movie',
+                                                            title: part.title,
+                                                            posterPath: part.posterPath,
+                                                            backdropPath: part.backdropPath,
+                                                            overview: part.overview,
+                                                            rating: part.rating,
+                                                            year: part.year ? parseInt(part.year, 10) : undefined,
+                                                        }}
+                                                        onClick={() => {
+                                                            if (!isCurrent && onOpenOnline) {
+                                                                onOpenOnline({
+                                                                    tmdbId: part.tmdbId,
+                                                                    mediaType: 'movie',
+                                                                    title: part.title,
+                                                                    posterPath: part.posterPath,
+                                                                    backdropPath: part.backdropPath,
+                                                                    overview: part.overview,
+                                                                    rating: part.rating,
+                                                                    year: part.year,
+                                                                    popularity: 0,
+                                                                });
+                                                            }
+                                                        }}
+                                                        disableHoverExpand={true}
+                                                        showProgress={false}
+                                                        showRating
+                                                    />
+                                                    {isCurrent && (
+                                                        <div className="absolute top-2 right-2 z-20 pointer-events-none">
+                                                            <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md bg-blue-600/90 text-white shadow-sm border border-blue-400/40">
+                                                                Current
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         );
                                     })}
@@ -859,6 +869,7 @@ export default function ContentDetailModal({ item, onClose, onPlay, onViewEpisod
                                             <ContentCard
                                                 item={toDiscoverContentCardItem(similar)}
                                                 onClick={() => openOnlineResult(similar)}
+                                                disableHoverExpand={true}
                                                 showProgress={false}
                                                 showRating={true}
                                             />

@@ -10,6 +10,7 @@ import { useAppStore } from './store/useAppStore';
 import type { ContentItem, Season, DiscoverOnlineItem, TabId } from './types';
 import { isValidTab } from './types';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 
 // Hooks
 import { useToast } from './hooks/useToast';
@@ -44,6 +45,7 @@ const FolderManager = dynamic(() => import('./components/FolderManager'), { ssr:
 const MobileSearchModal = dynamic(() => import('./components/MobileSearchModal'), { ssr: false });
 const EpisodeModal = dynamic(() => import('./components/EpisodeModal'), { ssr: false });
 const ContentDetailModal = dynamic(() => import('./components/ContentDetailModal'), { ssr: false });
+const TitleDetailPage = dynamic(() => import('./components/TitleDetailPage'), { ssr: false });
 const GlobalSearchModal = dynamic(() => import('./components/GlobalSearchModal'), { ssr: false });
 const DiscoverPage = dynamic(() => import('./components/DiscoverPage'), { ssr: false });
 const TorrentSearchPage = dynamic(() => import('./components/TorrentSearchPage'), { ssr: false });
@@ -57,6 +59,7 @@ const FixMatchModal = dynamic(() => import('./components/FixMatchModal'), { ssr:
 const PlayChoiceModal = dynamic(() => import('./components/PlayChoiceModal'), { ssr: false });
 
 export default function Home() {
+  const router = useRouter();
   // ──────────────────── Hooks ────────────────────
   const { toast, showToast } = useToast();
   const { setupComplete, setSetupComplete, isAuthenticated, setIsAuthenticated, authChecked, logout } = useAuth();
@@ -152,6 +155,9 @@ export default function Home() {
   const focusedIndexRef = useRef(focusedIndex);
   const playbackRef = useRef(playback);
   const selectedShowRef = useRef(selectedShow);
+  const selectedDetailRef = useRef(selectedDetail);
+  const previousLibraryScrollY = useRef(0);
+  const [detailInitialSection, setDetailInitialSection] = useState<'top' | 'episodes'>('top');
 
   useEffect(() => {
     libraryRef.current = library;
@@ -161,13 +167,16 @@ export default function Home() {
     focusedIndexRef.current = focusedIndex;
     playbackRef.current = playback;
     selectedShowRef.current = selectedShow;
-  }, [library, filteredLibrary, activeTab, selectedGenre, focusedIndex, playback, selectedShow]);
+    selectedDetailRef.current = selectedDetail;
+  }, [library, filteredLibrary, activeTab, selectedGenre, focusedIndex, playback, selectedShow, selectedDetail]);
 
   // ──────────────────── Tab Switching ────────────────────
   const switchTab = (tab: TabId) => {
     setFocusedIndex(-1);
     setSelectedGenre(null);
     setSelectedLanguage(null);
+    setSelectedDetail(null);
+    setDiscoverInitialItem(null);
     if (tab === 'discover') {
       setDiscoverMode('online');
       setTorrentInitialQuery('');
@@ -191,25 +200,43 @@ export default function Home() {
       const requestedTab = searchParams.get('tab');
       const openLiveSports = searchParams.get('liveSports') === '1';
       if (openLiveSports) setShowLiveSports(true);
-      if (!isValidTab(requestedTab)) return;
-      if (requestedTab === 'all') setSelectedGenre(null);
-      if (requestedTab === 'discover') {
-        setDiscoverMode('online');
-        setTorrentInitialQuery('');
+      if (isValidTab(requestedTab)) {
+        if (requestedTab === 'all') setSelectedGenre(null);
+        if (requestedTab === 'discover') {
+          setDiscoverMode('online');
+          setTorrentInitialQuery('');
+          setDiscoverInitialItem(null);
+        }
+        setActiveTab(requestedTab);
       }
-      setActiveTab(requestedTab);
+
+      // Title detail page navigation sync
+      const titleParam = searchParams.get('title');
+      if (titleParam) {
+        const [tType, tIdStr] = titleParam.split(':');
+        const tId = parseInt(tIdStr, 10);
+        if (tId && libraryRef.current.length > 0) {
+          const found = libraryRef.current.find(
+            (i) => (i.type === tType || (tType === 'tv' && i.type === 'show')) && (i.id === tId || i.tmdbId === tId)
+          );
+          if (found) setSelectedDetail(found);
+        }
+      } else if (selectedDetailRef.current) {
+        setSelectedDetail(null);
+      }
     };
 
     updateTabFromUrl();
     window.addEventListener('popstate', updateTabFromUrl);
     return () => window.removeEventListener('popstate', updateTabFromUrl);
-  }, [setActiveTab, setDiscoverMode, setTorrentInitialQuery, setSelectedGenre, setShowLiveSports]);
+  }, [setActiveTab, setDiscoverMode, setTorrentInitialQuery, setDiscoverInitialItem, setSelectedGenre, setShowLiveSports, setSelectedDetail]);
 
   const openOnlineInDiscover = (item: DiscoverOnlineItem) => {
+    closeTitleDetail();
     setDiscoverMode('online');
-    setDiscoverInitialItem(item);
+    setDiscoverInitialItem(null);
     setActiveTab('discover');
-    setTimeout(() => setDiscoverInitialItem(null), 500);
+    router.push(`/discover/${item.mediaType}/${item.tmdbId}`);
   };
 
   // ──────────────────── Data Fetch on Mount ────────────────────
@@ -354,44 +381,55 @@ export default function Home() {
   }, [filteredLibrary.length, focusedIndex, setFocusedIndex]);
 
   // ──────────────────── Cross-Hook Handlers ────────────────────
-  const openShow = useCallback(async (show: ContentItem, forceFresh: boolean = false) => {
-    setSelectedShow(show);
-    setLoadingEpisodes(true);
-    try {
-      if (forceFresh) {
-        invalidateQuery(`/api/episodes?showId=${show.id}`);
-      }
-      const data = await cachedFetch<{ seasons?: Season[] }>(
-        apiUrl(`/api/episodes?showId=${show.id}`),
-        { credentials: 'same-origin' },
-        undefined,
-        forceFresh
-      );
-      const loadedSeasons = data.seasons || [];
-      setSeasons(loadedSeasons);
-      if (loadedSeasons.length === 0) {
-        setSelectedShow(null);
-      }
-    } catch {
-      showToast('Failed to load episodes', 'error');
-    } finally {
-      setLoadingEpisodes(false);
+  const openTitleDetail = useCallback((item: ContentItem, targetSection: 'top' | 'episodes' = 'top') => {
+    setFocusedIndex(-1);
+    if (typeof window !== 'undefined') {
+      previousLibraryScrollY.current = window.scrollY;
     }
-  }, [setSelectedShow, setLoadingEpisodes, setSeasons, showToast]);
+    setDetailInitialSection(targetSection);
+    setSelectedDetail(item);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('title', `${item.type}:${item.id}`);
+      window.history.pushState({ titleId: item.id }, '', url.toString());
+      if (targetSection === 'top') {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      }
+    }
+  }, [setSelectedDetail, setFocusedIndex]);
+
+  const closeTitleDetail = useCallback(() => {
+    setSelectedDetail(null);
+    setDetailInitialSection('top');
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('title')) {
+        url.searchParams.delete('title');
+        window.history.pushState(null, '', url.toString());
+      }
+      const restoreY = previousLibraryScrollY.current;
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: restoreY, left: 0, behavior: 'instant' });
+      });
+    }
+  }, [setSelectedDetail]);
+
+  const openShow = useCallback((show: ContentItem, _forceFresh?: boolean) => {
+    openTitleDetail(show, 'episodes');
+  }, [openTitleDetail]);
 
   const handleCardClick = useCallback((item: ContentItem) => {
-    setFocusedIndex(-1);
-    setSelectedDetail(item);
-  }, [setSelectedDetail, setFocusedIndex]);
+    openTitleDetail(item, 'top');
+  }, [openTitleDetail]);
 
   const handlePlayClick = useCallback((item: ContentItem) => {
     setFocusedIndex(-1);
     if (item.type === 'movie') {
       playbackRef.current.playFile('movie', item.id, undefined, item.watchProgress?.progress);
     } else {
-      openShow(item);
+      openTitleDetail(item, 'episodes');
     }
-  }, [openShow, setFocusedIndex]);
+  }, [openTitleDetail, setFocusedIndex]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, item: ContentItem) => {
     setContextMenu({ x: e.clientX, y: e.clientY, item });
@@ -564,12 +602,21 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[var(--background)] text-white font-sans selection:bg-red-900 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-0">
 
-      {/* Navbar */}
+      {/* Sticky Global Top Navbar (visible across both library and detail pages) */}
       <DetailTabNav
         activeTab={activeTab}
         showLiveSportsActive={showLiveSports}
-        onTabChange={switchTab}
-        onShowLiveSports={() => setShowLiveSports(true)}
+        onBack={selectedDetail ? closeTitleDetail : undefined}
+        onTabChange={(tab) => {
+          if (selectedDetail) {
+            closeTitleDetail();
+          }
+          switchTab(tab);
+        }}
+        onShowLiveSports={() => {
+          if (selectedDetail) closeTitleDetail();
+          setShowLiveSports(true);
+        }}
         onShowSearch={() => setShowSearchModal(true)}
         onShowMobileConnect={() => setShowMobileConnect(true)}
         onShowDlna={() => setShowDlna(true)}
@@ -588,131 +635,136 @@ export default function Home() {
         onLogout={logout}
       />
 
-      {/* Library Content (movie/show/all tabs) */}
-      {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'discover' && (loading ? (
-        <>
-          <HeroSkeleton />
-          <div className="px-12 pb-20 pt-6 sm:pt-8 relative z-20">
-            <CardGridSkeleton count={16} />
+      {/* Main Library View (hidden when TitleDetailPage is active to preserve scroll position and DOM cache) */}
+      <div className={selectedDetail ? "hidden" : "contents"}>
+
+        {/* Library Content (movie/show/all tabs) */}
+        {activeTab !== 'live' && activeTab !== 'watchlist' && activeTab !== 'discover' && (loading ? (
+          <>
+            <HeroSkeleton />
+            <div className="px-12 pb-20 pt-6 sm:pt-8 relative z-20">
+              <CardGridSkeleton count={16} />
+            </div>
+          </>
+        ) : library.length === 0 ? (
+          <div className="pt-24">
+            <EmptyState type="empty" onAddFolder={() => setShowFolderManager(true)} />
           </div>
-        </>
-      ) : library.length === 0 ? (
-        <div className="pt-24">
-          <EmptyState type="empty" onAddFolder={() => setShowFolderManager(true)} />
-        </div>
-      ) : (
-        <>
-          {/* Hero Section */}
-          {hero.featured && (
-            <HeroSection
-              featured={hero.featured}
-              featuredLogoUrl={hero.featuredLogoUrl}
-              heroCandidates={hero.heroCandidates}
-              heroIndex={hero.heroIndex}
-              onSetHeroIndex={hero.setHeroIndex}
-              onPlay={() => playback.playFile('movie', hero.featured.id)}
-              onMoreInfo={() => setSelectedDetail(hero.featured)}
-              onViewEpisodes={() => openShow(hero.featured)}
-            />
-          )}
-
-          <div className={clsx(hero.featured ? "pt-10 sm:pt-14 md:pt-16" : "pt-24 sm:pt-28", "relative z-20")}>
-            {/* Content Grid with integrated Genre, Language, Grid, and Sort dropdowns */}
-            <LibraryGrid
-              filteredLibrary={filteredLibrary}
-              activeTab={activeTab}
-              genres={availableGenres}
-              selectedGenre={selectedGenre}
-              onGenreSelect={setSelectedGenre}
-              languages={availableLanguages}
-              selectedLanguage={selectedLanguage}
-              onLanguageSelect={setSelectedLanguage}
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-              onGenreClear={handleGenreClear}
-              focusedIndex={focusedIndex}
-              displayPrefs={displayPrefs}
-              onDisplayPrefChange={updateDisplayPref}
-              onCardClick={handleCardClick}
-              onPlayClick={handlePlayClick}
-              onContextMenu={handleContextMenu}
-            />
-          </div>
-        </>
-      ))}
-
-      {/* Live TV Section */}
-      {activeTab === 'live' && (
-        <LiveTVSection
-          iptvChannels={iptv.iptvChannels}
-          iptvCategories={iptv.iptvCategories}
-          iptvCountries={iptv.iptvCountries}
-          selectedIPTVCategory={iptv.selectedIPTVCategory}
-          setSelectedIPTVCategory={iptv.setSelectedIPTVCategory}
-          selectedIPTVCountry={iptv.selectedIPTVCountry}
-          setSelectedIPTVCountry={iptv.setSelectedIPTVCountry}
-          iptvSearchQuery={iptv.iptvSearchQuery}
-          setIptvSearchQuery={iptv.setIptvSearchQuery}
-          selectedIPTVChannel={iptv.selectedIPTVChannel}
-          setSelectedIPTVChannel={iptv.setSelectedIPTVChannel}
-          loadingIPTV={iptv.loadingIPTV}
-          onManageChannels={() => iptv.setShowIPTVManager(true)}
-          onDeleteChannel={iptv.deleteIPTVChannel}
-        />
-      )}
-
-      {/* Watchlist Section */}
-      {activeTab === 'watchlist' && (
-        <WatchlistPage
-          libraryTmdbIds={library.map(item => item.tmdbId).filter((id): id is number => id != null)}
-          onOpenOnline={(item) => openOnlineInDiscover(item)}
-        />
-      )}
-
-      {/* Discover Section */}
-      {activeTab === 'discover' && (
-        discoverMode === 'online' ? (
-          <DiscoverPage
-            initialItem={discoverInitialItem}
-            onSwitchToTorrents={(query) => { if (query) setTorrentInitialQuery(query); setDiscoverMode('torrents'); }}
-          />
         ) : (
-          <TorrentSearchPage
-            initialQuery={torrentInitialQuery}
-            onSwitchToOnline={() => setDiscoverMode('online')}
+          <>
+            {/* Hero Section */}
+            {hero.featured && (
+              <HeroSection
+                featured={hero.featured}
+                featuredLogoUrl={hero.featuredLogoUrl}
+                heroCandidates={hero.heroCandidates}
+                heroIndex={hero.heroIndex}
+                onSetHeroIndex={hero.setHeroIndex}
+                onPlay={() => playback.playFile('movie', hero.featured.id)}
+                onMoreInfo={() => openTitleDetail(hero.featured, 'top')}
+                onViewEpisodes={() => openTitleDetail(hero.featured, 'episodes')}
+              />
+            )}
+
+            <div className={clsx(hero.featured ? "pt-10 sm:pt-14 md:pt-16" : "pt-24 sm:pt-28", "relative z-20")}>
+              {/* Content Grid with integrated Genre, Language, Grid, and Sort dropdowns */}
+              <LibraryGrid
+                filteredLibrary={filteredLibrary}
+                activeTab={activeTab}
+                genres={availableGenres}
+                selectedGenre={selectedGenre}
+                onGenreSelect={setSelectedGenre}
+                languages={availableLanguages}
+                selectedLanguage={selectedLanguage}
+                onLanguageSelect={setSelectedLanguage}
+                sortBy={sortBy}
+                onSortChange={setSortBy}
+                onGenreClear={handleGenreClear}
+                focusedIndex={focusedIndex}
+                displayPrefs={displayPrefs}
+                onDisplayPrefChange={updateDisplayPref}
+                onCardClick={handleCardClick}
+                onPlayClick={handlePlayClick}
+                onContextMenu={handleContextMenu}
+              />
+            </div>
+          </>
+        ))}
+
+        {/* Live TV Section */}
+        {activeTab === 'live' && (
+          <LiveTVSection
+            iptvChannels={iptv.iptvChannels}
+            iptvCategories={iptv.iptvCategories}
+            iptvCountries={iptv.iptvCountries}
+            selectedIPTVCategory={iptv.selectedIPTVCategory}
+            setSelectedIPTVCategory={iptv.setSelectedIPTVCategory}
+            selectedIPTVCountry={iptv.selectedIPTVCountry}
+            setSelectedIPTVCountry={iptv.setSelectedIPTVCountry}
+            iptvSearchQuery={iptv.iptvSearchQuery}
+            setIptvSearchQuery={iptv.setIptvSearchQuery}
+            selectedIPTVChannel={iptv.selectedIPTVChannel}
+            setSelectedIPTVChannel={iptv.setSelectedIPTVChannel}
+            loadingIPTV={iptv.loadingIPTV}
+            onManageChannels={() => iptv.setShowIPTVManager(true)}
+            onDeleteChannel={iptv.deleteIPTVChannel}
+          />
+        )}
+
+        {/* Watchlist Section */}
+        {activeTab === 'watchlist' && (
+          <WatchlistPage
+            libraryTmdbIds={library.map(item => item.tmdbId).filter((id): id is number => id != null)}
             onOpenOnline={(item) => openOnlineInDiscover(item)}
           />
-        )
-      )}
+        )}
 
-      {/* Content Detail Modal */}
+        {/* Discover Section */}
+        {activeTab === 'discover' && (
+          discoverMode === 'online' ? (
+            <DiscoverPage
+              initialItem={discoverInitialItem}
+              onSwitchToTorrents={(query) => { if (query) setTorrentInitialQuery(query); setDiscoverMode('torrents'); }}
+            />
+          ) : (
+            <TorrentSearchPage
+              initialQuery={torrentInitialQuery}
+              onSwitchToOnline={() => setDiscoverMode('online')}
+              onOpenOnline={(item) => openOnlineInDiscover(item)}
+            />
+          )
+        )}
+      </div>
+
+      {/* Cinejoy Master Title Detail Page (Full-screen, unified movies & TV shows) */}
       {selectedDetail && (
-        <ContentDetailModal
+        <TitleDetailPage
           item={selectedDetail}
-          onClose={() => setSelectedDetail(null)}
-          onPlay={() => { playback.playFile('movie', selectedDetail.id, undefined, selectedDetail.watchProgress?.progress); setSelectedDetail(null); }}
-          onViewEpisodes={() => { openShow(selectedDetail); setSelectedDetail(null); }}
-          onOpenOnline={(item) => { openOnlineInDiscover(item); setSelectedDetail(null); }}
-          onFixMatch={() => setFixMatchItem(selectedDetail)}
-        />
-      )}
-
-      {/* Episode Modal */}
-      {selectedShow && (
-        <EpisodeModal
-          show={selectedShow}
-          seasons={Array.isArray(seasons) ? seasons : []}
-          loading={loadingEpisodes}
-          onClose={() => setSelectedShow(null)}
-          onPlayEpisode={(episodeId, startTime) => playback.playFile('show', selectedShow.id, episodeId, startTime)}
+          initialSection={detailInitialSection}
+          isLocal={library.some(l => (l.id === selectedDetail.id || (l.tmdbId && l.tmdbId === selectedDetail.tmdbId)) && l.type === selectedDetail.type)}
+          onBack={closeTitleDetail}
+          onPlayLocal={(item, epId, start) => {
+            const matchedLocal = library.find(l =>
+              (l.id === item.id || (l.tmdbId && l.tmdbId === item.tmdbId)) &&
+              l.type === item.type
+            ) || item;
+            playback.playFile(matchedLocal.type, matchedLocal.id, epId, start);
+          }}
           onDeleteEpisode={handleDeleteEpisode}
           onRemoveEpisodeFromLibrary={handleRemoveEpisodeFromLibrary}
-          onMarkWatched={async (episode, watched) => {
-            await handleMarkWatched({ ...selectedShow, type: 'show', title: episode.title } as ContentItem, watched, episode.id);
-            if (selectedShow) {
-              invalidateQuery(`/api/episodes?showId=${selectedShow.id}`);
-              openShow(selectedShow, true);
-            }
+          onMarkWatched={async (item, watched, epId) => {
+            await handleMarkWatched(item, watched, epId);
+            fetchLibrary();
+            fetchContinueWatching();
+          }}
+          onFixMatch={(item) => setFixMatchItem(item)}
+          onOpenOnline={(onlineItem) => {
+            closeTitleDetail();
+            openOnlineInDiscover(onlineItem);
+          }}
+          onSelectSimilar={(sim) => {
+            closeTitleDetail();
+            openOnlineInDiscover(sim);
           }}
         />
       )}
