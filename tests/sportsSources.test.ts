@@ -186,5 +186,5 @@ describe('Sports Matches Endpoint Live & Today Integration', () => {
     expect(todayRes.status).toBe(200);
     const todayData = await todayRes.json();
     expect(Array.isArray(todayData.matches)).toBe(true);
-  }, 15000);
+  }, 30000);
 });

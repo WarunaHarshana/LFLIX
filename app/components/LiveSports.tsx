@@ -74,22 +74,61 @@ function resolveMediaUrl(path?: string | null): string | null {
   return `https://streamed.pk/api/images/proxy/${path}.webp`;
 }
 
-function getSportBackdrop(category?: string): string {
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function getSportBackdrop(category?: string, seed?: string): string {
   const cat = (category || '').toLowerCase();
+  const idx = seed ? hashString(seed) : 0;
+
   if (cat.includes('football') || cat.includes('soccer')) {
-    return 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=800&q=80';
+    const list = [
+      'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1489944445391-11dd35574ca6?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=800&q=80'
+    ];
+    return list[idx % list.length];
   }
   if (cat.includes('tennis')) {
-    return 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=800&q=80';
+    const list = [
+      'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1530915534664-4ac6423816b7?auto=format&fit=crop&w=800&q=80'
+    ];
+    return list[idx % list.length];
   }
   if (cat.includes('basket') || cat.includes('nba')) {
-    return 'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=800&q=80';
+    const list = [
+      'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1519766304817-4f37bda74a29?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1574623452334-1e0ac2b3ccb4?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1518063319789-7217e6706b04?auto=format&fit=crop&w=800&q=80'
+    ];
+    return list[idx % list.length];
   }
   if (cat.includes('mma') || cat.includes('box') || cat.includes('fight') || cat.includes('ufc') || cat.includes('combat')) {
-    return 'https://images.unsplash.com/photo-1549719386-74dfcbf7dbed?auto=format&fit=crop&w=800&q=80';
+    const list = [
+      'https://images.unsplash.com/photo-1549719386-74dfcbf7dbed?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1509563457144-88484fcf85a7?auto=format&fit=crop&w=800&q=80'
+    ];
+    return list[idx % list.length];
   }
   if (cat.includes('motor') || cat.includes('f1') || cat.includes('race') || cat.includes('formula')) {
-    return 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=800&q=80';
+    const list = [
+      'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1568605117034-706509f6920d?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1571607388263-1044f9ea01dd?auto=format&fit=crop&w=800&q=80'
+    ];
+    return list[idx % list.length];
   }
   if (cat.includes('american') || cat.includes('nfl')) {
     return 'https://images.unsplash.com/photo-1566577739112-5180d4bf9390?auto=format&fit=crop&w=800&q=80';
@@ -115,7 +154,12 @@ function getSportBackdrop(category?: string): string {
   if (cat.includes('dart')) {
     return 'https://www.thesportsdb.com/images/sports/darts.jpg';
   }
-  return 'https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?auto=format&fit=crop&w=800&q=80';
+  const genericList = [
+    'https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1517649763962-0c623266ddc0?auto=format&fit=crop&w=800&q=80'
+  ];
+  return genericList[idx % genericList.length];
 }
 
 function getTeamInitials(name?: string): string {
@@ -349,7 +393,7 @@ function SportCard({
 }) {
   const [imgError, setImgError] = useState(false);
   const posterUrl = resolveMediaUrl(match.poster);
-  const backdropUrl = getSportBackdrop(match.category);
+  const backdropUrl = getSportBackdrop(match.category, match.id || match.title);
   const displayImage = (!imgError && posterUrl) ? posterUrl : backdropUrl;
 
   const homeBadge = resolveMediaUrl(match.teams?.home?.badge);
@@ -367,18 +411,18 @@ function SportCard({
           onWatch();
         }
       }}
-      className={`group relative aspect-[2/3] rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.04] hover:z-30 liquid-card liquid-sheen-effect shadow-xl hover:shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_24px_rgba(255,255,255,0.12)] border focus:outline-none focus:ring-2 focus:ring-white/60 ${
+      className={`group relative aspect-[2/3] rounded-2xl overflow-hidden cursor-pointer transition-transform duration-200 ease-out hover:scale-[1.03] active:scale-[0.98] liquid-card shadow-xl hover:shadow-[0_20px_45px_rgba(0,0,0,0.85),0_0_24px_rgba(255,255,255,0.12)] border focus:outline-none focus:ring-2 focus:ring-white/60 ${
         isSelected
           ? 'border-white/60 shadow-[0_0_30px_rgba(255,255,255,0.3)] ring-1 ring-white/50'
           : 'border-white/10 hover:border-white/30'
       }`}
     >
-      {/* 100% Full-Bleed Photographic Artwork */}
+      {/* 100% Full-Bleed Photographic Artwork with Smooth Scale */}
       <img
         src={displayImage}
         alt={match.title}
         onError={() => setImgError(true)}
-        className="w-full h-full object-cover transition duration-500 group-hover:scale-105 group-hover:brightness-95"
+        className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105 group-hover:brightness-95"
       />
 
       {/* Top Vignette Gradient for High Badge Contrast */}
@@ -388,30 +432,30 @@ function SportCard({
       <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-20 pointer-events-none">
         {match.isLive ? (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-600/90 text-white text-[10px] font-extrabold shadow-[0_0_14px_rgba(239,68,68,0.6)] border border-red-400/40 backdrop-blur-md select-none tracking-wider uppercase">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-white motion-safe:animate-pulse" />
             LIVE
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/70 text-neutral-200 border border-white/15 text-[10px] font-semibold backdrop-blur-md select-none shadow-md">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/75 text-neutral-200 border border-white/15 text-[10px] font-semibold backdrop-blur-md select-none shadow-md tabular-nums">
             <Clock className="w-3 h-3 text-neutral-400 shrink-0" />
             <span>{formatTime(match.date)}</span>
           </span>
         )}
       </div>
 
-      {/* Top Right Badges: 4K, Popular, Sport */}
-      <div className="absolute top-2.5 right-2.5 flex flex-col items-end gap-1.5 z-20 pointer-events-none">
+      {/* Top Right Badges: Inline Compact Badges */}
+      <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20 pointer-events-none">
         {match.is4k && (
-          <span className="px-2 py-0.5 text-[10px] rounded-full font-bold tracking-wider bg-purple-950/70 text-purple-300 border border-purple-500/40 backdrop-blur-md shadow-sm uppercase">
-            4K UHD
+          <span className="px-2 py-0.5 text-[9px] rounded-full font-bold tracking-wider bg-purple-950/80 text-purple-300 border border-purple-500/40 backdrop-blur-md shadow-sm uppercase tabular-nums">
+            4K
           </span>
         )}
         {match.popular && (
-          <span className="px-2.5 py-1 text-[10px] rounded-full font-bold tracking-wider bg-amber-950/70 text-amber-300 border border-amber-500/40 backdrop-blur-md shadow-sm uppercase flex items-center gap-1">
-            <span className="text-amber-400 text-[9px]">★</span> POPULAR
+          <span className="px-2 py-0.5 text-[9px] rounded-full font-bold tracking-wider bg-amber-950/80 text-amber-300 border border-amber-500/40 backdrop-blur-md shadow-sm uppercase flex items-center gap-0.5">
+            <span className="text-amber-400 text-[8px]">★</span> POP
           </span>
         )}
-        <span className="px-2.5 py-1 text-[10px] rounded-full font-medium tracking-wide bg-black/65 text-neutral-300 border border-white/15 backdrop-blur-md shadow-sm capitalize inline-flex items-center gap-1.5">
+        <span className="px-2.5 py-1 text-[10px] rounded-full font-medium tracking-wide bg-black/70 text-neutral-300 border border-white/15 backdrop-blur-md shadow-sm capitalize inline-flex items-center gap-1.5">
           <SportVectorIcon sport={match.category} className="w-3 h-3 text-neutral-400" />
           <span>{match.category}</span>
         </span>
@@ -420,25 +464,25 @@ function SportCard({
       {/* Center Matchup Crests */}
       {homeBadge && awayBadge && (
         <div className="absolute inset-0 flex items-center justify-center gap-3 pointer-events-none pb-14 z-10">
-          <div className="w-12 h-12 p-2 rounded-2xl bg-black/65 backdrop-blur-md border border-white/20 shadow-2xl group-hover:scale-110 transition duration-300 flex items-center justify-center">
+          <div className="w-12 h-12 p-2 rounded-2xl bg-black/65 backdrop-blur-md border border-white/20 shadow-2xl group-hover:scale-105 transition-transform duration-300 flex items-center justify-center">
             <img src={homeBadge} alt="" className="w-full h-full object-contain drop-shadow-md" />
           </div>
           <div className="w-7 h-7 rounded-full bg-neutral-900/90 border border-white/20 text-[10px] font-black text-red-400 shadow-xl flex items-center justify-center tracking-wider backdrop-blur-md">
             VS
           </div>
-          <div className="w-12 h-12 p-2 rounded-2xl bg-black/65 backdrop-blur-md border border-white/20 shadow-2xl group-hover:scale-110 transition duration-300 flex items-center justify-center">
+          <div className="w-12 h-12 p-2 rounded-2xl bg-black/65 backdrop-blur-md border border-white/20 shadow-2xl group-hover:scale-105 transition-transform duration-300 flex items-center justify-center">
             <img src={awayBadge} alt="" className="w-full h-full object-contain drop-shadow-md" />
           </div>
         </div>
       )}
 
-      {/* Bottom Gradient & Match Info */}
-      <div className="absolute inset-x-0 bottom-0 p-3.5 bg-gradient-to-t from-black via-black/90 to-transparent pt-20 z-10 pointer-events-none transition-transform duration-300">
-        <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-2 drop-shadow-md leading-snug mb-1.5">
+      {/* Bottom Gradient & Match Info (Always 100% visible and readable) */}
+      <div className="absolute inset-x-0 bottom-0 p-3.5 bg-gradient-to-t from-black via-black/90 to-transparent pt-20 z-10 pointer-events-none transition-transform duration-200">
+        <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-2 drop-shadow-md leading-snug mb-1.5 [text-wrap:balance]">
           {match.teams?.home && match.teams?.away ? (
             <>
               <span>{match.teams.home.name}</span>
-              <span className="text-red-400 font-extrabold text-[10px] mx-1">VS</span>
+              <span className="text-red-400 font-extrabold text-[10px] mx-1 tracking-wider uppercase">VS</span>
               <span>{match.teams.away.name}</span>
             </>
           ) : (
@@ -447,7 +491,7 @@ function SportCard({
         </h3>
 
         <div className="flex items-center justify-between text-[11px] text-neutral-300">
-          <div className="flex items-center gap-1.5 font-medium text-neutral-400">
+          <div className="flex items-center gap-1.5 font-medium text-neutral-400 tabular-nums">
             <Tv className="w-3 h-3 text-neutral-400" />
             <span>{match.sources.length} {match.sources.length === 1 ? 'feed' : 'feeds'}</span>
           </div>
@@ -462,7 +506,7 @@ function SportCard({
               </span>
             ))}
             {match.sources.length > 2 && (
-              <span className="text-[9px] text-neutral-400 font-mono">
+              <span className="text-[9px] text-neutral-400 font-mono tabular-nums">
                 +{match.sources.length - 2}
               </span>
             )}
@@ -470,21 +514,19 @@ function SportCard({
         </div>
       </div>
 
-      {/* Hover Overlay with Red Liquid Watch Button */}
-      <div className="absolute inset-0 p-4 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center bg-black/65 backdrop-blur-[2px] z-20 pointer-events-none">
+      {/* Refined Apple-style Floating Play Pill on Hover (Never blacks out the match info) */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         {isLoadingStream ? (
-          <div className="flex flex-col items-center gap-2">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-white/30 border-t-red-500" />
-            <span className="text-xs font-bold text-white">Loading Feeds...</span>
+          <div className="px-4 py-2 rounded-full liquid-glass-pill bg-black/80 border border-white/30 text-white font-bold text-xs shadow-2xl backdrop-blur-xl flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-red-500" />
+            <span className="tracking-wide">Connecting...</span>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-2.5 transform scale-95 group-hover:scale-100 transition-transform duration-300">
-            <div className="w-13 h-13 rounded-full liquid-btn-primary flex items-center justify-center shadow-[0_8px_30px_rgba(255,255,255,0.35)]">
-              <Play className="w-5 h-5 fill-black text-black ml-0.5" />
+          <div className="px-4.5 py-2 rounded-full liquid-glass-pill bg-black/80 hover:bg-black/95 border border-white/30 text-white font-bold text-xs shadow-[0_12px_36px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.3)] backdrop-blur-xl flex items-center gap-2 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200 ease-out">
+            <div className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shadow-md">
+              <Play className="w-2.5 h-2.5 fill-black text-black ml-0.5" />
             </div>
-            <span className="px-5 py-2 rounded-xl liquid-btn-primary text-black text-xs sm:text-sm font-bold shadow-lg flex items-center gap-1.5">
-              <span>{match.isLive ? 'Watch Live Match' : 'Watch Match'}</span>
-            </span>
+            <span className="tracking-wide">{match.isLive ? 'Watch Live' : 'Watch Event'}</span>
           </div>
         )}
       </div>
@@ -512,6 +554,8 @@ export default function LiveSports({ onClose }: Props) {
   const [streams, setStreams] = useState<Stream[]>([]);
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [activeTab, setActiveTab] = useState<'live' | 'today'>('live');
+  const [liveCount, setLiveCount] = useState<number | null>(null);
+  const [todayCount, setTodayCount] = useState<number | null>(null);
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null);
   const [sortByQuality, setSortByQuality] = useState(true);
   const [streamReloadKey, setStreamReloadKey] = useState(0);
@@ -526,6 +570,7 @@ export default function LiveSports({ onClose }: Props) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const timeoutRef = useRef<any>(null);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
 
   // Category scrollpane state and handlers
   const categoryScrollRef = useRef<HTMLDivElement>(null);
@@ -805,6 +850,11 @@ export default function LiveSports({ onClose }: Props) {
       .then(data => {
         if (data.matches && Array.isArray(data.matches)) {
           setRawMatches(data.matches);
+          if (activeTab === 'live') {
+            setLiveCount(data.matches.length);
+          } else {
+            setTodayCount(data.matches.length);
+          }
         } else {
           setRawMatches([]);
           setError('No matches found');
@@ -823,6 +873,23 @@ export default function LiveSports({ onClose }: Props) {
     fetchMatches(false);
   }, [fetchMatches]);
 
+  // Background fetch opposite tab count so both tab badges always display accurate numbers
+  useEffect(() => {
+    const otherType = activeTab === 'live' ? 'today' : 'live';
+    fetch(`/api/sports/matches?type=${otherType}&sport=all`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.matches && Array.isArray(data.matches)) {
+          if (otherType === 'live') {
+            setLiveCount(data.matches.length);
+          } else {
+            setTodayCount(data.matches.length);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [activeTab]);
+
   // Compute live match counts per category
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: rawMatches.length, '4k': 0 };
@@ -837,6 +904,18 @@ export default function LiveSports({ onClose }: Props) {
     }
     return counts;
   }, [rawMatches, sports]);
+
+  // Sports sorted with active broadcast matches first so users don't have to scroll past empty categories
+  const sortedSports = useMemo(() => {
+    return [...sports].sort((a, b) => {
+      const countA = categoryCounts[a.id.toLowerCase()] || 0;
+      const countB = categoryCounts[b.id.toLowerCase()] || 0;
+      if (countA > 0 && countB === 0) return -1;
+      if (countA === 0 && countB > 0) return 1;
+      if (countA > 0 && countB > 0) return countB - countA;
+      return 0;
+    });
+  }, [sports, categoryCounts]);
 
   // Client-side filtering for fast and responsive UX
   const filteredMatches = useMemo(() => {
@@ -874,6 +953,9 @@ export default function LiveSports({ onClose }: Props) {
     setSelectedMatch(match);
     setSelectedStream(null);
     setStreams([]);
+    if (modalScrollRef.current) {
+      modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     try {
@@ -987,13 +1069,21 @@ export default function LiveSports({ onClose }: Props) {
 
   return (
     <div
+      ref={modalScrollRef}
       role="dialog"
       aria-modal="true"
       aria-label="Live sports"
       className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[100] overflow-y-auto"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="min-h-screen bg-gradient-to-b from-neutral-950 via-black to-neutral-950">
+      {/* Ambient Stadium Lighting Glow Mesh (Provides authentic underlying depth and color contrast for frosted glass refraction) */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+        <div className="absolute -top-[15%] -left-[10%] w-[55vw] h-[55vw] rounded-full bg-emerald-600/10 blur-[130px] mix-blend-screen" />
+        <div className="absolute top-[10%] -right-[15%] w-[50vw] h-[50vw] rounded-full bg-indigo-600/12 blur-[140px] mix-blend-screen" />
+        <div className="absolute top-[50%] left-[20%] w-[60vw] h-[45vw] rounded-full bg-red-600/[0.06] blur-[150px] mix-blend-screen" />
+      </div>
+
+      <div className="min-h-screen relative z-10 bg-gradient-to-b from-neutral-950/75 via-black/80 to-neutral-950/75">
         {/* Header Bar */}
         <div className="fixed top-0 left-0 right-0 z-50 bg-black/60 backdrop-blur-2xl border-b border-white/10 pt-[env(safe-area-inset-top)]">
           <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-12 py-3 sm:py-4">
@@ -1200,10 +1290,9 @@ export default function LiveSports({ onClose }: Props) {
                           key={`${selectedStream.id}-${streamReloadKey}`}
                           src={selectedStream.embedUrl}
                           className="w-full h-full border-0"
-                          allow="autoplay; picture-in-picture; fullscreen *"
+                          allow="autoplay; encrypted-media; picture-in-picture; fullscreen *"
                           allowFullScreen
-                          referrerPolicy="no-referrer"
-                          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+                          referrerPolicy="no-referrer-when-downgrade"
                         />
                       ) : (
                         <video
@@ -1301,179 +1390,172 @@ export default function LiveSports({ onClose }: Props) {
 
                   {/* Now Watching Panel (1/3 width) */}
                   <div className="lg:col-span-1">
-                    <div className="liquid-glass-base border border-white/15 rounded-3xl p-5 sm:p-6 h-full shadow-2xl relative overflow-hidden flex flex-col justify-between">
-                      <div className="absolute -right-16 -top-16 w-56 h-56 bg-white/[0.02] rounded-full blur-2xl pointer-events-none" />
-                      <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-4">
-                          <p className="text-xs md:text-sm text-neutral-400 uppercase font-bold tracking-wider">Now Watching</p>
-                          <button
-                            type="button"
-                            aria-label="Close Player"
-                            onClick={() => {
-                              setSelectedMatch(null);
-                              setSelectedStream(null);
-                              setStreams([]);
-                              setQualities([]);
-                              setCurrentQuality(-1);
-                              setIsDropdownOpen(false);
-                            }}
-                            className="p-1.5 liquid-glass-pill border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer text-neutral-400 hover:text-white"
-                            title="Close Player"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
+                    <div className="liquid-glass-base border border-white/15 rounded-3xl p-5 sm:p-6 h-full shadow-2xl relative flex flex-col justify-between">
+                      {/* Glow background constrained to rounded-3xl so card doesn't need overflow-hidden */}
+                      <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
+                        <div className="absolute -right-16 -top-16 w-56 h-56 bg-white/[0.02] rounded-full blur-2xl" />
+                      </div>
+                      <div className="relative z-10 flex flex-col flex-1 justify-between">
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <p className="text-xs md:text-sm text-neutral-400 uppercase font-bold tracking-wider">Now Watching</p>
+                            <button
+                              type="button"
+                              aria-label="Close Player"
+                              onClick={() => {
+                                setSelectedMatch(null);
+                                setSelectedStream(null);
+                                setStreams([]);
+                                setQualities([]);
+                                setCurrentQuality(-1);
+                                setIsDropdownOpen(false);
+                              }}
+                              className="p-1.5 liquid-glass-pill border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer text-neutral-400 hover:text-white"
+                              title="Close Player"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
 
-                        {/* Match Details */}
-                        <div className="mb-6">
-                          {selectedMatch.teams?.home && selectedMatch.teams?.away ? (
-                            <div className="flex items-center justify-between mb-5 bg-white/[0.03] border border-white/10 rounded-2xl p-4 shadow-inner">
-                              <div className="flex flex-col items-center flex-1 min-w-0">
-                                <TeamBadge name={selectedMatch.teams.home.name} badge={selectedMatch.teams.home.badge} size="lg" />
-                                <span className="text-xs text-neutral-200 text-center font-semibold truncate w-full mt-2">
-                                  {selectedMatch.teams.home.name}
+                          {/* Match Details */}
+                          <div className="mb-6">
+                            {selectedMatch.teams?.home && selectedMatch.teams?.away ? (
+                              <div className="flex items-center justify-between mb-5 bg-white/[0.03] border border-white/10 rounded-2xl p-4 shadow-inner">
+                                <div className="flex flex-col items-center flex-1 min-w-0">
+                                  <TeamBadge name={selectedMatch.teams.home.name} badge={selectedMatch.teams.home.badge} size="lg" />
+                                  <span className="text-xs text-neutral-200 text-center font-semibold truncate w-full mt-2">
+                                    {selectedMatch.teams.home.name}
+                                  </span>
+                                </div>
+                                <span className="text-xs font-extrabold text-red-500 px-3 shrink-0">VS</span>
+                                <div className="flex flex-col items-center flex-1 min-w-0">
+                                  <TeamBadge name={selectedMatch.teams.away.name} badge={selectedMatch.teams.away.badge} size="lg" />
+                                  <span className="text-xs text-neutral-200 text-center font-semibold truncate w-full mt-2">
+                                    {selectedMatch.teams.away.name}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <h2 className="text-lg font-bold text-white mb-4 leading-snug">{selectedMatch.title}</h2>
+                            )}
+
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 text-neutral-300 text-xs font-semibold">
+                                <SportVectorIcon sport={selectedMatch.category} className="w-4 h-4 text-neutral-400" />
+                                <span className="capitalize">{selectedMatch.category}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {selectedMatch.is4k && (
+                                  <span className="text-[10px] bg-purple-950/70 text-purple-300 px-2.5 py-0.5 rounded-full border border-purple-500/40 font-bold uppercase tracking-wider">
+                                    4K UHD
+                                  </span>
+                                )}
+                                <span className="text-[10px] bg-white/10 text-neutral-300 px-2.5 py-0.5 rounded-full border border-white/15 font-semibold">
+                                  {formatTime(selectedMatch.date)}
                                 </span>
                               </div>
-                              <span className="text-xs font-extrabold text-red-500 px-3 shrink-0">VS</span>
-                              <div className="flex flex-col items-center flex-1 min-w-0">
-                                <TeamBadge name={selectedMatch.teams.away.name} badge={selectedMatch.teams.away.badge} size="lg" />
-                                <span className="text-xs text-neutral-200 text-center font-semibold truncate w-full mt-2">
-                                  {selectedMatch.teams.away.name}
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <h2 className="text-lg font-bold text-white mb-4 leading-snug">{selectedMatch.title}</h2>
-                          )}
-
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 text-neutral-300 text-xs font-semibold">
-                              <SportVectorIcon sport={selectedMatch.category} className="w-4 h-4 text-neutral-400" />
-                              <span className="capitalize">{selectedMatch.category}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              {selectedMatch.is4k && (
-                                <span className="text-[10px] bg-purple-950/70 text-purple-300 px-2.5 py-0.5 rounded-full border border-purple-500/40 font-bold uppercase tracking-wider">
-                                  4K UHD
-                                </span>
-                              )}
-                              <span className="text-[10px] bg-white/10 text-neutral-300 px-2.5 py-0.5 rounded-full border border-white/15 font-semibold">
-                                {formatTime(selectedMatch.date)}
-                              </span>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Stream Selection Dropdown or State */}
-                        <div className="flex flex-col gap-2 mb-4 relative z-50" ref={dropdownRef}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider">Select Stream Feed</span>
-                            {streams.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => setSortByQuality(!sortByQuality)}
-                                className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-semibold transition-all cursor-pointer border ${
-                                  sortByQuality
-                                    ? 'bg-neutral-800 text-neutral-200 border-white/20'
-                                    : 'bg-white/[0.03] border-white/10 text-neutral-400 hover:text-white'
-                                }`}
-                              >
-                                <SlidersHorizontal className="w-3 h-3 text-red-400" />
-                                <span>Sort: Quality First</span>
-                              </button>
+                          {/* Stream Selection Dropdown or State */}
+                          <div className="flex flex-col gap-2 mb-4 relative z-40" ref={dropdownRef}>
+                            <div className="flex items-center justify-between">
+                              <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider">Select Stream Feed</span>
+                              {streams.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSortByQuality(!sortByQuality)}
+                                  className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-semibold transition-all cursor-pointer border ${
+                                    sortByQuality
+                                      ? 'bg-neutral-800 text-neutral-200 border-white/20'
+                                      : 'bg-white/[0.03] border-white/10 text-neutral-400 hover:text-white'
+                                  }`}
+                                >
+                                  <SlidersHorizontal className="w-3 h-3 text-red-400" />
+                                  <span>Sort: Quality First</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {loadingStreams ? (
+                              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-white/[0.04] border border-white/10 text-neutral-300 text-xs">
+                                <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white/20 border-t-red-500 shrink-0" />
+                                <span>Searching for broadcast feeds...</span>
+                              </div>
+                            ) : streams.length === 0 ? (
+                              <div className="p-3.5 rounded-2xl bg-amber-500/[0.08] border border-amber-500/20 text-amber-200 text-xs flex flex-col gap-2">
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                                  <span>No active feeds right now</span>
+                                </div>
+                                <p className="text-[11px] text-neutral-400">Streams will appear automatically as soon as coverage begins.</p>
+                                <button
+                                  type="button"
+                                  onClick={() => loadStreams(selectedMatch)}
+                                  className="mt-1 px-3 py-1.5 rounded-xl liquid-btn-primary text-black text-[11px] font-bold self-start cursor-pointer flex items-center gap-1"
+                                >
+                                  <RotateCw className="w-3 h-3" />
+                                  <span>Retry Feeds</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <LiquidDropdown
+                                label="Select a feed..."
+                                title="Available Feeds"
+                                options={getSortedStreams().map((stream) => ({
+                                  id: stream.id,
+                                  name: getStreamTitle(stream),
+                                  badge: (
+                                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-white/[0.08] text-neutral-300 border border-white/10 uppercase tracking-wider shrink-0">
+                                      {stream.source}
+                                    </span>
+                                  ),
+                                }))}
+                                value={selectedStream?.id || ''}
+                                onChange={(val) => {
+                                  const s = streams.find((st) => String(st.id) === String(val));
+                                  if (s) setSelectedStream(s);
+                                }}
+                                className="w-full"
+                                menuWidth="w-full"
+                                menuMaxHeight="max-h-[155px]"
+                                enableHover={false}
+                              />
                             )}
                           </div>
 
-                          {loadingStreams ? (
-                            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-white/[0.04] border border-white/10 text-neutral-300 text-xs">
-                              <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white/20 border-t-red-500 shrink-0" />
-                              <span>Searching for broadcast feeds...</span>
-                            </div>
-                          ) : streams.length === 0 ? (
-                            <div className="p-3.5 rounded-2xl bg-amber-500/[0.08] border border-amber-500/20 text-amber-200 text-xs flex flex-col gap-2">
-                              <div className="flex items-center gap-1.5 font-bold">
-                                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                                <span>No active feeds right now</span>
+                          {/* Direct HLS Quality Selector Buttons (when supported) */}
+                          {qualities.length > 1 && (
+                            <div className="mb-4">
+                              <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider block mb-2">Resolution</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {qualities.map((q) => (
+                                  <button
+                                    type="button"
+                                    key={q.index}
+                                    onClick={() => handleQualityChange(q.index)}
+                                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
+                                      currentQuality === q.index
+                                        ? 'bg-white/[0.15] text-white border-white/30 shadow-md font-bold'
+                                        : 'bg-white/[0.04] border-white/10 text-neutral-400 hover:text-white'
+                                    }`}
+                                  >
+                                    {q.label}
+                                  </button>
+                                ))}
                               </div>
-                              <p className="text-[11px] text-neutral-400">Streams will appear automatically as soon as coverage begins.</p>
-                              <button
-                                type="button"
-                                onClick={() => loadStreams(selectedMatch)}
-                                className="mt-1 px-3 py-1.5 rounded-xl liquid-btn-primary text-black text-[11px] font-bold self-start cursor-pointer flex items-center gap-1"
-                              >
-                                <RotateCw className="w-3 h-3" />
-                                <span>Retry Feeds</span>
-                              </button>
                             </div>
-                          ) : (
-                            <LiquidDropdown
-                              label="Select a feed..."
-                              title="Available Feeds"
-                              options={getSortedStreams().map((stream) => ({
-                                id: stream.id,
-                                name: getStreamTitle(stream),
-                                badge: (
-                                  <span className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-white/[0.08] text-neutral-300 border border-white/10 uppercase tracking-wider shrink-0">
-                                    {stream.source}
-                                  </span>
-                                ),
-                              }))}
-                              value={selectedStream?.id || ''}
-                              onChange={(val) => {
-                                const s = streams.find((st) => String(st.id) === String(val));
-                                if (s) setSelectedStream(s);
-                              }}
-                              className="w-full"
-                              menuWidth="w-full"
-                            />
                           )}
                         </div>
 
-                        {/* Direct HLS Quality Selector Buttons (when supported) */}
-                        {qualities.length > 1 && (
-                          <div className="mb-4">
-                            <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider block mb-2">Resolution</span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {qualities.map((q) => (
-                                <button
-                                  type="button"
-                                  key={q.index}
-                                  onClick={() => handleQualityChange(q.index)}
-                                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
-                                    currentQuality === q.index
-                                      ? 'bg-white/[0.15] text-white border-white/30 shadow-md font-bold'
-                                      : 'bg-white/[0.04] border-white/10 text-neutral-400 hover:text-white'
-                                  }`}
-                                >
-                                  {q.label}
-                                </button>
-                              ))}
-                            </div>
+                        {/* Stream Troubleshooting Note (Anchored at bottom with clear separation) */}
+                        <div className="mt-4 pt-2">
+                          <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 text-neutral-400 text-[11px] leading-relaxed flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-neutral-400 shrink-0 mt-0.5" />
+                            <span>If a stream buffers or stalls, try switching to a different feed above or click the reload icon on the video player.</span>
                           </div>
-                        )}
-
-                        {/* Stream Troubleshooting Note */}
-                        <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 text-neutral-400 text-[11px] leading-relaxed flex items-start gap-2">
-                          <AlertCircle className="w-4 h-4 text-neutral-400 shrink-0 mt-0.5" />
-                          <span>If a stream buffers or stalls, try switching to a different feed above or click the reload icon on the video player.</span>
                         </div>
                       </div>
-
-                      {/* Close Player Action Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedMatch(null);
-                          setSelectedStream(null);
-                          setStreams([]);
-                          setQualities([]);
-                          setCurrentQuality(-1);
-                          setIsDropdownOpen(false);
-                        }}
-                        className="w-full mt-4 py-2.5 rounded-2xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 hover:border-red-500/40 text-neutral-300 hover:text-white text-xs md:text-sm font-semibold transition-all cursor-pointer text-center shadow-lg"
-                      >
-                        Close Player
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -1498,10 +1580,10 @@ export default function LiveSports({ onClose }: Props) {
                     >
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                       <span>Live Now</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-bold ${
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-bold tabular-nums ${
                         activeTab === 'live' ? 'bg-white/20 text-white' : 'bg-white/10 text-neutral-400'
                       }`}>
-                        {categoryCounts['all'] || rawMatches.length}
+                        {liveCount !== null ? liveCount : (activeTab === 'live' ? rawMatches.length : '...')}
                       </span>
                     </button>
 
@@ -1516,10 +1598,10 @@ export default function LiveSports({ onClose }: Props) {
                     >
                       <Clock className="w-4 h-4 text-neutral-400" />
                       <span>Today&apos;s Schedule</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-bold ${
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-bold tabular-nums ${
                         activeTab === 'today' ? 'bg-white/20 text-white' : 'bg-white/10 text-neutral-400'
                       }`}>
-                        {categoryCounts['all'] || rawMatches.length}
+                        {todayCount !== null ? todayCount : (activeTab === 'today' ? rawMatches.length : '...')}
                       </span>
                     </button>
                   </div>
@@ -1537,7 +1619,7 @@ export default function LiveSports({ onClose }: Props) {
                     <Sparkles className="w-4 h-4 text-purple-400" />
                     <span>4K UHD Only</span>
                     {categoryCounts['4k'] > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 text-white font-mono font-bold ml-0.5">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 text-white font-mono font-bold tabular-nums ml-0.5">
                         {categoryCounts['4k']}
                       </span>
                     )}
@@ -1605,15 +1687,15 @@ export default function LiveSports({ onClose }: Props) {
                   >
                     <SportVectorIcon sport="all" className="w-4.5 h-4.5 transition-colors" />
                     <span>All Sports</span>
-                    <span className={`text-xs font-mono transition-colors px-2 py-0.5 rounded-full ${
+                    <span className={`text-xs font-mono tabular-nums transition-colors px-2 py-0.5 rounded-full ${
                       selectedSport === 'all' ? 'bg-white/25 text-white font-bold' : 'bg-white/10 text-neutral-400'
                     }`}>
                       {categoryCounts['all'] || rawMatches.length}
                     </span>
                   </button>
 
-                  {/* Individual Sport Pills with Vector SVG Icons */}
-                  {sports.map(sport => {
+                  {/* Individual Sport Pills with Vector SVG Icons (Sorted with active broadcast matches first) */}
+                  {sortedSports.map(sport => {
                     const count = categoryCounts[sport.id.toLowerCase()] || 0;
                     const isSelected = selectedSport === sport.id;
 
@@ -1630,7 +1712,7 @@ export default function LiveSports({ onClose }: Props) {
                       >
                         <SportVectorIcon sport={sport.id} className="w-4.5 h-4.5 transition-colors" />
                         <span>{sport.name}</span>
-                        <span className={`text-xs font-mono transition-colors px-2 py-0.5 rounded-full ${
+                        <span className={`text-xs font-mono tabular-nums transition-colors px-2 py-0.5 rounded-full ${
                           isSelected
                             ? 'bg-white/25 text-white font-bold'
                             : count > 0

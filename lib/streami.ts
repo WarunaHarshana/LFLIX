@@ -101,8 +101,14 @@ function flattenEmbeds(blocks: StreamiEmbedBlock[] | undefined): { language: str
       if (!e || !e.embed) continue;
       const trimmedEmbed = e.embed.trim();
       // Discard invalid / empty placeholder links (e.g. https://streami.fit/live/?channel_id=)
+      // or bogus google.com links and known dead domains
       if (
         !trimmedEmbed.startsWith('http') ||
+        trimmedEmbed.includes('google.com') ||
+        trimmedEmbed.includes('lovetier.bz') ||
+        trimmedEmbed.includes('dlstreams.com') ||
+        trimmedEmbed.includes('antenasport.org') ||
+        trimmedEmbed.includes('parklogic.com') ||
         trimmedEmbed.endsWith('channel_id=') ||
         trimmedEmbed.endsWith('channel_id=null') ||
         trimmedEmbed.endsWith('channel_id=undefined') ||

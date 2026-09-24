@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
-export const TIMSTREAMS_BASE = 'https://timstreams.st';
-export const TIMSTREAMS_FALLBACK_BASE = 'https://timst.cfd';
+export const TIMSTREAMS_BASE = 'https://timst.cfd';
+export const TIMSTREAMS_FALLBACK_BASE = 'https://timstreams.st';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 export type TimStreamsGenre = {
@@ -196,7 +196,8 @@ async function fetchWithFallback(endpoint: string, options: RequestInit = {}): P
           'Accept': 'application/json',
           'User-Agent': USER_AGENT,
           ...(options.headers || {})
-        }
+        },
+        signal: AbortSignal.timeout(4000)
       });
       if (res.ok) {
         const contentType = res.headers.get('content-type') || '';

@@ -23,6 +23,8 @@ interface LiquidDropdownProps {
   isHighlightActive?: boolean;
   icon?: ReactNode;
   menuWidth?: string;
+  menuMaxHeight?: string;
+  menuClassName?: string;
   enableHover?: boolean;
 }
 
@@ -38,6 +40,8 @@ export default function LiquidDropdown({
   isHighlightActive,
   icon,
   menuWidth,
+  menuMaxHeight,
+  menuClassName,
   enableHover = true,
 }: LiquidDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -109,9 +113,12 @@ export default function LiquidDropdown({
       <div
         role="listbox"
         className={clsx(
-          'absolute top-full mt-2 liquid-glass-menu rounded-2xl shadow-2xl p-1.5 max-w-[calc(100vw-2rem)] max-h-[480px] max-h-[75vh] overflow-y-auto scrollbar-thin transition-all duration-200 z-50 before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-[""]',
+          'absolute top-full mt-2 liquid-glass-menu rounded-2xl shadow-2xl p-1.5 max-w-[calc(100vw-2rem)] overflow-y-auto scrollbar-thin transition-all duration-200 z-50',
+          menuMaxHeight || 'max-h-[480px] max-h-[75vh]',
           align === 'right' ? 'right-0' : 'left-0',
           menuWidth || 'w-56 min-w-[180px]',
+          enableHover && 'before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-[""]',
+          menuClassName,
           isOpen
             ? 'opacity-100 visible'
             : enableHover
@@ -120,7 +127,7 @@ export default function LiquidDropdown({
         )}
       >
         {title && (
-          <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-300 border-b border-white/10 sticky top-0 bg-neutral-900/95 backdrop-blur-xl rounded-t-xl z-10">
+          <div className="px-3.5 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-200 border-b border-white/10 sticky top-0 bg-[#0d0d14] backdrop-blur-xl rounded-t-xl z-10 select-none">
             {title}
           </div>
         )}

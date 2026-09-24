@@ -368,7 +368,12 @@ export async function GET(request: Request) {
         });
         if (liveRes.ok) {
           const liveData = await liveRes.json();
-          rawStreamedMatches = Array.isArray(liveData) ? liveData : [];
+          // Filter out matches that only contain 'delta' sources since delta feeds return [] until broadcast starts
+          const activeLive = Array.isArray(liveData) ? liveData.filter((m: any) => {
+            if (!m.sources || m.sources.length === 0) return true;
+            return m.sources.some((s: any) => s.source !== 'delta');
+          }) : [];
+          rawStreamedMatches = activeLive;
         }
       } catch (e) {
         console.error('Error fetching matches/live:', e);
@@ -381,7 +386,9 @@ export async function GET(request: Request) {
       for (const m of allTodayRaw) {
         const matchTime = typeof m.date === 'number' ? m.date : new Date(m.date).getTime();
         const isInLiveWindow = (now >= matchTime - 20 * 60 * 1000) && (now <= matchTime + 3.5 * 3600 * 1000);
-        if (isInLiveWindow) {
+        // Only include if in live window and has active non-delta sources
+        const hasActiveSource = m.sources && m.sources.some((s: any) => s.source !== 'delta');
+        if (isInLiveWindow && hasActiveSource) {
           const key = getMatchKey(m);
           if (!liveKeys.has(key)) {
             rawStreamedMatches.push(m);

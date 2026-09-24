@@ -10,7 +10,7 @@ import {
 describe('timstreams', () => {
   describe('constants', () => {
     it('uses the correct official base URL', () => {
-      expect(TIMSTREAMS_BASE).toBe('https://timstreams.st');
+      expect(TIMSTREAMS_BASE).toBe('https://timst.cfd');
     });
   });
 
