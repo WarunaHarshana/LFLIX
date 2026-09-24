@@ -1103,7 +1103,7 @@ export default function TitleDetailPage({
     : null;
 
   return (
-    <div className="relative min-h-screen w-full bg-[#050505] text-white selection:bg-white/20 overflow-x-hidden pt-14 md:pt-20">
+    <div className="relative min-h-screen w-full bg-[#050505] text-white selection:bg-white/20 overflow-x-hidden">
       {toast && <ToastNotification toast={toast} />}
 
       {/* ──────────────── 1. Fixed Ambient Glow Layer (pins colorful glow behind document scroll) ──────────────── */}
