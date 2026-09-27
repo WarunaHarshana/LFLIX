@@ -25,7 +25,7 @@ import {
     ChevronDown,
     CheckCircle2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import DownloadModal from './DownloadModal';
 import TrailerModal from './TrailerModal';
 import { triggerHaptic } from '@/lib/haptics';
@@ -85,6 +85,7 @@ const QUICK_SUGGESTIONS = [
 ];
 
 export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Props) {
+    const shouldReduceMotion = useReducedMotion();
     const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<TMDBResult[]>([]);
@@ -488,10 +489,10 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                     <AnimatePresence>
                         {(searching || searchQuery.trim().length >= 2) && (
                             <motion.div
-                                initial={{ opacity: 0, height: 0, y: -4 }}
-                                animate={{ opacity: 1, height: 'auto', y: 0 }}
-                                exit={{ opacity: 0, height: 0, y: -4 }}
-                                transition={{ type: 'spring', damping: 26, stiffness: 300 }}
+                                initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                                animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                                exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                                 className="border-t border-white/10 mt-3 pt-3 overflow-hidden"
                             >
                                 <div className="flex items-center justify-between px-1 mb-3">
@@ -668,8 +669,8 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                                 {isActive && (
                                     <motion.div
                                         layoutId="activeWatchlistTab"
-                                        className="absolute inset-0 bg-white/20 border border-white/35 rounded-xl shadow-[0_2px_14px_rgba(255,255,255,0.22)] backdrop-blur-xl"
-                                        transition={{ type: 'spring', damping: 25, stiffness: 320 }}
+                                        className="absolute inset-0 bg-white/20 border border-white/35 rounded-xl shadow-[0_2px_10px_rgba(255,255,255,0.18)] backdrop-blur-sm will-change-transform"
+                                        transition={shouldReduceMotion ? { duration: 0.15 } : { type: 'spring', damping: 28, stiffness: 350 }}
                                     />
                                 )}
                                 <span className="relative z-10 flex items-center gap-2">
@@ -729,11 +730,11 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                         <AnimatePresence>
                             {showSortMenu && (
                                 <motion.div
-                                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                                    transition={{ type: 'spring', damping: 24, stiffness: 300 }}
-                                    className="absolute right-0 mt-2 w-52 liquid-glass-menu rounded-2xl p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] z-50 border border-white/20 origin-top"
+                                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.96 }}
+                                    animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.96 }}
+                                    transition={shouldReduceMotion ? { duration: 0.15 } : { type: 'spring', damping: 28, stiffness: 350 }}
+                                    className="absolute right-0 mt-2 w-52 liquid-glass-menu rounded-2xl p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] z-50 border border-white/20 origin-top-right"
                                 >
                                     {(['recent', 'rating', 'year', 'title'] as const).map((option) => (
                                         <button
@@ -860,11 +861,10 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                 </div>
             ) : viewMode === 'grid' ? (
                 /* ─── GRID VIEW: Apple Glass Cards with Fluid Hover & Rich Typography ─── */
-                <motion.div
-                    layout
+                <div
                     className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 sm:gap-6 relative z-10"
                 >
-                    <AnimatePresence mode="popLayout">
+                    <AnimatePresence>
                         {filteredWatchlist.map((item) => {
                             const inLibrary = isInLibrary(item.tmdbId);
                             const available = item.mediaType === 'movie' && isMovieAvailable(item.tmdbId);
@@ -872,17 +872,16 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
 
                             return (
                                 <motion.div
-                                    layout
-                                    initial={{ opacity: 0, scale: 0.92 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.85 }}
-                                    whileHover={{ y: -8, scale: 1.025 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+                                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
+                                    animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+                                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
+                                    whileHover={shouldReduceMotion ? {} : { y: -6, scale: 1.02 }}
+                                    whileTap={shouldReduceMotion ? {} : { scale: 0.98 }}
+                                    transition={{ type: 'spring', damping: 32, stiffness: 360, mass: 0.8 }}
                                     key={item.id}
                                     data-testid={`watchlist-card-${item.id}`}
                                     onClick={() => openWatchlistItemOnline(item)}
-                                    className={`group relative rounded-2xl sm:rounded-3xl overflow-hidden cursor-pointer apple-glass-card transition-all duration-300 shadow-lg ${
+                                    className={`group relative rounded-2xl sm:rounded-3xl overflow-hidden cursor-pointer apple-glass-card transition-colors duration-200 shadow-lg ${
                                         available && !inLibrary
                                             ? 'border-emerald-500/40 shadow-emerald-500/10 hover:border-emerald-400/80 hover:shadow-emerald-500/25'
                                             : 'border-white/12 hover:border-white/35'
@@ -909,16 +908,16 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
 
                                         {/* Status Badges (Top Left) */}
                                         <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5 pointer-events-none select-none max-w-[70%]">
-                                            <span className="px-2.5 py-1 bg-black/80 backdrop-blur-md border border-white/20 rounded-lg text-xs uppercase tracking-wider text-white font-extrabold shadow-md w-fit">
+                                            <span className="px-2.5 py-1 bg-black/90 border border-white/20 rounded-lg text-xs uppercase tracking-wider text-white font-extrabold shadow-md w-fit">
                                                 {item.mediaType === 'movie' ? 'Movie' : 'TV'}
                                             </span>
                                             {inLibrary && (
-                                                <span className="px-2.5 py-1 bg-green-500/40 backdrop-blur-md border border-green-500/60 rounded-lg text-xs text-green-100 font-black shadow-md w-fit flex items-center gap-1">
+                                                <span className="px-2.5 py-1 bg-green-950/90 border border-green-500/60 rounded-lg text-xs text-green-200 font-black shadow-md w-fit flex items-center gap-1">
                                                     <CheckCircle2 className="w-3 h-3" /> In Library
                                                 </span>
                                             )}
                                             {available && !inLibrary && (
-                                                <span className="px-2.5 py-1 bg-emerald-500/45 backdrop-blur-md border border-emerald-400/70 rounded-lg text-xs text-emerald-100 font-black flex items-center gap-1 animate-pulse shadow-md w-fit">
+                                                <span className="px-2.5 py-1 bg-emerald-950/90 border border-emerald-400/70 rounded-lg text-xs text-emerald-200 font-black flex items-center gap-1 animate-pulse shadow-md w-fit">
                                                     <Sparkles className="w-3 h-3" /> Ready
                                                 </span>
                                             )}
@@ -926,14 +925,14 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
 
                                         {/* Rating Badge (Top Right) */}
                                         {displayRating != null && displayRating > 0 && (
-                                            <div className="absolute top-3 right-3 z-20 inline-flex items-center gap-1 px-2.5 py-1 bg-black/80 backdrop-blur-md border border-amber-400/45 rounded-lg text-xs text-amber-300 font-black shadow-md pointer-events-none select-none w-fit tabular-nums">
+                                            <div className="absolute top-3 right-3 z-20 inline-flex items-center gap-1 px-2.5 py-1 bg-black/90 border border-amber-400/45 rounded-lg text-xs text-amber-300 font-black shadow-md pointer-events-none select-none w-fit tabular-nums">
                                                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                                                 <span>{displayRating.toFixed(1)}</span>
                                             </div>
                                         )}
 
                                         {/* Apple-style Hover Scrim & Direct Action Layer */}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/65 to-black/25 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-4 backdrop-blur-[3px] z-20">
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/75 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-4 z-20">
                                             {item.overview && (
                                                 <p className="text-xs sm:text-sm text-neutral-200 line-clamp-3 mb-3 leading-relaxed drop-shadow text-pretty">
                                                     {item.overview}
@@ -999,11 +998,11 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                             );
                         })}
                     </AnimatePresence>
-                </motion.div>
+                </div>
             ) : (
                 /* ─── COMPACT SHELF/LIST VIEW: Clean, Informative, Space-Efficient ─── */
-                <motion.div layout className="space-y-3 relative z-10">
-                    <AnimatePresence mode="popLayout">
+                <div className="space-y-3 relative z-10">
+                    <AnimatePresence>
                         {filteredWatchlist.map((item) => {
                             const inLibrary = isInLibrary(item.tmdbId);
                             const available = item.mediaType === 'movie' && isMovieAvailable(item.tmdbId);
@@ -1011,16 +1010,15 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
 
                             return (
                                 <motion.div
-                                    layout
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    whileHover={{ scale: 1.01 }}
-                                    transition={{ type: 'spring', damping: 24, stiffness: 280 }}
+                                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+                                    animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
+                                    whileHover={shouldReduceMotion ? {} : { scale: 1.01 }}
+                                    transition={{ type: 'spring', damping: 30, stiffness: 350 }}
                                     key={item.id}
                                     data-testid={`watchlist-list-item-${item.id}`}
                                     onClick={() => openWatchlistItemOnline(item)}
-                                    className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 apple-glass-card rounded-2xl sm:rounded-3xl cursor-pointer transition-all duration-200 hover:border-white/35 shadow-md group ${
+                                    className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 apple-glass-card rounded-2xl sm:rounded-3xl cursor-pointer transition-colors duration-200 hover:border-white/35 shadow-md group ${
                                         available && !inLibrary ? 'border-emerald-500/40' : 'border-white/12'
                                     }`}
                                 >
@@ -1143,17 +1141,17 @@ export default function WatchlistPage({ libraryTmdbIds = [], onOpenOnline }: Pro
                             );
                         })}
                     </AnimatePresence>
-                </motion.div>
+                </div>
             )}
 
             {/* Agency & Forgiveness: Floating Undo Toast Notification */}
             <AnimatePresence>
                 {deletedUndoItem && (
                     <motion.div
-                        initial={{ opacity: 0, y: 30, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.96 }}
+                        animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.96 }}
+                        transition={shouldReduceMotion ? { duration: 0.15 } : { type: 'spring', damping: 28, stiffness: 350 }}
                         className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3.5 px-6 py-3.5 apple-glass-toast rounded-2xl shadow-2xl border border-white/20 select-none"
                     >
                         <span className="text-sm sm:text-base text-neutral-200">
