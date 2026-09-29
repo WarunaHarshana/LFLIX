@@ -61,6 +61,7 @@ const HW_ENCODER_CANDIDATES = [
   { name: 'h264_nvenc', args: ['-preset', 'p1', '-tune', 'zerolatency'] },
   { name: 'h264_qsv', args: ['-preset', 'veryfast', '-global_quality', '23'] },
   { name: 'h264_amf', args: ['-quality', 'speed', '-rc', 'cqp', '-qp_i', '23', '-qp_p', '23'] },
+  { name: 'h264_mf', args: ['-b:v', '4000k'] },
   { name: 'h264_videotoolbox', args: ['-q:v', '55'] },
 ];
 
@@ -103,7 +104,7 @@ function encoderWorks(encoder: string): boolean {
  * Set `LFLIX_FORCE_SOFTWARE_ENCODER=1` to skip hardware entirely.
  */
 export function getVideoEncoder(): EncoderChoice {
-  if (cachedEncoder) return cachedEncoder;
+  if (cachedEncoder && cachedEncoder.name !== 'libx264') return cachedEncoder;
 
   if (process.env.LFLIX_FORCE_SOFTWARE_ENCODER === '1') {
     cachedEncoder = SOFTWARE_ENCODER;
@@ -121,6 +122,10 @@ export function getVideoEncoder(): EncoderChoice {
   console.log('[Transcode] No usable hardware encoder, falling back to libx264');
   cachedEncoder = SOFTWARE_ENCODER;
   return cachedEncoder;
+}
+
+export function resetCachedEncoder(): void {
+  cachedEncoder = null;
 }
 
 /** Flags for the chosen encoder, ready to splice into an ffmpeg argument list. */

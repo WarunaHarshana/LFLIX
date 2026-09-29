@@ -40,6 +40,8 @@ type EpisodeResponse = {
   seasonNumber: number;
   episodeNumber: number;
   title: string;
+  fileName?: string | null;
+  container?: string | null;
   overview: string | null;
   stillPath: string | null;
   rating: number | null;
@@ -144,6 +146,8 @@ export async function GET(req: Request) {
         seasonNumber: ep.seasonNumber,
         episodeNumber: ep.episodeNumber,
         title: ep.title,
+        fileName: ep.fileName || (ep.filePath ? path.basename(ep.filePath) : null),
+        container: ep.filePath ? path.extname(ep.filePath).replace('.', '').toLowerCase() : null,
         overview: ep.overview,
         stillPath: ep.stillPath,
         rating: ep.rating,

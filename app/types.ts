@@ -13,6 +13,8 @@ export type ContentItem = {
   rating: number | null;
   imdbRating?: number | null;
   filePath?: string;
+  fileName?: string | null;
+  container?: string | null;
   isHDR?: boolean;
   resolution?: string | null;
   videoCodec?: string | null;
@@ -39,7 +41,9 @@ export type Episode = {
   seasonNumber: number;
   episodeNumber: number;
   title: string;
-  filePath: string;
+  filePath?: string;
+  fileName?: string | null;
+  container?: string | null;
   overview?: string | null;
   stillPath?: string | null;
   rating?: number | null;

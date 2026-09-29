@@ -1238,7 +1238,9 @@ video::cue {
   .liquid-glass-base,
   .liquid-glass-dock,
   .cinejoy-specs-card,
-  .cinejoy-btn-circle {
+  .cinejoy-btn-circle,
+  .player-glass-popover,
+  .player-hud-pill {
     background: #14141c !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -1251,9 +1253,36 @@ video::cue {
   .liquid-glass-pill,
   .liquid-sheen-effect::after,
   .cinejoy-btn-primary,
-  .cinejoy-btn-circle {
+  .cinejoy-btn-circle,
+  .player-glass-popover,
+  .player-hud-pill {
     transition: opacity 0.15s ease !important;
     transform: none !important;
     animation: none !important;
   }
 }
+
+/* ==========================================================================
+   Player Glassmorphism & Apple Fluid Motion Tokens
+   ========================================================================== */
+:root {
+  --player-spring: cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.player-glass-popover {
+  background: rgba(15, 15, 20, 0.85);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.25rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.player-hud-pill {
+  background: rgba(12, 12, 18, 0.72);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+

@@ -67,6 +67,9 @@ function qualityColor(q: string): string {
 
 function sourceBadge(result: TorrentResult): { label: string; className: string } {
     const source = result.source.toUpperCase();
+    if (source.includes('CINEJOY') || source === 'LFLIX') {
+        return { label: 'LFLIX Direct', className: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' };
+    }
     if (source === 'DDL') {
         return { label: '⚡ Direct DDL', className: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold' };
     }
@@ -77,6 +80,16 @@ function sourceBadge(result: TorrentResult): { label: string; className: string 
         return { label: 'YTS', className: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' };
     }
     return { label: result.source, className: 'bg-neutral-700/50 text-neutral-500' };
+}
+
+export function formatDirectDownloadSource(source?: string | null): string {
+    if (!source) return 'LFLIX';
+    const trimmed = source.trim();
+    const formatted = trimmed
+        .replace(/^(?:4K\s*)?CINEJOY\b/i, 'LFLIX')
+        .replace(/\bCINEJOY\b/gi, 'LFLIX')
+        .trim();
+    return formatted || 'LFLIX';
 }
 
 /** Extract format tags (HDR, IMAX, Remux, Atmos, etc.) from a title */
@@ -696,11 +709,14 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                                 ⚡ Fast Direct
                                                             </span>
                                                         )}
-                                                        {item.source && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium">
-                                                                {item.source}
-                                                            </span>
-                                                        )}
+                                                        {(item.source || item.provider === 'cinejoy') && (() => {
+                                                            const formatted = formatDirectDownloadSource(item.source);
+                                                            return (
+                                                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium">
+                                                                    {formatted}
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </div>
                                                     <p className="text-sm font-medium truncate text-neutral-200" title={item.name}>
                                                         {item.name}

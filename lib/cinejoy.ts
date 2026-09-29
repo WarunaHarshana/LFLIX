@@ -2,9 +2,9 @@ import crypto from 'crypto';
 import { MemoryCache } from './cache';
 
 const CINEJOY_ENC_DEC_API = 'https://enc-dec.app/api';
-const CINEJOY_SHEGU_API = 'https://api.shegu.st';
-const CINEJOY_SUBTITLES_API = 'https://subtitles.shegu.st';
-const CINEJOY_DOWNLOADS_API = 'https://downloads.shegu.st';
+const CINEJOY_SHEGU_APIS = ['https://api.wing.st', 'https://api.shegu.st'];
+const CINEJOY_SUBTITLES_APIS = ['https://subtitles.wing.st', 'https://subtitles.shegu.st'];
+const CINEJOY_DOWNLOADS_APIS = ['https://downloads.wing.st', 'https://downloads.shegu.st'];
 
 const CINEJOY_HEADERS = {
   Accept: '*/*',
@@ -19,7 +19,9 @@ const ALLOWED_CDN_DOMAINS = [
   'movieboxnoob.cc',
   'bright67.online',
   'shegu.st',
+  'wing.st',
   'cinejoy.to',
+  'cinejoy.pk',
   'strem.io',
   'cloudflarestorage.com',
   'workers.dev',
@@ -84,15 +86,22 @@ let wasmModulePromise: Promise<WebAssembly.Module> | null = null;
 export async function getCinejoyWasmModule(): Promise<WebAssembly.Module> {
   if (!wasmModulePromise) {
     wasmModulePromise = (async () => {
-      const res = await fetch(`${CINEJOY_SHEGU_API}/crush.wasm`, {
-        headers: CINEJOY_HEADERS,
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to fetch crush.wasm: HTTP ${res.status}`);
+      let lastErr: any;
+      for (const apiHost of CINEJOY_SHEGU_APIS) {
+        try {
+          const res = await fetch(`${apiHost}/crush.wasm`, {
+            headers: CINEJOY_HEADERS,
+            signal: AbortSignal.timeout(8000),
+          });
+          if (res.ok) {
+            const bytes = await res.arrayBuffer();
+            return await WebAssembly.compile(bytes);
+          }
+        } catch (err) {
+          lastErr = err;
+        }
       }
-      const bytes = await res.arrayBuffer();
-      return WebAssembly.compile(bytes);
+      throw lastErr || new Error('Failed to fetch crush.wasm from all endpoints');
     })().catch((err) => {
       wasmModulePromise = null;
       throw err;
@@ -190,18 +199,31 @@ async function resolveViaLocalWasm(
   const ephemeralPublic = outBuf.subarray(33, 98);
   const body = outBuf.subarray(98, ret);
 
-  const gRes = await fetch(`${CINEJOY_SHEGU_API}/g`, {
-    method: 'POST',
-    body,
-    headers: {
-      ...CINEJOY_HEADERS,
-      'Content-Type': 'application/octet-stream',
-    },
-    signal: AbortSignal.timeout(6000),
-  });
+  let gRes: Response | null = null;
+  let lastStatus = 0;
+  for (const apiHost of CINEJOY_SHEGU_APIS) {
+    try {
+      const res = await fetch(`${apiHost}/g`, {
+        method: 'POST',
+        body,
+        headers: {
+          ...CINEJOY_HEADERS,
+          'Content-Type': 'application/octet-stream',
+        },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (res.ok) {
+        gRes = res;
+        break;
+      }
+      lastStatus = res.status;
+    } catch {
+      continue;
+    }
+  }
 
-  if (!gRes.ok) {
-    throw new Error(`shegu.st/g returned HTTP ${gRes.status}`);
+  if (!gRes || !gRes.ok) {
+    throw new Error(`Cinejoy /g returned HTTP ${lastStatus || 502}`);
   }
 
   const gBuf = Buffer.from(await gRes.arrayBuffer());
@@ -227,15 +249,28 @@ async function resolveViaLegacyEncDec(targetUrl: string): Promise<any> {
 
   const { data, state } = encJson.result;
 
-  const gRes = await fetch(`${CINEJOY_SHEGU_API}/g`, {
-    method: 'POST',
-    body: Buffer.from(data, 'base64url'),
-    headers: CINEJOY_HEADERS,
-    signal: AbortSignal.timeout(6000),
-  });
+  let gRes: Response | null = null;
+  let lastStatus = 0;
+  for (const apiHost of CINEJOY_SHEGU_APIS) {
+    try {
+      const res = await fetch(`${apiHost}/g`, {
+        method: 'POST',
+        body: Buffer.from(data, 'base64url'),
+        headers: CINEJOY_HEADERS,
+        signal: AbortSignal.timeout(6000),
+      });
+      if (res.ok) {
+        gRes = res;
+        break;
+      }
+      lastStatus = res.status;
+    } catch {
+      continue;
+    }
+  }
 
-  if (!gRes.ok) {
-    throw new Error(`shegu.st/g returned HTTP ${gRes.status}`);
+  if (!gRes || !gRes.ok) {
+    throw new Error(`Cinejoy /g returned HTTP ${lastStatus || 502}`);
   }
 
   const gBuffer = Buffer.from(await gRes.arrayBuffer());
@@ -322,19 +357,28 @@ export async function fetchCinejoySubtitles(
   episode?: number
 ): Promise<CinejoySubtitle[]> {
   try {
-    let url = `${CINEJOY_SUBTITLES_API}/subtitles?type=${type === 'tv' ? 'tv' : 'movie'}&tmdb=${tmdbId}`;
+    let queryPart = `?type=${type === 'tv' ? 'tv' : 'movie'}&tmdb=${tmdbId}`;
     if (type === 'tv' && season && episode) {
-      url += `&season=${season}&episode=${episode}`;
+      queryPart += `&season=${season}&episode=${episode}`;
     }
 
-    const res = await fetch(url, {
-      headers: CINEJOY_HEADERS,
-      signal: AbortSignal.timeout(4000),
-    });
+    let data: any = null;
+    for (const subApi of CINEJOY_SUBTITLES_APIS) {
+      try {
+        const res = await fetch(`${subApi}/subtitles${queryPart}`, {
+          headers: CINEJOY_HEADERS,
+          signal: AbortSignal.timeout(4000),
+        });
+        if (res.ok) {
+          data = await res.json();
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
 
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!Array.isArray(data?.subtitles)) return [];
+    if (!data || !Array.isArray(data?.subtitles)) return [];
 
     const subs: CinejoySubtitle[] = [];
     for (const s of data.subtitles) {
@@ -405,7 +449,7 @@ export async function resolveCinejoyStream(
       );
       const isTv = type === 'tv';
       const cType = isTv ? 'series' : 'movie';
-      let targetUrl = `${CINEJOY_SHEGU_API}/?title=${encodeURIComponent(title)}&type=${cType}&tmdb=${tmdbId}&server=${server}`;
+      let targetUrl = `${CINEJOY_SHEGU_APIS[0]}/?title=${encodeURIComponent(title)}&type=${cType}&tmdb=${tmdbId}&server=${server}`;
       if (year) {
         targetUrl += `&year=${year}`;
       }
@@ -612,40 +656,40 @@ export async function fetchCinejoyDirectDownloads(
     return cached;
   }
 
-  const endpoint = mediaType === 'movie'
-    ? `${CINEJOY_DOWNLOADS_API}/movie/${tmdbId}`
-    : `${CINEJOY_DOWNLOADS_API}/tv/${tmdbId}/${season || 1}/${episode || 1}`;
-
   try {
-    // Upstream API can be slow for TV episodes; use generous timeout + one retry on timeout
-    const FETCH_TIMEOUT_MS = 20_000;
-    let res: Response;
-    try {
-      res = await fetch(endpoint, {
-        headers: CINEJOY_HEADERS,
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      });
-    } catch (firstErr: any) {
-      // Retry once on timeout (TV endpoints are often slower)
-      if (firstErr?.name === 'TimeoutError' || firstErr?.code === 'UND_ERR_CONNECT_TIMEOUT') {
-        res = await fetch(endpoint, {
+    const FETCH_TIMEOUT_MS = 10_000;
+    let data: any = null;
+
+    for (const baseApi of CINEJOY_DOWNLOADS_APIS) {
+      const endpoint = mediaType === 'movie'
+        ? `${baseApi}/movie/${tmdbId}`
+        : `${baseApi}/tv/${tmdbId}/${season || 1}/${episode || 1}`;
+
+      try {
+        const res = await fetch(endpoint, {
           headers: CINEJOY_HEADERS,
           signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
-      } else {
-        throw firstErr;
+
+        if (res.ok) {
+          data = await res.json();
+          break;
+        }
+
+        if (res.status === 404) {
+          cinejoyDownloadsCache.set(cacheKey, [], NEGATIVE_CACHE_TTL_MS);
+          return [];
+        }
+      } catch {
+        continue;
       }
     }
 
-    if (!res.ok) {
-      if (res.status === 404 || res.status === 500) {
-        cinejoyDownloadsCache.set(cacheKey, [], NEGATIVE_CACHE_TTL_MS);
-        return [];
-      }
-      throw new Error(`Direct downloads request failed: HTTP ${res.status}`);
+    if (!data) {
+      cinejoyDownloadsCache.set(cacheKey, [], NEGATIVE_CACHE_TTL_MS);
+      return [];
     }
 
-    const data = await res.json();
     const rawLinks = Array.isArray(data?.links) ? data.links : [];
     if (rawLinks.length === 0) {
       cinejoyDownloadsCache.set(cacheKey, [], NEGATIVE_CACHE_TTL_MS);
@@ -699,7 +743,7 @@ export async function fetchCinejoyDirectDownloads(
       if (/\b(?:HEVC|H\.?265|X265)\b/i.test(combinedForTags) && !bracketTags.includes('HEVC') && !bracketTags.includes('X265')) extraTags.push('HEVC');
 
       const cleanTags = Array.from(new Set([...bracketTags, ...extraTags]))
-        .filter(tag => !/^(?:fsl|server|cinejoy|fast|direct)$/i.test(tag));
+        .filter(tag => !/^(?:fsl.*|server|cinejoy|fast|direct)$/i.test(tag));
 
       downloads.push({
         source,

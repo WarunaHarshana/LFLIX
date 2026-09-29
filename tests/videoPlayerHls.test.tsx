@@ -60,7 +60,7 @@ vi.mock('@/lib/mobileConfig', () => ({
   getServerUrl: () => 'http://192.168.1.11:3000',
 }));
 
-import VideoPlayer, { parseWebVTT } from '@/app/components/VideoPlayer';
+import VideoPlayer, { parseWebVTT, isStreamIncompatible } from '@/app/components/VideoPlayer';
 
 describe('VideoPlayer HLS prioritization', () => {
   beforeEach(() => {
@@ -319,5 +319,52 @@ Active Subtitle Text In Overlay`;
       global.fetch = originalFetch;
     }
   });
+
+  describe('isStreamIncompatible helper', () => {
+    it('detects incompatible containers (mkv, avi, wmv, flv, ts, m2ts)', () => {
+      expect(isStreamIncompatible('/api/stream?id=1', 'h264', 'aac', 'test.mkv')).toBe(true);
+      expect(isStreamIncompatible('/api/stream?id=1', 'h264', 'aac', 'test.avi')).toBe(true);
+      expect(isStreamIncompatible('/api/stream?id=1', 'h264', 'aac', 'test.ts')).toBe(true);
+      expect(isStreamIncompatible('/api/stream?id=1', 'h264', 'aac', 'test.mp4')).toBe(false);
+    });
+
+    it('detects incompatible video codecs (hevc, h265, x265, vc1, mpeg2)', () => {
+      expect(isStreamIncompatible('/api/stream?id=1', 'HEVC', 'aac', 'test.mp4')).toBe(true);
+      expect(isStreamIncompatible('/api/stream?id=1', 'h265', 'aac', 'test.mp4')).toBe(true);
+      expect(isStreamIncompatible('/api/stream?id=1', 'x265', 'aac', 'test.mp4')).toBe(true);
+      expect(isStreamIncompatible('/api/stream?id=1', 'h264', 'aac', 'test.mp4')).toBe(false);
+    });
+
+    it('detects incompatible audio codecs (ac3, eac3, dts, dtshd, truehd, flac)', () => {
+      expect(isStreamIncompatible('/api/stream?id=1', 'h264', 'eac3', 'test.mp4')).toBe(true);
+      expect(isStreamIncompatible('/api/stream?id=1', 'h264', 'ac3', 'test.mp4')).toBe(true);
+      expect(isStreamIncompatible('/api/stream?id=1', 'h264', 'dts', 'test.mp4')).toBe(true);
+      expect(isStreamIncompatible('/api/stream?id=1', 'h264', 'aac', 'test.mp4')).toBe(false);
+    });
+
+    it('does not flag HLS/transcode URLs as incompatible', () => {
+      expect(isStreamIncompatible('https://example.com/stream.m3u8', 'hevc', 'eac3', 'test.mkv')).toBe(false);
+      expect(isStreamIncompatible('/api/transcode?id=1', 'hevc', 'eac3', 'test.mkv')).toBe(false);
+    });
+  });
+
+  it('renders video element without native src on initial render for incompatible media, preventing decode error', () => {
+    const { container } = render(
+      <VideoPlayer
+        title="House of the Dragon"
+        src="/api/stream?contentType=show&contentId=49&episodeId=597"
+        fileName="House.of.the.Dragon.S03E02.2160p.10bit.HDR.DV.WEBRip.6CH.x265.HEVC-PSA.mkv"
+        videoCodec="HEVC"
+        audioCodec="AAC"
+        onClose={vi.fn()}
+      />
+    );
+
+    const video = container.querySelector('video');
+    expect(video).toBeTruthy();
+    // Native src must NOT be populated with direct /api/stream to prevent Chrome decode crash
+    expect(video?.getAttribute('src')).toBeNull();
+  });
 });
+
 

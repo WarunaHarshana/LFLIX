@@ -95,18 +95,18 @@ function buildHlsConfig(src: string, initialTime = 0): Record<string, unknown> {
       enableWorker: true,
       progressive: true,
       startPosition,
-      maxBufferLength: 30,
-      maxMaxBufferLength: 60,
+      maxBufferLength: 24,
+      maxMaxBufferLength: 48,
       maxBufferSize: 60 * 1000 * 1000,
       backBufferLength: 30,
-      startFragPrefetch: true,
+      startFragPrefetch: false,
       lowLatencyMode: false,
       xhrSetup: (xhr: XMLHttpRequest) => {
         xhr.withCredentials = true;
       },
       fragLoadPolicy: {
         default: {
-          maxTimeToFirstByteMs: 15_000,
+          maxTimeToFirstByteMs: 25_000,
           maxLoadTimeMs: 60_000,
           timeoutRetry: { maxNumRetry: 4, retryDelayMs: 0, maxRetryDelayMs: 0 },
           errorRetry: { maxNumRetry: 6, retryDelayMs: 500, maxRetryDelayMs: 3000 },
@@ -147,8 +147,58 @@ function buildHlsConfig(src: string, initialTime = 0): Record<string, unknown> {
   };
 }
 
-function isHlsSource(url: string): boolean {
-  return /\.m3u8(\?|$)/i.test(url) || /\/api\/transcode(\?|$)/i.test(url);
+export function isHlsSource(url: string): boolean {
+  return /\.m3u8(\?|$)/i.test(url) || /\/api\/transcode(\?|$)/i.test(url) || /\/api\/hls(\?|$)/i.test(url);
+}
+
+export function isStreamIncompatible(
+  src: string,
+  videoCodec?: string | null,
+  audioCodec?: string | null,
+  fileName?: string | null
+): boolean {
+  if (isHlsSource(src)) return false;
+
+  const norm = (s?: string | null) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const a = norm(audioCodec);
+  const v = norm(videoCodec);
+  const badAudio = ['ac3', 'eac3', 'ddp', 'dolby', 'dts', 'dtshd', 'truehd', 'mlp', 'flac', 'pcm', 'lpcm'];
+  const badVideo = ['hevc', 'h265', 'x265', 'hev1', 'hvc1', 'vc1', 'mpeg2', 'wmv', 'vp6'];
+
+  let ext = fileName ? fileName.split('.').pop()?.toLowerCase() : '';
+  if (!ext && src) {
+    try {
+      const u = new URL(src, 'http://localhost');
+      ext = u.pathname.split('.').pop()?.toLowerCase() || '';
+    } catch {}
+  }
+  const badContainers = ['mkv', 'avi', 'wmv', 'flv', 'ts', 'm2ts', 'divx', 'xvid', 'mpg', 'mpeg', 'vob'];
+  const isBadContainer = !!ext && badContainers.includes(ext);
+
+  return (
+    isBadContainer ||
+    (a !== '' && badAudio.some((c) => a.includes(c))) ||
+    (v !== '' && badVideo.some((c) => v.includes(c)))
+  );
+}
+
+export function buildApiUrlForSrc(src: string, base: string, extra?: Record<string, string>): string {
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const u = new URL(src, origin);
+    const params = new URLSearchParams();
+    for (const k of ['token', 'contentType', 'contentId', 'episodeId']) {
+      const v = u.searchParams.get(k);
+      if (v) params.set(k, v);
+    }
+    if (extra) {
+      for (const [k, v] of Object.entries(extra)) params.set(k, v);
+    }
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
+  } catch {
+    return '';
+  }
 }
 
 function formatTime(seconds: number): string {
@@ -310,6 +360,27 @@ export default function VideoPlayer({
     type: 'forward' | 'backward';
     key: number;
   } | null>(null);
+
+  // Floating HUD Notification State (Apple Design §12 & §16)
+  const [hudNotification, setHudNotification] = useState<{
+    id: number;
+    text: string;
+    icon: React.ReactNode;
+  } | null>(null);
+  const hudTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showHud = useCallback((text: string, icon: React.ReactNode) => {
+    if (hudTimeoutRef.current) clearTimeout(hudTimeoutRef.current);
+    setHudNotification({ id: Date.now(), text, icon });
+    hudTimeoutRef.current = setTimeout(() => {
+      setHudNotification(null);
+    }, 1400);
+  }, []);
+
+  // Hold-to-2× Playback Speed State & Gesture
+  const [isHoldingSpeed, setIsHoldingSpeed] = useState(false);
+  const speedHoldTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const previousSpeedRef = useRef<number>(1);
 
   // Tracks & settings
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -604,7 +675,12 @@ export default function VideoPlayer({
     }
   };
 
-  const [activeSrc, setActiveSrc] = useState(src);
+  const [activeSrc, setActiveSrc] = useState<string>(() => {
+    if (!isNative && isStreamIncompatible(src, videoCodec, audioCodec, fileName)) {
+      return buildApiUrlForSrc(src, '/api/transcode') || src;
+    }
+    return src;
+  });
   const [didFallback, setDidFallback] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const hlsRef = useRef<any>(null);
@@ -612,21 +688,7 @@ export default function VideoPlayer({
   // Helper to build parameterized API URLs forwarding stream tokens
   const buildApiUrl = useCallback(
     (base: string, extra?: Record<string, string>): string => {
-      try {
-        const u = new URL(src, window.location.origin);
-        const params = new URLSearchParams();
-        for (const k of ['token', 'contentType', 'contentId', 'episodeId']) {
-          const v = u.searchParams.get(k);
-          if (v) params.set(k, v);
-        }
-        if (extra) {
-          for (const [k, v] of Object.entries(extra)) params.set(k, v);
-        }
-        const qs = params.toString();
-        return qs ? `${base}?${qs}` : base;
-      } catch {
-        return '';
-      }
+      return buildApiUrlForSrc(src, base, extra);
     },
     [src]
   );
@@ -647,31 +709,16 @@ export default function VideoPlayer({
     scheduleHideControls();
   }, [scheduleHideControls]);
 
-  // Codec checks and initial transcode route resolution
+  // Codec checks and transcode route resolution when props update
   useEffect(() => {
     setDidFallback(false);
-    const norm = (s?: string | null) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const a = norm(audioCodec);
-    const v = norm(videoCodec);
-    const badAudio = ['ac3', 'eac3', 'dts', 'dtshd', 'truehd', 'mlp', 'flac', 'pcm'];
-    const badVideo = ['hevc', 'h265', 'vc1', 'mpeg2', 'wmv', 'vp6'];
-
-    const ext = fileName ? fileName.split('.').pop()?.toLowerCase() : '';
-    const badContainers = ['mkv', 'avi', 'wmv', 'flv', 'ts', 'divx', 'xvid', 'mpg', 'mpeg'];
-    const isBadContainer = badContainers.includes(ext || '');
-
-    const incompatible =
-      isBadContainer ||
-      (a !== '' && badAudio.some((c) => a.includes(c))) ||
-      (v !== '' && badVideo.some((c) => v.includes(c)));
-
-    if (!isNative && incompatible) {
-      const transcodeUrl = buildApiUrl('/api/transcode');
+    if (!isNative && isStreamIncompatible(src, videoCodec, audioCodec, fileName)) {
+      const transcodeUrl = buildApiUrlForSrc(src, '/api/transcode');
       setActiveSrc(transcodeUrl || src);
     } else {
       setActiveSrc(src);
     }
-  }, [src, isNative, audioCodec, videoCodec, fileName, buildApiUrl]);
+  }, [src, isNative, audioCodec, videoCodec, fileName]);
 
   // Attach HLS engine for HLS / transcode streams
   useEffect(() => {
@@ -753,6 +800,11 @@ export default function VideoPlayer({
             setActiveLevel(typeof data?.level === 'number' ? data.level : -1);
           });
 
+          if (videoRef.current) {
+            videoRef.current.pause();
+            videoRef.current.removeAttribute('src');
+            videoRef.current.load();
+          }
           hls.loadSource(activeSrc);
           hls.attachMedia(videoRef.current);
 
@@ -1200,6 +1252,12 @@ export default function VideoPlayer({
           setDidFallback(true);
           setError(null);
           setLoading(true);
+          try {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+          } catch {}
+          setReloadKey((k) => k + 1);
           setActiveSrc(transcodeUrl);
           return;
         }
@@ -1464,16 +1522,27 @@ export default function VideoPlayer({
           break;
         case 'ArrowUp':
           e.preventDefault();
-          setVolume(volume + 0.1);
+          const nextVolUp = Math.min(1, Math.round((volume + 0.05) * 100) / 100);
+          setVolume(nextVolUp);
+          showHud(`${Math.round(nextVolUp * 100)}%`, <Volume2 className="w-4 h-4 text-white" />);
           break;
         case 'ArrowDown':
           e.preventDefault();
-          setVolume(volume - 0.1);
+          const nextVolDown = Math.max(0, Math.round((volume - 0.05) * 100) / 100);
+          setVolume(nextVolDown);
+          showHud(
+            nextVolDown === 0 ? 'Muted' : `${Math.round(nextVolDown * 100)}%`,
+            nextVolDown === 0 ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume1 className="w-4 h-4 text-white" />
+          );
           break;
         case 'm':
         case 'M':
           e.preventDefault();
           toggleMute();
+          showHud(
+            isMuted ? 'Unmuted' : 'Muted',
+            isMuted ? <Volume2 className="w-4 h-4 text-white" /> : <VolumeX className="w-4 h-4 text-red-400" />
+          );
           break;
         case 'f':
         case 'F':
@@ -1489,12 +1558,43 @@ export default function VideoPlayer({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isNative, onClose, volume]);
+  }, [isNative, onClose, volume, isMuted, showHud]);
+
+  // Hold-to-2× Speed Pointer Handlers
+  const handlePointerDownCanvas = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('button, input, select, .controls-bar, .player-glass-popover')) return;
+
+    previousSpeedRef.current = videoRef.current?.playbackRate || playbackRate || 1;
+    speedHoldTimerRef.current = setTimeout(() => {
+      setIsHoldingSpeed(true);
+      if (videoRef.current) {
+        videoRef.current.playbackRate = 2;
+        showHud('2× Speed', <Gauge className="w-4 h-4 text-amber-400" />);
+      }
+    }, 350);
+  };
+
+  const handlePointerUpCanvas = () => {
+    if (speedHoldTimerRef.current) {
+      clearTimeout(speedHoldTimerRef.current);
+      speedHoldTimerRef.current = null;
+    }
+    if (isHoldingSpeed) {
+      setIsHoldingSpeed(false);
+      if (videoRef.current) {
+        videoRef.current.playbackRate = previousSpeedRef.current;
+        showHud(`${previousSpeedRef.current}× Speed`, <Gauge className="w-4 h-4 text-white" />);
+      }
+    }
+  };
 
   // Touch screen tap / double-tap handling on the video area
   const handleVideoAreaTouchOrClick = (e: React.MouseEvent | React.TouchEvent) => {
+    // If hold-to-2x gesture just finished, suppress click
+    if (isHoldingSpeed) return;
     // Don't trigger if interacting with controls overlay directly
-    if ((e.target as HTMLElement).closest('button, input, select, .controls-bar')) return;
+    if ((e.target as HTMLElement).closest('button, input, select, .controls-bar, .player-glass-popover')) return;
 
     const now = Date.now();
     const timeDiff = now - lastTapTimeRef.current;
@@ -1639,11 +1739,15 @@ export default function VideoPlayer({
 
       {/* ──────────────── Video Element (Full Bleed) ──────────────── */}
       <div
-        className="absolute inset-0 w-full h-full flex items-center justify-center cursor-pointer"
+        className="absolute inset-0 w-full h-full flex items-center justify-center cursor-pointer select-none"
         onClick={handleVideoAreaTouchOrClick}
         onTouchEnd={handleVideoAreaTouchOrClick}
+        onPointerDown={handlePointerDownCanvas}
+        onPointerUp={handlePointerUpCanvas}
+        onPointerLeave={handlePointerUpCanvas}
       >
         <video
+          key={reloadKey}
           ref={videoRef}
           crossOrigin="anonymous"
           src={isHlsSource(activeSrc) ? undefined : activeSrc}
@@ -1700,6 +1804,16 @@ export default function VideoPlayer({
         </div>
       )}
 
+      {/* ──────────────── Apple-Style Floating Top HUD Notification ──────────────── */}
+      {hudNotification && (
+        <div className="absolute top-8 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 player-hud-pill px-4 py-2 rounded-full pointer-events-none animate-fadeIn select-none shadow-2xl">
+          {hudNotification.icon}
+          <span className="text-white text-xs font-semibold tracking-wider uppercase font-mono">
+            {hudNotification.text}
+          </span>
+        </div>
+      )}
+
       {/* ──────────────── Double Tap Ripple Feedback ──────────────── */}
       {doubleTapFeedback && (
         <div
@@ -1746,7 +1860,7 @@ export default function VideoPlayer({
                   setError(null);
                   setLoading(true);
                   setDidFallback(true);
-                  const t = buildApiUrl('/api/transcode');
+                  const t = buildApiUrl('/api/transcode', { _t: Date.now().toString() });
                   if (t) setActiveSrc(t);
                   setReloadKey((k) => k + 1);
                 }}
@@ -1940,35 +2054,40 @@ export default function VideoPlayer({
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerLeave={() => setHoverPosition(null)}
-            className="relative w-full py-3 cursor-pointer select-none group touch-none"
+            className="group/progress relative w-full h-8 flex items-center cursor-pointer select-none touch-none py-2"
+            role="slider"
+            aria-label="Seek time"
+            aria-valuemin={0}
+            aria-valuemax={duration || 100}
+            aria-valuenow={currentTime}
           >
-            {/* Hover Tooltip */}
+            {/* Hover Tooltip - Floating Frosted Pill */}
             {hoverPosition && duration > 0 && (
               <div
-                className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 bg-neutral-900/90 text-white text-[11px] font-mono rounded shadow border border-white/15 pointer-events-none"
+                className="absolute -top-9 -translate-x-1/2 player-hud-pill px-3 py-1 rounded-full text-xs text-white pointer-events-none whitespace-nowrap shadow-xl font-mono font-medium tracking-wide z-40 transition-transform duration-75"
                 style={{ left: `${hoverPosition.x}px` }}
               >
                 {formatTime(hoverPosition.time)}
               </div>
             )}
 
-            {/* Track Background */}
-            <div className="w-full h-1.5 group-hover:h-2.5 bg-white/25 rounded-full overflow-hidden relative transition-all">
+            {/* Background Track with Dynamic Height Transition */}
+            <div className="relative w-full h-1 group-hover/progress:h-2 transition-[height] duration-150 rounded-full bg-white/20 overflow-hidden">
               {/* Buffer Bar */}
               <div
-                className="absolute top-0 bottom-0 left-0 bg-white/40 transition-all duration-200"
+                className="absolute top-0 bottom-0 left-0 bg-white/35 rounded-full transition-[width] duration-200"
                 style={{ width: `${bufferPercent}%` }}
               />
               {/* Progress Bar */}
               <div
-                className="absolute top-0 bottom-0 left-0 bg-red-600"
+                className="absolute top-0 bottom-0 left-0 bg-red-600 rounded-full"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
 
             {/* Thumb Knob */}
             <div
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 group-hover:w-4.5 group-hover:h-4.5 bg-red-500 border border-white rounded-full shadow-lg transition-transform pointer-events-none"
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-red-500 border-2 border-white rounded-full shadow-lg scale-0 group-hover/progress:scale-100 transition-transform duration-150 ease-out pointer-events-none z-30"
               style={{ left: `${progressPercent}%` }}
             />
           </div>
@@ -1980,17 +2099,17 @@ export default function VideoPlayer({
               <button
                 onClick={togglePlayPause}
                 aria-label={isPlaying ? 'Pause' : 'Play'}
-                className="p-1.5 hover:bg-white/15 rounded-lg transition"
+                className="p-1.5 hover:bg-white/15 active:scale-95 rounded-lg transition-transform duration-100"
               >
                 {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
               </button>
 
-              {/* Volume / Mute (desktop slider + mobile tap) */}
-              <div className="flex items-center gap-1.5 group/vol">
+              {/* Hover-Expanding Volume Control */}
+              <div className="flex items-center group/vol relative">
                 <button
                   onClick={toggleMute}
                   aria-label={isMuted ? 'Unmute' : 'Mute'}
-                  className="p-1.5 hover:bg-white/15 rounded-lg transition"
+                  className="p-1.5 hover:bg-white/15 active:scale-95 rounded-lg transition-transform duration-100"
                 >
                   {isMuted || volume === 0 ? (
                     <VolumeX className="w-5 h-5 text-red-400" />
@@ -2000,16 +2119,22 @@ export default function VideoPlayer({
                     <Volume2 className="w-5 h-5" />
                   )}
                 </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={isMuted ? 0 : volume}
-                  onChange={(e) => setVolume(parseFloat(e.target.value))}
-                  className="hidden sm:inline-block w-16 md:w-20 accent-red-600 h-1 cursor-pointer bg-white/20 rounded-lg"
-                  aria-label="Volume slider"
-                />
+                <div className="w-0 group-hover/vol:w-20 sm:group-hover/vol:w-24 overflow-hidden transition-all duration-200 ease-out flex items-center h-8 -ml-1 pl-1">
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={isMuted ? 0 : volume}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setVolume(val);
+                      showHud(`${Math.round(val * 100)}%`, <Volume2 className="w-4 h-4 text-white" />);
+                    }}
+                    className="w-16 sm:w-20 accent-red-600 h-1 cursor-pointer bg-white/25 rounded-lg"
+                    aria-label="Volume slider"
+                  />
+                </div>
               </div>
 
               {/* Time Display */}
@@ -2027,10 +2152,20 @@ export default function VideoPlayer({
                   setShowSettingsModal(true);
                   setActiveSettingsTab('speed');
                 }}
-                className="px-2 py-1 hover:bg-white/15 rounded-lg text-xs font-semibold text-neutral-300 transition"
+                className="px-2 py-1 hover:bg-white/15 active:scale-95 rounded-lg text-xs font-semibold text-neutral-300 transition-all duration-100"
                 title="Playback Speed"
               >
                 {playbackRate === 1 ? '1x' : `${playbackRate}x`}
+              </button>
+
+              {/* Settings Button */}
+              <button
+                onClick={() => setShowSettingsModal((prev) => !prev)}
+                aria-label="Playback Settings"
+                className="p-1.5 hover:bg-white/15 active:scale-95 rounded-lg transition-all duration-100 text-neutral-300 hover:text-white"
+                title="Playback Settings"
+              >
+                <Settings2 className="w-5 h-5" />
               </button>
 
               {/* Picture in Picture */}
@@ -2038,7 +2173,7 @@ export default function VideoPlayer({
                 <button
                   onClick={togglePiP}
                   aria-label="Picture in Picture"
-                  className="p-1.5 hover:bg-white/15 rounded-lg transition"
+                  className="p-1.5 hover:bg-white/15 active:scale-95 rounded-lg transition-all duration-100"
                   title="Picture in Picture"
                 >
                   <PictureInPicture2 className="w-5 h-5" />
@@ -2049,7 +2184,7 @@ export default function VideoPlayer({
               <button
                 onClick={toggleFullscreen}
                 aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                className="p-1.5 hover:bg-white/15 rounded-lg transition"
+                className="p-1.5 hover:bg-white/15 active:scale-95 rounded-lg transition-all duration-100"
                 title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
               >
                 {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
@@ -2059,29 +2194,38 @@ export default function VideoPlayer({
         </div>
       </div>
 
-      {/* ──────────────── Responsive Mobile / Desktop Settings Modal ──────────────── */}
+      {/* ──────────────── Responsive Floating Contextual Settings Popover ──────────────── */}
       {showSettingsModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
-          onClick={() => setShowSettingsModal(false)}
-        >
+        <>
+          {/* Subtle click-outside backdrop */}
           <div
-            className="w-full max-w-md liquid-glass-menu rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] transition-opacity"
+            onClick={() => setShowSettingsModal(false)}
+          />
+
+          {/* Contextual Popover Container anchored above bottom toolbar */}
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Playback Settings"
+            className="absolute bottom-20 right-3 sm:right-6 w-[calc(100%-1.5rem)] sm:w-96 max-w-sm player-glass-popover z-50 overflow-hidden flex flex-col max-h-[75vh] animate-fadeIn shadow-2xl"
             onClick={(e) => e.stopPropagation()}
+            style={{
+              transition: 'height 0.28s var(--player-spring)',
+            }}
           >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/[0.02]">
+            {/* Popover Header */}
+            <div className="flex items-center justify-between p-3.5 border-b border-white/10 bg-white/[0.03]">
               <div className="flex items-center gap-2">
-                <Settings2 className="w-5 h-5 text-red-500" />
-                <h3 className="font-semibold text-white text-base">Playback Settings</h3>
+                <Settings2 className="w-4 h-4 text-red-500" />
+                <h3 className="font-semibold text-white text-sm">Playback Settings</h3>
               </div>
               <button
                 onClick={() => setShowSettingsModal(false)}
-                className="p-1.5 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition cursor-pointer"
+                aria-label="Close settings"
+                className="p-1.5 hover:bg-white/10 active:scale-95 rounded-full text-neutral-400 hover:text-white transition cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -2089,7 +2233,7 @@ export default function VideoPlayer({
             <div className="flex border-b border-white/10 bg-white/[0.02] overflow-x-auto no-scrollbar">
               <button
                 onClick={() => setActiveSettingsTab('audio')}
-                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 min-w-[65px] py-2 px-2.5 text-xs sm:text-sm font-medium border-b-2 transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeSettingsTab === 'audio'
                     ? 'border-red-500 text-white font-bold bg-white/[0.08]'
                     : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]'
@@ -2100,7 +2244,7 @@ export default function VideoPlayer({
               </button>
               <button
                 onClick={() => setActiveSettingsTab('subtitles')}
-                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 min-w-[65px] py-2 px-2.5 text-xs sm:text-sm font-medium border-b-2 transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeSettingsTab === 'subtitles'
                     ? 'border-red-500 text-white font-bold bg-white/[0.08]'
                     : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]'
@@ -2112,7 +2256,7 @@ export default function VideoPlayer({
               {qualityLevels.length > 1 && (
                 <button
                   onClick={() => setActiveSettingsTab('quality')}
-                  className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`flex-1 min-w-[65px] py-2 px-2.5 text-xs sm:text-sm font-medium border-b-2 transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
                     activeSettingsTab === 'quality'
                       ? 'border-red-500 text-white font-bold bg-white/[0.08]'
                       : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]'
@@ -2124,7 +2268,7 @@ export default function VideoPlayer({
               )}
               <button
                 onClick={() => setActiveSettingsTab('speed')}
-                className={`flex-1 min-w-[70px] py-2.5 px-3 text-xs sm:text-sm font-medium border-b-2 transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 min-w-[65px] py-2 px-2.5 text-xs sm:text-sm font-medium border-b-2 transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeSettingsTab === 'speed'
                     ? 'border-red-500 text-white font-bold bg-white/[0.08]'
                     : 'border-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]'
@@ -2136,7 +2280,7 @@ export default function VideoPlayer({
             </div>
 
             {/* Tab Contents */}
-            <div className="p-4 overflow-y-auto max-h-[50vh]">
+            <div className="p-3.5 overflow-y-auto max-h-[50vh] scrollbar-thin">
               {/* Audio Tab */}
               {activeSettingsTab === 'audio' && (
                 <div className="space-y-1">
@@ -2411,7 +2555,7 @@ export default function VideoPlayer({
               )}
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* ──────────────── External Mobile / Desktop Player Modal ──────────────── */}

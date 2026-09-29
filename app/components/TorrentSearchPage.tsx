@@ -275,6 +275,9 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
 
     const sourceBadge = (result: TorrentResult): { label: string; className: string } => {
         const source = result.source.toUpperCase();
+        if (source.includes('CINEJOY') || source === 'LFLIX') {
+            return { label: 'LFLIX Direct', className: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' };
+        }
         if (source === 'DDL') {
             return { label: '⬇ DDL', className: 'bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold' };
         }

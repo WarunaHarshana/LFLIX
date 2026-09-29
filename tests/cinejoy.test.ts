@@ -16,6 +16,9 @@ describe('Cinejoy Host Validation', () => {
     expect(isAllowedCinejoyHost('subtitles.shegu.st')).toBe(true);
     expect(isAllowedCinejoyHost('subs5.strem.io')).toBe(true);
     expect(isAllowedCinejoyHost('cinejoy.to')).toBe(true);
+    expect(isAllowedCinejoyHost('api.wing.st')).toBe(true);
+    expect(isAllowedCinejoyHost('downloads.wing.st')).toBe(true);
+    expect(isAllowedCinejoyHost('cinejoy.pk')).toBe(true);
   });
 
   it('rejects unapproved external hosts', () => {

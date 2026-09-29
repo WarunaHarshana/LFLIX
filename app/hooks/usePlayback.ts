@@ -173,7 +173,7 @@ export function usePlayback(
         isHDR = !!movie?.isHDR;
         audioCodec = movie?.audioCodec;
         videoCodec = movie?.videoCodec;
-        fileName = movie?.filePath ? movie.filePath.split(/[/\\]/).pop() : null;
+        fileName = (movie as any)?.fileName || (movie?.filePath ? movie.filePath.split(/[/\\]/).pop() : null);
       } else {
         const show = library.find(s => s.id === contentId);
         title = show?.title || 'TV Show';
@@ -192,7 +192,7 @@ export function usePlayback(
                 isHDR = !!foundEp.isHDR;
                 audioCodec = foundEp.audioCodec;
                 videoCodec = foundEp.videoCodec;
-                fileName = foundEp.filePath ? foundEp.filePath.split(/[/\\]/).pop() : null;
+                fileName = foundEp.fileName || (foundEp.filePath ? foundEp.filePath.split(/[/\\]/).pop() : null);
               }
             }
           } catch (e) {
