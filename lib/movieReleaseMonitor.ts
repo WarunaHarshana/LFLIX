@@ -341,7 +341,7 @@ class MovieReleaseMonitor {
         message: `${movie.title}${movie.year ? ` (${movie.year})` : ''} is available to download${qualityInfo}${sourceInfo}`,
         tmdbId: movie.tmdbId,
         posterPath: movie.posterPath,
-        actionUrl: `/watchlist`,
+        actionUrl: `/?tab=watchlist`,
       });
 
       db.prepare(

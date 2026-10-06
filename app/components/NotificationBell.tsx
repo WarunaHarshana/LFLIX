@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, Check, CheckCheck, Trash2, X, Download, Tv, Film, AlertCircle } from 'lucide-react';
 import { useNotifications, Notification } from '../hooks/useNotifications';
+import { useAppStore } from '../store/useAppStore';
 import { triggerHaptic } from '@/lib/haptics';
 
 function timeAgo(dateStr: string): string {
@@ -74,13 +75,32 @@ function NotificationItem({
     ? `https://image.tmdb.org/t/p/w92${notification.posterPath}`
     : null;
 
+  const setActiveTab = useAppStore((state) => state.setActiveTab);
+
   const handleClick = () => {
     triggerHaptic('light');
     if (!notification.read) {
       onMarkRead(notification.id);
     }
-    if (notification.actionUrl) {
-      router.push(notification.actionUrl);
+
+    let targetUrl = notification.actionUrl;
+    if (!targetUrl) {
+      if (notification.type === 'movie_available') {
+        targetUrl = '/?tab=watchlist';
+      } else if (notification.showId) {
+        targetUrl = `/?title=tv:${notification.showId}`;
+      } else if (notification.tmdbId) {
+        targetUrl = `/?title=tv:${notification.tmdbId}`;
+      }
+    }
+
+    if (targetUrl) {
+      if (targetUrl === '/watchlist' || targetUrl.includes('tab=watchlist')) {
+        setActiveTab('watchlist');
+        router.push('/?tab=watchlist');
+      } else {
+        router.push(targetUrl);
+      }
       onClose();
     }
   };
