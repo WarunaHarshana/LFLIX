@@ -94,12 +94,12 @@ linear-downscaling=yes
 sigmoid-upscaling=yes
 dither-depth=auto
 
-# === HDR to SDR Tone Mapping & Vivid Colors ===
-target-prim=bt.709
-target-trc=srgb
-tone-mapping=spline
+# === Color Reproduction & HDR Tone Mapping ===
+target-prim=auto
+target-trc=auto
+tone-mapping=auto
 gamut-mapping-mode=auto
-hdr-compute-peak=no
+hdr-compute-peak=yes
 
 # === Playback & Synchronization ===
 save-position-on-quit=yes
@@ -160,7 +160,7 @@ hwdec=no
 scale=bilinear
 cscale=bilinear
 dscale=mitchell
-hdr-compute-peak=no
+hdr-compute-peak=yes
 `;
 
 function main() {
