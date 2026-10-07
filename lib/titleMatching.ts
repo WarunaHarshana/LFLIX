@@ -300,13 +300,142 @@ export function matchesTvTitleStrictly(title: string, query: string): boolean {
 }
 
 /**
+ * Parse structured season and episode information from a TV release title.
+ */
+export interface ParsedTvTitleInfo {
+  season?: number;
+  episode?: number;
+  isSeasonPack?: boolean;
+  isSeriesPack?: boolean;
+  seasonRange?: [number, number];
+}
+
+export function parseTvTitleInfo(title: string): ParsedTvTitleInfo {
+  if (!title) return {};
+
+  // 1. Check for multi-season / complete series packs
+  // e.g. S01-S06, S1-S6, Seasons 1-6, Seasons 1 to 8, Season 1-8
+  const multiSeasonMatch = title.match(/\b(?:s(\d{1,2})[\s._-]*[-~]s?(\d{1,2})|seasons?[\s._-]*(\d{1,2})[\s._-]*(?:to|-|through)[\s._-]*(\d{1,2}))\b/i);
+  if (multiSeasonMatch) {
+    const sStart = parseInt(multiSeasonMatch[1] || multiSeasonMatch[3], 10);
+    const sEnd = parseInt(multiSeasonMatch[2] || multiSeasonMatch[4], 10);
+    return {
+      isSeriesPack: true,
+      seasonRange: [Math.min(sStart, sEnd), Math.max(sStart, sEnd)],
+    };
+  }
+
+  if (/\b(?:complete[\s._-]*(?:series|collection)|all[\s._-]*seasons)\b/i.test(title)) {
+    return { isSeriesPack: true };
+  }
+
+  // 2. Check for Season + Episode: S01E02, S1E2, 1x02, etc.
+  const sxxexx = title.match(/\bs(\d{1,2})[\s._-]*[ex](\d{1,3})\b/i) ||
+                 title.match(/\b(\d{1,2})x(\d{1,3})\b/i);
+  if (sxxexx) {
+    return {
+      season: parseInt(sxxexx[1], 10),
+      episode: parseInt(sxxexx[2], 10),
+      isSeasonPack: false,
+    };
+  }
+
+  // Check for "Season X ... Episode Y"
+  const sMatch = title.match(/\b(?:s|season)[\s._-]*(\d{1,2})\b/i);
+  const epMatch = title.match(/\b(?:ep|episode)[\s._-]*(\d{1,3})\b/i);
+
+  if (sMatch && epMatch) {
+    return {
+      season: parseInt(sMatch[1], 10),
+      episode: parseInt(epMatch[1], 10),
+      isSeasonPack: false,
+    };
+  }
+
+  // 3. Season-only / Season Pack (S01, Season 1, etc.)
+  if (sMatch) {
+    return {
+      season: parseInt(sMatch[1], 10),
+      isSeasonPack: true,
+    };
+  }
+
+  // 4. Episode-only (no season)
+  if (epMatch) {
+    return {
+      episode: parseInt(epMatch[1], 10),
+      isSeasonPack: false,
+    };
+  }
+
+  return {};
+}
+
+/**
+ * Check whether a title matches the given season & episode filter.
+ */
+export function matchesTvSeasonEpisode(
+  title: string,
+  filter: { season?: number | 'all'; episode?: number | 'all' }
+): boolean {
+  const { season, episode } = filter;
+  const filterSeason = season !== undefined && season !== 'all' ? Number(season) : null;
+  const filterEpisode = episode !== undefined && episode !== 'all' ? Number(episode) : null;
+
+  // No filter applied -> matches all
+  if (filterSeason === null && filterEpisode === null) {
+    return true;
+  }
+
+  const info = parseTvTitleInfo(title);
+
+  // If complete series pack with no specific season range
+  if (info.isSeriesPack && !info.seasonRange) {
+    return true;
+  }
+
+  // If multi-season pack with season range, check if requested season is within range
+  if (info.isSeriesPack && info.seasonRange) {
+    if (filterSeason !== null) {
+      return filterSeason >= info.seasonRange[0] && filterSeason <= info.seasonRange[1];
+    }
+    return true;
+  }
+
+  // If filtering by season:
+  if (filterSeason !== null) {
+    if (info.season === undefined) {
+      return false;
+    }
+    if (info.season !== filterSeason) {
+      return false;
+    }
+  }
+
+  // If filtering by episode:
+  if (filterEpisode !== null) {
+    // If exact episode, it must match
+    if (info.episode !== undefined) {
+      return info.episode === filterEpisode;
+    }
+    // If it's a season pack for the matching season, include it (packs contain all episodes)
+    if (info.isSeasonPack) {
+      return true;
+    }
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Filter and sort results by relevance, strict title matching, and release year.
  */
 export function filterByRelevance<T extends CandidateRelease>(
   results: T[],
   query: string,
   minScore: number = 30,
-  options?: { year?: string; type?: 'movie' | 'tv' }
+  options?: { year?: string; type?: 'movie' | 'tv'; season?: number; episode?: number }
 ): T[] {
   const targetYear = options?.year ? parseInt(options.year, 10) : NaN;
   const useYearFilter = (options?.type === 'movie' || options?.type === 'tv') && Number.isFinite(targetYear);
@@ -314,6 +443,11 @@ export function filterByRelevance<T extends CandidateRelease>(
   return results
     .filter(r => options?.type !== 'movie' || matchesMovieTitleStrictly(r.title, query))
     .filter(r => options?.type !== 'tv' || matchesTvTitleStrictly(r.title, query))
+    .filter(r => {
+      if (options?.type !== 'tv') return true;
+      if (options?.season === undefined && options?.episode === undefined) return true;
+      return matchesTvSeasonEpisode(r.title, { season: options.season, episode: options.episode });
+    })
     .map(r => {
       const baseScore = relevanceScore(r.title, query);
       if (!useYearFilter) {
@@ -343,6 +477,15 @@ export function filterByRelevance<T extends CandidateRelease>(
     .filter(r => !(useYearFilter && (r as any)._hasConflictingYear))
     .filter(r => (r as any)._score >= minScore)
     .sort((a, b) => {
+      // Prioritize exact episode hits when an episode is requested
+      if (options?.type === 'tv' && options.episode !== undefined) {
+        const aInfo = parseTvTitleInfo(a.title);
+        const bInfo = parseTvTitleInfo(b.title);
+        const aExactEp = aInfo.episode === options.episode;
+        const bExactEp = bInfo.episode === options.episode;
+        if (aExactEp !== bExactEp) return aExactEp ? -1 : 1;
+      }
+
       const aExact = (a as any)._hasExactYear;
       const bExact = (b as any)._hasExactYear;
       if (aExact !== bExact) return aExact ? -1 : 1;
@@ -393,6 +536,13 @@ export function isDirectDownloadMatch(
   }
 
   // TV show validation
+  if (options?.season && !options?.episode) {
+    const itemInfo = parseTvTitleInfo(rawName);
+    if (itemInfo.season != null && itemInfo.season !== options.season) {
+      return false;
+    }
+  }
+
   const episodeQuery = options?.season && options?.episode
     ? { season: options.season, episode: options.episode }
     : extractEpisodeQuery(queryTitle);

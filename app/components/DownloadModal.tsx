@@ -1,11 +1,11 @@
 'use client';
 
 import type React from 'react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Search, Download, Loader2, Star, ArrowDown, ArrowRight, Link2, Film, Tv, AlertTriangle, Magnet, Folder, ArrowUpDown, Zap, Copy, Check, ExternalLink, Cloud, CloudUpload } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import LiquidDropdown from './LiquidDropdown';
-import { isDirectDownloadMatch } from '@/lib/titleMatching';
+import { isDirectDownloadMatch, parseTvTitleInfo, matchesTvSeasonEpisode } from '@/lib/titleMatching';
 
 type SortMode = 'seeds' | 'size_asc' | 'size_desc';
 
@@ -49,6 +49,7 @@ type Props = {
     tmdbId?: number;
     season?: number;
     episode?: number;
+    availableSeasons?: { seasonNumber: number; name?: string; episodeCount?: number }[];
     onClose: () => void;
     onDownloadStarted?: () => void;
 };
@@ -125,7 +126,7 @@ function extractTags(title: string): { label: string; className: string }[] {
     return tags;
 }
 
-export default function DownloadModal({ isOpen, title, year, mediaType, posterPath, watchlistId, tmdbId, season, episode, onClose, onDownloadStarted }: Props) {
+export default function DownloadModal({ isOpen, title, year, mediaType, posterPath, watchlistId, tmdbId, season, episode, availableSeasons, onClose, onDownloadStarted }: Props) {
     const modalRef = useModalBehavior(isOpen, onClose, { trapFocus: true });
 
     const [results, setResults] = useState<TorrentResult[]>([]);
@@ -148,27 +149,166 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     const [cloudMode, setCloudMode] = useState(false);
     const [cloudAvailable, setCloudAvailable] = useState(false);
 
+    // TV Season & Episode filter state
+    const [selectedSeason, setSelectedSeason] = useState<number | 'all'>(season ?? 'all');
+    const [selectedEpisode, setSelectedEpisode] = useState<number | 'all'>(episode ?? 'all');
+    const [seasonsData, setSeasonsData] = useState<{ seasonNumber: number; name?: string; episodeCount?: number }[]>(availableSeasons || []);
+    const searchedTargets = useRef<Set<string>>(new Set());
+
+    useEffect(() => {
+        if (isOpen) {
+            setSelectedSeason(season ?? 'all');
+            setSelectedEpisode(episode ?? 'all');
+            if (availableSeasons && availableSeasons.length > 0) {
+                setSeasonsData(availableSeasons);
+            }
+        }
+    }, [isOpen, season, episode, availableSeasons]);
+
+    // Fetch TMDB seasons if TV show and not provided
+    useEffect(() => {
+        if (!isOpen || mediaType !== 'tv' || seasonsData.length > 0 || !tmdbId) return;
+        let cancelled = false;
+        fetch(`/api/tmdb-details?id=${tmdbId}&type=tv`)
+            .then(res => res.json())
+            .then(data => {
+                if (!cancelled && Array.isArray(data?.seasons)) {
+                    const validSeasons = data.seasons
+                        .filter((s: any) => s.seasonNumber > 0)
+                        .map((s: any) => ({
+                            seasonNumber: s.seasonNumber,
+                            name: s.name,
+                            episodeCount: s.episodeCount,
+                        }));
+                    if (validSeasons.length > 0) {
+                        setSeasonsData(validSeasons);
+                    }
+                }
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [isOpen, mediaType, tmdbId, seasonsData.length]);
+
+    // Overall season list (merging props/TMDB + parsed release titles)
+    const allSeasons = useMemo(() => {
+        const map = new Map<number, { seasonNumber: number; name: string; episodeCount?: number }>();
+        for (const s of seasonsData) {
+            if (s.seasonNumber > 0) {
+                map.set(s.seasonNumber, {
+                    seasonNumber: s.seasonNumber,
+                    name: s.name || `Season ${s.seasonNumber}`,
+                    episodeCount: s.episodeCount,
+                });
+            }
+        }
+        for (const r of results) {
+            const info = parseTvTitleInfo(r.title);
+            if (info.season && info.season > 0 && !map.has(info.season)) {
+                map.set(info.season, {
+                    seasonNumber: info.season,
+                    name: `Season ${info.season}`,
+                });
+            }
+        }
+        for (const d of directDownloads) {
+            const info = parseTvTitleInfo(d.name);
+            if (info.season && info.season > 0 && !map.has(info.season)) {
+                map.set(info.season, {
+                    seasonNumber: info.season,
+                    name: `Season ${info.season}`,
+                });
+            }
+        }
+        return Array.from(map.values()).sort((a, b) => a.seasonNumber - b.seasonNumber);
+    }, [seasonsData, results, directDownloads]);
+
+    const currentSeasonInfo = useMemo(() => {
+        if (selectedSeason === 'all') return null;
+        return allSeasons.find((s) => s.seasonNumber === Number(selectedSeason));
+    }, [allSeasons, selectedSeason]);
+
+    const episodeOptions = useMemo(() => {
+        if (selectedSeason === 'all') return [];
+        const count = currentSeasonInfo?.episodeCount || 0;
+        const epSet = new Set<number>();
+        if (count > 0) {
+            for (let i = 1; i <= count; i++) epSet.add(i);
+        }
+        for (const r of results) {
+            const info = parseTvTitleInfo(r.title);
+            if (info.season === Number(selectedSeason) && info.episode && info.episode > 0) {
+                epSet.add(info.episode);
+            }
+        }
+        for (const d of directDownloads) {
+            const info = parseTvTitleInfo(d.name);
+            if (info.season === Number(selectedSeason) && info.episode && info.episode > 0) {
+                epSet.add(info.episode);
+            }
+        }
+        return Array.from(epSet).sort((a, b) => a - b);
+    }, [selectedSeason, currentSeasonInfo, results, directDownloads]);
+
+    const seasonsToDisplay = useMemo(() => {
+        if (allSeasons.length > 0) return allSeasons;
+        if (selectedSeason !== 'all') {
+            return [{ seasonNumber: Number(selectedSeason), name: `Season ${selectedSeason}` }];
+        }
+        return [{ seasonNumber: 1, name: 'Season 1' }];
+    }, [allSeasons, selectedSeason]);
+
     const pureTorrentResults = useMemo(() => {
         return results.filter((r) => !isDDL(r));
     }, [results]);
 
+    const filteredTorrentResults = useMemo(() => {
+        if (mediaType !== 'tv') return pureTorrentResults;
+        if (selectedSeason === 'all' && selectedEpisode === 'all') return pureTorrentResults;
+        return pureTorrentResults.filter((r) =>
+            matchesTvSeasonEpisode(r.title, { season: selectedSeason, episode: selectedEpisode })
+        );
+    }, [pureTorrentResults, mediaType, selectedSeason, selectedEpisode]);
+
     const sortedResults = useMemo(() => {
-        const sorted = [...pureTorrentResults];
+        const sorted = [...filteredTorrentResults];
+        // If a specific episode is selected, prioritize exact episode matches before packs
+        if (mediaType === 'tv' && selectedEpisode !== 'all') {
+            const targetEp = Number(selectedEpisode);
+            sorted.sort((a, b) => {
+                const aInfo = parseTvTitleInfo(a.title);
+                const bInfo = parseTvTitleInfo(b.title);
+                const aIsExact = aInfo.episode === targetEp;
+                const bIsExact = bInfo.episode === targetEp;
+                if (aIsExact !== bIsExact) return aIsExact ? -1 : 1;
+                return 0;
+            });
+        }
         switch (sortBy) {
             case 'size_asc': return sorted.sort((a, b) => a.sizeBytes - b.sizeBytes);
             case 'size_desc': return sorted.sort((a, b) => b.sizeBytes - a.sizeBytes);
             default: return sorted.sort((a, b) => b.seeds - a.seeds);
         }
-    }, [pureTorrentResults, sortBy]);
+    }, [filteredTorrentResults, sortBy, mediaType, selectedEpisode]);
 
     const filteredDirectDownloads = useMemo(() => {
         return directDownloads.filter((d) => {
+            if (mediaType === 'tv') {
+                const s = selectedSeason !== 'all' ? Number(selectedSeason) : undefined;
+                const ep = selectedEpisode !== 'all' ? Number(selectedEpisode) : undefined;
+                if (!matchesTvSeasonEpisode(d.name, { season: selectedSeason, episode: selectedEpisode })) {
+                    return false;
+                }
+                if (d.provider !== 'ddl' && (/cinejoy/i.test(d.source || '') || /cinejoy/i.test(d.provider || ''))) {
+                    return true;
+                }
+                return isDirectDownloadMatch(d, title, { year, mediaType, season: s, episode: ep });
+            }
             if (d.provider !== 'ddl' && (/cinejoy/i.test(d.source || '') || /cinejoy/i.test(d.provider || ''))) {
                 return true;
             }
             return isDirectDownloadMatch(d, title, { year, mediaType, season, episode });
         });
-    }, [directDownloads, title, year, mediaType, season, episode]);
+    }, [directDownloads, title, year, mediaType, selectedSeason, selectedEpisode, season, episode]);
 
     const allDirectQuotaExceeded = useMemo(() => {
         return filteredDirectDownloads.length > 0 && filteredDirectDownloads.every(item => item.quotaExceeded);
@@ -216,8 +356,12 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
     useEffect(() => {
         if (isOpen && title) {
             fetchFolders();
-            searchTorrents();
-            searchDirect();
+            searchedTargets.current.clear();
+            const initS = season !== undefined ? season : undefined;
+            const initEp = episode !== undefined ? episode : undefined;
+            searchedTargets.current.add(`${selectedSeason}:${selectedEpisode}`);
+            searchTorrents(initS, initEp);
+            searchDirect(initS, initEp);
         }
         return () => {
             setResults([]);
@@ -230,8 +374,25 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             setManualMagnet('');
             setCopiedUrl(null);
             setActiveTab('direct');
+            searchedTargets.current.clear();
         };
     }, [isOpen, title, tmdbId, year, mediaType, season, episode]);
+
+    // Re-query targeted sources when season or episode filter changes for TV
+    useEffect(() => {
+        if (!isOpen || mediaType !== 'tv') return;
+        const targetKey = `${selectedSeason}:${selectedEpisode}`;
+        if (searchedTargets.current.has(targetKey)) return;
+        searchedTargets.current.add(targetKey);
+
+        const s = selectedSeason !== 'all' ? Number(selectedSeason) : undefined;
+        const ep = selectedEpisode !== 'all' ? Number(selectedEpisode) : undefined;
+
+        if (s !== undefined) {
+            searchDirect(s, ep || 1);
+            searchTorrents(s, ep);
+        }
+    }, [selectedSeason, selectedEpisode, isOpen, mediaType]);
 
     const fetchFolders = async () => {
         try {
@@ -247,7 +408,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         } catch { /* ignore */ }
     };
 
-    const searchTorrents = async () => {
+    const searchTorrents = async (targetSeason?: number, targetEpisode?: number) => {
         setSearching(true);
         setError(null);
         try {
@@ -256,19 +417,34 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
             if (mediaType) params.set('type', mediaType);
             if (mediaType === 'movie') params.set('goodOnly', '1');
             if (tmdbId) params.set('tmdbId', String(tmdbId));
-            if (season) params.set('season', String(season));
-            if (episode) params.set('episode', String(episode));
+            if (targetSeason !== undefined) params.set('season', String(targetSeason));
+            else if (season !== undefined) params.set('season', String(season));
+            if (targetEpisode !== undefined) params.set('episode', String(targetEpisode));
+            else if (episode !== undefined) params.set('episode', String(episode));
+
             const res = await fetch(`/api/torrent-search?${params}`);
             const data = await res.json();
-            if (data.error) setError(data.error);
+            if (data.error && results.length === 0) setError(data.error);
             else {
                 const torrentList: TorrentResult[] = data.results || [];
-                setResults(torrentList);
+                setResults((prev) => {
+                    const seen = new Set(prev.map(p => p.magnet));
+                    const merged = [...prev];
+                    for (const item of torrentList) {
+                        if (!seen.has(item.magnet)) {
+                            seen.add(item.magnet);
+                            merged.push(item);
+                        }
+                    }
+                    return merged;
+                });
 
                 // Convert any DDL / http-direct results into DirectDownloadItems and merge into directDownloads
+                const activeS = targetSeason ?? season;
+                const activeEp = targetEpisode ?? episode;
                 const ddlItems: DirectDownloadItem[] = torrentList
                     .filter(isDDL)
-                    .filter((r) => isDirectDownloadMatch({ name: r.title }, title, { year, mediaType, season, episode }))
+                    .filter((r) => isDirectDownloadMatch({ name: r.title }, title, { year, mediaType, season: activeS, episode: activeEp }))
                     .map((r) => {
                         const rawUrl = r.magnet.replace(/^http-direct:/, '');
                         return {
@@ -299,7 +475,9 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                 }
             }
         } catch {
-            setError('Search failed. Please try again.');
+            if (results.length === 0) {
+                setError('Search failed. Please try again.');
+            }
         } finally {
             setSearching(false);
             setSearched(true);
@@ -337,7 +515,7 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
         }
     };
 
-    const searchDirect = async () => {
+    const searchDirect = async (targetSeason?: number, targetEpisode?: number) => {
         setSearchingDirect(true);
         try {
             const params = new URLSearchParams();
@@ -348,8 +526,10 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                 params.set('title', title);
             }
             if (year) params.set('year', String(year));
-            if (season) params.set('season', String(season));
-            if (episode) params.set('episode', String(episode));
+            const s = targetSeason !== undefined ? targetSeason : season;
+            const ep = targetEpisode !== undefined ? targetEpisode : episode;
+            if (s !== undefined) params.set('season', String(s));
+            if (ep !== undefined) params.set('episode', String(ep));
 
             const res = await fetch(`/api/direct-downloads?${params.toString()}`);
             if (res.status && res.status >= 400) {
@@ -362,16 +542,12 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                     if (d.provider !== 'ddl' && (/cinejoy/i.test(d.source || '') || /cinejoy/i.test(d.provider || ''))) {
                         return true;
                     }
-                    return isDirectDownloadMatch(d, title, { year, mediaType, season, episode });
+                    return isDirectDownloadMatch(d, title, { year, mediaType, season: s, episode: ep });
                 });
                 setDirectDownloads((prev) => {
                     const existingUrls = new Set(validDownloads.map((d: DirectDownloadItem) => d.url));
                     const previousNonDuplicates = prev
-                        .filter((p) => !existingUrls.has(p.url))
-                        .filter((p) => {
-                            if (p.provider !== 'ddl' && (/cinejoy/i.test(p.source || '') || /cinejoy/i.test(p.provider || ''))) return true;
-                            return isDirectDownloadMatch(p, title, { year, mediaType, season, episode });
-                        });
+                        .filter((p) => !existingUrls.has(p.url));
                     return [...validDownloads, ...previousNonDuplicates];
                 });
                 if (validDownloads.length > 0) {
@@ -414,8 +590,10 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                     ? item.name
                     : `${item.name}.mkv`;
             } else {
-                if (mediaType === 'tv' && season && episode) {
-                    cleanFilename = `${title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')} [${item.qualityLabel || '1080p'}].mkv`;
+                if (mediaType === 'tv') {
+                    const s = selectedSeason !== 'all' ? Number(selectedSeason) : (season ?? 1);
+                    const ep = selectedEpisode !== 'all' ? Number(selectedEpisode) : (episode ?? 1);
+                    cleanFilename = `${title} S${String(s).padStart(2, '0')}E${String(ep).padStart(2, '0')} [${item.qualityLabel || '1080p'}].mkv`;
                 } else {
                     cleanFilename = `${title}${year ? ` (${year})` : ''} [${item.qualityLabel || '1080p'}].mkv`;
                 }
@@ -576,6 +754,105 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                     </div>
                 )}
 
+                {/* TV Season & Episode Filter Bar */}
+                {mediaType === 'tv' && (
+                    <div className="px-5 py-2.5 border-b border-white/10 bg-white/[0.02] flex flex-wrap items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-neutral-400 font-semibold flex items-center gap-1.5 mr-1">
+                                <Tv className="w-3.5 h-3.5 text-amber-400" /> Filter:
+                            </span>
+
+                            {/* Season Selector */}
+                            <LiquidDropdown
+                                label="Season"
+                                title="Select Season"
+                                options={[
+                                    { id: 'all', name: 'All Seasons' },
+                                    ...seasonsToDisplay.map((s) => ({
+                                        id: String(s.seasonNumber),
+                                        name: s.name || `Season ${s.seasonNumber}`,
+                                    })),
+                                ]}
+                                value={String(selectedSeason)}
+                                onChange={(val) => {
+                                    if (val === 'all') {
+                                        setSelectedSeason('all');
+                                        setSelectedEpisode('all');
+                                    } else {
+                                        setSelectedSeason(Number(val));
+                                        setSelectedEpisode('all');
+                                    }
+                                }}
+                                className="min-w-[130px]"
+                                pillClassName={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition select-none cursor-pointer border ${
+                                    selectedSeason !== 'all'
+                                        ? 'bg-amber-500/20 text-amber-200 border-amber-500/40 shadow-sm'
+                                        : 'liquid-glass-pill text-neutral-300 hover:text-white border-white/10'
+                                }`}
+                            />
+
+                            {/* Episode Selector (Only when a specific season is selected) */}
+                            {selectedSeason !== 'all' && (
+                                <LiquidDropdown
+                                    label="Episode"
+                                    title="Select Episode"
+                                    options={[
+                                        { id: 'all', name: 'All Episodes' },
+                                        ...(episodeOptions.length > 0 ? episodeOptions : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).map((ep) => ({
+                                            id: String(ep),
+                                            name: `Episode ${ep}`,
+                                        })),
+                                    ]}
+                                    value={String(selectedEpisode)}
+                                    onChange={(val) => {
+                                        setSelectedEpisode(val === 'all' ? 'all' : Number(val));
+                                    }}
+                                    className="min-w-[130px]"
+                                    pillClassName={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition select-none cursor-pointer border ${
+                                        selectedEpisode !== 'all'
+                                            ? 'bg-sky-500/20 text-sky-200 border-sky-500/40 shadow-sm'
+                                            : 'liquid-glass-pill text-neutral-300 hover:text-white border-white/10'
+                                    }`}
+                                />
+                            )}
+
+                            {/* Reset Filter Button */}
+                            {(selectedSeason !== 'all' || selectedEpisode !== 'all') && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedSeason('all');
+                                        setSelectedEpisode('all');
+                                    }}
+                                    className="px-2.5 py-1.5 text-xs text-neutral-400 hover:text-white rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition flex items-center gap-1 cursor-pointer"
+                                    title="Reset season and episode filters"
+                                >
+                                    <X className="w-3 h-3" />
+                                    <span>Reset</span>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Filter Status Pill Badge */}
+                        <div className="flex items-center gap-2">
+                            {selectedSeason !== 'all' ? (
+                                <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-[11px] tracking-wide flex items-center gap-1 shadow-sm">
+                                    <span>S{String(selectedSeason).padStart(2, '0')}</span>
+                                    {selectedEpisode !== 'all' ? (
+                                        <span className="text-sky-300">E{String(selectedEpisode).padStart(2, '0')}</span>
+                                    ) : (
+                                        <span className="text-amber-300/70 font-normal text-[10px]">(All Episodes)</span>
+                                    )}
+                                </span>
+                            ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-neutral-400 text-[11px]">
+                                    All Seasons
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Tabs: Direct Downloads vs Torrents */}
                 <div className="flex items-center gap-2 px-5 pt-3 border-b border-white/10 bg-black/20">
                     <button
@@ -614,9 +891,9 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                         <span>Torrents</span>
                         {searching ? (
                             <Loader2 className="w-3 h-3 animate-spin ml-1 text-neutral-400" />
-                        ) : pureTorrentResults.length > 0 ? (
+                        ) : filteredTorrentResults.length > 0 ? (
                             <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/10 text-neutral-200 text-[10px] font-bold border border-white/10">
-                                {pureTorrentResults.length}
+                                {filteredTorrentResults.length}
                             </span>
                         ) : null}
                     </button>
@@ -691,6 +968,31 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                                         <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${qualityColor(item.qualityLabel)}`}>
                                                             {item.qualityLabel}
                                                         </span>
+                                                        {mediaType === 'tv' && (() => {
+                                                            const info = parseTvTitleInfo(item.name);
+                                                            if (info.isSeasonPack && info.season) {
+                                                                return (
+                                                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
+                                                                        Season {info.season} Pack
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            if (info.season && info.episode) {
+                                                                return (
+                                                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
+                                                                        S{String(info.season).padStart(2, '0')}E{String(info.episode).padStart(2, '0')}
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            if (info.season) {
+                                                                return (
+                                                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
+                                                                        Season {info.season}
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            return null;
+                                                        })()}
                                                         {item.size && (
                                                             <span className="text-xs font-semibold text-neutral-200">
                                                                 {item.size}
@@ -847,15 +1149,32 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                             {!searchingDirect && searchedDirect && filteredDirectDownloads.length === 0 && (
                                 <div className="text-center py-8">
                                     <Zap className="w-10 h-10 text-neutral-600 mx-auto mb-3 opacity-50" />
-                                    <p className="text-neutral-400 text-sm">No direct downloads found for &quot;{title}&quot;</p>
-                                    <p className="text-neutral-500 text-xs mt-1">Try switching to Torrents below</p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setActiveTab('torrents')}
-                                        className="mt-3 px-3.5 py-1.5 liquid-glass-pill text-neutral-300 hover:text-white text-xs font-semibold rounded-xl transition cursor-pointer"
-                                    >
-                                        Switch to Torrents ({pureTorrentResults.length})
-                                    </button>
+                                    <p className="text-neutral-400 text-sm">
+                                        {mediaType === 'tv' && (selectedSeason !== 'all' || selectedEpisode !== 'all')
+                                            ? `No direct streams found for S${selectedSeason !== 'all' ? String(selectedSeason).padStart(2, '0') : '??'}${selectedEpisode !== 'all' ? `E${String(selectedEpisode).padStart(2, '0')}` : ''}`
+                                            : `No direct downloads found for "${title}"`}
+                                    </p>
+                                    <p className="text-neutral-500 text-xs mt-1">
+                                        {filteredTorrentResults.length > 0 ? 'Try switching to Torrents below' : 'Try resetting your filter or searching torrents'}
+                                    </p>
+                                    <div className="flex items-center justify-center gap-2 mt-3">
+                                        {mediaType === 'tv' && (selectedSeason !== 'all' || selectedEpisode !== 'all') && (
+                                            <button
+                                                type="button"
+                                                onClick={() => { setSelectedSeason('all'); setSelectedEpisode('all'); }}
+                                                className="px-3.5 py-1.5 liquid-glass-pill text-neutral-300 hover:text-white text-xs font-semibold rounded-xl transition cursor-pointer"
+                                            >
+                                                Reset Filter
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveTab('torrents')}
+                                            className="px-3.5 py-1.5 liquid-glass-pill text-amber-300 hover:text-white text-xs font-semibold rounded-xl transition cursor-pointer"
+                                        >
+                                            Switch to Torrents ({filteredTorrentResults.length})
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </>
@@ -873,7 +1192,14 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                             {!searching && searched && pureTorrentResults.length > 0 && (
                                 <>
                                     <div className="flex items-center justify-between">
-                                        <h3 className="text-sm font-semibold text-neutral-300">{pureTorrentResults.length} torrent{pureTorrentResults.length === 1 ? '' : 's'} found</h3>
+                                        <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-1.5">
+                                            <span>{sortedResults.length} torrent{sortedResults.length === 1 ? '' : 's'} found</span>
+                                            {mediaType === 'tv' && selectedSeason !== 'all' && (
+                                                <span className="text-xs text-amber-300/80 font-normal">
+                                                    (S{String(selectedSeason).padStart(2, '0')}{selectedEpisode !== 'all' ? `E${String(selectedEpisode).padStart(2, '0')}` : ''})
+                                                </span>
+                                            )}
+                                        </h3>
                                         <div className="flex items-center gap-1">
                                             <ArrowUpDown className="w-3 h-3 text-neutral-500 mr-0.5" />
                                             {(['seeds', 'size_desc', 'size_asc'] as SortMode[]).map(mode => (
@@ -890,24 +1216,78 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                             ))}
                                         </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        {sortedResults.map((result, i) => {
-                                            const source = sourceBadge(result);
-                                            return (
-                                                <div key={i} className="flex items-center gap-3 p-3.5 liquid-glass-pill bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 rounded-2xl transition">
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium truncate mb-1 text-neutral-200" title={result.title}>{result.title}</p>
-                                                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                                                            <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>{result.quality}</span>
-                                                            {extractTags(result.title).map((tag, ti) => (
-                                                                <span key={ti} className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${tag.className}`}>{tag.label}</span>
-                                                            ))}
-                                                            <span className="text-neutral-400">{result.size}</span>
-                                                            <span className="text-emerald-400 font-semibold">↑{result.seeds}</span>
-                                                            <span className="text-rose-400 font-semibold">↓{result.leeches}</span>
-                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
+
+                                    {sortedResults.length === 0 ? (
+                                        <div className="text-center py-8">
+                                            <Magnet className="w-10 h-10 text-neutral-700 mx-auto mb-3" />
+                                            <p className="text-neutral-400 text-sm">
+                                                No torrents found matching {selectedSeason !== 'all' ? `Season ${selectedSeason}` : ''}{selectedEpisode !== 'all' ? ` Episode ${selectedEpisode}` : ''}
+                                            </p>
+                                            <p className="text-neutral-500 text-xs mt-1">
+                                                {pureTorrentResults.length} total release{pureTorrentResults.length === 1 ? '' : 's'} available for other seasons or complete series.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedSeason('all');
+                                                    setSelectedEpisode('all');
+                                                }}
+                                                className="mt-3 px-3.5 py-1.5 liquid-glass-pill text-neutral-300 hover:text-white text-xs font-semibold rounded-xl transition cursor-pointer"
+                                            >
+                                                Show All ({pureTorrentResults.length})
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {sortedResults.map((result, i) => {
+                                                const source = sourceBadge(result);
+                                                return (
+                                                    <div key={i} className="flex items-center gap-3 p-3.5 liquid-glass-pill bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 rounded-2xl transition">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium truncate mb-1 text-neutral-200" title={result.title}>{result.title}</p>
+                                                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                                <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${qualityColor(result.quality)}`}>{result.quality}</span>
+                                                                {mediaType === 'tv' && (() => {
+                                                                    const info = parseTvTitleInfo(result.title);
+                                                                    if (info.isSeriesPack) {
+                                                                        return (
+                                                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30 font-bold">
+                                                                                Complete Series
+                                                                            </span>
+                                                                        );
+                                                                    }
+                                                                    if (info.isSeasonPack && info.season) {
+                                                                        return (
+                                                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
+                                                                                Season {info.season} Pack
+                                                                            </span>
+                                                                        );
+                                                                    }
+                                                                    if (info.season && info.episode) {
+                                                                        return (
+                                                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
+                                                                                S{String(info.season).padStart(2, '0')}E{String(info.episode).padStart(2, '0')}
+                                                                            </span>
+                                                                        );
+                                                                    }
+                                                                    if (info.season) {
+                                                                        return (
+                                                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
+                                                                                Season {info.season}
+                                                                            </span>
+                                                                        );
+                                                                    }
+                                                                    return null;
+                                                                })()}
+                                                                {extractTags(result.title).map((tag, ti) => (
+                                                                    <span key={ti} className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${tag.className}`}>{tag.label}</span>
+                                                                ))}
+                                                                <span className="text-neutral-400">{result.size}</span>
+                                                                <span className="text-emerald-400 font-semibold">↑{result.seeds}</span>
+                                                                <span className="text-rose-400 font-semibold">↓{result.leeches}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${source.className}`}>{source.label}</span>
+                                                            </div>
                                                         </div>
-                                                    </div>
                                                     <div className="flex items-center gap-2 flex-shrink-0">
                                                         <button
                                                             onClick={() => startDownload(result.magnet)}
@@ -945,8 +1325,9 @@ export default function DownloadModal({ isOpen, title, year, mediaType, posterPa
                                             );
                                         })}
                                     </div>
-                                </>
-                            )}
+                                )}
+                            </>
+                        )}
 
                             {/* No torrent results */}
                             {!searching && searched && pureTorrentResults.length === 0 && !error && (

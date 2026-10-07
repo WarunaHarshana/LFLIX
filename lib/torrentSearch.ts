@@ -26,6 +26,8 @@ import {
     filterByRelevance,
     isDirectDownloadMatch,
     normalizeTitle,
+    parseTvTitleInfo,
+    matchesTvSeasonEpisode,
 } from './titleMatching';
 
 export {
@@ -49,6 +51,8 @@ export {
     filterByRelevance,
     isDirectDownloadMatch,
     normalizeTitle,
+    parseTvTitleInfo,
+    matchesTvSeasonEpisode,
 };
 
 export interface TorrentResult {
@@ -1653,14 +1657,22 @@ export async function searchTorrentsWithDiagnostics(
         return { ...cached, tookMs: Date.now() - started };
     }
 
-    // Use title without appending year directly, as appending year drops many valid tracker results
-    const query = title;
+    const isTv = options?.type === 'tv';
+    const isMovie = options?.type === 'movie';
+
+    // Use title with season/episode tag for TV when searching specific season/episodes
+    let query = title;
+    if (isTv && options?.season && !extractEpisodeQuery(title)) {
+        const seasonTag = `S${String(options.season).padStart(2, '0')}`;
+        const epTag = options.episode ? `E${String(options.episode).padStart(2, '0')}` : '';
+        const tvTag = `${seasonTag}${epTag}`;
+        if (!new RegExp(`\\b${seasonTag}\\b`, 'i').test(title)) {
+            query = `${title} ${tvTag}`;
+        }
+    }
 
     // Always use 200 (All Video) for TPB to ensure we don't filter out HD categories (207, 208)
     const tpbCategory = '200';
-
-    const isTv = options?.type === 'tv';
-    const isMovie = options?.type === 'movie';
 
     const [
         psaSource,
@@ -1732,10 +1744,20 @@ export async function searchTorrentsWithDiagnostics(
     });
 
     // Filter by relevance to search query — removes random/unrelated results
-    const relevant = filterByRelevance(unique, title, 25, { year: options?.year, type: options?.type });
+    const relevant = filterByRelevance(unique, title, 25, {
+        year: options?.year,
+        type: options?.type,
+        season: options?.season,
+        episode: options?.episode,
+    });
 
     // Apply the same relevance/year filtering to DDL results
-    const relevantDdl = filterByRelevance(ddlResults, title, 15, { year: options?.year, type: options?.type });
+    const relevantDdl = filterByRelevance(ddlResults, title, 15, {
+        year: options?.year,
+        type: options?.type,
+        season: options?.season,
+        episode: options?.episode,
+    });
 
     // Deduplicate merged result set.
     const merged = [...relevant, ...relevantDdl];

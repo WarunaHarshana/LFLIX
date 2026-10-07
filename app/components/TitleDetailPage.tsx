@@ -539,6 +539,7 @@ export default function TitleDetailPage({
   const [showStreamModal, setShowStreamModal] = useState(false);
   const [streamModalTarget, setStreamModalTarget] = useState<{ season?: number; episode?: number } | null>(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloadModalEpisode, setDownloadModalEpisode] = useState<{ season?: number; episode?: number } | null>(null);
   const [showTrailerModal, setShowTrailerModal] = useState(false);
   const [showFixMatch, setShowFixMatch] = useState(false);
 
@@ -1299,6 +1300,9 @@ export default function TitleDetailPage({
                 <button
                   onClick={() => {
                     triggerHaptic('light');
+                    if (item.type === 'show') {
+                      setDownloadModalEpisode({ season: activeSeason });
+                    }
                     setShowDownloadModal(true);
                   }}
                   className="cinejoy-btn-circle cursor-pointer"
@@ -2168,7 +2172,13 @@ export default function TitleDetailPage({
           mediaType={item.type === 'show' ? 'tv' : 'movie'}
           posterPath={item.posterPath}
           tmdbId={item.tmdbId || undefined}
-          onClose={() => setShowDownloadModal(false)}
+          season={downloadModalEpisode?.season ?? (item.type === 'show' ? activeSeason : undefined)}
+          episode={downloadModalEpisode?.episode}
+          availableSeasons={availableSeasons}
+          onClose={() => {
+            setShowDownloadModal(false);
+            setDownloadModalEpisode(null);
+          }}
         />
       )}
 
@@ -2240,6 +2250,19 @@ export default function TitleDetailPage({
               >
                 <Globe className="w-3.5 h-3.5 text-sky-400" />
                 <span>Watch Online</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const ep = activeContextMenu.episode;
+                  setActiveContextMenu(null);
+                  setDownloadModalEpisode({ season: ep.seasonNumber, episode: ep.episodeNumber });
+                  setShowDownloadModal(true);
+                }}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-white text-xs font-semibold w-full text-left transition cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-sky-400" />
+                <span>Download Episode</span>
               </button>
 
               <button
