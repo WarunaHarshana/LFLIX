@@ -65,3 +65,4 @@ cookies.txt
 # Downloaded tools
 bin/rclone.exe
 bin/*.zip
+bin/mpv/

@@ -61,7 +61,7 @@ if not exist ".env.local" (
     echo You'll need to complete the setup wizard
     echo when you first open LFLIX in your browser.
     echo.
-    timeout /t 3 >nul
+    ping -n 4 127.0.0.1 >nul
 )
 
 :: ---------------------------------------------------------------------------
@@ -72,30 +72,52 @@ if errorlevel 1 (
     if exist "Mount-GoogleDrive-Hidden.vbs" (
         echo Mounting Google Drive Z:...
         wscript.exe "Mount-GoogleDrive-Hidden.vbs"
-        timeout /t 2 >nul
+        ping -n 3 127.0.0.1 >nul
     )
 )
 
 :: ---------------------------------------------------------------------------
-:: Clear a stale server off port 3000.
+:: 1. Check if LFLIX is ALREADY running and healthy.
+:: If so, open the browser directly and exit.
+:: (Use 'Start LFLIX.bat --restart' to force a fresh server restart)
+:: ---------------------------------------------------------------------------
+if /I not "%1"=="--restart" if /I not "%1"=="-r" (
+    set "ALREADY_PORT="
+    for /f %%p in ('node -e "const http=require('http'); const ports=[3000,4000,3550,8080]; function check(i){ if(i>=ports.length){ process.exit(1); } const req=http.get('http://localhost:'+ports[i]+'/api/ping',{timeout:1000},res=>{ if(res.statusCode===200){ console.log(ports[i]); process.exit(0); } else check(i+1); }); req.on('error',()=>check(i+1)); req.on('timeout',()=>{req.destroy();check(i+1);}); } check(0);"') do set "ALREADY_PORT=%%p"
+
+    if defined ALREADY_PORT (
+        echo ==========================================
+        echo    LFLIX is already running!
+        echo ==========================================
+        echo.
+        echo Found active server on http://localhost:!ALREADY_PORT!
+        echo Opening LFLIX in your browser...
+        echo.
+        start http://localhost:!ALREADY_PORT! || powershell -NoProfile -NonInteractive -Command "Start-Process 'http://localhost:!ALREADY_PORT!'" >nul 2>&1
+        ping -n 3 127.0.0.1 >nul
+        exit /b 0
+    )
+)
+
+:: ---------------------------------------------------------------------------
+:: 2. Clear a stale/unresponsive server off port 3000.
 ::
-:: Closing this window with the X button leaves node.exe running and holding the
-:: port. On the next launch Next.js finds 3000 taken and quietly moves to 3001,
-:: while the browser below still opens 3000 -- so you land on the old, orphaned
-:: server, which answers every route with "404 This page could not be found".
+:: Closing the console window with the X button leaves node.exe running and holding
+:: the port. On the next launch Next.js finds 3000 taken and quietly moves to 3001,
+:: while the browser below still opens 3000 -- landing on an unresponsive server.
 :: ---------------------------------------------------------------------------
 set "STALE_PID="
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"TCP.*:3000 .*LISTENING"') do set "STALE_PID=%%p"
 
 if defined STALE_PID (
     :: Only ever terminate node.exe -- never something else the user has on 3000.
-    for /f "tokens=1 delims=," %%n in ('tasklist /FI "PID eq %STALE_PID%" /FO CSV /NH 2^>nul') do set "STALE_NAME=%%~n"
+    for /f "tokens=1 delims=," %%n in ('tasklist /FI "PID eq !STALE_PID!" /FO CSV /NH 2^>nul') do set "STALE_NAME=%%~n"
 
     if /I "!STALE_NAME!"=="node.exe" (
-        echo Found a previous LFLIX server still running on port 3000 ^(PID %STALE_PID%^).
+        echo Found an unresponsive LFLIX server on port 3000 ^(PID !STALE_PID!^).
         echo Stopping it so this one can start cleanly...
-        taskkill /F /PID %STALE_PID% >nul 2>&1
-        timeout /t 2 >nul
+        taskkill /F /PID !STALE_PID! >nul 2>&1
+        ping -n 3 127.0.0.1 >nul
         echo Done.
         echo.
     ) else (
@@ -103,15 +125,15 @@ if defined STALE_PID (
         echo    WARNING: Port 3000 is already in use
         echo ==========================================
         echo.
-        echo Held by "!STALE_NAME!" ^(PID %STALE_PID%^), which is not LFLIX.
+        echo Held by "!STALE_NAME!" ^(PID !STALE_PID!^), which is not LFLIX.
         echo LFLIX will start on a different port - watch the address printed below.
         echo.
-        timeout /t 2 >nul
+        ping -n 3 127.0.0.1 >nul
     )
 )
 
 :: ---------------------------------------------------------------------------
-:: Detect available port.
+:: 3. Detect available port.
 :: If port 3000 is blocked by Windows (Hyper-V / WinNAT exclusion),
 :: automatically fall back to 4000, 3550, or 8080.
 :: ---------------------------------------------------------------------------
@@ -147,10 +169,11 @@ echo so it releases port !LFLIX_PORT! for next time.
 echo ==========================================
 echo.
 
-:: Wait for the server to be ready, then open the browser.
-:: -f matters: without it curl treats a 404 as success, which is exactly how the
-:: orphaned-server case managed to open a broken page.
-start /b cmd /c "for /L %%i in (1,1,45) do (curl -sf -o nul http://localhost:!LFLIX_PORT!/api/ping && start http://localhost:!LFLIX_PORT! && exit /b 0 || timeout /t 2 >nul) & echo Browser auto-open timed out - open http://localhost:!LFLIX_PORT! manually."
+:: ---------------------------------------------------------------------------
+:: 4. Wait for server to become ready, then open the browser automatically.
+:: scripts/open-browser.js polls /api/ping until ready, then launches browser.
+:: ---------------------------------------------------------------------------
+start "" /b node "%~dp0scripts\open-browser.js" !LFLIX_PORT!
 
 :: Start the server (this blocks)
 set "PORT=!LFLIX_PORT!"
