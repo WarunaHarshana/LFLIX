@@ -10,7 +10,22 @@ export async function POST(req: Request) {
     if (limited) return limited;
 
     const body = await readJsonObject(req, 8 * 1024);
-    const { magnetUri, fileIndex } = body as { magnetUri?: string; fileIndex?: number };
+    const { action, infoHash, magnetUri, fileIndex } = body as {
+      action?: string;
+      infoHash?: string;
+      magnetUri?: string;
+      fileIndex?: number;
+    };
+
+    if (action === 'heartbeat' && infoHash) {
+      const ok = torrentStreamManager.heartbeat(infoHash);
+      return NextResponse.json({ success: ok });
+    }
+
+    if (action === 'stop' && infoHash) {
+      const stopped = await torrentStreamManager.stopStream(infoHash, true);
+      return NextResponse.json({ success: stopped });
+    }
 
     if (!magnetUri || typeof magnetUri !== 'string' || !magnetUri.trim().startsWith('magnet:')) {
       return NextResponse.json(

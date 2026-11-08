@@ -70,4 +70,30 @@ describe('/api/torrent-stream route', () => {
     const res = await PATCH(req);
     expect(res.status).toBe(400);
   });
+
+  it('handles action: heartbeat in POST request', async () => {
+    const req = new Request('http://localhost:3000/api/torrent-stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'heartbeat', infoHash: 'nonexistent123' }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(false);
+  });
+
+  it('handles action: stop in POST request for sendBeacon compatibility', async () => {
+    const req = new Request('http://localhost:3000/api/torrent-stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop', infoHash: 'nonexistent123' }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(false);
+  });
 });

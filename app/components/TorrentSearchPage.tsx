@@ -22,7 +22,9 @@ import {
     MonitorPlay,
     Users,
     Gauge,
-    Radio
+    Radio,
+    Trash2,
+    HardDrive
 } from 'lucide-react';
 import LiquidDropdown from './LiquidDropdown';
 
@@ -156,6 +158,8 @@ export default function TorrentSearchPage({
     const [streamSession, setStreamSession] = useState<StreamSession | null>(null);
     const [streamModalOpen, setStreamModalOpen] = useState(false);
     const [launchingDesktopPlayer, setLaunchingDesktopPlayer] = useState(false);
+    const [cacheStats, setCacheStats] = useState<{ totalSizeBytes: number; totalSizeFormatted: string; freeDiskFormatted: string } | null>(null);
+    const [clearingCache, setClearingCache] = useState(false);
 
     // Trending state
     const [trendingMovies, setTrendingMovies] = useState<TrendingItem[]>([]);
@@ -175,11 +179,43 @@ export default function TorrentSearchPage({
 
     const sourceIssues = sourceStatuses.filter(source => source.status !== 'ok');
 
+    const fetchCacheStats = async () => {
+        try {
+            const res = await fetch('/api/torrent-stream/cache');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setCacheStats({
+                        totalSizeBytes: data.totalSizeBytes,
+                        totalSizeFormatted: data.totalSizeFormatted,
+                        freeDiskFormatted: data.freeDiskFormatted,
+                    });
+                }
+            }
+        } catch { /* ignore */ }
+    };
+
+    const clearStreamCache = async () => {
+        setClearingCache(true);
+        try {
+            const res = await fetch('/api/torrent-stream/cache', { method: 'DELETE' });
+            if (res.ok) {
+                showToast?.('Stream cache purged successfully', 'success');
+                void fetchCacheStats();
+            }
+        } catch {
+            showToast?.('Failed to clear stream cache', 'error');
+        } finally {
+            setClearingCache(false);
+        }
+    };
+
     useEffect(() => {
         fetchFolders();
         fetchTrending();
         fetchGdrive();
         fetchCloud();
+        fetchCacheStats();
     }, []);
 
     // Polling stream stats while stream modal is open
@@ -201,6 +237,33 @@ export default function TorrentSearchPage({
         }, 1500);
 
         return () => clearInterval(interval);
+    }, [streamModalOpen, streamSession?.infoHash]);
+
+    // Active heartbeat and beforeunload teardown so streams never linger on tab close
+    useEffect(() => {
+        if (!streamModalOpen || !streamSession?.infoHash) return;
+        const hash = streamSession.infoHash;
+
+        const heartbeatTimer = setInterval(() => {
+            fetch('/api/torrent-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'heartbeat', infoHash: hash }),
+            }).catch(() => {});
+        }, 10000);
+
+        const handleBeforeUnload = () => {
+            navigator.sendBeacon(
+                '/api/torrent-stream',
+                new Blob([JSON.stringify({ action: 'stop', infoHash: hash })], { type: 'application/json' })
+            );
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            clearInterval(heartbeatTimer);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
     }, [streamModalOpen, streamSession?.infoHash]);
 
     const fetchCloud = async () => {
@@ -396,6 +459,7 @@ export default function TorrentSearchPage({
             await fetch(`/api/torrent-stream?infoHash=${encodeURIComponent(hash)}`, {
                 method: 'DELETE',
             });
+            void fetchCacheStats();
         } catch { /* ignore */ }
     };
 
@@ -527,6 +591,26 @@ export default function TorrentSearchPage({
                         </p>
                     </div>
                 </div>
+                {cacheStats && (
+                    <div className="flex items-center gap-2.5 mt-3">
+                        <span className="text-xs px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/10 text-neutral-300 flex items-center gap-1.5 shadow-sm">
+                            <HardDrive className="w-3.5 h-3.5 text-amber-400" />
+                            Stream Cache: <strong className="text-white font-semibold">{cacheStats.totalSizeFormatted}</strong>
+                            <span className="text-neutral-500">({cacheStats.freeDiskFormatted} free)</span>
+                        </span>
+                        {cacheStats.totalSizeBytes > 0 && (
+                            <button
+                                onClick={clearStreamCache}
+                                disabled={clearingCache}
+                                className="text-xs px-3 py-1.5 rounded-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-300 hover:text-red-200 transition flex items-center gap-1.5 active:scale-95 shadow-sm"
+                                title="Purge stream temporary files and free disk space immediately"
+                            >
+                                <Trash2 className="w-3 h-3" />
+                                <span>{clearingCache ? 'Clearing...' : 'Clear Stream Cache'}</span>
+                            </button>
+                        )}
+                    </div>
+                )}
                 {onSwitchToOnline && (
                     <button
                         onClick={onSwitchToOnline}
@@ -1028,8 +1112,19 @@ export default function TorrentSearchPage({
                                     <p className="text-sm font-semibold text-neutral-200 break-words mb-1">
                                         {streamSession.name}
                                     </p>
-                                    <p className="text-xs text-neutral-400">
-                                        Total Size: {formatBytes(streamSession.totalSize)}
+                                    <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+                                        <span>Total Size: {formatBytes(streamSession.totalSize)}</span>
+                                        <span className="text-neutral-600">•</span>
+                                        <span>Buffered: {formatBytes(streamSession.downloaded)}</span>
+                                        {cacheStats && (
+                                            <>
+                                                <span className="text-neutral-600">•</span>
+                                                <span className="text-amber-400 font-medium">Free Space: {cacheStats.freeDiskFormatted}</span>
+                                            </>
+                                        )}
+                                    </div>
+                                    <p className="text-[11px] text-neutral-500 mt-1">
+                                        On-demand stream buffers playback pieces only (does not download the entire movie). Cache is automatically cleaned when closed.
                                     </p>
                                 </div>
 

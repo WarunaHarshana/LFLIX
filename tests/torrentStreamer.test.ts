@@ -92,4 +92,26 @@ describe('TorrentStreamManager', () => {
     expect(stats.files[0].nextStreamUrl).toBe('/api/torrent-stream/video?infoHash=08ada5a7a6183aae1e09d831df6748d566095a10&fileIndex=0');
     expect(stats.streamUrl).toBe(stats.files[0].streamUrl);
   });
+
+  it('provides getCacheStats with disk and folder telemetry', () => {
+    const manager = TorrentStreamManager.getInstance();
+    const stats = manager.getCacheStats();
+    expect(typeof stats.cacheDir).toBe('string');
+    expect(typeof stats.totalSizeBytes).toBe('number');
+    expect(typeof stats.totalSizeFormatted).toBe('string');
+    expect(typeof stats.freeDiskBytes).toBe('number');
+    expect(typeof stats.freeDiskFormatted).toBe('string');
+  });
+
+  it('handles heartbeats appropriately', () => {
+    const manager = TorrentStreamManager.getInstance();
+    expect(manager.heartbeat('unknownhash123')).toBe(false);
+  });
+
+  it('includes candidate cache dirs', () => {
+    const manager = TorrentStreamManager.getInstance();
+    const dirs = manager.getCandidateCacheDirs();
+    expect(dirs.length).toBeGreaterThanOrEqual(1);
+    expect(dirs.some(d => d.includes('torrent-streams') || d.includes('stream-cache'))).toBe(true);
+  });
 });

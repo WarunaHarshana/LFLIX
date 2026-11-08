@@ -124,6 +124,64 @@ function normalizeInfoHash(input: string): string {
   return input.toLowerCase().replace(/^urn:btih:/, '').replace(/[^a-z0-9]/g, '');
 }
 
+function getStreamCacheBaseDir(): string {
+  try {
+    const { db } = require('./db');
+    const custom = db.prepare('SELECT value FROM settings WHERE key = ?').get('streamCachePath') as { value: string } | undefined;
+    if (custom?.value && typeof custom.value === 'string' && fs.existsSync(custom.value)) {
+      const customDir = path.join(custom.value, 'lflix-stream-cache');
+      if (!fs.existsSync(customDir)) fs.mkdirSync(customDir, { recursive: true });
+      return customDir;
+    }
+
+    const dlSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('downloadPath') as { value: string } | undefined;
+    if (dlSetting?.value && typeof dlSetting.value === 'string' && fs.existsSync(dlSetting.value)) {
+      const targetDir = path.join(dlSetting.value, '.lflix-stream-cache');
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+      return targetDir;
+    }
+  } catch {
+    // ignore
+  }
+
+  const defaultDir = path.join(os.tmpdir(), 'lflix-torrent-streams');
+  if (!fs.existsSync(defaultDir)) {
+    try {
+      fs.mkdirSync(defaultDir, { recursive: true });
+    } catch {
+      return path.join(process.cwd(), 'scratch', 'torrent-streams');
+    }
+  }
+  return defaultDir;
+}
+
+function getDirectorySizeBytes(dirPath: string): number {
+  if (!fs.existsSync(dirPath)) return 0;
+  let total = 0;
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        total += getDirectorySizeBytes(full);
+      } else if (entry.isFile()) {
+        try {
+          total += fs.statSync(full).size;
+        } catch {}
+      }
+    }
+  } catch {}
+  return total;
+}
+
+function formatBytesCompact(bytes: number): string {
+  if (bytes <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
 export class TorrentStreamManager {
   private static instance: TorrentStreamManager | null = null;
   private client: ClientLike | null = null;
@@ -135,17 +193,17 @@ export class TorrentStreamManager {
     { torrent: TorrentLike; selectedIndex: number; createdAt: number; lastActiveAt: number }
   > = new Map();
   private cacheBaseDir: string;
+  private pendingDeletions: Set<string> = new Set();
   private readonly metadataTimeoutMs = 40 * 1000;
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   private constructor() {
-    this.cacheBaseDir = path.join(os.tmpdir(), 'lflix-torrent-streams');
+    this.cacheBaseDir = getStreamCacheBaseDir();
     try {
       if (!fs.existsSync(this.cacheBaseDir)) {
         fs.mkdirSync(this.cacheBaseDir, { recursive: true });
       }
     } catch {
-      // fallback to cwd scratch if tmpdir lacks write permission
       this.cacheBaseDir = path.join(process.cwd(), 'scratch', 'torrent-streams');
       if (!fs.existsSync(this.cacheBaseDir)) {
         fs.mkdirSync(this.cacheBaseDir, { recursive: true });
@@ -155,10 +213,10 @@ export class TorrentStreamManager {
     // Auto-purge orphaned torrent cache directories from previous runs on startup
     this.purgeStaleCacheOnStartup();
 
-    // Auto-cleanup idle streams every 5 minutes
+    // Auto-cleanup idle streams and pending deletions every 60 seconds
     this.cleanupInterval = setInterval(() => {
       this.cleanupIdleStreams();
-    }, 5 * 60 * 1000);
+    }, 60 * 1000);
 
     if (this.cleanupInterval.unref) {
       this.cleanupInterval.unref();
@@ -291,10 +349,10 @@ export class TorrentStreamManager {
       const tailStart = Math.max(endPiece - 2, startPiece);
       torrent.critical(tailStart, endPiece);
 
-      // 3. Mark the active file with elevated priority
-      if (typeof file.select === 'function') {
-        file.select(1);
-      }
+      // NOTE: We deliberately do NOT call file.select(1) across the entire file.
+      // Proactive file-level selection causes WebTorrent to download the entire
+      // 20GB/89GB file in the background. On-demand streaming chunks are requested
+      // dynamically by file.createReadStream().
     } catch (err: unknown) {
       console.warn('[TorrentStreamer] Failed to prioritize container headers:', err);
     }
@@ -437,6 +495,18 @@ export class TorrentStreamManager {
       });
     }
 
+    // CRITICAL: Immediately deselect ALL pieces across the entire torrent!
+    // In WebTorrent, all pieces across the entire torrent are selected by default.
+    // If left enabled, WebTorrent downloads the entire multi-gigabyte or 89GB file from peers in the background.
+    // By deselecting all pieces, we disable proactive whole-file background downloading completely.
+    if (typeof (torrent as any).deselect === 'function' && Array.isArray((torrent as any).pieces)) {
+      try {
+        (torrent as any).deselect(0, (torrent as any).pieces.length - 1, false);
+      } catch (err) {
+        console.warn('[TorrentStreamer] Failed to deselect pieces:', err);
+      }
+    }
+
     // Pick best video file
     session = this.activeStreams.get(rawInfoHash);
     const torrentFiles = torrent.files || [];
@@ -484,10 +554,77 @@ export class TorrentStreamManager {
     return results;
   }
 
-  public async stopStream(infoHash: string, cleanDisk = true): Promise<boolean> {
+  public getCandidateCacheDirs(): string[] {
+    const dirs = new Set<string>();
+    if (this.cacheBaseDir) dirs.add(this.cacheBaseDir);
+    dirs.add(path.join(os.tmpdir(), 'lflix-torrent-streams'));
+    dirs.add(path.join(process.cwd(), 'scratch', 'torrent-streams'));
+    return Array.from(dirs).filter(Boolean);
+  }
+
+  public heartbeat(infoHash: string): boolean {
     const normalized = normalizeInfoHash(infoHash);
     const session = this.activeStreams.get(normalized);
     if (!session) return false;
+    session.lastActiveAt = Date.now();
+    return true;
+  }
+
+  private async safeRemoveDirectory(targetDir: string, maxRetries = 8, delayMs = 350): Promise<boolean> {
+    if (!fs.existsSync(targetDir)) {
+      this.pendingDeletions.delete(targetDir);
+      return true;
+    }
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        fs.rmSync(targetDir, { recursive: true, force: true, maxRetries: 3 });
+        if (!fs.existsSync(targetDir)) {
+          this.pendingDeletions.delete(targetDir);
+          return true;
+        }
+      } catch {
+        if (attempt < maxRetries - 1) {
+          await new Promise((res) => setTimeout(res, delayMs));
+        } else {
+          this.pendingDeletions.add(targetDir);
+        }
+      }
+    }
+
+    return !fs.existsSync(targetDir);
+  }
+
+  private async processPendingDeletions(): Promise<void> {
+    for (const dir of Array.from(this.pendingDeletions)) {
+      if (!fs.existsSync(dir)) {
+        this.pendingDeletions.delete(dir);
+        continue;
+      }
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+        this.pendingDeletions.delete(dir);
+        console.log(`[TorrentStreamer] Cleared previously locked stream folder: ${dir}`);
+      } catch {
+        // remains in pendingDeletions for next sweep
+      }
+    }
+  }
+
+  public async stopStream(infoHash: string, cleanDisk = true): Promise<boolean> {
+    const normalized = normalizeInfoHash(infoHash);
+    const session = this.activeStreams.get(normalized);
+    if (!session) {
+      if (cleanDisk) {
+        for (const base of this.getCandidateCacheDirs()) {
+          const torrentDir = path.join(base, normalized);
+          if (fs.existsSync(torrentDir)) {
+            await this.safeRemoveDirectory(torrentDir);
+          }
+        }
+      }
+      return false;
+    }
 
     this.activeStreams.delete(normalized);
 
@@ -503,17 +640,78 @@ export class TorrentStreamManager {
     }
 
     if (cleanDisk) {
-      const torrentDir = path.join(this.cacheBaseDir, normalized);
-      try {
+      for (const base of this.getCandidateCacheDirs()) {
+        const torrentDir = path.join(base, normalized);
         if (fs.existsSync(torrentDir)) {
-          fs.rmSync(torrentDir, { recursive: true, force: true });
+          await this.safeRemoveDirectory(torrentDir);
         }
-      } catch {
-        // ignore deletion error
       }
     }
 
     return true;
+  }
+
+  public getCacheStats(): {
+    cacheDir: string;
+    totalSizeBytes: number;
+    totalSizeFormatted: string;
+    activeStreamsCount: number;
+    freeDiskBytes: number;
+    freeDiskFormatted: string;
+  } {
+    let totalBytes = 0;
+    for (const dir of this.getCandidateCacheDirs()) {
+      totalBytes += getDirectorySizeBytes(dir);
+    }
+
+    let freeBytes = 0;
+    try {
+      if (typeof (fs as any).statfsSync === 'function') {
+        const stats = (fs as any).statfsSync(this.cacheBaseDir);
+        freeBytes = stats.bavail * stats.bsize;
+      }
+    } catch {}
+
+    return {
+      cacheDir: this.cacheBaseDir,
+      totalSizeBytes: totalBytes,
+      totalSizeFormatted: formatBytesCompact(totalBytes),
+      activeStreamsCount: this.activeStreams.size,
+      freeDiskBytes: freeBytes,
+      freeDiskFormatted: formatBytesCompact(freeBytes),
+    };
+  }
+
+  public async clearAllCache(): Promise<{ freedBytes: number; success: boolean }> {
+    const initialStats = this.getCacheStats();
+
+    // 1. Destroy all active streams
+    const hashes = Array.from(this.activeStreams.keys());
+    for (const hash of hashes) {
+      await this.stopStream(hash, true);
+    }
+
+    // 2. Wipe all folders in candidate directories
+    for (const baseDir of this.getCandidateCacheDirs()) {
+      if (!fs.existsSync(baseDir)) continue;
+      try {
+        const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(baseDir, entry.name);
+          await this.safeRemoveDirectory(fullPath);
+        }
+      } catch (err) {
+        console.warn(`[TorrentStreamer] Failed to purge directory ${baseDir}:`, err);
+      }
+    }
+
+    // 3. Process any pending deletions
+    await this.processPendingDeletions();
+
+    const finalStats = this.getCacheStats();
+    const freedBytes = Math.max(initialStats.totalSizeBytes - finalStats.totalSizeBytes, 0);
+
+    return { freedBytes, success: true };
   }
 
   private pickBestFileIndex(files: FileLike[], preferredIndex?: number): number {
@@ -629,35 +827,75 @@ export class TorrentStreamManager {
   }
 
   private purgeStaleCacheOnStartup() {
-    try {
-      if (!fs.existsSync(this.cacheBaseDir)) return;
-      const entries = fs.readdirSync(this.cacheBaseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const fullPath = path.join(this.cacheBaseDir, entry.name);
-          try {
-            fs.rmSync(fullPath, { recursive: true, force: true });
-            console.log(`[TorrentStreamer] Cleaned orphaned cache folder on startup: ${entry.name}`);
-          } catch {
-            // ignore if locked
+    this.sweepOrphanedFolders();
+  }
+
+  private sweepOrphanedFolders() {
+    const activeHashes = new Set(
+      Array.from(this.activeStreams.keys()).map((h) => h.toLowerCase())
+    );
+
+    for (const baseDir of this.getCandidateCacheDirs()) {
+      if (!fs.existsSync(baseDir)) continue;
+      try {
+        const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const folderName = entry.name.toLowerCase();
+            if (!activeHashes.has(folderName)) {
+              const fullPath = path.join(baseDir, entry.name);
+              try {
+                fs.rmSync(fullPath, { recursive: true, force: true });
+                console.log(`[TorrentStreamer] Cleaned orphaned cache folder: ${entry.name}`);
+              } catch {
+                void this.safeRemoveDirectory(fullPath);
+              }
+            }
           }
         }
+      } catch (err) {
+        console.warn(`[TorrentStreamer] Failed to sweep cache in ${baseDir}:`, err);
       }
-    } catch (err) {
-      console.warn('[TorrentStreamer] Failed to purge stale cache on startup:', err);
+    }
+  }
+
+  private enforceCacheQuota(maxBytes = 10 * 1024 * 1024 * 1024) {
+    let currentTotal = 0;
+    for (const dir of this.getCandidateCacheDirs()) {
+      currentTotal += getDirectorySizeBytes(dir);
+    }
+
+    if (currentTotal > maxBytes && this.activeStreams.size > 0) {
+      console.warn(`[TorrentStreamer] Stream cache (${formatBytesCompact(currentTotal)}) exceeded quota (${formatBytesCompact(maxBytes)}). Pruning oldest stream.`);
+      let oldestHash: string | null = null;
+      let oldestTime = Infinity;
+      for (const [hash, session] of this.activeStreams) {
+        if (session.lastActiveAt < oldestTime) {
+          oldestTime = session.lastActiveAt;
+          oldestHash = hash;
+        }
+      }
+      if (oldestHash) {
+        void this.stopStream(oldestHash, true);
+      }
     }
   }
 
   private cleanupIdleStreams() {
     const now = Date.now();
-    const idleThresholdMs = 30 * 60 * 1000; // 30 minutes of zero read requests
+    // 90 seconds threshold: zero read requests and zero heartbeats means stream is closed/abandoned
+    const idleThresholdMs = 90 * 1000;
 
     for (const [hash, session] of this.activeStreams) {
       if (now - session.lastActiveAt > idleThresholdMs) {
-        console.log(`[TorrentStreamer] Auto-cleaning idle stream session: ${hash}`);
+        console.log(`[TorrentStreamer] Auto-cleaning abandoned/idle stream session: ${hash}`);
         void this.stopStream(hash, true);
       }
     }
+
+    void this.processPendingDeletions();
+    this.sweepOrphanedFolders();
+    this.enforceCacheQuota();
   }
 
   public async destroy(): Promise<void> {

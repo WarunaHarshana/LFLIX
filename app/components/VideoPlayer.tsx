@@ -1197,6 +1197,43 @@ export default function VideoPlayer({
     };
   }, [src, isNative, onClose]);
 
+  // Torrent streaming heartbeat and immediate stop cleanup on unmount / page leave
+  useEffect(() => {
+    let infoHash: string | null = null;
+    try {
+      const u = new URL(src, window.location.origin);
+      infoHash = u.searchParams.get('infoHash');
+    } catch {}
+
+    if (!infoHash) return;
+
+    const hash = infoHash;
+    const heartbeatTimer = setInterval(() => {
+      fetch('/api/torrent-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'heartbeat', infoHash: hash }),
+      }).catch(() => {});
+    }, 10000);
+
+    const handleBeforeUnload = () => {
+      navigator.sendBeacon(
+        '/api/torrent-stream',
+        new Blob([JSON.stringify({ action: 'stop', infoHash: hash })], { type: 'application/json' })
+      );
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(heartbeatTimer);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      navigator.sendBeacon(
+        '/api/torrent-stream',
+        new Blob([JSON.stringify({ action: 'stop', infoHash: hash })], { type: 'application/json' })
+      );
+    };
+  }, [src]);
+
   // Video element playback event bindings
   useEffect(() => {
     if (isNative) return;
