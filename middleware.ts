@@ -100,7 +100,8 @@ export async function middleware(request: NextRequest) {
     '/api/ip',
     '/api/dlna',
     '/api/sports/streams/resolve',
-    '/api/stream-servers/proxy'
+    '/api/stream-servers/proxy',
+    '/api/torrent-stream/video'
   ];
 
   const isPublic = publicPaths.some(path =>
@@ -119,7 +120,7 @@ export async function middleware(request: NextRequest) {
       (request.nextUrl.pathname.startsWith('/api/stream') ||
        request.nextUrl.pathname.startsWith('/api/transcode') ||
        request.nextUrl.pathname.startsWith('/api/subtitles')) &&
-      request.nextUrl.searchParams.has('token')
+      (request.nextUrl.searchParams.has('token') || request.nextUrl.searchParams.has('infoHash'))
     ) {
       return response;
     }

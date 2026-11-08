@@ -79,4 +79,12 @@ describe('buildPlayerArgs', () => {
     const args = buildPlayerArgs('generic', testFile);
     expect(args).toEqual([testFile]);
   });
+
+  it('builds MPV arguments with direct HTTP torrent stream URL', () => {
+    const streamUrl = 'http://127.0.0.1:42069/webtorrent/abc12345/0';
+    const args = buildPlayerArgs('mpv', streamUrl, 45);
+    expect(args).toContain('--fullscreen');
+    expect(args).toContain('--start=45');
+    expect(args[args.length - 1]).toBe(streamUrl);
+  });
 });

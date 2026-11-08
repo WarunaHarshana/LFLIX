@@ -1,4 +1,7 @@
 import crypto from 'crypto';
+import { Agent } from 'undici';
+
+const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
 export const TIMSTREAMS_BASE = 'https://timst.cfd';
 export const TIMSTREAMS_FALLBACK_BASE = 'https://timstreams.st';
@@ -190,15 +193,19 @@ async function fetchWithFallback(endpoint: string, options: RequestInit = {}): P
   for (const base of bases) {
     try {
       const url = `${base}${endpoint}`;
-      const res = await fetch(url, {
+      const fetchOpts: any = {
         ...options,
         headers: {
           'Accept': 'application/json',
           'User-Agent': USER_AGENT,
           ...(options.headers || {})
         },
-        signal: AbortSignal.timeout(4000)
-      });
+        signal: AbortSignal.timeout(3000),
+      };
+      if (insecureAgent) {
+        fetchOpts.dispatcher = insecureAgent;
+      }
+      const res = await fetch(url, fetchOpts);
       if (res.ok) {
         const contentType = res.headers.get('content-type') || '';
         if (contentType.includes('text/html')) {
@@ -221,9 +228,7 @@ async function fetchWithFallback(endpoint: string, options: RequestInit = {}): P
  */
 export async function fetchTimStreamsEvents(): Promise<{ events: TimStreamsEvent[]; genres: Record<number, string> }> {
   try {
-    const res = await fetchWithFallback('/api/live-upcoming', {
-      next: { revalidate: 60 } as any
-    });
+    const res = await fetchWithFallback('/api/live-upcoming');
     const data = await res.json();
     const genres = normalizeGenresMap(data.genres);
     const events: TimStreamsEvent[] = Array.isArray(data.events) ? data.events : [];
@@ -239,9 +244,7 @@ export async function fetchTimStreamsEvents(): Promise<{ events: TimStreamsEvent
  */
 export async function fetchTimStreamsWatch(id: string): Promise<TimStreamsWatchItem | null> {
   try {
-    const res = await fetchWithFallback(`/api/watch/${encodeURIComponent(id)}`, {
-      next: { revalidate: 30 } as any
-    });
+    const res = await fetchWithFallback(`/api/watch/${encodeURIComponent(id)}`);
     const data = await res.json();
     if (data.item) {
       return data.item;
@@ -269,9 +272,7 @@ export async function fetchTimStreamsWatch(id: string): Promise<TimStreamsWatchI
  */
 export async function fetchTimStreamsChannels(): Promise<{ channels: TimStreamsChannel[]; genres: Record<number, string> }> {
   try {
-    const res = await fetchWithFallback('/api/channels', {
-      next: { revalidate: 300 } as any
-    });
+    const res = await fetchWithFallback('/api/channels');
     const data = await res.json();
     const genres = normalizeGenresMap(data.genres);
     const channels: TimStreamsChannel[] = Array.isArray(data.channels) ? data.channels : [];

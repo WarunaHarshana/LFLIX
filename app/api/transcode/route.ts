@@ -39,8 +39,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: resolved.error }, { status: resolved.status });
     }
 
+    const paramDur = searchParams.get('duration') ? parseFloat(searchParams.get('duration')!) : null;
     const duration = (resolved.duration && resolved.duration > 0)
       ? resolved.duration
+      : (paramDur && Number.isFinite(paramDur) && paramDur > 0)
+      ? paramDur
       : await probeDuration(resolved.mediaPath);
     if (!duration) {
       return NextResponse.json({ error: 'Could not probe media duration' }, { status: 500 });

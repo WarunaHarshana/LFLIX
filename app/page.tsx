@@ -731,6 +731,14 @@ export default function Home() {
               initialQuery={torrentInitialQuery}
               onSwitchToOnline={() => setDiscoverMode('online')}
               onOpenOnline={(item) => openOnlineInDiscover(item)}
+              onPlayStream={(stream) => {
+                playback.setVideoPlayer({
+                  src: stream.url,
+                  title: stream.title,
+                  fileName: stream.fileName,
+                });
+              }}
+              showToast={showToast}
             />
           )
         )}

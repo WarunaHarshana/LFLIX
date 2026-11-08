@@ -345,6 +345,13 @@ Active Subtitle Text In Overlay`;
     it('does not flag HLS/transcode URLs as incompatible', () => {
       expect(isStreamIncompatible('https://example.com/stream.m3u8', 'hevc', 'eac3', 'test.mkv')).toBe(false);
       expect(isStreamIncompatible('/api/transcode?id=1', 'hevc', 'eac3', 'test.mkv')).toBe(false);
+      expect(isStreamIncompatible('/api/transcode?infoHash=abc', 'hevc', 'eac3', 'test.mkv')).toBe(false);
+    });
+
+    it('flags incompatible torrent streams (e.g. MKV/HEVC) for transcode but allows compatible MP4s natively', () => {
+      expect(isStreamIncompatible('/api/torrent-stream/video?infoHash=abc', 'hevc', 'aac', 'test.mkv')).toBe(true);
+      expect(isStreamIncompatible('/api/torrent-stream/video?infoHash=abc', null, null, 'The.Odyssey.2026.HEVC.mkv')).toBe(true);
+      expect(isStreamIncompatible('/api/torrent-stream/video?infoHash=abc', 'h264', 'aac', 'test.mp4')).toBe(false);
     });
   });
 

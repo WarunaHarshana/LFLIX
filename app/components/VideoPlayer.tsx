@@ -174,9 +174,18 @@ export function isStreamIncompatible(
   }
   const badContainers = ['mkv', 'avi', 'wmv', 'flv', 'ts', 'm2ts', 'divx', 'xvid', 'mpg', 'mpeg', 'vob'];
   const isBadContainer = !!ext && badContainers.includes(ext);
+  const fn = (fileName || '').toLowerCase();
+  const hasBadCodecInName =
+    fn.includes('hevc') ||
+    fn.includes('x265') ||
+    fn.includes('h265') ||
+    fn.includes('10bit') ||
+    fn.includes('truehd') ||
+    fn.includes('dts');
 
   return (
     isBadContainer ||
+    hasBadCodecInName ||
     (a !== '' && badAudio.some((c) => a.includes(c))) ||
     (v !== '' && badVideo.some((c) => v.includes(c)))
   );
@@ -187,7 +196,7 @@ export function buildApiUrlForSrc(src: string, base: string, extra?: Record<stri
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
     const u = new URL(src, origin);
     const params = new URLSearchParams();
-    for (const k of ['token', 'contentType', 'contentId', 'episodeId']) {
+    for (const k of ['token', 'contentType', 'contentId', 'episodeId', 'infoHash', 'fileIndex']) {
       const v = u.searchParams.get(k);
       if (v) params.set(k, v);
     }
@@ -195,7 +204,7 @@ export function buildApiUrlForSrc(src: string, base: string, extra?: Record<stri
       for (const [k, v] of Object.entries(extra)) params.set(k, v);
     }
     const qs = params.toString();
-    return qs ? `${base}?${qs}` : base;
+    return qs ? `${base}?${qs}` : '';
   } catch {
     return '';
   }
@@ -563,6 +572,29 @@ export default function VideoPlayer({
             contentType,
             contentId: parseInt(contentId, 10),
             episodeId: episodeId ? parseInt(episodeId, 10) : undefined,
+            startTime: Math.floor(currentPos),
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (videoRef.current) videoRef.current.pause();
+          setNativePlayerMsg(`Playing on Host PC (${data.message || 'Player'})`);
+          setTimeout(() => setNativePlayerMsg(null), 4000);
+          setShowExternalPlayerModal(false);
+          return;
+        } else {
+          setNativePlayerMsg(`Failed to launch on PC: ${data.error || 'Error'}`);
+          setTimeout(() => setNativePlayerMsg(null), 4000);
+        }
+      } else {
+        // Direct stream or torrent stream
+        const fullStreamUrl = src.startsWith('http') ? src : `${window.location.origin}${src}`;
+        const res = await fetch('/api/play', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            streamUrl: fullStreamUrl,
             startTime: Math.floor(currentPos),
           }),
         });
@@ -1196,6 +1228,32 @@ export default function VideoPlayer({
         setCurrentTime(video.currentTime);
       }
       updateActiveCue(video.currentTime);
+
+      // Auto-fallback if audio is advancing but no visual frames can be rendered (e.g. HEVC/x265 in Chrome)
+      if (
+        !didFallback &&
+        !isHlsSource(activeSrc) &&
+        video.currentTime > 1.2 &&
+        video.videoWidth === 0 &&
+        video.videoHeight === 0
+      ) {
+        const transcodeUrl = buildApiUrl('/api/transcode', {
+          duration: video.duration > 0 ? String(Math.floor(video.duration)) : '',
+        });
+        if (transcodeUrl) {
+          setDidFallback(true);
+          setError(null);
+          setLoading(true);
+          try {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+          } catch {}
+          setReloadKey((k) => k + 1);
+          setActiveSrc(transcodeUrl);
+          return;
+        }
+      }
       if (video.buffered.length > 0) {
         try {
           const cur = video.currentTime;

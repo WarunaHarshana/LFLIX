@@ -1,7 +1,29 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, Download, Loader2, X, ArrowDown, Star, Link2, AlertTriangle, Magnet, Folder, Globe, ArrowUpDown, TrendingUp, Film, Tv, Cloud, CloudUpload } from 'lucide-react';
+import {
+    Search,
+    Download,
+    Loader2,
+    X,
+    ArrowDown,
+    Link2,
+    AlertTriangle,
+    Magnet,
+    Folder,
+    Globe,
+    ArrowUpDown,
+    TrendingUp,
+    Film,
+    Tv,
+    Cloud,
+    CloudUpload,
+    Play,
+    MonitorPlay,
+    Users,
+    Gauge,
+    Radio
+} from 'lucide-react';
 import LiquidDropdown from './LiquidDropdown';
 
 type TrendingItem = {
@@ -52,13 +74,64 @@ type TMDBResult = {
     popularity: number;
 };
 
+type StreamFile = {
+    index: number;
+    name: string;
+    length: number;
+    isVideo: boolean;
+    mimeType: string;
+    streamUrl: string;
+    localStreamUrl: string;
+    nextStreamUrl?: string;
+};
+
+type StreamSession = {
+    infoHash: string;
+    name: string;
+    status: 'metadata' | 'ready' | 'streaming' | 'error';
+    downloadSpeed: number;
+    uploadSpeed: number;
+    progress: number;
+    numPeers: number;
+    totalSize: number;
+    downloaded: number;
+    selectedFileIndex: number;
+    files: StreamFile[];
+    streamUrl: string;
+    localStreamUrl: string;
+    nextStreamUrl?: string;
+    errorMessage?: string;
+};
+
 type Props = {
     onOpenOnline?: (item: TMDBResult) => void;
     onSwitchToOnline?: () => void;
     initialQuery?: string;
+    onPlayStream?: (stream: { url: string; localUrl: string; title: string; fileName?: string }) => void;
+    showToast?: (message: string, type: 'success' | 'error') => void;
 };
 
-export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, initialQuery }: Props) {
+function formatSpeed(bytesPerSec: number): string {
+    if (!bytesPerSec || bytesPerSec <= 0) return '0 KB/s';
+    if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+    return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
+function formatBytes(bytes: number): string {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+}
+
+export default function TorrentSearchPage({
+    onOpenOnline,
+    onSwitchToOnline,
+    initialQuery,
+    onPlayStream,
+    showToast,
+}: Props) {
     const [searchQuery, setSearchQuery] = useState('');
     const [results, setResults] = useState<TorrentResult[]>([]);
     const [sourceStatuses, setSourceStatuses] = useState<TorrentSourceStatus[]>([]);
@@ -77,6 +150,12 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
     const [gdriveAvailable, setGdriveAvailable] = useState(false);
     const [cloudMode, setCloudMode] = useState(false);
     const [cloudAvailable, setCloudAvailable] = useState(false);
+
+    // Streaming state (TorrentPlayer innovation adaptation)
+    const [streamingTarget, setStreamingTarget] = useState<string | null>(null);
+    const [streamSession, setStreamSession] = useState<StreamSession | null>(null);
+    const [streamModalOpen, setStreamModalOpen] = useState(false);
+    const [launchingDesktopPlayer, setLaunchingDesktopPlayer] = useState(false);
 
     // Trending state
     const [trendingMovies, setTrendingMovies] = useState<TrendingItem[]>([]);
@@ -102,6 +181,27 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
         fetchGdrive();
         fetchCloud();
     }, []);
+
+    // Polling stream stats while stream modal is open
+    useEffect(() => {
+        if (!streamModalOpen || !streamSession?.infoHash) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/torrent-stream?infoHash=${encodeURIComponent(streamSession.infoHash)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.stream) {
+                        setStreamSession(prev => (prev ? { ...prev, ...data.stream } : data.stream));
+                    }
+                }
+            } catch {
+                // ignore polling errors
+            }
+        }, 1500);
+
+        return () => clearInterval(interval);
+    }, [streamModalOpen, streamSession?.infoHash]);
 
     const fetchCloud = async () => {
         try {
@@ -202,6 +302,104 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
         void executeSearch(initialQuery);
     }, [initialQuery]);
 
+    // --- Torrent Streaming Actions (Instant Seek & Stream) ---
+    const startStreaming = async (magnetUri: string, title?: string, fileIndex?: number) => {
+        if (!magnetUri || !magnetUri.trim().startsWith('magnet:')) {
+            setError('Please provide a valid magnet link');
+            return;
+        }
+
+        setStreamingTarget(magnetUri);
+        setStreamModalOpen(true);
+        try {
+            const res = await fetch('/api/torrent-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ magnetUri: magnetUri.trim(), fileIndex }),
+            });
+            const data = await res.json();
+            if (data.success && data.stream) {
+                setStreamSession({
+                    ...data.stream,
+                    name: title || data.stream.name,
+                });
+            } else {
+                setError(data.error || 'Failed to start instant stream');
+                setStreamModalOpen(false);
+            }
+        } catch {
+            setError('Failed to connect to torrent streaming service');
+            setStreamModalOpen(false);
+        } finally {
+            setStreamingTarget(null);
+        }
+    };
+
+    const switchStreamFile = async (newIndex: number) => {
+        if (!streamSession) return;
+        await startStreaming(`magnet:?xt=urn:btih:${streamSession.infoHash}`, streamSession.name, newIndex);
+    };
+
+    const playStreamInBrowser = () => {
+        if (!streamSession) return;
+        const activeFile = streamSession.files?.[streamSession.selectedFileIndex] || streamSession.files?.[0];
+        const preferredBrowserUrl = activeFile?.nextStreamUrl || streamSession.nextStreamUrl || streamSession.localStreamUrl || streamSession.streamUrl;
+        if (onPlayStream) {
+            onPlayStream({
+                url: preferredBrowserUrl,
+                localUrl: activeFile?.localStreamUrl || streamSession.localStreamUrl || preferredBrowserUrl,
+                title: activeFile?.name ? `${streamSession.name} - ${activeFile.name}` : streamSession.name,
+                fileName: activeFile?.name || streamSession.name,
+            });
+            setStreamModalOpen(false);
+        } else {
+            window.open(preferredBrowserUrl, '_blank');
+        }
+    };
+
+    const playStreamOnHostPc = async () => {
+        if (!streamSession) return;
+        setLaunchingDesktopPlayer(true);
+        try {
+            const res = await fetch('/api/play', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    streamUrl: streamSession.localStreamUrl || streamSession.streamUrl,
+                    title: streamSession.name,
+                }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                if (showToast) {
+                    showToast(data.message || 'Player launched on Host PC', 'success');
+                }
+            } else {
+                setError(data.error || 'Failed to launch desktop player');
+            }
+        } catch {
+            setError('Failed to communicate with player service');
+        } finally {
+            setLaunchingDesktopPlayer(false);
+        }
+    };
+
+    const stopStreamSession = async () => {
+        if (!streamSession) {
+            setStreamModalOpen(false);
+            return;
+        }
+        const hash = streamSession.infoHash;
+        setStreamSession(null);
+        setStreamModalOpen(false);
+        try {
+            await fetch(`/api/torrent-stream?infoHash=${encodeURIComponent(hash)}`, {
+                method: 'DELETE',
+            });
+        } catch { /* ignore */ }
+    };
+
+    // --- Standard Downloads ---
     const startDownload = async (magnetUri: string, forceTarget?: 'local' | 'gdrive' | 'cloud') => {
         const isCloud = forceTarget === 'cloud' || (forceTarget === undefined && cloudMode);
         const isDrive = !isCloud && (forceTarget === 'gdrive' || (forceTarget === undefined && gdriveMode));
@@ -216,7 +414,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
             const res = await fetch('/api/downloads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                body: JSON.stringify(body),
             });
             const data = await res.json();
             if (data.success) {
@@ -261,7 +459,6 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
         if (e.key === 'Enter') searchTorrents();
     };
 
-    // Quality badge color
     const qualityColor = (q: string) => {
         const ql = q.toLowerCase();
         if (ql.includes('2160') || ql.includes('4k') || ql.includes('uhd')) return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
@@ -290,7 +487,6 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
         return { label: result.source, className: 'bg-neutral-800 text-neutral-500' };
     };
 
-    /** Extract format tags (HDR, IMAX, Remux, Atmos, etc.) from a title */
     const extractTags = (title: string): { label: string; className: string }[] => {
         const tags: { label: string; className: string }[] = [];
         if (/\bDOVI\b|\bDV\b|DOLBY[\s.-]?VISION/i.test(title))
@@ -325,8 +521,10 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                         <Magnet className="w-7 h-7" />
                     </div>
                     <div>
-                        <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">Torrent Search</h1>
-                        <p className="text-neutral-400 text-sm md:text-base mt-0.5">Search for any torrent — movies, TV episodes, anything. Download directly to your library.</p>
+                        <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">Torrent Search & Stream</h1>
+                        <p className="text-neutral-400 text-sm md:text-base mt-0.5">
+                            Search for any torrent. Stream instantly with sub-second random seeking or download to your library.
+                        </p>
                     </div>
                 </div>
                 {onSwitchToOnline && (
@@ -458,11 +656,11 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                     if (newVal) setCloudMode(false);
                                     localStorage.setItem('lflix-gdrive-default', newVal ? 'true' : 'false');
                                 }}
-                                className={`flex flex-col items-center justify-center p-3 sm:px-5 rounded-2xl transition-all shadow-md flex-shrink-0 min-w-[72px] sm:min-w-[84px] h-full ${gdriveMode ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold' : 'bg-white/[0.04] text-neutral-400 border border-white/10 hover:bg-white/10'}`}
-                                title="Mount to Drive via local Rclone"
+                                className={`flex flex-col items-center justify-center p-3 sm:px-5 rounded-2xl transition-all shadow-md flex-shrink-0 min-w-[72px] sm:min-w-[84px] h-full ${gdriveMode ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-bold' : 'bg-white/[0.04] text-neutral-400 border border-white/10 hover:bg-white/10'}`}
+                                title="Local Google Drive: Download directly into mounted Z:\ drive"
                             >
-                                <CloudUpload className="w-6 h-6 mb-1" />
-                                <span className="text-xs uppercase tracking-wider font-semibold">Drive</span>
+                                <Cloud className="w-6 h-6 mb-1 text-blue-400" />
+                                <span className="text-xs uppercase tracking-wider font-semibold">GDrive</span>
                             </button>
                         )}
                     </div>
@@ -543,6 +741,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                     {sortedResults.map((result, i) => {
                         const isStarted = downloadStarted.has(result.magnet);
                         const source = sourceBadge(result);
+                        const isStreaming = streamingTarget === result.magnet;
                         return (
                             <div
                                 key={i}
@@ -564,19 +763,37 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                         {result.uploadDate && <span className="text-neutral-500">{result.uploadDate}</span>}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-1 sm:pt-0">
+                                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end pt-1 sm:pt-0">
+                                    {/* ⚡ Instant Stream Button (TorrentPlayer Feature) */}
+                                    {!isDDL(result) && result.magnet.startsWith('magnet:') && (
+                                        <button
+                                            onClick={() => startStreaming(result.magnet, result.title)}
+                                            disabled={streamingTarget !== null}
+                                            className="flex-1 sm:flex-initial justify-center px-4 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer min-h-[38px] bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-lg shadow-orange-500/20 hover:scale-105"
+                                            title="Stream immediately with instant random seeking without waiting for full download"
+                                        >
+                                            {isStreaming ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                                            ) : (
+                                                <Play className="w-3.5 h-3.5 fill-black text-black" />
+                                            )}
+                                            <span>⚡ Stream</span>
+                                        </button>
+                                    )}
+
                                     <button
                                         onClick={() => openDetailsByTitle(result.title)}
                                         disabled={downloading !== null || resolvingDetails !== null}
-                                        className="flex-1 sm:flex-initial justify-center px-4 py-2.5 liquid-glass-pill border border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-600/30 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 min-h-[38px]"
+                                        className="flex-1 sm:flex-initial justify-center px-3.5 py-2.5 liquid-glass-pill border border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-600/30 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 min-h-[38px]"
                                     >
                                         {resolvingDetails === result.title ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
                                         Details
                                     </button>
+
                                     <button
                                         onClick={() => startDownload(result.magnet)}
                                         disabled={downloading !== null || isStarted}
-                                        className={`flex-1 sm:flex-initial justify-center px-4 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer min-h-[38px] ${isStarted
+                                        className={`flex-1 sm:flex-initial justify-center px-3.5 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer min-h-[38px] ${isStarted
                                             ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default'
                                             : 'liquid-btn-primary shadow-md hover:scale-105'
                                             }`}
@@ -595,7 +812,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                     <button
                                         onClick={() => startDownload(result.magnet, 'gdrive')}
                                         disabled={downloading !== null || isStarted}
-                                        className="flex-1 sm:flex-initial justify-center px-3.5 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer min-h-[38px] bg-blue-600/85 hover:bg-blue-600 text-white shadow-md shadow-blue-500/15 hover:shadow-blue-500/30 hover:scale-105 border border-blue-400/30 disabled:opacity-50"
+                                        className="flex-1 sm:flex-initial justify-center px-3 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer min-h-[38px] bg-blue-600/85 hover:bg-blue-600 text-white shadow-md shadow-blue-500/15 hover:shadow-blue-500/30 hover:scale-105 border border-blue-400/30 disabled:opacity-50"
                                         title="Download torrent to Google Drive via local Rclone"
                                     >
                                         {downloading === `${result.magnet}:gdrive` ? (
@@ -603,14 +820,14 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                         ) : (
                                             <CloudUpload className="w-3.5 h-3.5" />
                                         )}
-                                        <span>To Drive</span>
+                                        <span>Drive</span>
                                     </button>
 
                                     {cloudAvailable && (
                                         <button
                                             onClick={() => startDownload(result.magnet, 'cloud')}
                                             disabled={downloading !== null || isStarted}
-                                            className="flex-1 sm:flex-initial justify-center px-3.5 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer min-h-[38px] bg-purple-600/85 hover:bg-purple-600 text-white shadow-md shadow-purple-500/15 hover:shadow-purple-500/30 hover:scale-105 border border-purple-400/30 disabled:opacity-50"
+                                            className="flex-1 sm:flex-initial justify-center px-3 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer min-h-[38px] bg-purple-600/85 hover:bg-purple-600 text-white shadow-md shadow-purple-500/15 hover:shadow-purple-500/30 hover:scale-105 border border-purple-400/30 disabled:opacity-50"
                                             title="Cloud-to-Cloud: Download in cloud container directly to Drive (0 local disk/network)"
                                         >
                                             {downloading === `${result.magnet}:cloud` ? (
@@ -618,7 +835,7 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                             ) : (
                                                 <Cloud className="w-3.5 h-3.5" />
                                             )}
-                                            <span>To Cloud</span>
+                                            <span>Cloud</span>
                                         </button>
                                     )}
                                 </div>
@@ -670,83 +887,45 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                         </div>
                     </div>
 
-                    {/* Trending loading */}
-                    {loadingTrending && (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2 className="w-7 h-7 animate-spin text-neutral-400" />
+                    {/* Trending Grid */}
+                    {loadingTrending ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                            {Array.from({ length: 12 }).map((_, i) => (
+                                <div key={i} className="aspect-[2/3] rounded-2xl bg-white/[0.04] animate-pulse" />
+                            ))}
                         </div>
-                    )}
-
-                    {/* Trending grid */}
-                    {!loadingTrending && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3.5">
-                            {(trendingTab === 'movie' ? trendingMovies : trendingTv).map((item) => (
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                            {(trendingTab === 'movie' ? trendingMovies : trendingTv).map(item => (
                                 <div
                                     key={item.tmdbId}
                                     onClick={() => {
-                                        setSearchQuery(item.title);
-                                        executeSearch(item.title);
-                                        inputRef.current?.focus();
+                                        const q = item.year ? `${item.title} ${item.year}` : item.title;
+                                        setSearchQuery(q);
+                                        executeSearch(q);
                                     }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' || e.key === ' ') {
-                                            e.preventDefault();
-                                            setSearchQuery(item.title);
-                                            executeSearch(item.title);
-                                            inputRef.current?.focus();
-                                        }
-                                    }}
-                                    role="button"
-                                    tabIndex={0}
-                                    className="group relative liquid-card liquid-sheen-effect rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.04] hover:z-30 shadow-md hover:shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_24px_rgba(255,255,255,0.12)] text-left"
-                                    title={`Search torrents for "${item.title}"`}
+                                    className="group relative cursor-pointer rounded-2xl overflow-hidden border border-white/10 hover:border-white/30 transition-all hover:scale-[1.03] hover:shadow-xl bg-neutral-900/40"
                                 >
-                                    {/* Poster */}
-                                    <div className="aspect-[2/3] relative bg-neutral-900 overflow-hidden">
-                                        {onOpenOnline && (
-                                            <button aria-label="Open details"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onOpenOnline(item);
-                                                }}
-                                                className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/20 text-white rounded-lg text-[10px] font-bold transition shadow-md"
-                                                title="Open details"
-                                            >
-                                                <Globe className="w-3 h-3 text-blue-400" />
-                                                <span>Details</span>
-                                            </button>
-                                        )}
+                                    <div className="aspect-[2/3] bg-neutral-800 relative">
                                         {item.posterPath ? (
                                             <img
-                                                src={`https://image.tmdb.org/t/p/w300${item.posterPath}`}
+                                                src={`https://image.tmdb.org/t/p/w500${item.posterPath}`}
                                                 alt={item.title}
-                                                className="w-full h-full object-cover transition duration-500 group-hover:scale-105 group-hover:brightness-95"
+                                                className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
                                                 loading="lazy"
                                             />
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center">
-                                                {item.mediaType === 'movie' ? <Film className="w-8 h-8 text-neutral-700" /> : <Tv className="w-8 h-8 text-neutral-700" />}
+                                            <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                                                <Film className="w-8 h-8" />
                                             </div>
                                         )}
-                                        {/* Hover overlay */}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
-                                            <div className="w-full">
-                                                <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl liquid-glass-pill border border-white/20 text-xs text-blue-300 font-semibold shadow-lg">
-                                                    <Search className="w-3 h-3 text-blue-400" />
-                                                    <span>Search Torrents</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {/* Rating badge */}
-                                        {item.rating !== null && item.rating > 0 && (
-                                            <div className="!absolute top-2 right-2 z-20 flex items-center gap-1 bg-black/75 backdrop-blur-md border border-amber-400/35 px-2 py-0.5 rounded-lg shadow-md w-fit pointer-events-none select-none text-amber-300 font-bold text-[10px]">
-                                                <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                                                <span>{item.rating.toFixed(1)}</span>
+                                        {item.rating && (
+                                            <div className="absolute top-2 right-2 px-2 py-0.5 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-[11px] font-bold text-amber-400">
+                                                ★ {item.rating.toFixed(1)}
                                             </div>
                                         )}
                                     </div>
-                                    {/* Info */}
-                                    <div className="p-3">
+                                    <div className="p-2.5">
                                         <p className="text-xs md:text-sm font-semibold leading-tight line-clamp-2 mb-1 group-hover:text-white transition-colors">{item.title}</p>
                                         {item.year && (
                                             <p className="text-[10px] md:text-xs text-neutral-400 font-medium">{item.year}</p>
@@ -754,17 +933,6 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                                     </div>
                                 </div>
                             ))}
-                        </div>
-                    )}
-
-                    {/* Fallback if no trending data */}
-                    {!loadingTrending && trendingMovies.length === 0 && trendingTv.length === 0 && (
-                        <div className="text-center py-16 liquid-glass-base border border-white/10 rounded-3xl shadow-xl">
-                            <Magnet className="w-16 h-16 text-neutral-600 mx-auto mb-4" />
-                            <h3 className="text-xl font-bold text-neutral-300 mb-2">Search for anything</h3>
-                            <p className="text-neutral-400 text-sm md:text-base max-w-md mx-auto">
-                                Search for movies, TV episodes, or any content by name. Include quality tags like 1080p or 4K for better results.
-                            </p>
                         </div>
                     )}
                 </div>
@@ -785,6 +953,18 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                         placeholder="magnet:?xt=urn:btih:..."
                         className="flex-1 bg-white/[0.04] border border-white/15 focus:border-blue-400/50 focus:bg-white/[0.08] rounded-2xl px-4 py-3 text-sm text-white outline-none transition-all font-mono shadow-inner"
                     />
+
+                    {/* Instant Stream Magnet button */}
+                    <button
+                        onClick={() => startStreaming(manualMagnet.trim(), 'Magnet Stream')}
+                        disabled={!manualMagnet.trim().startsWith('magnet:') || streamingTarget !== null}
+                        className="px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+                        title="Stream magnet instantly"
+                    >
+                        <Play className="w-4 h-4 fill-black text-black" />
+                        <span>⚡ Stream</span>
+                    </button>
+
                     <button
                         onClick={() => startManualDownload('local')}
                         disabled={!manualMagnet.trim().startsWith('magnet:') || downloading !== null}
@@ -818,6 +998,153 @@ export default function TorrentSearchPage({ onOpenOnline, onSwitchToOnline, init
                     )}
                 </div>
             </div>
+
+            {/* --- TorrentPlayer Stream Control Modal --- */}
+            {streamModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+                    <div className="liquid-glass-base border border-amber-500/30 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl relative overflow-hidden">
+                        <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-2xl">
+                                    <Radio className="w-6 h-6 animate-pulse" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white leading-tight">Instant Torrent Stream</h3>
+                                    <p className="text-xs text-amber-400 font-medium">Powered by Swarm Playhead Streaming</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={stopStreamSession}
+                                className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition"
+                                title="Close & Stop Stream"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {streamSession ? (
+                            <div className="space-y-5">
+                                <div>
+                                    <p className="text-sm font-semibold text-neutral-200 break-words mb-1">
+                                        {streamSession.name}
+                                    </p>
+                                    <p className="text-xs text-neutral-400">
+                                        Total Size: {formatBytes(streamSession.totalSize)}
+                                    </p>
+                                </div>
+
+                                {/* Live Swarm Telemetry */}
+                                <div className="grid grid-cols-3 gap-2 p-3 bg-white/[0.03] border border-white/10 rounded-2xl text-center">
+                                    <div className="flex flex-col items-center justify-center">
+                                        <div className="flex items-center gap-1 text-xs text-neutral-400 mb-0.5">
+                                            <Gauge className="w-3.5 h-3.5 text-amber-400" />
+                                            <span>Speed</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-white">
+                                            {formatSpeed(streamSession.downloadSpeed)}
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col items-center justify-center border-x border-white/10">
+                                        <div className="flex items-center gap-1 text-xs text-neutral-400 mb-0.5">
+                                            <Users className="w-3.5 h-3.5 text-blue-400" />
+                                            <span>Peers</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-white">
+                                            {streamSession.numPeers} connected
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col items-center justify-center">
+                                        <div className="flex items-center gap-1 text-xs text-neutral-400 mb-0.5">
+                                            <Radio className="w-3.5 h-3.5 text-green-400" />
+                                            <span>Buffered</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-white">
+                                            {(streamSession.progress * 100).toFixed(1)}%
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Multi-file selector (if torrent has multiple videos) */}
+                                {streamSession.files && streamSession.files.filter(f => f.isVideo).length > 1 && (
+                                    <div>
+                                        <label className="text-xs text-neutral-300 font-semibold mb-1.5 block">
+                                            Select Video Track / Episode:
+                                        </label>
+                                        <select
+                                            value={streamSession.selectedFileIndex}
+                                            onChange={(e) => switchStreamFile(Number(e.target.value))}
+                                            className="w-full bg-neutral-900 border border-white/15 text-white rounded-xl p-2.5 text-xs outline-none focus:border-amber-400"
+                                        >
+                                            {streamSession.files
+                                                .filter(f => f.isVideo)
+                                                .map(file => (
+                                                    <option key={file.index} value={file.index}>
+                                                        {file.name} ({formatBytes(file.length)})
+                                                    </option>
+                                                ))}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                                    <button
+                                        onClick={playStreamInBrowser}
+                                        className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 hover:scale-[1.02] transition"
+                                    >
+                                        <Play className="w-4 h-4 fill-black" />
+                                        <span>Play in Browser</span>
+                                    </button>
+
+                                    <button
+                                        onClick={playStreamOnHostPc}
+                                        disabled={launchingDesktopPlayer}
+                                        className="flex-1 py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 hover:scale-[1.02] transition"
+                                        title="Play in desktop MPV / VLC player on Host PC"
+                                    >
+                                        {launchingDesktopPlayer ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <MonitorPlay className="w-4 h-4 text-amber-400" />
+                                        )}
+                                        <span>Play in MPV / VLC</span>
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-1">
+                                    <button
+                                        onClick={() => {
+                                            if (streamSession?.infoHash) {
+                                                void startDownload(`magnet:?xt=urn:btih:${streamSession.infoHash}`);
+                                                setStreamModalOpen(false);
+                                            }
+                                        }}
+                                        className="text-xs text-neutral-400 hover:text-white flex items-center gap-1 transition"
+                                    >
+                                        <Download className="w-3.5 h-3.5 text-neutral-500" />
+                                        <span>Save full torrent to library in background</span>
+                                    </button>
+
+                                    <button
+                                        onClick={stopStreamSession}
+                                        className="text-xs text-red-400 hover:text-red-300 font-semibold transition"
+                                    >
+                                        Stop Stream
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
+                                <Loader2 className="w-10 h-10 animate-spin text-amber-400" />
+                                <p className="text-sm font-semibold text-white">Connecting to BitTorrent Swarm...</p>
+                                <p className="text-xs text-neutral-400 max-w-sm">
+                                    Fetching metadata and pre-buffering container headers for instant playback.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

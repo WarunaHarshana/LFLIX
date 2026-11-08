@@ -3,6 +3,7 @@ import path from 'path';
 import { spawnSync, execFile } from 'child_process';
 import db from '@/lib/db';
 import { verifyStreamToken } from './streamTokens';
+import { torrentStreamManager } from './torrentStreamer';
 
 /**
  * Locate the ffmpeg / ffprobe binaries.
@@ -218,6 +219,26 @@ export type ResolveResult =
  * matching the existing /api/stream contract.
  */
 export function resolveMediaFromParams(searchParams: URLSearchParams): ResolveResult {
+  const infoHash = searchParams.get('infoHash');
+  if (infoHash) {
+    const fileIndexStr = searchParams.get('fileIndex');
+    const fileIndex = fileIndexStr ? parseInt(fileIndexStr, 10) : 0;
+    const stats = torrentStreamManager.getStreamStats(infoHash);
+    const files = stats?.files || [];
+    const safeIdx = fileIndex >= 0 && fileIndex < files.length ? fileIndex : 0;
+    const file = files[safeIdx];
+    if (!stats || !file) {
+      return { ok: false, status: 404, error: 'Torrent stream not found' };
+    }
+    const mediaPath = file.localStreamUrl || file.streamUrl;
+    return {
+      ok: true,
+      mediaPath,
+      videoCodec: undefined,
+      duration: undefined,
+    };
+  }
+
   const token = searchParams.get('token');
   const contentType = searchParams.get('contentType') as StreamContentType | null;
   const contentId = searchParams.get('contentId');
@@ -267,6 +288,13 @@ export function resolveMediaFromParams(searchParams: URLSearchParams): ResolveRe
 /** Build a query string that carries the same auth params (token OR ids) forward. */
 export function forwardAuthParams(searchParams: URLSearchParams): string {
   const out = new URLSearchParams();
+  const infoHash = searchParams.get('infoHash');
+  if (infoHash) {
+    out.set('infoHash', infoHash);
+    const fileIndex = searchParams.get('fileIndex');
+    if (fileIndex) out.set('fileIndex', fileIndex);
+    return out.toString();
+  }
   const token = searchParams.get('token');
   if (token) {
     out.set('token', token);

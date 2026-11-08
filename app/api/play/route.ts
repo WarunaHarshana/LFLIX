@@ -125,7 +125,59 @@ export async function POST(req: Request) {
     const limited = rateLimit(req, 'play', { windowMs: 60 * 1000, max: 30 });
     if (limited) return limited;
 
-    const { contentType, contentId, episodeId, startTime } = await readJsonObject(req, 8 * 1024);
+    const { contentType, contentId, episodeId, startTime, streamUrl } = await readJsonObject(req, 8 * 1024);
+
+    // Support launching external players directly for verified local/LAN stream URLs
+    if (streamUrl && typeof streamUrl === 'string') {
+      const trimmedStream = streamUrl.trim();
+      const isAllowedStreamUrl = /^https?:\/\/(localhost|127\.0\.0\.1|::1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?(\/[a-zA-Z0-9_\-\.\/%?&=]*)?$/i.test(trimmedStream);
+
+      if (!isAllowedStreamUrl) {
+        return NextResponse.json({ error: 'Invalid or disallowed stream URL' }, { status: 400 });
+      }
+
+      const playerPath = getPlayerPath();
+      const playerValidation = validatePlayerExecutable(playerPath);
+      if (!playerValidation.valid) {
+        return NextResponse.json({
+          error: `${playerValidation.error} Please update the player path in Settings.`
+        }, { status: 400 });
+      }
+
+      const playerType = detectPlayerType(playerPath);
+      const safeStartTime = typeof startTime === 'number' && Number.isFinite(startTime) && startTime > 0
+        ? startTime
+        : undefined;
+      const playerArgs = buildPlayerArgs(playerType, trimmedStream, safeStartTime);
+
+      if (process.platform === 'win32') {
+        const cmdLine = `start "" "${playerPath}" ${playerArgs.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`;
+        const child = spawn('cmd.exe', ['/c', cmdLine], {
+          windowsVerbatimArguments: true,
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: false,
+        });
+        child.unref();
+      } else {
+        const child = spawn(playerPath, playerArgs, {
+          detached: true,
+          stdio: 'ignore'
+        });
+        child.unref();
+      }
+
+      const playerNames: Record<PlayerType, string> = {
+        vlc: 'VLC',
+        potplayer: 'PotPlayer',
+        mpc: 'MPC',
+        mpv: 'mpv',
+        generic: 'Player'
+      };
+
+      return NextResponse.json({ success: true, message: `${playerNames[playerType]} Launched` });
+    }
+
     const parsedContentId = parsePositiveInt(contentId);
     const parsedEpisodeId = episodeId !== undefined ? parsePositiveInt(episodeId) : undefined;
 
