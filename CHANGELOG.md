@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.14.0
+
+Complete Live Sports & Live TV architectural migration to four modern streaming services (PPV.st, StrmFree.pk, Tim-Streams.com, PitSport.st), removal of legacy stream APIs, multi-provider parallel aggregation & deduplication, elevated UI/UX with branded source pills and stream selection drawer, and browser embed playback fixes.
+
+### Added
+
+- **Modern Streaming Services Architecture**: Completely migrated Live Sports and Live TV to four modern, high-reliability providers: PPV.st (`https://ppv.st/`), StrmFree (`https://strmfree.pk/`), Tim-Streams (`https://tim-streams.com/`), and PitSport (`https://pitsport.st/`).
+- **Clean Typed Provider Libraries**: Created modular, robust client libraries in `lib/`: `lib/ppv.ts`, `lib/strmfree.ts`, `lib/timstreams.ts`, and `lib/pitsport.ts`.
+- **Parallel Aggregation & Error Isolation**: Implemented `Promise.allSettled` in `/api/sports/matches` to query all four streaming providers in parallel without allowing timeouts or outages on one provider to degrade other sources.
+- **Multi-Source Deduplication**: Added team-sorted `getMatchKey` deduplication that intelligently combines fixtures across multiple providers into unified match cards with multi-source switcher pills.
+- **Dynamic Obfuscated Stream Decryption**: Implemented automated JS deobfuscation and ticket token XOR stream URL decoding for TimStreams (`ehgembxe.cfd` / `tims-001.sytes.net`) alongside dynamic embed resolvers for StrmFree, PitSport, and PPV.st.
+- **Expanded Live TV Channels Catalog**: Aggregated 224+ global TV networks and 24/7 channels from TimStreams and PPV.st, enriched with metadata, country flags, and category mapping.
+- **Redesigned Live Sports UI (`LiveSports.tsx`)**:
+  - Color-coded provider badges (PPV.st, StrmFree, Tim-Streams, PitSport) with glowing pulse indicators.
+  - Stream selection drawer with one-click source switching, resolution badges (`4K UHD`, `1080p FHD`, `720p HD`), and latency/feed tags.
+  - League group quick-filters (Premier League, Champions League, La Liga, NBA, UFC, Formula 1, etc.) and category navigation.
+  - Theater mode toggle, stream reload button, popout window, and container fullscreen.
+- **Redesigned Live TV UI (`LiveTVSection.tsx`)**:
+  - Curated category sidebar tabs (Favorites, Sports, News, Movies, Entertainment, Kids, Music, Documentaries).
+  - Persistent favorite channels system backed by `localStorage` (`lflix_iptv_favorites`).
+  - Channel surfing controls (Next/Previous Channel), stream reload, and country quick-filters.
+
+### Changed & Fixed
+
+- **Decommissioned Legacy Stream APIs**: Safely deleted obsolete `lib/streami.ts` and `lib/xyzstreams.ts` modules and stripped all legacy `streamed.pk` dependencies.
+- **Embed Sandbox & Security Hardening Fixes**: Removed restrictive iframe `sandbox` attributes that triggered anti-sandbox blockers on embed hosts (such as StrmFree's sandbox check and PitSport's `sandGuard`), and aligned `Referrer-Policy` to `no-referrer` to prevent HTTP-to-HTTPS downgrade drops.
+- **Middleware Streaming Headers**: Updated `middleware.ts` to allow `Cross-Origin-Resource-Policy: cross-origin` on media stream resolution endpoints, eliminating Chrome `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` errors.
+
 ## v0.13.0
 
 High-speed direct downloads (DDL) architecture, live subtitle overlay engine with customizable typography, stream connection watchdog & auto-failover, frontend code-splitting, and database/scanner performance optimizations.

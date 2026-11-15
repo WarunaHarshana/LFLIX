@@ -42,10 +42,30 @@ function getAllowedOrigin(request: NextRequest): string | null {
 
 function applySecurityHeaders(response: NextResponse, request: NextRequest): NextResponse {
   response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'DENY');
+  
+  // Do not deny framing for stream resolution or proxy endpoints
+  if (
+    request.nextUrl.pathname.startsWith('/api/sports/streams/resolve') ||
+    request.nextUrl.pathname.startsWith('/api/stream-servers/proxy')
+  ) {
+    // allow iframe embedding for video player streams
+  } else {
+    response.headers.set('X-Frame-Options', 'DENY');
+  }
+
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
-  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+
+  // Allow cross-origin media streaming for stream chunks and video players
+  if (
+    request.nextUrl.pathname.startsWith('/api/sports/streams/resolve') ||
+    request.nextUrl.pathname.startsWith('/api/stream') ||
+    request.nextUrl.pathname.startsWith('/api/transcode')
+  ) {
+    response.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  } else {
+    response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  }
 
   if (request.nextUrl.protocol === 'https:') {
     response.headers.set('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');

@@ -227,13 +227,13 @@ export default function IPTVPlayer({ channel, onClose }: Props) {
           </div>
         )}
         
-        {channel.url.includes('embed') || channel.url.includes('pages.dev') || channel.url.includes('html') ? (
+        {channel.url.includes('embed') || channel.url.includes('pages.dev') || channel.url.includes('html') || channel.url.includes('ehgembxe') || channel.url.includes('taifood') || channel.url.includes('strmfree') || channel.url.includes('embdlol') ? (
           <iframe
             src={channel.url}
-            className="w-full h-full border-0"
-            allow="autoplay; picture-in-picture; fullscreen *"
+            className="w-full h-full border-0 bg-black"
+            allow="autoplay; picture-in-picture; fullscreen"
             allowFullScreen
-            sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-downloads allow-modals allow-pointer-lock"
+            referrerPolicy="no-referrer"
             onLoad={() => setLoading(false)}
           />
         ) : (

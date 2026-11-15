@@ -19,28 +19,35 @@ import {
   RotateCw,
   ExternalLink,
   Sparkles,
-  FilterX
+  FilterX,
+  Zap,
+  Activity,
+  Layers,
+  Maximize2,
+  Radio,
+  Flame,
+  Star
 } from 'lucide-react';
 import { useModalBehavior } from '@/app/hooks/useModalBehavior';
 import LiquidDropdown from './LiquidDropdown';
 
-type Sport = {
+export type Sport = {
   id: string;
   name: string;
   icon?: string;
 };
 
-type Team = {
+export type Team = {
   name: string;
   badge?: string | null;
 };
 
-type StreamSource = {
+export type StreamSource = {
   source: string;
   id: string;
 };
 
-type Match = {
+export type Match = {
   id: string;
   title: string;
   category: string;
@@ -54,24 +61,290 @@ type Match = {
   sources: StreamSource[];
   isLive: boolean;
   is4k?: boolean;
+  league?: string;
 };
 
-type Stream = {
+export type Stream = {
   id: string;
   streamNo: number;
   language: string;
   hd: boolean;
   is4k?: boolean;
   embedUrl?: string;
+  url?: string;
   source: string;
+  quality?: string;
+  latency?: string;
+  bitrate?: number;
 };
+
+/* =========================================================================
+   PROVIDER BRANDING & CONFIGURATION
+   The 4 Official Providers: PPV.st, StrmFree, Tim-Streams, PitSport
+   ========================================================================= */
+
+export type ProviderKey = 'ppv' | 'strmfree' | 'timstreams' | 'pitsport' | 'other';
+
+export interface ProviderMeta {
+  key: ProviderKey;
+  label: string;
+  shortLabel: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  glow: string;
+  accentColor: string;
+  dotColor: string;
+  description: string;
+}
+
+export const PROVIDER_CONFIGS: Record<string, ProviderMeta> = {
+  ppv: {
+    key: 'ppv',
+    label: 'PPV.st',
+    shortLabel: 'PPV',
+    badgeBg: 'bg-amber-500/15',
+    badgeBorder: 'border-amber-400/35',
+    badgeText: 'text-amber-300',
+    glow: 'shadow-[0_0_12px_rgba(245,158,11,0.25)]',
+    accentColor: '#f59e0b',
+    dotColor: 'bg-amber-400',
+    description: 'PPV.st High-Priority Live Event Feed',
+  },
+  'ppv.st': {
+    key: 'ppv',
+    label: 'PPV.st',
+    shortLabel: 'PPV',
+    badgeBg: 'bg-amber-500/15',
+    badgeBorder: 'border-amber-400/35',
+    badgeText: 'text-amber-300',
+    glow: 'shadow-[0_0_12px_rgba(245,158,11,0.25)]',
+    accentColor: '#f59e0b',
+    dotColor: 'bg-amber-400',
+    description: 'PPV.st High-Priority Live Event Feed',
+  },
+  strmfree: {
+    key: 'strmfree',
+    label: 'StrmFree',
+    shortLabel: 'STRM',
+    badgeBg: 'bg-cyan-500/15',
+    badgeBorder: 'border-cyan-400/35',
+    badgeText: 'text-cyan-300',
+    glow: 'shadow-[0_0_12px_rgba(6,182,212,0.25)]',
+    accentColor: '#06b6d4',
+    dotColor: 'bg-cyan-400',
+    description: 'StrmFree High-Definition Sports Network',
+  },
+  'strmfree.pk': {
+    key: 'strmfree',
+    label: 'StrmFree',
+    shortLabel: 'STRM',
+    badgeBg: 'bg-cyan-500/15',
+    badgeBorder: 'border-cyan-400/35',
+    badgeText: 'text-cyan-300',
+    glow: 'shadow-[0_0_12px_rgba(6,182,212,0.25)]',
+    accentColor: '#06b6d4',
+    dotColor: 'bg-cyan-400',
+    description: 'StrmFree High-Definition Sports Network',
+  },
+  timstreams: {
+    key: 'timstreams',
+    label: 'Tim-Streams',
+    shortLabel: 'TIM',
+    badgeBg: 'bg-emerald-500/15',
+    badgeBorder: 'border-emerald-400/35',
+    badgeText: 'text-emerald-300',
+    glow: 'shadow-[0_0_12px_rgba(16,185,129,0.25)]',
+    accentColor: '#10b981',
+    dotColor: 'bg-emerald-400',
+    description: 'Tim-Streams Global Multi-Channel Feed',
+  },
+  'tim-streams': {
+    key: 'timstreams',
+    label: 'Tim-Streams',
+    shortLabel: 'TIM',
+    badgeBg: 'bg-emerald-500/15',
+    badgeBorder: 'border-emerald-400/35',
+    badgeText: 'text-emerald-300',
+    glow: 'shadow-[0_0_12px_rgba(16,185,129,0.25)]',
+    accentColor: '#10b981',
+    dotColor: 'bg-emerald-400',
+    description: 'Tim-Streams Global Multi-Channel Feed',
+  },
+  pitsport: {
+    key: 'pitsport',
+    label: 'PitSport',
+    shortLabel: 'PIT',
+    badgeBg: 'bg-rose-500/15',
+    badgeBorder: 'border-rose-400/35',
+    badgeText: 'text-rose-300',
+    glow: 'shadow-[0_0_12px_rgba(244,63,94,0.25)]',
+    accentColor: '#f43f5e',
+    dotColor: 'bg-rose-400',
+    description: 'PitSport Motorsport & Combat Network',
+  },
+  'pitsport.st': {
+    key: 'pitsport',
+    label: 'PitSport',
+    shortLabel: 'PIT',
+    badgeBg: 'bg-rose-500/15',
+    badgeBorder: 'border-rose-400/35',
+    badgeText: 'text-rose-300',
+    glow: 'shadow-[0_0_12px_rgba(244,63,94,0.25)]',
+    accentColor: '#f43f5e',
+    dotColor: 'bg-rose-400',
+    description: 'PitSport Motorsport & Combat Network',
+  },
+};
+
+export function getProviderMeta(source?: string): ProviderMeta {
+  if (!source) {
+    return {
+      key: 'other',
+      label: 'Stream Feed',
+      shortLabel: 'FEED',
+      badgeBg: 'bg-white/[0.08]',
+      badgeBorder: 'border-white/15',
+      badgeText: 'text-neutral-300',
+      glow: '',
+      accentColor: '#a3a3a3',
+      dotColor: 'bg-neutral-400',
+      description: 'Standard Broadcast Stream',
+    };
+  }
+
+  const clean = source.toLowerCase().trim();
+  if (clean.includes('ppv')) return PROVIDER_CONFIGS.ppv;
+  if (clean.includes('strmfree') || clean.includes('streamfree')) return PROVIDER_CONFIGS.strmfree;
+  if (clean.includes('tim')) return PROVIDER_CONFIGS.timstreams;
+  if (clean.includes('pit')) return PROVIDER_CONFIGS.pitsport;
+
+  return (
+    PROVIDER_CONFIGS[clean] || {
+      key: 'other',
+      label: source.toUpperCase(),
+      shortLabel: source.slice(0, 4).toUpperCase(),
+      badgeBg: 'bg-white/[0.08]',
+      badgeBorder: 'border-white/15',
+      badgeText: 'text-neutral-300',
+      glow: '',
+      accentColor: '#a3a3a3',
+      dotColor: 'bg-neutral-400',
+      description: 'Sports Broadcast Source',
+    }
+  );
+}
+
+export function ProviderBadge({
+  source,
+  size = 'md',
+  showDot = true,
+  className = '',
+}: {
+  source?: string;
+  size?: 'xs' | 'sm' | 'md' | 'lg';
+  showDot?: boolean;
+  className?: string;
+}) {
+  const meta = getProviderMeta(source);
+
+  const sizeClasses = {
+    xs: 'px-1.5 py-0.5 text-[9px] gap-1',
+    sm: 'px-2 py-0.5 text-[10px] gap-1',
+    md: 'px-2.5 py-1 text-xs gap-1.5',
+    lg: 'px-3 py-1.5 text-sm gap-2',
+  }[size];
+
+  return (
+    <span
+      className={`inline-flex items-center font-bold tracking-wider uppercase rounded-lg border backdrop-blur-md transition-all select-none ${meta.badgeBg} ${meta.badgeBorder} ${meta.badgeText} ${meta.glow} ${sizeClasses} ${className}`}
+      title={meta.description}
+    >
+      {showDot && (
+        <span className={`w-1.5 h-1.5 rounded-full ${meta.dotColor} shrink-0 animate-pulse`} />
+      )}
+      <span>{meta.label}</span>
+    </span>
+  );
+}
+
+/* =========================================================================
+   STREAM RESOLUTION & IFRAME DETECTION
+   Seamlessly handles direct HLS (.m3u8) vs embedded iframes
+   ========================================================================= */
+
+export function isIframeStream(url?: string | null): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+
+  // If it contains direct m3u8 or mp4 format and is not an embed portal
+  if ((lower.includes('.m3u8') || lower.includes('.mp4') || lower.includes('ext=.m3u8')) &&
+      !lower.includes('ehgembxe.cfd') &&
+      !lower.includes('/embed') &&
+      !lower.includes('/play/') &&
+      !lower.includes('html')) {
+    return false;
+  }
+
+  // Known embed players and dynamic iframe pages
+  if (
+    lower.includes('embed') ||
+    lower.includes('/play/') ||
+    lower.includes('pages.dev') ||
+    lower.includes('ehgembxe') ||
+    lower.includes('taifood') ||
+    lower.includes('embdlol') ||
+    lower.includes('strmfree') ||
+    lower.includes('html') ||
+    lower.includes('iframe') ||
+    lower.includes('player') ||
+    lower.includes('cdx-')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function getStreamResolutionBadge(stream: Stream) {
+  const text = ((stream.language || '') + ' ' + (stream.embedUrl || '')).toLowerCase();
+  if (stream.is4k || text.includes('4k') || text.includes('uhd') || text.includes('2160p')) {
+    return { label: '4K UHD', color: 'bg-purple-950/80 text-purple-300 border-purple-500/40 shadow-sm' };
+  }
+  if (text.includes('1080p') || text.includes('fhd') || text.includes('1080') || text.includes('hevc') || text.includes('max')) {
+    return { label: '1080p FHD', color: 'bg-blue-950/80 text-blue-300 border-blue-500/40 shadow-sm' };
+  }
+  if (stream.hd || text.includes('720p') || text.includes('hd') || text.includes('720')) {
+    return { label: '720p HD', color: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40 shadow-sm' };
+  }
+  return { label: 'SD', color: 'bg-white/10 text-neutral-300 border-white/15' };
+}
+
+export function getStreamLatencyTag(stream: Stream) {
+  const url = (stream.embedUrl || '').toLowerCase();
+  if (url.includes('.m3u8')) {
+    return { label: 'Direct HLS', isDirect: true };
+  }
+  if (url.includes('ehgembxe') || url.includes('tim')) {
+    return { label: 'Fast CDN', isDirect: false };
+  }
+  if (stream.source === 'ppv' || stream.source === 'pitsport') {
+    return { label: 'Low Latency', isDirect: false };
+  }
+  return { label: 'Embed Player', isDirect: false };
+}
+
+/* =========================================================================
+   MEDIA URL RESOLVER & ASSET HELPERS
+   Clean URL resolution without legacy proxies
+   ========================================================================= */
 
 function resolveMediaUrl(path?: string | null): string | null {
   if (!path) return null;
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  if (path.startsWith('/api/')) return `https://streamed.pk${path}`;
-  if (path.startsWith('/')) return `https://streamed.pk${path}`;
-  return `https://streamed.pk/api/images/proxy/${path}.webp`;
+  if (path.startsWith('data:')) return path;
+  if (path.startsWith('/')) return path;
+  return `/${path}`;
 }
 
 function hashString(str: string): number {
@@ -173,8 +446,7 @@ function getTeamInitials(name?: string): string {
 }
 
 /**
- * Professional, modern minimalist SVG vector icons for each sport.
- * Replaces colorful smartphone emojis with razor-sharp graphics.
+ * Modern vector SVG icons for sports categories
  */
 function SportVectorIcon({ sport, className = "w-4 h-4" }: { sport?: string; className?: string }) {
   const s = (sport || '').toLowerCase().trim();
@@ -333,11 +605,11 @@ function matchesSport(matchCat: string, targetSport: string): boolean {
 
   if (m === t) return true;
 
-  if (t === 'fight' && ['mma', 'boxing', 'combat'].includes(m)) return true;
-  if (['mma', 'boxing'].includes(t) && m === 'fight') return true;
+  if (t === 'fight' && ['mma', 'boxing', 'combat', 'ufc', 'wrestling'].includes(m)) return true;
+  if (['mma', 'boxing', 'ufc'].includes(t) && m === 'fight') return true;
 
-  if (t === 'motor-sports' && ['motorsport', 'formula1', 'formula'].includes(m)) return true;
-  if (['formula1', 'motorsport'].includes(t) && m === 'motor-sports') return true;
+  if (t === 'motor-sports' && ['motorsport', 'formula1', 'formula', 'racing'].includes(m)) return true;
+  if (['formula1', 'motorsport', 'racing'].includes(t) && m === 'motor-sports') return true;
 
   if (t === 'billiards' && ['snooker', 'pool'].includes(m)) return true;
   if (['snooker', 'pool'].includes(t) && m === 'billiards') return true;
@@ -359,7 +631,7 @@ function TeamBadge({ name, badge, size = 'sm' }: { name?: string; badge?: string
     if (size === 'sm') return null;
     return (
       <div className={`rounded-2xl bg-white/[0.06] border border-white/15 flex items-center justify-center font-bold text-neutral-300 shadow-md backdrop-blur-md shrink-0 select-none font-mono ${
-        size === 'lg' ? 'w-13 h-13 text-sm' : 'w-9 h-9 text-xs'
+        size === 'lg' ? 'w-14 h-14 text-sm' : 'w-9 h-9 text-xs'
       }`}>
         {name ? getTeamInitials(name) : 'TM'}
       </div>
@@ -372,11 +644,15 @@ function TeamBadge({ name, badge, size = 'sm' }: { name?: string; badge?: string
       alt={name || ''}
       onError={() => setError(true)}
       className={`object-contain shrink-0 drop-shadow-md transition-transform duration-300 ${
-        size === 'lg' ? 'w-13 h-13 group-hover:scale-110' : size === 'md' ? 'w-9 h-9' : 'w-4 h-4'
+        size === 'lg' ? 'w-14 h-14 group-hover:scale-110' : size === 'md' ? 'w-9 h-9' : 'w-4 h-4'
       }`}
     />
   );
 }
+
+/* =========================================================================
+   SPORT CARD COMPONENT
+   ========================================================================= */
 
 function SportCard({
   match,
@@ -399,6 +675,16 @@ function SportCard({
   const homeBadge = resolveMediaUrl(match.teams?.home?.badge);
   const awayBadge = resolveMediaUrl(match.teams?.away?.badge);
 
+  // Group unique source provider keys
+  const providerKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of match.sources) {
+      const meta = getProviderMeta(s.source);
+      set.add(meta.key);
+    }
+    return Array.from(set);
+  }, [match.sources]);
+
   return (
     <div
       tabIndex={0}
@@ -417,7 +703,7 @@ function SportCard({
           : 'border-white/10 hover:border-white/30'
       }`}
     >
-      {/* 100% Full-Bleed Photographic Artwork with Smooth Scale */}
+      {/* 100% Full-Bleed Photographic Artwork */}
       <img
         src={displayImage}
         alt={match.title}
@@ -428,7 +714,7 @@ function SportCard({
       {/* Top Vignette Gradient for High Badge Contrast */}
       <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/85 via-black/40 to-transparent pointer-events-none z-10" />
 
-      {/* Top Left Badges: LIVE or Time */}
+      {/* Top Left Badges: LIVE pulse or Scheduled Time */}
       <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-20 pointer-events-none">
         {match.isLive ? (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-600/90 text-white text-[10px] font-extrabold shadow-[0_0_14px_rgba(239,68,68,0.6)] border border-red-400/40 backdrop-blur-md select-none tracking-wider uppercase">
@@ -443,7 +729,7 @@ function SportCard({
         )}
       </div>
 
-      {/* Top Right Badges: Inline Compact Badges */}
+      {/* Top Right Badges: 4K, Popular Star, Sport Category */}
       <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20 pointer-events-none">
         {match.is4k && (
           <span className="px-2 py-0.5 text-[9px] rounded-full font-bold tracking-wider bg-purple-950/80 text-purple-300 border border-purple-500/40 backdrop-blur-md shadow-sm uppercase tabular-nums">
@@ -452,7 +738,7 @@ function SportCard({
         )}
         {match.popular && (
           <span className="px-2 py-0.5 text-[9px] rounded-full font-bold tracking-wider bg-amber-950/80 text-amber-300 border border-amber-500/40 backdrop-blur-md shadow-sm uppercase flex items-center gap-0.5">
-            <span className="text-amber-400 text-[8px]">★</span> POP
+            <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" /> POP
           </span>
         )}
         <span className="px-2.5 py-1 text-[10px] rounded-full font-medium tracking-wide bg-black/70 text-neutral-300 border border-white/15 backdrop-blur-md shadow-sm capitalize inline-flex items-center gap-1.5">
@@ -476,9 +762,9 @@ function SportCard({
         </div>
       )}
 
-      {/* Bottom Gradient & Match Info (Always 100% visible and readable) */}
+      {/* Bottom Gradient & Match Info with Provider Badges */}
       <div className="absolute inset-x-0 bottom-0 p-3.5 bg-gradient-to-t from-black via-black/90 to-transparent pt-20 z-10 pointer-events-none transition-transform duration-200">
-        <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-2 drop-shadow-md leading-snug mb-1.5 [text-wrap:balance]">
+        <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-2 drop-shadow-md leading-snug mb-2 [text-wrap:balance]">
           {match.teams?.home && match.teams?.away ? (
             <>
               <span>{match.teams.home.name}</span>
@@ -490,31 +776,27 @@ function SportCard({
           )}
         </h3>
 
-        <div className="flex items-center justify-between text-[11px] text-neutral-300">
+        <div className="flex items-center justify-between text-[11px] text-neutral-300 gap-1.5">
           <div className="flex items-center gap-1.5 font-medium text-neutral-400 tabular-nums">
             <Tv className="w-3 h-3 text-neutral-400" />
             <span>{match.sources.length} {match.sources.length === 1 ? 'feed' : 'feeds'}</span>
           </div>
 
-          <div className="flex items-center gap-1">
-            {match.sources.slice(0, 2).map((src, i) => (
-              <span
-                key={i}
-                className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-white/[0.08] text-neutral-300 border border-white/10 uppercase tracking-wider backdrop-blur-sm"
-              >
-                {src.source}
-              </span>
+          {/* Provider Badges on Card */}
+          <div className="flex items-center gap-1 flex-wrap justify-end">
+            {providerKeys.slice(0, 3).map((pkey) => (
+              <ProviderBadge key={pkey} source={pkey} size="xs" showDot={false} />
             ))}
-            {match.sources.length > 2 && (
+            {providerKeys.length > 3 && (
               <span className="text-[9px] text-neutral-400 font-mono tabular-nums">
-                +{match.sources.length - 2}
+                +{providerKeys.length - 3}
               </span>
             )}
           </div>
         </div>
       </div>
 
-      {/* Refined Apple-style Floating Play Pill on Hover (Never blacks out the match info) */}
+      {/* Apple-style Floating Play Pill on Hover */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         {isLoadingStream ? (
           <div className="px-4 py-2 rounded-full liquid-glass-pill bg-black/80 border border-white/30 text-white font-bold text-xs shadow-2xl backdrop-blur-xl flex items-center gap-2">
@@ -522,7 +804,7 @@ function SportCard({
             <span className="tracking-wide">Connecting...</span>
           </div>
         ) : (
-          <div className="px-4.5 py-2 rounded-full liquid-glass-pill bg-black/80 hover:bg-black/95 border border-white/30 text-white font-bold text-xs shadow-[0_12px_36px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.3)] backdrop-blur-xl flex items-center gap-2 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200 ease-out">
+          <div className="px-4.5 py-2 rounded-full liquid-glass-pill bg-black/85 hover:bg-black/95 border border-white/30 text-white font-bold text-xs shadow-[0_12px_36px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.3)] backdrop-blur-xl flex items-center gap-2 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200 ease-out">
             <div className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shadow-md">
               <Play className="w-2.5 h-2.5 fill-black text-black ml-0.5" />
             </div>
@@ -534,6 +816,10 @@ function SportCard({
   );
 }
 
+/* =========================================================================
+   MAIN LIVESPORTS COMPONENT
+   ========================================================================= */
+
 type Props = {
   onClose: () => void;
 };
@@ -543,6 +829,8 @@ export default function LiveSports({ onClose }: Props) {
 
   const [sports, setSports] = useState<Sport[]>([]);
   const [selectedSport, setSelectedSport] = useState<string>('all');
+  const [selectedProvider, setSelectedProvider] = useState<string>('all');
+  const [selectedLeague, setSelectedLeague] = useState<string>('all');
   const [rawMatches, setRawMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -557,16 +845,16 @@ export default function LiveSports({ onClose }: Props) {
   const [liveCount, setLiveCount] = useState<number | null>(null);
   const [todayCount, setTodayCount] = useState<number | null>(null);
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null);
+  const [streamSourceFilter, setStreamSourceFilter] = useState<string>('all');
   const [sortByQuality, setSortByQuality] = useState(true);
   const [streamReloadKey, setStreamReloadKey] = useState(0);
+  const [theaterMode, setTheaterMode] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [qualities, setQualities] = useState<{ index: number; label: string }[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const hlsRef = useRef<any>(null);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const timeoutRef = useRef<any>(null);
@@ -625,31 +913,22 @@ export default function LiveSports({ onClose }: Props) {
     }
   };
 
-  // Activity handler to show controls and start hide timer
+  // Activity tracking for controls fade
   const handleActivity = useCallback(() => {
     setShowControls(true);
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    timeoutRef.current = setTimeout(() => {
-      setShowControls(false);
-    }, 3000);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setShowControls(false), 3000);
   }, []);
 
-  // Activity tracking for showing/hiding controls and cursor
   useEffect(() => {
     if (!selectedStream) {
       setShowControls(true);
       return;
     }
-
     handleActivity();
-
     const container = containerRef.current;
     const handleMouseLeave = () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setShowControls(false);
     };
 
@@ -659,13 +938,10 @@ export default function LiveSports({ onClose }: Props) {
       container.addEventListener('touchstart', handleActivity);
       container.addEventListener('mouseleave', handleMouseLeave);
     }
-
     document.addEventListener('keydown', handleActivity);
 
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (container) {
         container.removeEventListener('mousemove', handleActivity);
         container.removeEventListener('mousedown', handleActivity);
@@ -695,17 +971,6 @@ export default function LiveSports({ onClose }: Props) {
     }
   };
 
-  // Close dropdown on click outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && event.target instanceof Node && !dropdownRef.current.contains(event.target)) {
-        setIsDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const handleQualityChange = (index: number) => {
     setCurrentQuality(index);
     if (hlsRef.current) {
@@ -718,30 +983,20 @@ export default function LiveSports({ onClose }: Props) {
     setQualities([]);
     setCurrentQuality(-1);
     hlsRef.current = null;
-    if (!selectedStream) return;
+    const streamUrl = selectedStream ? (selectedStream.url || selectedStream.embedUrl) : null;
+    if (!selectedStream || !streamUrl) return;
+
+    if (isIframeStream(streamUrl)) return;
+
     const video = videoRef.current;
     if (!video) return;
-
-    const { embedUrl } = selectedStream;
-    if (!embedUrl) return;
-
-    const isIframe = embedUrl.includes('embed') ||
-                     embedUrl.includes('play/') ||
-                     embedUrl.includes('pages.dev') ||
-                     embedUrl.includes('html') ||
-                     embedUrl.includes('cdx-') ||
-                     selectedStream.source === 'streami' ||
-                     selectedStream.source === 'timstreams' ||
-                     selectedStream.source === 'xyzstreams';
-
-    if (isIframe) return;
 
     let hls: any;
     import('hls.js').then(({ default: Hls }) => {
       if (!videoRef.current) return;
       if (Hls.isSupported()) {
         hls = new Hls({ enableWorker: true });
-        hls.loadSource(embedUrl);
+        hls.loadSource(streamUrl);
         hls.attachMedia(videoRef.current);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           const levels = hls.levels.map((level: any, idx: number) => {
@@ -753,18 +1008,16 @@ export default function LiveSports({ onClose }: Props) {
         });
         hlsRef.current = hls;
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = embedUrl;
+        video.src = streamUrl;
         video.play().catch(() => {});
       } else {
-        video.src = embedUrl;
+        video.src = streamUrl;
         video.play().catch(() => {});
       }
     });
 
     return () => {
-      if (hls) {
-        hls.destroy();
-      }
+      if (hls) hls.destroy();
       hlsRef.current = null;
     };
   }, [selectedStream, streamReloadKey]);
@@ -776,7 +1029,6 @@ export default function LiveSports({ onClose }: Props) {
     if (!video || !container) return;
 
     const originalRequestFullscreen = video.requestFullscreen || (video as any).webkitRequestFullscreen;
-
     const customRequestFullscreen = function (options?: FullscreenOptions) {
       if (container.requestFullscreen) {
         return container.requestFullscreen(options);
@@ -794,7 +1046,6 @@ export default function LiveSports({ onClose }: Props) {
       e.stopPropagation();
       toggleFullscreen();
     };
-
     video.addEventListener('dblclick', handleDblClick);
 
     return () => {
@@ -832,7 +1083,7 @@ export default function LiveSports({ onClose }: Props) {
       });
   }, []);
 
-  // Fetch all matches for the current tab
+  // Fetch all matches for current active tab
   const fetchMatches = useCallback((isManualRefresh = false) => {
     if (isManualRefresh) {
       setIsRefreshing(true);
@@ -873,7 +1124,7 @@ export default function LiveSports({ onClose }: Props) {
     fetchMatches(false);
   }, [fetchMatches]);
 
-  // Background fetch opposite tab count so both tab badges always display accurate numbers
+  // Background fetch opposite tab count
   useEffect(() => {
     const otherType = activeTab === 'live' ? 'today' : 'live';
     fetch(`/api/sports/matches?type=${otherType}&sport=all`)
@@ -890,7 +1141,7 @@ export default function LiveSports({ onClose }: Props) {
       .catch(() => {});
   }, [activeTab]);
 
-  // Compute live match counts per category
+  // Compute category counts
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: rawMatches.length, '4k': 0 };
     for (const m of rawMatches) {
@@ -905,7 +1156,7 @@ export default function LiveSports({ onClose }: Props) {
     return counts;
   }, [rawMatches, sports]);
 
-  // Sports sorted with active broadcast matches first so users don't have to scroll past empty categories
+  // Sports sorted with active matches first
   const sortedSports = useMemo(() => {
     return [...sports].sort((a, b) => {
       const countA = categoryCounts[a.id.toLowerCase()] || 0;
@@ -917,11 +1168,50 @@ export default function LiveSports({ onClose }: Props) {
     });
   }, [sports, categoryCounts]);
 
-  // Client-side filtering for fast and responsive UX
+  // Dynamic Popular League detection from matches
+  const popularLeagues = useMemo(() => {
+    const LEAGUE_PATTERNS = [
+      { id: 'premier-league', name: 'Premier League', regex: /\b(premier league|epl)\b/i },
+      { id: 'champions-league', name: 'Champions League', regex: /\b(champions league|ucl)\b/i },
+      { id: 'la-liga', name: 'La Liga', regex: /\b(la liga|laliga)\b/i },
+      { id: 'serie-a', name: 'Serie A', regex: /\b(serie a)\b/i },
+      { id: 'bundesliga', name: 'Bundesliga', regex: /\b(bundesliga)\b/i },
+      { id: 'nba', name: 'NBA', regex: /\b(nba)\b/i },
+      { id: 'ufc', name: 'UFC', regex: /\b(ufc|mma|bellator|pfl)\b/i },
+      { id: 'f1', name: 'Formula 1', regex: /\b(formula 1|formula1|f1|grand prix)\b/i },
+      { id: 'nfl', name: 'NFL', regex: /\b(nfl)\b/i },
+      { id: 'mlb', name: 'MLB', regex: /\b(mlb)\b/i },
+      { id: 'nhl', name: 'NHL', regex: /\b(nhl)\b/i },
+      { id: 'tennis-tour', name: 'ATP / WTA', regex: /\b(atp|wta|wimbledon|us open|roland garros)\b/i },
+    ];
+
+    return LEAGUE_PATTERNS.map((l) => {
+      const count = rawMatches.filter((m) => l.regex.test(m.title) || l.regex.test(m.category)).length;
+      return { ...l, count };
+    }).filter((l) => l.count > 0);
+  }, [rawMatches]);
+
+  // Provider match count map (PPV.st, StrmFree, Tim-Streams, PitSport)
+  const providerCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: rawMatches.length, ppv: 0, strmfree: 0, timstreams: 0, pitsport: 0 };
+    for (const m of rawMatches) {
+      const seen = new Set<string>();
+      for (const s of m.sources) {
+        const meta = getProviderMeta(s.source);
+        if (!seen.has(meta.key)) {
+          seen.add(meta.key);
+          counts[meta.key] = (counts[meta.key] || 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [rawMatches]);
+
+  // Client-side filtering
   const filteredMatches = useMemo(() => {
     let result = rawMatches;
 
-    // 4K filter toggle
+    // 4K filter
     if (only4k) {
       result = result.filter(m => m.is4k);
     }
@@ -933,6 +1223,19 @@ export default function LiveSports({ onClose }: Props) {
       result = result.filter(m => matchesSport(m.category, selectedSport));
     }
 
+    // Provider filter
+    if (selectedProvider !== 'all') {
+      result = result.filter(m => m.sources.some(s => getProviderMeta(s.source).key === selectedProvider));
+    }
+
+    // League filter
+    if (selectedLeague !== 'all') {
+      const leagueObj = popularLeagues.find(l => l.id === selectedLeague);
+      if (leagueObj) {
+        result = result.filter(m => leagueObj.regex.test(m.title) || leagueObj.regex.test(m.category));
+      }
+    }
+
     // Search query filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -941,18 +1244,21 @@ export default function LiveSports({ onClose }: Props) {
         const homeMatch = m.teams?.home?.name?.toLowerCase().includes(q);
         const awayMatch = m.teams?.away?.name?.toLowerCase().includes(q);
         const catMatch = m.category?.toLowerCase().includes(q);
-        return titleMatch || homeMatch || awayMatch || catMatch;
+        const sourceMatch = m.sources.some(s => s.source.toLowerCase().includes(q));
+        return titleMatch || homeMatch || awayMatch || catMatch || sourceMatch;
       });
     }
 
     return result;
-  }, [rawMatches, selectedSport, only4k, searchQuery]);
+  }, [rawMatches, selectedSport, selectedProvider, selectedLeague, only4k, searchQuery, popularLeagues]);
 
+  // Load stream feeds for a match
   const loadStreams = async (match: Match) => {
     setLoadingStreams(true);
     setSelectedMatch(match);
     setSelectedStream(null);
     setStreams([]);
+    setStreamSourceFilter('all');
     if (modalScrollRef.current) {
       modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -961,7 +1267,7 @@ export default function LiveSports({ onClose }: Props) {
     try {
       const fetchPromises = match.sources.map(async (source) => {
         try {
-          const res = await fetch(`/api/sports/streams?source=${source.source}&id=${source.id}`);
+          const res = await fetch(`/api/sports/streams?source=${encodeURIComponent(source.source)}&id=${encodeURIComponent(source.id)}`);
           if (!res.ok) return [];
           const data = await res.json();
           return data.streams || [];
@@ -972,7 +1278,7 @@ export default function LiveSports({ onClose }: Props) {
       });
 
       const results = await Promise.all(fetchPromises);
-      const allStreams = results.flat();
+      const allStreams: Stream[] = results.flat();
 
       if (allStreams.length > 0) {
         const seenIds = new Set<string>();
@@ -1054,18 +1360,37 @@ export default function LiveSports({ onClose }: Props) {
     return 0;
   };
 
-  const getSortedStreams = useCallback(() => {
-    if (!sortByQuality) return streams;
-    return [...streams].sort((a, b) => getQualityRank(b) - getQualityRank(a));
-  }, [streams, sortByQuality]);
+  // Filtered and sorted streams for the drawer
+  const displayedStreams = useMemo(() => {
+    let list = streams;
+    if (streamSourceFilter !== 'all') {
+      list = list.filter(st => getProviderMeta(st.source).key === streamSourceFilter);
+    }
+    if (sortByQuality) {
+      return [...list].sort((a, b) => getQualityRank(b) - getQualityRank(a));
+    }
+    return list;
+  }, [streams, streamSourceFilter, sortByQuality]);
+
+  // Active stream sources for current match
+  const streamProviderTabs = useMemo(() => {
+    const counts: Record<string, number> = { all: streams.length };
+    for (const st of streams) {
+      const k = getProviderMeta(st.source).key;
+      counts[k] = (counts[k] || 0) + 1;
+    }
+    return counts;
+  }, [streams]);
 
   const resetAllFilters = () => {
     setSelectedSport('all');
+    setSelectedProvider('all');
+    setSelectedLeague('all');
     setSearchQuery('');
     setOnly4k(false);
   };
 
-  const isFilterActive = selectedSport !== 'all' || searchQuery.trim() !== '' || only4k;
+  const isFilterActive = selectedSport !== 'all' || selectedProvider !== 'all' || selectedLeague !== 'all' || searchQuery.trim() !== '' || only4k;
 
   return (
     <div
@@ -1076,11 +1401,11 @@ export default function LiveSports({ onClose }: Props) {
       className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[100] overflow-y-auto"
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Ambient Stadium Lighting Glow Mesh (Provides authentic underlying depth and color contrast for frosted glass refraction) */}
+      {/* Ambient Stadium Lighting Glow Mesh */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
         <div className="absolute -top-[15%] -left-[10%] w-[55vw] h-[55vw] rounded-full bg-emerald-600/10 blur-[130px] mix-blend-screen" />
-        <div className="absolute top-[10%] -right-[15%] w-[50vw] h-[50vw] rounded-full bg-indigo-600/12 blur-[140px] mix-blend-screen" />
-        <div className="absolute top-[50%] left-[20%] w-[60vw] h-[45vw] rounded-full bg-red-600/[0.06] blur-[150px] mix-blend-screen" />
+        <div className="absolute top-[10%] -right-[15%] w-[50vw] h-[50vw] rounded-full bg-cyan-600/12 blur-[140px] mix-blend-screen" />
+        <div className="absolute top-[50%] left-[20%] w-[60vw] h-[45vw] rounded-full bg-amber-600/[0.07] blur-[150px] mix-blend-screen" />
       </div>
 
       <div className="min-h-screen relative z-10 bg-gradient-to-b from-neutral-950/75 via-black/80 to-neutral-950/75">
@@ -1106,14 +1431,14 @@ export default function LiveSports({ onClose }: Props) {
                   </button>
 
                   <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="p-2 sm:p-2.5 bg-white/[0.04] border border-white/15 rounded-2xl text-red-500 shadow-lg shadow-red-600/10">
+                    <div className="p-2 sm:p-2.5 bg-gradient-to-br from-red-600/30 to-red-600/10 border border-red-500/30 rounded-2xl text-red-500 shadow-lg shadow-red-600/20">
                       <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <h1 className="text-base sm:text-2xl font-black tracking-tight text-white">Live Sports</h1>
                         {activeTab === 'live' && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/60 border border-red-500/40 text-red-400 text-[10px] font-bold uppercase tracking-wider">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/70 border border-red-500/40 text-red-400 text-[10px] font-bold uppercase tracking-wider shadow-[0_0_10px_rgba(239,68,68,0.3)]">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
                             <span>{rawMatches.length} Live</span>
                           </span>
@@ -1163,7 +1488,7 @@ export default function LiveSports({ onClose }: Props) {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search matches, teams, tournaments..."
+                    placeholder="Search matches, teams, tournaments, providers..."
                     className="w-full pl-9 pr-8 py-2 bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] border border-white/15 focus:border-white/40 rounded-full text-xs sm:text-sm text-white placeholder-neutral-500 transition-all outline-none shadow-inner"
                   />
                   {searchQuery && (
@@ -1212,13 +1537,12 @@ export default function LiveSports({ onClose }: Props) {
 
         <div className="pt-28 sm:pt-24 pb-12">
           <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-12">
-            {/* Active Stream Player Theater Mode */}
-            {/* Active Stream Player Theater Mode */}
+            {/* Active Stream Player & Enhanced Stream Selection Drawer */}
             {selectedMatch && (
               <div className="mb-8 animate-fade-in">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Video Player (2/3 width) */}
-                  <div className="lg:col-span-2">
+                <div className={`grid gap-6 ${theaterMode ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-3'}`}>
+                  {/* Video Player Column */}
+                  <div className={theaterMode ? 'w-full' : 'lg:col-span-2'}>
                     <div
                       ref={containerRef}
                       onDoubleClick={toggleFullscreen}
@@ -1272,27 +1596,20 @@ export default function LiveSports({ onClose }: Props) {
                             </button>
                           </div>
                         </div>
-                      ) : !selectedStream.embedUrl ? (
+                      ) : !(selectedStream.embedUrl || selectedStream.url) ? (
                         <div className="flex flex-col items-center justify-center p-6 text-center">
                           <AlertCircle className="w-12 h-12 text-red-500 mb-3 animate-pulse" />
                           <p className="text-neutral-200 font-semibold mb-1">Stream feed unavailable</p>
-                          <p className="text-neutral-400 text-sm max-w-md">The source did not provide a valid streaming URL. Please try another feed.</p>
+                          <p className="text-neutral-400 text-sm max-w-md">The source did not provide a valid streaming URL. Please switch to another feed below.</p>
                         </div>
-                      ) : selectedStream.embedUrl.includes('embed') ||
-                         selectedStream.embedUrl.includes('play/') ||
-                         selectedStream.embedUrl.includes('pages.dev') ||
-                         selectedStream.embedUrl.includes('html') ||
-                         selectedStream.embedUrl.includes('cdx-') ||
-                         selectedStream.source === 'streami' ||
-                         selectedStream.source === 'timstreams' ||
-                         selectedStream.source === 'xyzstreams' ? (
+                      ) : isIframeStream(selectedStream.embedUrl || selectedStream.url) ? (
                         <iframe
                           key={`${selectedStream.id}-${streamReloadKey}`}
-                          src={selectedStream.embedUrl}
-                          className="w-full h-full border-0"
-                          allow="autoplay; encrypted-media; picture-in-picture; fullscreen *"
+                          src={selectedStream.embedUrl || selectedStream.url}
+                          className="w-full h-full border-0 bg-black"
+                          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                           allowFullScreen
-                          referrerPolicy="no-referrer-when-downgrade"
+                          referrerPolicy="no-referrer"
                         />
                       ) : (
                         <video
@@ -1308,18 +1625,23 @@ export default function LiveSports({ onClose }: Props) {
                         </video>
                       )}
 
-                      {/* Overlaid Top Left: Live indicator */}
-                      {selectedMatch.isLive && (
-                        <div
-                          style={{ position: 'absolute', top: '16px', left: '16px', zIndex: 50 }}
-                          className={`flex items-center gap-2 px-3.5 py-1.5 bg-red-600/90 border border-red-400/40 backdrop-blur-md rounded-full pointer-events-none transition-opacity duration-300 shadow-[0_0_15px_rgba(239,68,68,0.5)] ${
-                            showControls ? 'opacity-100' : 'opacity-0'
-                          }`}
-                        >
-                          <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                          <span className="text-white text-xs md:text-sm font-bold tracking-wider">LIVE</span>
-                        </div>
-                      )}
+                      {/* Overlaid Top Left: Live indicator and Current Source Badge */}
+                      <div
+                        style={{ position: 'absolute', top: '16px', left: '16px', zIndex: 50 }}
+                        className={`flex items-center gap-2 transition-opacity duration-300 ${
+                          showControls ? 'opacity-100' : 'opacity-0'
+                        }`}
+                      >
+                        {selectedMatch.isLive && (
+                          <div className="flex items-center gap-1.5 px-3 py-1 bg-red-600/90 border border-red-400/40 backdrop-blur-md rounded-full shadow-[0_0_15px_rgba(239,68,68,0.5)]">
+                            <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                            <span className="text-white text-xs font-bold tracking-wider">LIVE</span>
+                          </div>
+                        )}
+                        {selectedStream && (
+                          <ProviderBadge source={selectedStream.source} size="sm" />
+                        )}
+                      </div>
 
                       {/* Overlaid Top Right Controls Group */}
                       <div
@@ -1335,7 +1657,7 @@ export default function LiveSports({ onClose }: Props) {
                             aria-label="Reload Stream"
                             onClick={() => setStreamReloadKey(k => k + 1)}
                             className="p-2.5 liquid-glass-pill bg-black/75 hover:bg-black/95 border border-white/20 text-white hover:text-red-400 backdrop-blur-xl rounded-full transition-all cursor-pointer shadow-lg hover:scale-105"
-                            title="Reload Stream"
+                            title="Reload Stream Feed"
                           >
                             <RotateCw className="w-4 h-4 sm:w-5 sm:h-5" />
                           </button>
@@ -1353,6 +1675,17 @@ export default function LiveSports({ onClose }: Props) {
                             <ExternalLink className="w-4 h-4 sm:w-5 sm:h-5" />
                           </button>
                         )}
+
+                        {/* Theater Mode Toggle Button */}
+                        <button
+                          type="button"
+                          aria-label={theaterMode ? "Exit Theater Mode" : "Enter Theater Mode"}
+                          onClick={() => setTheaterMode(!theaterMode)}
+                          className="p-2.5 liquid-glass-pill bg-black/75 hover:bg-black/95 border border-white/20 text-white hover:text-red-400 backdrop-blur-xl rounded-full transition-all cursor-pointer shadow-lg hover:scale-105 hidden lg:flex"
+                          title={theaterMode ? "Exit Theater Mode" : "Enter Theater Mode"}
+                        >
+                          <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                        </button>
 
                         {/* Fullscreen Button */}
                         {selectedStream?.embedUrl && (
@@ -1377,7 +1710,7 @@ export default function LiveSports({ onClose }: Props) {
                             setStreams([]);
                             setQualities([]);
                             setCurrentQuality(-1);
-                            setIsDropdownOpen(false);
+                            setTheaterMode(false);
                           }}
                           className="p-2.5 liquid-glass-pill bg-black/75 hover:bg-black/95 border border-white/20 text-white hover:text-red-400 backdrop-blur-xl rounded-full transition-all cursor-pointer shadow-lg hover:scale-105"
                           title="Close Player"
@@ -1388,17 +1721,16 @@ export default function LiveSports({ onClose }: Props) {
                     </div>
                   </div>
 
-                  {/* Now Watching Panel (1/3 width) */}
-                  <div className="lg:col-span-1">
+                  {/* Now Watching & Modern Stream Selection Drawer */}
+                  <div className={theaterMode ? 'w-full' : 'lg:col-span-1'}>
                     <div className="liquid-glass-base border border-white/15 rounded-3xl p-5 sm:p-6 h-full shadow-2xl relative flex flex-col justify-between">
-                      {/* Glow background constrained to rounded-3xl so card doesn't need overflow-hidden */}
-                      <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
-                        <div className="absolute -right-16 -top-16 w-56 h-56 bg-white/[0.02] rounded-full blur-2xl" />
-                      </div>
                       <div className="relative z-10 flex flex-col flex-1 justify-between">
                         <div>
+                          {/* Matchup Header */}
                           <div className="flex items-center justify-between mb-4">
-                            <p className="text-xs md:text-sm text-neutral-400 uppercase font-bold tracking-wider">Now Watching</p>
+                            <p className="text-xs md:text-sm text-neutral-400 uppercase font-bold tracking-wider">
+                              Now Watching
+                            </p>
                             <button
                               type="button"
                               aria-label="Close Player"
@@ -1408,7 +1740,7 @@ export default function LiveSports({ onClose }: Props) {
                                 setStreams([]);
                                 setQualities([]);
                                 setCurrentQuality(-1);
-                                setIsDropdownOpen(false);
+                                setTheaterMode(false);
                               }}
                               className="p-1.5 liquid-glass-pill border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer text-neutral-400 hover:text-white"
                               title="Close Player"
@@ -1417,10 +1749,10 @@ export default function LiveSports({ onClose }: Props) {
                             </button>
                           </div>
 
-                          {/* Match Details */}
-                          <div className="mb-6">
+                          {/* Match Details Display */}
+                          <div className="mb-5">
                             {selectedMatch.teams?.home && selectedMatch.teams?.away ? (
-                              <div className="flex items-center justify-between mb-5 bg-white/[0.03] border border-white/10 rounded-2xl p-4 shadow-inner">
+                              <div className="flex items-center justify-between mb-4 bg-white/[0.03] border border-white/10 rounded-2xl p-4 shadow-inner">
                                 <div className="flex flex-col items-center flex-1 min-w-0">
                                   <TeamBadge name={selectedMatch.teams.home.name} badge={selectedMatch.teams.home.badge} size="lg" />
                                   <span className="text-xs text-neutral-200 text-center font-semibold truncate w-full mt-2">
@@ -1436,7 +1768,7 @@ export default function LiveSports({ onClose }: Props) {
                                 </div>
                               </div>
                             ) : (
-                              <h2 className="text-lg font-bold text-white mb-4 leading-snug">{selectedMatch.title}</h2>
+                              <h2 className="text-base sm:text-lg font-bold text-white mb-3 leading-snug">{selectedMatch.title}</h2>
                             )}
 
                             <div className="flex items-center justify-between">
@@ -1457,33 +1789,73 @@ export default function LiveSports({ onClose }: Props) {
                             </div>
                           </div>
 
-                          {/* Stream Selection Dropdown or State */}
-                          <div className="flex flex-col gap-2 mb-4 relative z-40" ref={dropdownRef}>
+                          {/* Stream Selection Drawer & Multi-Source Switcher */}
+                          <div className="space-y-3 mb-4">
                             <div className="flex items-center justify-between">
-                              <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider">Select Stream Feed</span>
+                              <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider">
+                                Available Feeds ({streams.length})
+                              </span>
                               {streams.length > 1 && (
                                 <button
                                   type="button"
                                   onClick={() => setSortByQuality(!sortByQuality)}
-                                  className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-semibold transition-all cursor-pointer border ${
+                                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-semibold transition-all cursor-pointer border ${
                                     sortByQuality
                                       ? 'bg-neutral-800 text-neutral-200 border-white/20'
                                       : 'bg-white/[0.03] border-white/10 text-neutral-400 hover:text-white'
                                   }`}
                                 >
                                   <SlidersHorizontal className="w-3 h-3 text-red-400" />
-                                  <span>Sort: Quality First</span>
+                                  <span>Quality First</span>
                                 </button>
                               )}
                             </div>
 
+                            {/* Provider Source Filter Tabs (All, PPV.st, StrmFree, Tim-Streams, PitSport) */}
+                            {streams.length > 0 && Object.keys(streamProviderTabs).length > 2 && (
+                              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                                <button
+                                  type="button"
+                                  onClick={() => setStreamSourceFilter('all')}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-all border ${
+                                    streamSourceFilter === 'all'
+                                      ? 'bg-white/20 text-white border-white/40 shadow-sm'
+                                      : 'bg-white/[0.04] text-neutral-400 border-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  All ({streams.length})
+                                </button>
+                                {(['ppv', 'strmfree', 'timstreams', 'pitsport'] as ProviderKey[]).map((pkey) => {
+                                  const count = streamProviderTabs[pkey];
+                                  if (!count) return null;
+                                  const meta = getProviderMeta(pkey);
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={pkey}
+                                      onClick={() => setStreamSourceFilter(pkey)}
+                                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-all border flex items-center gap-1 ${
+                                        streamSourceFilter === pkey
+                                          ? `${meta.badgeBg} ${meta.badgeText} ${meta.badgeBorder} shadow-sm`
+                                          : 'bg-white/[0.04] text-neutral-400 border-white/10 hover:text-white'
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${meta.dotColor}`} />
+                                      <span>{meta.label} ({count})</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Stream Feed Card List (1-Click Switching) */}
                             {loadingStreams ? (
-                              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-white/[0.04] border border-white/10 text-neutral-300 text-xs">
-                                <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white/20 border-t-red-500 shrink-0" />
-                                <span>Searching for broadcast feeds...</span>
+                              <div className="flex items-center gap-2.5 p-4 rounded-2xl bg-white/[0.04] border border-white/10 text-neutral-300 text-xs">
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-red-500 shrink-0" />
+                                <span>Scanning and testing broadcast feeds...</span>
                               </div>
                             ) : streams.length === 0 ? (
-                              <div className="p-3.5 rounded-2xl bg-amber-500/[0.08] border border-amber-500/20 text-amber-200 text-xs flex flex-col gap-2">
+                              <div className="p-4 rounded-2xl bg-amber-500/[0.08] border border-amber-500/20 text-amber-200 text-xs flex flex-col gap-2">
                                 <div className="flex items-center gap-1.5 font-bold">
                                   <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
                                   <span>No active feeds right now</span>
@@ -1499,35 +1871,63 @@ export default function LiveSports({ onClose }: Props) {
                                 </button>
                               </div>
                             ) : (
-                              <LiquidDropdown
-                                label="Select a feed..."
-                                title="Available Feeds"
-                                options={getSortedStreams().map((stream) => ({
-                                  id: stream.id,
-                                  name: getStreamTitle(stream),
-                                  badge: (
-                                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-white/[0.08] text-neutral-300 border border-white/10 uppercase tracking-wider shrink-0">
-                                      {stream.source}
-                                    </span>
-                                  ),
-                                }))}
-                                value={selectedStream?.id || ''}
-                                onChange={(val) => {
-                                  const s = streams.find((st) => String(st.id) === String(val));
-                                  if (s) setSelectedStream(s);
-                                }}
-                                className="w-full"
-                                menuWidth="w-full"
-                                menuMaxHeight="max-h-[155px]"
-                                enableHover={false}
-                              />
+                              <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-white/20">
+                                {displayedStreams.map((st) => {
+                                  const isCurrent = selectedStream?.id === st.id;
+                                  const resBadge = getStreamResolutionBadge(st);
+                                  const latencyTag = getStreamLatencyTag(st);
+
+                                  return (
+                                    <div
+                                      key={st.id}
+                                      onClick={() => setSelectedStream(st)}
+                                      className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                                        isCurrent
+                                          ? 'bg-white/[0.12] border-white/40 shadow-lg ring-1 ring-white/30'
+                                          : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.07] hover:border-white/25'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border ${
+                                          isCurrent
+                                            ? 'bg-red-500 border-red-400 text-white shadow-md'
+                                            : 'border-white/20 text-transparent'
+                                        }`}>
+                                          <Check className="w-3 h-3" />
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <ProviderBadge source={st.source} size="xs" />
+                                            <span className="font-bold text-white text-xs truncate">
+                                              {getStreamTitle(st)}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5 mt-1 text-[10px] text-neutral-400">
+                                            <span>Feed {st.streamNo}</span>
+                                            <span>•</span>
+                                            <span className="capitalize">{latencyTag.label}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <span className={`px-2 py-0.5 text-[9px] rounded-full font-bold uppercase tracking-wider border ${resBadge.color}`}>
+                                          {resBadge.label}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             )}
                           </div>
 
                           {/* Direct HLS Quality Selector Buttons (when supported) */}
                           {qualities.length > 1 && (
-                            <div className="mb-4">
-                              <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider block mb-2">Resolution</span>
+                            <div className="mb-4 pt-3 border-t border-white/10">
+                              <span className="text-neutral-400 text-xs font-semibold uppercase tracking-wider block mb-2">
+                                Resolution Stream Quality
+                              </span>
                               <div className="flex flex-wrap gap-1.5">
                                 {qualities.map((q) => (
                                   <button
@@ -1548,11 +1948,13 @@ export default function LiveSports({ onClose }: Props) {
                           )}
                         </div>
 
-                        {/* Stream Troubleshooting Note (Anchored at bottom with clear separation) */}
+                        {/* Stream Troubleshooting Note */}
                         <div className="mt-4 pt-2">
                           <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/10 text-neutral-400 text-[11px] leading-relaxed flex items-start gap-2">
                             <AlertCircle className="w-4 h-4 text-neutral-400 shrink-0 mt-0.5" />
-                            <span>If a stream buffers or stalls, try switching to a different feed above or click the reload icon on the video player.</span>
+                            <span>
+                              Broadcast feeds provided by PPV.st, StrmFree, Tim-Streams, and PitSport. If a stream buffers or stalls, click the reload icon above or select an alternate feed.
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1562,12 +1964,12 @@ export default function LiveSports({ onClose }: Props) {
               </div>
             )}
 
-            {/* Navigation Tabs & Sport Categories Bar */}
+            {/* Navigation Tabs & Modern Category Filters */}
             <div className="mb-6 space-y-4">
-              {/* Top Navigation Tabs */}
+              {/* Top Navigation Tabs & Provider Quick Filters */}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  {/* Segmented Tab Control */}
+                  {/* Segmented Tab Control: Live Now vs Today's Schedule */}
                   <div className="inline-flex p-1 rounded-2xl bg-white/[0.04] border border-white/15 backdrop-blur-xl shadow-lg gap-1.5">
                     <button
                       type="button"
@@ -1617,13 +2019,51 @@ export default function LiveSports({ onClose }: Props) {
                     }`}
                   >
                     <Sparkles className="w-4 h-4 text-purple-400" />
-                    <span>4K UHD Only</span>
+                    <span>4K UHD</span>
                     {categoryCounts['4k'] > 0 && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 text-white font-mono font-bold tabular-nums ml-0.5">
                         {categoryCounts['4k']}
                       </span>
                     )}
                   </button>
+
+                  {/* Provider Filter Chips: PPV.st, StrmFree, Tim-Streams, PitSport */}
+                  <div className="hidden md:flex items-center gap-1.5 p-1 rounded-2xl bg-white/[0.03] border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProvider('all')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                        selectedProvider === 'all'
+                          ? 'bg-white/20 text-white shadow-sm'
+                          : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      All Sources
+                    </button>
+                    {(['ppv', 'strmfree', 'timstreams', 'pitsport'] as ProviderKey[]).map((pkey) => {
+                      const count = providerCounts[pkey];
+                      const meta = getProviderMeta(pkey);
+                      const isSelected = selectedProvider === pkey;
+                      return (
+                        <button
+                          type="button"
+                          key={pkey}
+                          onClick={() => setSelectedProvider(isSelected ? 'all' : pkey)}
+                          className={`px-2.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isSelected
+                              ? `${meta.badgeBg} ${meta.badgeText} border ${meta.badgeBorder} shadow-sm`
+                              : 'text-neutral-400 hover:text-white'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${meta.dotColor}`} />
+                          <span>{meta.shortLabel}</span>
+                          {count > 0 && (
+                            <span className="text-[10px] opacity-75 font-mono">({count})</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Reset Filters Action */}
@@ -1639,9 +2079,39 @@ export default function LiveSports({ onClose }: Props) {
                 )}
               </div>
 
+              {/* Popular League Filter Chips */}
+              {popularLeagues.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                  <span className="text-xs text-neutral-400 font-semibold uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
+                    <Flame className="w-3.5 h-3.5 text-amber-400" />
+                    Leagues:
+                  </span>
+                  {popularLeagues.map((league) => {
+                    const isSelected = selectedLeague === league.id;
+                    return (
+                      <button
+                        type="button"
+                        key={league.id}
+                        onClick={() => setSelectedLeague(isSelected ? 'all' : league.id)}
+                        className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border shrink-0 ${
+                          isSelected
+                            ? 'bg-red-600/30 text-red-200 border-red-500/50 shadow-md font-bold'
+                            : 'bg-white/[0.03] border-white/10 text-neutral-300 hover:text-white hover:border-white/20'
+                        }`}
+                      >
+                        <span>{league.name}</span>
+                        <span className="text-[10px] font-mono text-neutral-400 bg-white/10 px-1.5 py-0.2 rounded-full">
+                          {league.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Sport Category Filter Scrollpane with Navigation Arrows and Track */}
               <div className="relative group/category-scroll my-1">
-                {/* Left Scroll Navigation Button with edge fade */}
+                {/* Left Scroll Navigation Button */}
                 {showCategoryLeftArrow && (
                   <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center pr-4 bg-gradient-to-r from-black via-black/80 to-transparent pointer-events-none">
                     <button
@@ -1655,7 +2125,7 @@ export default function LiveSports({ onClose }: Props) {
                   </div>
                 )}
 
-                {/* Right Scroll Navigation Button with edge fade */}
+                {/* Right Scroll Navigation Button */}
                 {showCategoryRightArrow && (
                   <div className="absolute right-0 top-0 bottom-0 z-20 flex items-center pl-4 bg-gradient-to-l from-black via-black/80 to-transparent pointer-events-none">
                     <button
@@ -1694,7 +2164,7 @@ export default function LiveSports({ onClose }: Props) {
                     </span>
                   </button>
 
-                  {/* Individual Sport Pills with Vector SVG Icons (Sorted with active broadcast matches first) */}
+                  {/* Individual Sport Pills */}
                   {sortedSports.map(sport => {
                     const count = categoryCounts[sport.id.toLowerCase()] || 0;
                     const isSelected = selectedSport === sport.id;
@@ -1773,8 +2243,8 @@ export default function LiveSports({ onClose }: Props) {
                 </p>
                 <p className="text-sm mt-2 text-neutral-400 mb-5">
                   {activeTab === 'live'
-                    ? 'Matches will appear here as soon as broadcasts begin. Check today\'s schedule for upcoming games.'
-                    : 'Try selecting a different sport or clearing your search filters.'}
+                    ? "Matches will appear here as soon as broadcasts begin. Check today's schedule for upcoming games."
+                    : 'Try selecting a different sport or clearing your filters.'}
                 </p>
                 <div className="flex items-center gap-3">
                   {activeTab === 'live' && (

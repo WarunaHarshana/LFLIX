@@ -1,140 +1,160 @@
 import { describe, it, expect } from 'vitest';
-import { extractJsonArray, parseEventsData, parseStreamsData } from '@/lib/xyzstreams';
-import { getStreamiStreams } from '@/lib/streami';
-import { normalizeSportCategory, matchesSportFilter } from '@/app/api/sports/matches/route';
+import { mapPpvCategory, extractTeamsFromPpv, getPpvStreamsForMatch, PpvItem } from '@/lib/ppv';
+import { mapStrmFreeCategory, extractTeamsFromStrmFree, StrmFreeStream } from '@/lib/strmfree';
+import { mapPitSportCategory, extractTeamsFromPitSport, getPitSportStreams, PitSportProgramPlay } from '@/lib/pitsport';
+import { extractTeamsFromTitle, mapTimStreamsCategory } from '@/lib/timstreams';
+import { normalizeSportCategory, matchesSportFilter, getMatchKey } from '@/app/api/sports/matches/route';
 
-describe('XyzStreams Scraper & Array Extractor', () => {
-  it('correctly extracts arrays with timestamps containing colons without JSON corruption', () => {
-    const html = `
-      <script>
-        const EVENTS_DATA = [
-          {
-            "title": "One FC 100",
-            "href": "stream-1.html",
-            "start": "2026-09-11T23:00:00Z",
-            "end": "2026-09-12T04:30:00Z",
-            "category": "Combat Sports"
-          },
-          {
-            title: 'College Football',
-            href: 'cfb.html',
-            start: '2026-09-11T20:00:00Z',
-            end: '2026-09-12T01:00:00Z',
-            category: 'American Football',
-          }
-        ];
-      </script>
-    `;
-
-    const events = extractJsonArray(html, 'EVENTS_DATA');
-    expect(events).toHaveLength(2);
-    expect(events[0].title).toBe('One FC 100');
-    expect(events[0].start).toBe('2026-09-11T23:00:00Z');
-    expect(events[1].title).toBe('College Football');
-    expect(events[1].href).toBe('cfb.html');
+describe('PPV.st Provider', () => {
+  it('correctly maps PPV categories to canonical LFLIX sports', () => {
+    expect(mapPpvCategory('Combat Sports')).toBe('fight');
+    expect(mapPpvCategory('American Football')).toBe('american-football');
+    expect(mapPpvCategory('Football')).toBe('football');
+    expect(mapPpvCategory('Basketball')).toBe('basketball');
+    expect(mapPpvCategory('Ice Hockey')).toBe('hockey');
+    expect(mapPpvCategory('24/7 Streams')).toBe('tv');
   });
 
-  it('parses events using parseEventsData with fallback', () => {
-    const html = `
-      <script>
-        const EVENTS_DATA = [
-          {
-            "title": "Arsenal vs Chelsea",
-            "href": "pl-1.html",
-            "start": "2026-09-12T15:00:00Z",
-            "end": "2026-09-12T17:00:00Z",
-            "category": "Football"
-          }
-        ];
-      </script>
-    `;
-
-    const events = parseEventsData(html);
-    expect(events).toHaveLength(1);
-    expect(events[0].title).toBe('Arsenal vs Chelsea');
-    expect(events[0].category).toBe('Football');
+  it('extracts teams from US format "Away at Home"', () => {
+    const teams = extractTeamsFromPpv('Oregon State Beavers at Boise State Broncos');
+    expect(teams).toBeDefined();
+    expect(teams?.away.name).toBe('Oregon State Beavers');
+    expect(teams?.home.name).toBe('Boise State Broncos');
   });
 
-  it('parses channel streams from modern iframe structure and stream buttons', () => {
-    const channelHtml = `
-      <div id="playerContainer">
-        <iframe id="stream-player" src="https://xyzstreams.st/embed?espn" allowfullscreen></iframe>
-      </div>
-      <div class="stream-switcher">
-        <button class="stream-btn active" data-url="https://xyzstreams.st/embed?espn">Server 1 (ESPN)</button>
-        <button class="stream-btn" data-url="https://xyzstreams.st/embed?espn2">Server 2 (ESPN 2)</button>
-      </div>
-    `;
-
-    const streams = parseStreamsData(channelHtml);
-    expect(streams.length).toBeGreaterThanOrEqual(2);
-    expect(streams.some(s => s.embedUrl?.includes('espn'))).toBe(true);
-    expect(streams.some(s => s.embedUrl?.includes('espn2'))).toBe(true);
+  it('extracts teams from "Home vs Away"', () => {
+    const teams = extractTeamsFromPpv('Real Madrid vs Barcelona');
+    expect(teams).toBeDefined();
+    expect(teams?.home.name).toBe('Real Madrid');
+    expect(teams?.away.name).toBe('Barcelona');
   });
 
-  it('parses channel streams from legacy array when present', () => {
-    const legacyHtml = `
-      <script>
-        const streams = [
-          { server: 'HD 1', btnName: 'Main HD', title: 'Main Stream', file: 'https://cdn.example.com/live.m3u8' }
-        ];
-      </script>
-    `;
+  it('transforms PPV item and substreams into stream options', () => {
+    const item: PpvItem = {
+      id: 32004,
+      name: 'Oregon State Beavers at Boise State Broncos',
+      tag: 'College Football',
+      source_tag: 'HD | USA Net',
+      starts_at: 1794697200,
+      ends_at: 1794711600,
+      always_live: 0,
+      category_name: 'American Football',
+      iframe: 'https://taifood-blog.asia/embed/cfb/2026-11-14/orst-bois',
+      substreams: [
+        {
+          id: 1032004,
+          name: 'Oregon State Beavers at Boise State Broncos',
+          source_tag: 'SD | USA Net',
+          iframe: 'https://taifood-blog.asia/embed/cfb/2026-11-14/orst-bois_540p'
+        }
+      ]
+    };
 
-    const streams = parseStreamsData(legacyHtml);
-    expect(streams).toHaveLength(1);
-    expect(streams[0].file).toBe('https://cdn.example.com/live.m3u8');
+    const streams = getPpvStreamsForMatch(item);
+    expect(streams).toHaveLength(2);
+    expect(streams[0].id).toBe('ppv-32004-1');
+    expect(streams[0].embedUrl).toBe('https://taifood-blog.asia/embed/cfb/2026-11-14/orst-bois');
+    expect(streams[0].hd).toBe(true);
+    expect(streams[1].id).toBe('ppv-32004-2');
+    expect(streams[1].embedUrl).toBe('https://taifood-blog.asia/embed/cfb/2026-11-14/orst-bois_540p');
   });
 });
 
-describe('Streami Embeds Filter', () => {
-  it('filters out empty placeholder channel_id embeds and keeps valid feeds', () => {
-    const eventWithPlaceholders: any = {
-      id: 'test-event',
-      title: 'Test Match',
-      category: 'mma',
-      startTime: 1788537600,
-      _embeds: [
-        {
-          language: 'English | Fake',
-          embeds: [
-            { embed: 'https://streami.fit/live/?channel_id=', label: 'FHD' },
-            { embed: 'https://streami.fit/live/?channel_id=null', label: 'HD' },
-          ]
-        },
-        {
-          language: 'English | Real',
-          embeds: [
-            { embed: 'https://bestembeds.buzz/live/?channel_id=ufc', label: 'FHD' }
-          ]
-        }
-      ]
-    };
-
-    const streams = getStreamiStreams(eventWithPlaceholders);
-    expect(streams).toHaveLength(1);
-    expect(streams[0].embedUrl).toBe('https://bestembeds.buzz/live/?channel_id=ufc');
-    expect(streams[0].language).toContain('English | Real');
+describe('StrmFree.pk Provider', () => {
+  it('correctly maps StrmFree categories', () => {
+    expect(mapStrmFreeCategory('soccer')).toBe('football');
+    expect(mapStrmFreeCategory('basketball')).toBe('basketball');
+    expect(mapStrmFreeCategory('mma')).toBe('fight');
+    expect(mapStrmFreeCategory('american-football')).toBe('american-football');
   });
 
-  it('returns empty stream list for events with exclusively placeholder embeds', () => {
-    const eventOnlyPlaceholders: any = {
-      id: 'placeholder-event',
-      title: 'Upcoming Match',
-      category: 'mma',
-      startTime: 1788537600,
-      _embeds: [
-        {
-          language: 'English',
-          embeds: [
-            { embed: 'https://streami.fit/live/?channel_id=', label: 'FHD' }
-          ]
-        }
-      ]
+  it('extracts teams from team1 / team2 objects', () => {
+    const stream: StrmFreeStream = {
+      id: 'montenegro-vs-cyprus',
+      name: 'Montenegro vs Cyprus',
+      category: 'soccer',
+      stream_key: 'montenegro-vs-cyprus',
+      match_timestamp: 1794751200,
+      team1: { name: 'Montenegro', logo: 'https://cdn.example.com/mtg.png' },
+      team2: { name: 'Cyprus', logo: 'https://cdn.example.com/cyp.png' }
     };
 
-    const streams = getStreamiStreams(eventOnlyPlaceholders);
-    expect(streams).toHaveLength(0);
+    const teams = extractTeamsFromStrmFree(stream);
+    expect(teams).toBeDefined();
+    expect(teams?.home.name).toBe('Montenegro');
+    expect(teams?.home.badge).toBe('https://cdn.example.com/mtg.png');
+    expect(teams?.away.name).toBe('Cyprus');
+  });
+});
+
+describe('PitSport.st Provider', () => {
+  it('correctly maps motorsport, tennis, and combat categories', () => {
+    expect(mapPitSportCategory('Formula 1')).toBe('motor-sports');
+    expect(mapPitSportCategory('MotoGP')).toBe('motor-sports');
+    expect(mapPitSportCategory('Tennis')).toBe('tennis');
+    expect(mapPitSportCategory(null, 'Italian Grand Prix')).toBe('motor-sports');
+  });
+
+  it('extracts teams or participants from title', () => {
+    const teams = extractTeamsFromPitSport('Sinner vs Alcaraz');
+    expect(teams).toBeDefined();
+    expect(teams?.home.name).toBe('Sinner');
+    expect(teams?.away.name).toBe('Alcaraz');
+  });
+
+  it('transforms program play video into stream options', () => {
+    const playData: PitSportProgramPlay = {
+      program: {},
+      video: {
+        embedId: 102298,
+        embedType: 'video',
+        embedUrl: 'https://embdlol.st/embed/01a1d9d0-93c8-756d-baf2-a3b8c9625555',
+        label: 'Main Feed',
+        isDefault: true
+      },
+      videos: [
+        {
+          embedId: 102298,
+          embedType: 'video',
+          embedUrl: 'https://embdlol.st/embed/01a1d9d0-93c8-756d-baf2-a3b8c9625555',
+          label: 'Main Feed',
+          isDefault: true
+        }
+      ],
+      hasVideo: true
+    };
+
+    const streams = getPitSportStreams(playData, 103182);
+    expect(streams).toHaveLength(1);
+    expect(streams[0].id).toBe('pitsport-103182-1');
+    expect(streams[0].embedUrl).toBe('https://embdlol.st/embed/01a1d9d0-93c8-756d-baf2-a3b8c9625555');
+    expect(streams[0].source).toBe('pitsport');
+  });
+});
+
+describe('TimStreams Provider & Match Key Deduplication', () => {
+  it('extracts teams from title with US @ convention or vs', () => {
+    const teamsAt = extractTeamsFromTitle('Celtics @ Lakers');
+    expect(teamsAt?.away.name).toBe('Celtics');
+    expect(teamsAt?.home.name).toBe('Lakers');
+
+    const teamsVs = extractTeamsFromTitle('Arsenal vs Chelsea');
+    expect(teamsVs?.home.name).toBe('Arsenal');
+    expect(teamsVs?.away.name).toBe('Chelsea');
+  });
+
+  it('generates consistent match keys for deduplication regardless of team order or format', () => {
+    const matchA = {
+      title: 'Arsenal vs Chelsea',
+      teams: { home: { name: 'Arsenal' }, away: { name: 'Chelsea' } }
+    };
+    const matchB = {
+      title: 'Chelsea vs Arsenal',
+      teams: { home: { name: 'Chelsea' }, away: { name: 'Arsenal' } }
+    };
+
+    expect(getMatchKey(matchA)).toBe(getMatchKey(matchB));
+    expect(getMatchKey(matchA)).toBe('arsenal-vs-chelsea');
   });
 });
 
@@ -169,10 +189,10 @@ describe('Sports Categories Endpoint', () => {
   });
 });
 
-describe('Sports Matches Endpoint Live & Today Integration', () => {
+describe('Sports Matches Endpoint Integration', () => {
   it('fetches matches with live and today filters without throwing', async () => {
     const { GET: getMatches } = await import('@/app/api/sports/matches/route');
-    
+
     // Test live
     const liveReq = new Request('http://localhost:3000/api/sports/matches?type=live');
     const liveRes = await getMatches(liveReq);

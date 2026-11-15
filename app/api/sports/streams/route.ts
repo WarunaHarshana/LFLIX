@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
-import { fetchStreamiEventById, getStreamiStreams } from '@/lib/streami';
-import { fetchXyzStreams } from '@/lib/xyzstreams';
+import { fetchPpvStreams, getPpvStreamsForMatch } from '@/lib/ppv';
+import { fetchStrmFreeStreamByKey, fetchStrmFreeStreams, getStrmFreeStreamsForMatch } from '@/lib/strmfree';
 import { fetchTimStreamsWatch } from '@/lib/timstreams';
+import { fetchPitSportPlay, getPitSportStreams } from '@/lib/pitsport';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
-
-// Get stream URLs for a specific match
-const API_BASE = 'https://streamed.pk/api';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -21,36 +19,68 @@ export async function GET(request: Request) {
     );
   }
 
-  if (source === 'streami') {
+  // 1. PPV.st streams
+  if (source === 'ppv') {
     try {
-      const event = await fetchStreamiEventById(id);
-      if (!event) {
+      const items = await fetchPpvStreams();
+      const numId = Number(id);
+      const found = items.find(item => item.id === numId || item.uri_name === id || String(item.id) === id);
+
+      if (!found) {
         return NextResponse.json({ streams: [] });
       }
-      const transformedStreams = getStreamiStreams(event);
-      return NextResponse.json({ streams: transformedStreams });
+
+      const streams = getPpvStreamsForMatch(found);
+      return NextResponse.json({ streams });
     } catch (error) {
-      console.error('Streami sports streams API error:', error);
+      console.error('PPV streams API error:', error);
       return NextResponse.json(
-        { error: 'Failed to fetch streams from Streami' },
+        { error: 'Failed to fetch streams from PPV.st' },
         { status: 500 }
       );
     }
   }
 
-  if (source === 'xyzstreams') {
+  // 2. StrmFree.pk streams
+  if (source === 'strmfree') {
     try {
-      const transformedStreams = await fetchXyzStreams(id);
-      return NextResponse.json({ streams: transformedStreams });
+      let stream = await fetchStrmFreeStreamByKey(id);
+      if (!stream) {
+        // Fallback to searching all streams
+        const all = await fetchStrmFreeStreams();
+        stream = all.find(s => s.stream_key === id || s.id === id) || null;
+      }
+
+      if (!stream) {
+        // Even if not in API list, generate the standard StrmFree embed fallback
+        return NextResponse.json({
+          streams: [
+            {
+              id: `strmfree-${id}-1`,
+              streamNo: 1,
+              language: 'HD Stream',
+              hd: true,
+              is4k: false,
+              embedUrl: `https://strmfree.pk/embed/sports/${encodeURIComponent(id)}`,
+              source: 'strmfree',
+              referer: 'https://strmfree.pk/'
+            }
+          ]
+        });
+      }
+
+      const streams = await getStrmFreeStreamsForMatch(stream);
+      return NextResponse.json({ streams });
     } catch (error) {
-      console.error('xyzstreams sports streams API error:', error);
+      console.error('StrmFree streams API error:', error);
       return NextResponse.json(
-        { error: 'Failed to fetch streams from xyzstreams' },
+        { error: 'Failed to fetch streams from StrmFree' },
         { status: 500 }
       );
     }
   }
 
+  // 3. TimStreams streams
   if (source === 'timstreams') {
     try {
       const event = await fetchTimStreamsWatch(id);
@@ -70,7 +100,8 @@ export async function GET(request: Request) {
           hd: !!isHd,
           is4k: is4k,
           embedUrl: stream.url,
-          source: 'timstreams'
+          source: 'timstreams',
+          referer: 'https://tim-streams.com/'
         };
       });
 
@@ -84,43 +115,25 @@ export async function GET(request: Request) {
     }
   }
 
-  try {
-    const response = await fetch(`${API_BASE}/stream/${source}/${id}`, {
-      headers: {
-        'Accept': 'application/json',
-      },
-      next: { revalidate: 30 } // Cache for 30 seconds
-    });
+  // 4. PitSport.st streams
+  if (source === 'pitsport') {
+    try {
+      const playData = await fetchPitSportPlay(id);
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      if (!playData || !playData.hasVideo) {
+        return NextResponse.json({ streams: [] });
+      }
+
+      const streams = getPitSportStreams(playData, id);
+      return NextResponse.json({ streams });
+    } catch (error) {
+      console.error('PitSport streams API error:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch streams from PitSport' },
+        { status: 500 }
+      );
     }
-
-    const streams = await response.json();
-    
-    // Transform streams
-    const transformedStreams = streams.map((stream: any, index: number) => {
-      const label = (stream.language || '').toUpperCase();
-      const is4k = label.includes('4K') || label.includes('UHD');
-      const streamNum = stream.streamNo ?? (index + 1);
-      const streamSrc = stream.source || source;
-      return {
-        id: `${streamSrc}-${stream.id || id}-${streamNum}`,
-        streamNo: streamNum,
-        language: stream.language,
-        hd: stream.hd || is4k,
-        is4k: is4k,
-        embedUrl: stream.embedUrl,
-        source: streamSrc
-      };
-    });
-
-    return NextResponse.json({ streams: transformedStreams });
-  } catch (error) {
-    console.error('Sports sports streams API error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch streams' },
-      { status: 500 }
-    );
   }
+
+  return NextResponse.json({ streams: [] });
 }

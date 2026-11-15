@@ -3,8 +3,9 @@ import { Agent } from 'undici';
 
 const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
-export const TIMSTREAMS_BASE = 'https://timst.cfd';
-export const TIMSTREAMS_FALLBACK_BASE = 'https://timstreams.st';
+export const TIMSTREAMS_BASE = 'https://tim-streams.com';
+export const TIMSTREAMS_FALLBACK_BASE = 'https://timstreams.co.rw';
+export const TIMSTREAMS_LEGACY_BASE = 'https://timstreams.st';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 export type TimStreamsGenre = {
@@ -184,39 +185,44 @@ export function extractTeamsFromTitle(title: string): { home: { name: string }; 
 }
 
 /**
- * Fetches an endpoint with fallback across active TimStreams mirrors.
+ * Fetches an endpoint with fallback across active TimStreams mirrors and retry handling.
  */
-async function fetchWithFallback(endpoint: string, options: RequestInit = {}): Promise<Response> {
-  const bases = [TIMSTREAMS_BASE, TIMSTREAMS_FALLBACK_BASE];
+async function fetchWithFallback(endpoint: string, options: RequestInit = {}, retries = 2): Promise<Response> {
+  const bases = [TIMSTREAMS_BASE, TIMSTREAMS_FALLBACK_BASE, TIMSTREAMS_LEGACY_BASE];
   let lastError: any = null;
 
   for (const base of bases) {
-    try {
-      const url = `${base}${endpoint}`;
-      const fetchOpts: any = {
-        ...options,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': USER_AGENT,
-          ...(options.headers || {})
-        },
-        signal: AbortSignal.timeout(3000),
-      };
-      if (insecureAgent) {
-        fetchOpts.dispatcher = insecureAgent;
-      }
-      const res = await fetch(url, fetchOpts);
-      if (res.ok) {
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('text/html')) {
-          lastError = new Error(`${url} returned HTML (Cloudflare challenge or redirect) instead of JSON`);
-          continue;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const url = `${base}${endpoint}`;
+        const fetchOpts: any = {
+          ...options,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': USER_AGENT,
+            ...(options.headers || {})
+          },
+          signal: AbortSignal.timeout(5000),
+        };
+        if (insecureAgent) {
+          fetchOpts.dispatcher = insecureAgent;
         }
-        return res;
+        const res = await fetch(url, fetchOpts);
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('text/html')) {
+            lastError = new Error(`${url} returned HTML (Cloudflare challenge or redirect) instead of JSON`);
+            break; // don't retry HTML on this base
+          }
+          return res;
+        }
+        lastError = new Error(`Request to ${url} returned status ${res.status}`);
+      } catch (err) {
+        lastError = err;
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+        }
       }
-      lastError = new Error(`Request to ${url} returned status ${res.status}`);
-    } catch (err) {
-      lastError = err;
     }
   }
 
@@ -286,7 +292,7 @@ export async function fetchTimStreamsChannels(): Promise<{ channels: TimStreamsC
 const DECRYPTION_KEY = "8paW@#1UgOw4=A8iT*5we";
 
 /**
- * Decrypts a base64 encoded AES-GCM encrypted string using the specified key.
+ * Legacy AES-GCM decryption for old TimStreams CDN streams.
  */
 export async function decryptTimStreamUrl(encryptedBase64: string, keyStr: string = DECRYPTION_KEY): Promise<string> {
   const keyBuffer = Buffer.from(keyStr, 'utf8').subarray(0, 16);
@@ -321,33 +327,118 @@ export async function decryptTimStreamUrl(encryptedBase64: string, keyStr: strin
 }
 
 /**
- * Resolves a junkieembeds URL to a direct .m3u8 stream URL.
+ * Resolves a TimStreams embed URL (e.g. https://ehgembxe.cfd/:embedId) or stream ID to a direct .m3u8 stream URL.
  */
-export async function resolveTimStream(embedUrl: string): Promise<string> {
-  const match = embedUrl.match(/\/embed\/([^\/?#]+)/);
-  const streamId = match ? match[1] : embedUrl.split('/').pop();
-  if (!streamId) {
-    throw new Error('Could not extract stream ID from URL: ' + embedUrl);
+export async function resolveTimStream(embedUrlOrId: string): Promise<string> {
+  let targetUrl = (embedUrlOrId || '').trim();
+  if (!targetUrl) {
+    throw new Error('Embed URL or Stream ID is required');
   }
 
-  const response = await fetch('https://viznf.gdgdfhbdfidsf.xyz/fetch', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Origin': 'https://junkieembeds.pages.dev',
-      'Referer': 'https://junkieembeds.pages.dev/'
-    },
-    body: JSON.stringify({ id: streamId })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch encrypted stream from CDN: ${response.status} ${response.statusText}`);
+  // Normalize ID or URL
+  if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+    targetUrl = `https://ehgembxe.cfd/${targetUrl}`;
+  } else if (targetUrl.includes('junkieembeds.pages.dev/embed/')) {
+    const id = targetUrl.split('/embed/')[1]?.split(/[?#]/)[0];
+    if (id) {
+      targetUrl = `https://ehgembxe.cfd/${id}`;
+    }
   }
 
-  const data = await response.json();
-  if (!data.success || !data.url) {
-    throw new Error(`CDN API returned failure: ${JSON.stringify(data)}`);
+  let playUrl = targetUrl;
+  let html = '';
+  let lastErr: any = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const fetchOpts: any = {
+        headers: {
+          'Referer': `${TIMSTREAMS_BASE}/`,
+          'User-Agent': USER_AGENT,
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(6000),
+      };
+      if (insecureAgent) {
+        fetchOpts.dispatcher = insecureAgent;
+      }
+      const res = await fetch(targetUrl, fetchOpts);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch embed page: status ${res.status}`);
+      }
+      playUrl = res.url;
+      html = await res.text();
+      lastErr = null;
+      break;
+    } catch (err) {
+      lastErr = err;
+      await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+    }
   }
 
-  return await decryptTimStreamUrl(data.url);
+  if (lastErr) {
+    throw lastErr;
+  }
+
+  const match = html.match(/var\s+([a-zA-Z0-9_$]+)\s*=\s*\[([\d,\s]+)\]\s*,\s*([a-zA-Z0-9_$]+)\s*=\s*(\d+)\s*,\s*([a-zA-Z0-9_$]+)\s*=\s*(\d+)/);
+  if (!match) {
+    throw new Error(`Could not find obfuscated script in embed page: ${playUrl}`);
+  }
+
+  const bytes = match[2].split(',').map(s => parseInt(s.trim(), 10));
+  const xorVal = parseInt(match[4], 10);
+  const subVal = parseInt(match[6], 10);
+  const decodedBytes = new Uint8Array(bytes.map(b => ((b ^ xorVal) - subVal + 256) % 256));
+  const decodedScript = new TextDecoder().decode(decodedBytes);
+
+  const cfgMatch = decodedScript.match(/["']?ticketUrl["']?\s*:\s*['"]([^'"]+)['"]/);
+  if (!cfgMatch || !cfgMatch[1]) {
+    throw new Error('Failed to extract ticketUrl from decoded script');
+  }
+
+  const ticketUrl = cfgMatch[1];
+  let ticketBuffer: Uint8Array | null = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const fetchOpts: any = {
+        headers: {
+          'Referer': playUrl,
+          'User-Agent': USER_AGENT,
+        },
+        signal: AbortSignal.timeout(6000),
+      };
+      if (insecureAgent) {
+        fetchOpts.dispatcher = insecureAgent;
+      }
+      const ticketRes = await fetch(ticketUrl, fetchOpts);
+      if (!ticketRes.ok) {
+        throw new Error(`Failed to fetch ticket: status ${ticketRes.status}`);
+      }
+      ticketBuffer = new Uint8Array(await ticketRes.arrayBuffer());
+      lastErr = null;
+      break;
+    } catch (err) {
+      lastErr = err;
+      await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+    }
+  }
+
+  if (lastErr || !ticketBuffer) {
+    throw lastErr || new Error('Failed to retrieve ticket buffer');
+  }
+
+  if (ticketBuffer.length < 2) {
+    throw new Error('Ticket buffer too short');
+  }
+
+  const token = ticketUrl.split('/').pop() || '';
+  const seed = ticketBuffer[0];
+  let streamUrl = '';
+  for (let i = 1; i < ticketBuffer.length; i++) {
+    const charCode = ticketBuffer[i] ^ token.charCodeAt((i - 1) % token.length) ^ ((seed + i - 1) & 0xff);
+    streamUrl += String.fromCharCode(charCode);
+  }
+
+  return streamUrl;
 }

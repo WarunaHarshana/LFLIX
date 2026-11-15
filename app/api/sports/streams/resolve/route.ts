@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveTimStream } from '@/lib/timstreams';
+import { fetchPitSportPlay } from '@/lib/pitsport';
+import { fetchStrmFreeSources } from '@/lib/strmfree';
 import { resolveEmbedStream } from '@/lib/embedResolver';
 import { MemoryCache } from '@/lib/cache';
 
 // Mark as dynamic for static export compatibility
 export const dynamic = 'force-dynamic';
 
-// Cache resolved streams briefly to avoid re-resolving on every segment fetch.
-// Uses the shared MemoryCache so TTL and eviction behave the same everywhere.
 type ResolvedEmbedStream = Awaited<ReturnType<typeof resolveEmbedStream>>;
 
 const RESOLVED_STREAM_TTL_MS = 55_000;
@@ -24,16 +24,16 @@ function setCache(key: string, data: ResolvedEmbedStream, ttlMs = RESOLVED_STREA
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const streamId = searchParams.get('id');
-  const type = searchParams.get('type'); // 'embed' for embed.st, default for timstreams
-  const source = searchParams.get('source') || 'admin';
+  const type = searchParams.get('type');
+  const source = searchParams.get('source') || 'timstreams';
   const streamNo = searchParams.get('streamNo') || '1';
-  const quality = searchParams.get('quality'); // 'high', 'low', etc.
+  const quality = searchParams.get('quality');
 
   if (!streamId) {
     return NextResponse.json({ error: 'Stream ID is required' }, { status: 400 });
   }
 
-  // Handle embed.st stream resolution
+  // Handle embed.st stream resolution via DevTools protocol if requested
   if (type === 'embed') {
     const cacheKey = `embed:${source}:${streamId}:${streamNo}`;
 
@@ -62,14 +62,12 @@ export async function GET(req: NextRequest) {
       }
 
       // Return the master playlist with rewritten quality URLs
-      // pointing to our own API endpoint for proxying
       const baseUrl = `/api/sports/streams/resolve?type=embed&id=${encodeURIComponent(streamId)}&source=${encodeURIComponent(source)}&streamNo=${streamNo}`;
       let rewrittenMaster = resolved.masterPlaylist;
 
-      // Replace relative quality playlist paths with our proxy URLs
       for (const q of resolved.qualities) {
-        const qualityName = q.playlistUrl.split('/').slice(-2, -1)[0]; // e.g., 'high', 'low'
-        const relPath = q.playlistUrl.split('/').slice(-2).join('/'); // e.g., 'high/mono.m3u8'
+        const qualityName = q.playlistUrl.split('/').slice(-2, -1)[0];
+        const relPath = q.playlistUrl.split('/').slice(-2).join('/');
         rewrittenMaster = rewrittenMaster.replace(
           relPath,
           `${baseUrl}&quality=${qualityName}&ext=.m3u8`
@@ -92,12 +90,35 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Default: handle junkieembeds/timstreams resolution
-  try {
-    const embedUrl = `https://junkieembeds.pages.dev/embed/${streamId}`;
-    const decryptedUrl = await resolveTimStream(embedUrl);
+  // Handle PitSport stream resolution
+  if (source === 'pitsport') {
+    try {
+      const play = await fetchPitSportPlay(streamId);
+      if (play && play.video?.embedUrl) {
+        return NextResponse.redirect(play.video.embedUrl, { status: 302 });
+      }
+      return NextResponse.json({ error: 'PitSport stream video not found' }, { status: 404 });
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+  }
 
-    // Redirect to the decrypted stream (automatic 302 redirect)
+  // Handle StrmFree live source resolution
+  if (source === 'strmfree') {
+    try {
+      const sources = await fetchStrmFreeSources(streamId);
+      if (sources.length > 0 && sources[0].url) {
+        return NextResponse.redirect(sources[0].url, { status: 302 });
+      }
+      return NextResponse.redirect(`https://strmfree.pk/embed/sports/${encodeURIComponent(streamId)}`, { status: 302 });
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+  }
+
+  // Default: handle TimStreams direct HLS stream decryption & resolution
+  try {
+    const decryptedUrl = await resolveTimStream(streamId);
     return NextResponse.redirect(decryptedUrl, { status: 302 });
   } catch (error: any) {
     console.error(`Failed to resolve TimStreams stream for ID ${streamId}:`, error);
